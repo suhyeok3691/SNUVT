@@ -202,6 +202,30 @@ legend { font-weight: 700; padding: 0 6px; font-size: 14px; }
 .rh { display: grid; gap: 6px; }
 .stage-key { display: flex; flex-wrap: wrap; gap: 2px 14px; color: var(--muted); }
 .stage-key b { color: var(--ink); }
+/* 날짜 칸이 휴대폰에서 옆 칸을 넘지 않게 */
+input[type="date"] { -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%; min-height: 36px; text-align: left; }
+input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+.sub-h { font-size: 13.5px; font-weight: 700; margin: 4px 0 0; }
+/* 부상 이력 */
+.inj { display: grid; gap: 6px; }
+.inj-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) minmax(0, 1.6fr) 84px auto; gap: 6px; align-items: center; padding: 6px; border: 1px solid var(--line); border-radius: 8px; }
+.inj-end { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
+@media (max-width: 640px) { .inj-row { grid-template-columns: 1fr 1fr; } .inj-row .inj-type { grid-column: 1 / -1; } }
+/* 운동 설명 시트 */
+.rows li.tap { cursor: pointer; }
+.rows li.tap .nm::after { content: " ›"; color: var(--muted); }
+.rows li.tap:hover { background: var(--surface-2); }
+.sheet-bg { position: fixed; inset: 0; z-index: 30; background: rgba(10, 16, 30, 0.45); display: flex; align-items: flex-end; justify-content: center; }
+.sheet { background: var(--surface); width: 100%; max-width: 560px; max-height: 88vh; overflow-y: auto; border-radius: 16px 16px 0 0; padding: 18px 18px calc(18px + env(safe-area-inset-bottom, 0px)); }
+@media (min-width: 700px) { .sheet-bg { align-items: center; } .sheet { border-radius: 16px; } }
+.sheet-body { display: grid; gap: 10px; }
+.sheet-rx { font-weight: 700; font-size: 16px; color: var(--blue); }
+.sheet-steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 15px; }
+.timer { display: grid; gap: 8px; justify-items: center; padding: 12px; border-radius: 12px; background: var(--surface-2); }
+.t-time { font-family: var(--f-data); font-size: 48px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1; }
+.chips-t { gap: 4px; }
+.chip-t { padding: 4px 10px; font-size: 13px; }
+body.noscroll { overflow: hidden; }
 .pain-rows { display: grid; gap: 4px; }
 .pain-row { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; display: grid; gap: 6px; }
 .pain-row .pain-detail { display: none; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); align-items: end; }
@@ -263,7 +287,8 @@ td .btn.link { white-space: nowrap; }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=8"></script>
-<script src="app.js?v=8"></script>
+<script src="program.js?v=10"></script>
+<script src="guide.js?v=10"></script>
+<script src="app.js?v=10"></script>
 </body>
 </html>
