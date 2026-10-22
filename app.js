@@ -26,8 +26,13 @@ const readPain = prefix => Object.fromEntries(PAIN_AREAS.map(a => {
 }));
 const painMax = v => { const p = normPain(v); return !p ? 0 : p.r ? 10 : Math.max(p.d, p.m); };
 const coreSum = t => t && [t.sideL, t.sideR, t.plank].every(v => v != null) ? Number(t.sideL) + Number(t.sideR) + Number(t.plank) : null;
-// 웨이트 경험 3단계 (예전 값 lt6·gte6 도 읽음)
-const WEXP = [["none", "초보자 · 웨이트가 처음이에요"], ["machine", "중급자 · 기구(머신)는 쓸 줄 알아요"], ["free", "숙련자 · 스쿼트·데드리프트 자세를 알아요"]];
+// 웨이트 경험 4단계 (예전 값 lt6·gte6 도 읽음)
+const WEXP = [
+  ["none", "아기 · 웨이트를 한 번도 안 해 봤어요"],
+  ["machine", "유아 · 기구(머신)는 써 봤어요"],
+  ["free", "청소년 · 웬만한 기구와 프리웨이트(스쿼트·데드리프트)를 할 수 있어요"],
+  ["oly", "성인 · 파워 클린·행 클린·푸시 저크 같은 역도 동작을 할 수 있어요"],
+];
 const wexpNorm = v => v === "lt6" ? "machine" : v === "gte6" ? "free" : v;
 const wexpSelect = (id, cur, required) => `<label class="fl wide">웨이트 경험<select id="${id}" ${required ? "required" : ""}><option value="">고르기</option>${WEXP.map(([v, l]) => `<option value="${v}" ${wexpNorm(cur) === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>`;
 // 부상 이력: 부위 → 운동하다 흔히 다치는 종류
@@ -121,7 +126,6 @@ function latest(pid) {
 }
 const isMainTest = t => ["reach", "cmj", "block", "approach", "balL", "balR", "squat", "rdl", "pull"].some(k => t[k] != null);
 const isCoreHs = t => coreSum(t) != null || t.hsStage != null || t.hsWalk != null || t.hsSec != null;
-const inbodyOf = pid => [...(state.inbody[pid] || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
 const logsOf = pid => state.logs[pid] || [];
 const checksOf = pid => [...(state.painChecks[pid] || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.created).localeCompare(String(b.created)));
 const recentChecks = pid => { const from = iso(addDays(today(), -14)); return checksOf(pid).filter(c => c.date >= from); };
@@ -135,8 +139,11 @@ const selMon = () => state.week ?? thisMon();
 const selDay = () => state.day ?? (selMon() === thisMon() ? dowMon(today()) : 0);
 const infoOn = date => seasonDay(date, events());
 function weekLabel(mon) {
-  const ls = DAYS.map((_, d) => infoOn(dAdd(mon, d)).label);
-  return ls.find(l => /^(대회 주|컨디셔닝|트라이아웃)/.test(l)) || ls[3];
+  const infos = DAYS.map((_, d) => infoOn(dAdd(mon, d)));
+  const ev = infos.find(i => /^(대회 주|컨디셔닝|트라이아웃|대회 뒤)/.test(i.label));
+  if (ev) return ev.label;
+  const i = infos[3];
+  return i.optional ? i.label : `${i.label} · ${PHASE_NAMES[i.w]}`;
 }
 const canSeePrivate = pid => state.admin || (!!pid && pid === state.myPid);
 // 처방·기록 화면에서 보는 선수 (선수는 항상 본인)
@@ -150,10 +157,9 @@ function viewPid() {
 /* ---------- 프로그램 연결 ---------- */
 function ctxFor(p) {
   const h = state.health[p.id] || {};
-  const ib = inbodyOf(p.id).filter(x => x.weight != null).at(-1);
   return {
     player: p, test: latest(p.id),
-    weight: ib ? ib.weight : p.weight,
+    weight: p.weight,
     rehab: [], pain: state.health[p.id] ? (h.pain || {}) : null, checks: recentChecks(p.id),
     injuries: h.injuries || [], year: today().getFullYear(),
     ankleHistory: !!(p.adjust && p.adjust.ankleBal) || (Number(h.ankleL) || 0) + (Number(h.ankleR) || 0) > 0,
@@ -241,8 +247,7 @@ function todayHtml(p) {
 }
 function myStatusHtml(p) {
   const t = latest(p.id);
-  const ib = inbodyOf(p.id).filter(x => x.weight != null).at(-1);
-  const rel = relStrength(t, ib ? ib.weight : p.weight);
+  const rel = relStrength(t, p.weight);
   const mv = maxVertOf(t), v = vertOf(t);
   const mvRuns = runs(p.id).filter(x => maxVertOf(x) != null);
   const dMv = mv != null && mvRuns.length > 1 ? mv - maxVertOf(mvRuns[0]) : null;
@@ -264,14 +269,14 @@ function myStatusHtml(p) {
     </div>
     <div class="panel tile">
       <h3>내 지표</h3>
-      ${t || ib ? `<div class="stats">
+      ${t ? `<div class="stats">
         ${stat("맥스 버티컬", mv != null ? mv : "—", dMv != null ? ` <small class="${dMv < 0 ? "neg" : ""}">${dMv > 0 ? "+" : ""}${dMv}</small>` : "")}
         ${stat("버티컬 점프", v != null ? v : "—")}
         ${stat("블로킹 네트 위", blk != null ? (blk >= 0 ? "+" : "") + blk : "—")}
         ${stat("상대 근력", rel != null ? rel.toFixed(2) : "—")}
         ${stat("코어 합계 (초)", core != null ? core : "—", dCore != null ? ` <small class="${dCore < 0 ? "neg" : ""}">${dCore > 0 ? "+" : ""}${dCore}</small>` : "")}
         ${stat("핸드스탠드", hsText(t))}</div>` : emptyLine("측정 후 나와요.")}
-      ${nm ? `<p class="small muted">다음 측정 ${md(parseD(nm))} 주${nm === thisMon() ? " (이번 주)" : ""}</p>` : ""}
+      ${!t ? `<p class="small muted">아직 측정 기록이 없어요 · 다음 웨이트 A 전에 측정</p>` : nm ? `<p class="small muted">다음 측정 ${md(parseD(nm.mon))} 주${nm.mon === thisMon() ? " (이번 주)" : ""} · ${nm.type === "jump" ? "점프만" : "전체"}</p>` : ""}
       <button class="btn link" type="button" data-act="view" data-v="rec">코어·핸드스탠드 기록하기 →</button>
     </div>
     <div class="panel tile">
@@ -368,7 +373,7 @@ function viewTeamPlan() {
     ${extra.length ? `<h3 class="scope-h me">개인 블록이 있는 선수</h3><ul class="watch">${extra.map(({ p, b }) => `<li><button type="button" class="btn link" data-act="open" data-pid="${esc(p.id)}">${esc(p.name)}</button>${chipsHtml(b.map(x => ["", x.title.replace(/ \(.*\)$/, "")]))}</li>`).join("")}</ul>` : ""}
   </section>`;
 }
-/* ---------- 기록 (세션 · 측정 · 인바디) ---------- */
+/* ---------- 기록 (세션 · 측정) ---------- */
 function viewRec() {
   const pid = viewPid();
   if (!pid) return viewPlan();
@@ -376,7 +381,7 @@ function viewRec() {
   return `<section class="sec"><div class="sec-head"><h2>${esc(p.name)} <span class="chip pos">${esc(p.pos)}</span></h2>${playerPicker(pid)}</div></section>
   <div class="cols">
     <div class="col">${logHtml(p)}<section class="sec"><h3>통증 기록 <span class="private">본인·관리자만</span></h3>${painCheckForm(p, "rec")}${painCheckList(p)}</section></div>
-    <div class="col">${coreHtml(p)}${testsHtml(p)}${inbodyHtml(p)}</div>
+    <div class="col">${coreHtml(p)}${testsHtml(p)}</div>
   </div>`;
 }
 function logHtml(p) {
@@ -403,8 +408,7 @@ function logHtml(p) {
 }
 function testsHtml(p) {
   const r = runs(p.id).filter(isMainTest);
-  const ib = inbodyOf(p.id).filter(x => x.weight != null).at(-1);
-  const rel = relStrength(latest(p.id), ib ? ib.weight : p.weight);
+  const rel = relStrength(latest(p.id), p.weight);
   const above = v => v == null || v === "" ? "—" : ((Number(v) - NET >= 0 ? "+" : "") + (Number(v) - NET));
   return `<section class="sec"><h3>측정</h3>
     ${r.length ? `${rel != null ? `<p class="small muted">상대 근력 <b>${rel.toFixed(2)}</b></p>` : ""}
@@ -469,38 +473,6 @@ function coreHtml(p) {
   </section>`;
 }
 const hsStageSelect = id => `<label class="fl wide">핸드스탠드 단계<select id="${id}"><option value="">—</option>${HS_STAGES.slice(1).map((n, i) => `<option value="${i + 1}">${i + 1} ${n} · 다음 기준 ${HS_GOAL[i + 1]}</option>`).join("")}</select></label>`;
-function inbodyHtml(p) {
-  const list = inbodyOf(p.id);
-  const canAdd = state.admin || (state.role === "player" && p.id === state.myPid);
-  const diff = (a, b, k) => a[k] == null || !b || b[k] == null ? "" : (() => { const v = Number(a[k]) - Number(b[k]); return ` <small class="${v < 0 ? "neg" : ""}">${v > 0 ? "+" : ""}${v.toFixed(1)}</small>`; })();
-  const rows = list.slice().reverse().map((x, i, arr) => {
-    const prev = arr[i + 1];
-    const gap = x.legL && x.legR ? Math.abs(x.legL - x.legR) / Math.max(x.legL, x.legR) * 100 : null;
-    return `<tr><td class="num">${md(parseD(x.date))}${x.standardized ? "" : ' <span class="chip" title="아침 공복·운동 전이 아님">조건 다름</span>'}</td>
-      <td class="num">${x.weight ?? "—"}${diff(x, prev, "weight")}</td><td class="num">${x.smm ?? "—"}${diff(x, prev, "smm")}</td><td class="num">${x.pbf ?? "—"}</td>
-      <td class="num">${x.legL ?? "—"} / ${x.legR ?? "—"}${gap != null && gap >= 10 ? ' <span class="chip warn">차이 10%↑</span>' : ""}</td>
-      <td>${canAdd ? `<button class="btn link danger" type="button" data-act="delinbody" data-id="${esc(x.id)}">삭제</button>` : ""}</td></tr>`;
-  }).join("");
-  return `<section class="sec"><h3>인바디 <span class="private">본인·관리자만</span></h3>
-    ${rows ? `<div class="tw"><table><thead><tr><th>날짜</th><th>체중</th><th>골격근</th><th>체지방률</th><th>다리 L/R</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyLine("아직 기록이 없어요.")}
-    ${canAdd ? `<details class="panel" data-keep="inbody-form" ${keepOpen("inbody-form", !rows)}><summary><b>인바디 입력</b> <span class="small muted">아침 공복 · 운동 전 · 같은 기기</span></summary>
-    <form class="f" id="inbodyForm" data-pid="${esc(p.id)}">
-      <div class="fields">
-        <label class="fl">측정일<input type="date" id="ib-date" value="${iso(today())}" required></label>
-        <label class="fl">체중 (kg)<input type="number" id="ib-weight" inputmode="decimal" step="0.1" min="30" max="200" required></label>
-        <label class="fl">골격근량 (kg)<input type="number" id="ib-smm" inputmode="decimal" step="0.1" min="10" max="80"></label>
-        <label class="fl">체지방량 (kg)<input type="number" id="ib-fat" inputmode="decimal" step="0.1" min="0" max="100"></label>
-        <label class="fl">체지방률 (%)<input type="number" id="ib-pbf" inputmode="decimal" step="0.1" min="1" max="60"></label>
-        <label class="fl">왼다리 근육 (kg)<input type="number" id="ib-legl" inputmode="decimal" step="0.01" min="1" max="30"></label>
-        <label class="fl">오른다리 근육 (kg)<input type="number" id="ib-legr" inputmode="decimal" step="0.01" min="1" max="30"></label>
-        <label class="fl">메모<input id="ib-note" maxlength="100" placeholder="기기·장소"></label>
-      </div>
-      <label class="check"><input type="checkbox" id="ib-std" checked> 아침 공복 · 운동 전에 쟀어요</label>
-      <div class="row"><button class="btn primary" type="submit">저장</button></div>
-    </form></details>` : ""}
-  </section>`;
-}
-
 /* ---------- 로그인 · 승인 대기 · 가입 정보 ---------- */
 function viewAuth() {
   const login = state.authMode === "login";
@@ -692,21 +664,21 @@ function viewSeason() {
   const t = iso(today()), y = Number(t.slice(0, 4)), m = Number(t.slice(5, 7));
   const sy = m >= 3 ? y : y - 1, from = `${sy}-03-01`, to = `${sy + 1}-02-28`;
   const evs = normEvents(events());
-  const list = evs.filter(e => e.end >= from || e.end >= t);
+  const list = evs.filter(e => e.end >= from && e.start <= to);
   const range = e => e.start === e.end ? longDate(parseD(e.start)) : `${md(parseD(e.start))} – ${md(parseD(e.end))}`;
   // 앞으로 16주 흐름
   const weeks = Array.from({ length: 16 }, (_, k) => dAdd(thisMon(), 7 * k)).map(mon => {
     const infos = DAYS.map((_, d) => infoOn(dAdd(mon, d)));
     const i = infos[3], tag = infos.some(x => x.slot === "match") ? "cup" : infos.every(x => x.optional) ? "opt" : i.measure ? "test" : "";
-    const note = tag === "test" ? "측정" : "";
-    return `<li class="${tag}"><span class="num">${md(parseD(mon))}</span><span>${esc(weekLabel(mon))}${note ? ` <span class="chip">${note}</span>` : ""}</span></li>`;
+    const note = i.measure === "jump" ? "점프 측정" : i.measure ? "측정" : "";
+    return `<li class="${tag}"><span class="num">${md(parseD(mon))}</span><span>${esc(weekLabel(mon).replace(/^[12]학기 · 정규 훈련 [^ ]+ · /, ""))}${note ? ` <span class="chip">${note}</span>` : ""}</span></li>`;
   }).join("");
   return `<section class="sec"><div><h2>일정 <span class="small muted">${sy}.3 – ${sy + 1}.2</span></h2>
-    <p class="lede">정규 훈련 1학기 월·목 · 2학기 수·금. 일정을 넣으면 프로그램이 자동으로 맞춰져요.</p></div></section>
+    <p class="lede">정규 훈련 1학기 월·목 · 2학기 수·금 · 방학은 자동. 대회를 넣으면 그날에 맞춰 피크를 잡아요.</p></div></section>
   <div class="cols">
     <div class="col"><section class="sec"><h3>대회·일정</h3>
       ${list.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>이름</th><th>종류</th>${state.admin ? "<th></th>" : ""}</tr></thead><tbody>
-      ${list.map(e => `<tr class="${e.end < t ? "past" : ""}"><td class="num">${range(e)}</td><td><b>${esc(e.name)}</b>${e.note ? `<br><span class="small muted">${esc(e.note)}</span>` : ""}</td><td><span class="chip ${e.kind === "major" ? "warn" : ""}">${esc(EVENT_KINDS[e.kind] || e.kind)}</span></td>
+      ${list.map(e => `<tr class="${e.end < t ? "past" : ""}"><td class="num">${range(e)}</td><td><b>${esc(e.name)}</b>${e.auto ? ' <span class="small muted">자동</span>' : ""}${e.note ? `<br><span class="small muted">${esc(e.note)}</span>` : ""}</td><td><span class="chip ${e.kind === "major" ? "warn" : ""}">${esc(EVENT_KINDS[e.kind] || e.kind)}</span></td>
         ${state.admin ? `<td>${e.id ? `<button class="btn link danger" type="button" data-act="delevent" data-id="${esc(e.id)}">삭제</button>` : ""}</td>` : ""}</tr>`).join("")}
       </tbody></table></div>` : emptyLine("등록된 일정이 없어요.")}
       ${state.admin ? `<form class="f panel" id="eventForm">
@@ -853,7 +825,7 @@ document.addEventListener("click", async ev => {
   if (act === "delmember") {
     const m = state.profiles.find(x => x.id === b.dataset.id) || {};
     const who = (m.player_id && state.players[m.player_id] && state.players[m.player_id].name) || m.email || "이 계정";
-    if (!confirmDel(`${who} 계정을 삭제할까요?\n선수 정보와 측정·기록·부상·인바디가 모두 함께 지워져요.`)) return;
+    if (!confirmDel(`${who} 계정을 삭제할까요?\n선수 정보와 측정·기록·부상 정보가 모두 함께 지워져요.`)) return;
     // 이 계정에만 연결된 선수 정보를 먼저 지운다 (측정·기록 등은 cascade 로 함께 삭제) → 그다음 계정 삭제
     if (m.player_id && !state.profiles.some(o => o.id !== m.id && o.player_id === m.player_id)) {
       const d = await sb.from("players").delete().eq("id", m.player_id);
@@ -864,12 +836,12 @@ document.addEventListener("click", async ev => {
     else toast("계정을 삭제했어요");
     state.dirty = false; return loadAll();
   }
-  if (["delplayer", "deltest", "dellog", "delinbody", "delpain", "delevent"].includes(act)) {
-    const msg = { delevent: "이 일정을 삭제할까요?\n프로그램이 바로 다시 맞춰져요.", delplayer: `${(state.players[b.dataset.pid] || {}).name || "이 선수"}를 삭제할까요?\n측정·기록·부상 정보도 함께 지워져요.`, deltest: "이 측정 기록을 삭제할까요?", dellog: "이 세션 기록을 삭제할까요?", delinbody: "이 인바디 기록을 삭제할까요?", delpain: "이 통증 기록을 삭제할까요?" }[act];
+  if (["delplayer", "deltest", "dellog", "delpain", "delevent"].includes(act)) {
+    const msg = { delevent: "이 일정을 삭제할까요?\n프로그램이 바로 다시 맞춰져요.", delplayer: `${(state.players[b.dataset.pid] || {}).name || "이 선수"}를 삭제할까요?\n측정·기록·부상 정보도 함께 지워져요.`, deltest: "이 측정 기록을 삭제할까요?", dellog: "이 세션 기록을 삭제할까요?", delpain: "이 통증 기록을 삭제할까요?" }[act];
     if (!confirmDel(msg)) return;
     try {
       if (act === "delplayer") { ok(await sb.from("players").delete().eq("id", b.dataset.pid)); state.editPid = null; } // 부상·측정·기록도 함께 삭제됨
-      else ok(await sb.from({ deltest: "tests", dellog: "logs", delinbody: "inbody", delpain: "pain_checks", delevent: "events" }[act]).delete().eq("id", b.dataset.id));
+      else ok(await sb.from({ deltest: "tests", dellog: "logs", delpain: "pain_checks", delevent: "events" }[act]).delete().eq("id", b.dataset.id));
       toast("삭제했어요");
     } catch (e) { toast(failMsg(e)); }
     state.dirty = false; return loadAll();
@@ -990,13 +962,6 @@ document.addEventListener("submit", async ev => {
       if (!filled.length) { toast("측정값을 하나 이상 입력해 주세요."); return; }
       ok(await sb.from("tests").insert(row));
       toast("측정값을 저장했어요");
-    } else if (f.id === "inbodyForm") {
-      ok(await sb.from("inbody").insert({
-        player_id: f.dataset.pid, date: txt("ib-date"), weight: num("ib-weight"), smm: num("ib-smm"),
-        fat_mass: num("ib-fat"), pbf: num("ib-pbf"), leg_l: num("ib-legl"), leg_r: num("ib-legr"),
-        standardized: document.getElementById("ib-std").checked, note: txt("ib-note") || null,
-      }));
-      toast("인바디를 저장했어요");
     } else if (f.id === "painForm") {
       const w = f.dataset.where;
       ok(await sb.from("pain_checks").insert({
@@ -1073,13 +1038,12 @@ async function loadAll() {
       sb.from("tests").select("*").order("date"),
       sb.from("health").select("*"),
       sb.from("logs").select("*").order("date"),
-      sb.from("inbody").select("*").order("date"),
       sb.from("pain_checks").select("*").order("date"),
       sb.from("events").select("*").order("start_date"),
     ];
     if (state.coach) q.push(sb.from("profiles").select("*").order("created_at"));
     const res = await Promise.all(q);
-    const [st, pl, ts, hl, lg, ib, pcs, evq] = res, pr = state.coach ? res[8] : null;
+    const [st, pl, ts, hl, lg, pcs, evq] = res, pr = state.coach ? res[7] : null;
     for (const r of [pl, ts, hl, lg]) if (r.error) throw r.error;
     state.events = evq && !evq.error ? evq.data.map(r => ({ id: r.id, name: r.name, kind: r.kind, start: r.start_date, end: r.end_date, note: r.note })) : null;
     state.players = Object.fromEntries(pl.data.map(r => [r.id, {
@@ -1107,14 +1071,6 @@ async function loadAll() {
       });
     }
     state.logs = logs;
-    const inbody = {};
-    for (const r of (ib && !ib.error ? ib.data : [])) {
-      (inbody[r.player_id] = inbody[r.player_id] || []).push({
-        id: r.id, date: r.date, weight: numOrNull(r.weight), smm: numOrNull(r.smm), fat: numOrNull(r.fat_mass), pbf: numOrNull(r.pbf),
-        legL: numOrNull(r.leg_l), legR: numOrNull(r.leg_r), standardized: r.standardized, note: r.note,
-      });
-    }
-    state.inbody = inbody;
     const checks = {};
     for (const r of (pcs && !pcs.error ? pcs.data : [])) {
       (checks[r.player_id] = checks[r.player_id] || []).push({ id: r.id, date: r.date, area: r.area, during: r.during, morning: r.morning, rest: r.rest, created: r.created_at });
