@@ -547,13 +547,12 @@ function membersHtml() {
   const roleOpt = (v, cur, l) => `<option value="${v}" ${v === cur ? "selected" : ""}>${l}</option>`;
   const nameOf = m => (m.player_id && state.players[m.player_id] && state.players[m.player_id].name) || "";
   return `<details class="sec members" data-keep="members" ${keepOpen("members", list.some(m => m.role === "pending"))}><summary><h3>팀원 계정 <span class="muted small">${list.length}명${list.some(m => m.role === "pending") ? ` · 대기 ${list.filter(m => m.role === "pending").length}` : ""}</span></h3></summary>
-    <div class="tw"><table><thead><tr><th>이름</th><th>역할</th><th>선수 연결</th><th></th></tr></thead><tbody>
+    <div class="tw"><table><thead><tr><th>이름</th><th>역할</th><th></th></tr></thead><tbody>
     ${list.map(m => `<tr><td>${nameOf(m) ? `<b>${esc(nameOf(m))}</b>` : `<span class="muted">정보 없음</span>`}<br><span class="small muted">${esc(m.email || "")}</span>${m.role === "pending" ? ' <span class="chip warn">대기</span>' : ""}</td>
       <td><select id="mr-${esc(m.id)}" aria-label="역할" ${m.id === state.session.user.id ? "disabled" : ""}>${roleOpt("pending", m.role, "대기")}${roleOpt("player", m.role, "선수")}${roleOpt("coach", m.role, "관리자")}</select></td>
-      <td><select id="mp-${esc(m.id)}" aria-label="선수 연결"><option value="">없음</option>${ps.map(p => `<option value="${esc(p.id)}" ${p.id === m.player_id ? "selected" : ""}>${esc(p.name)} · ${esc(p.pos)}</option>`).join("")}</select></td>
-      <td><div class="row nowrap">
+      <td>${m.id === state.session.user.id ? '<span class="small muted">나</span>' : `<div class="row nowrap">
         <button class="btn" type="button" data-act="savemember" data-id="${esc(m.id)}">저장</button>
-        ${m.id === state.session.user.id ? '<span class="small muted">나</span>' : `<button class="btn danger" type="button" data-act="delmember" data-id="${esc(m.id)}">삭제</button>`}</div></td></tr>`).join("")}
+        <button class="btn danger" type="button" data-act="delmember" data-id="${esc(m.id)}">삭제</button></div>`}</td></tr>`).join("")}
     </tbody></table></div></details>`;
 }
 function viewIntake() {
@@ -784,15 +783,19 @@ document.addEventListener("click", async ev => {
   if (act === "savemember") {
     const id = b.dataset.id;
     const role = document.getElementById("mr-" + id).value;
-    const pid = document.getElementById("mp-" + id).value || null;
-    try { ok(await sb.from("profiles").update({ role, player_id: pid }).eq("id", id)); toast("저장했어요"); }
+    try { ok(await sb.from("profiles").update({ role }).eq("id", id)); toast("저장했어요"); }
     catch (e) { toast(failMsg(e)); }
     state.dirty = false; return loadAll();
   }
   if (act === "delmember") {
     const m = state.profiles.find(x => x.id === b.dataset.id) || {};
     const who = (m.player_id && state.players[m.player_id] && state.players[m.player_id].name) || m.email || "이 계정";
-    if (!confirmDel(`${who} 계정을 삭제할까요?${m.role === "pending" ? "\n승인 대기 계정이라 낸 정보도 함께 지워져요." : "\n측정·기록은 남고 계정만 지워져요."}`)) return;
+    if (!confirmDel(`${who} 계정을 삭제할까요?\n선수 정보와 측정·기록·부상·인바디가 모두 함께 지워져요.`)) return;
+    // 이 계정에만 연결된 선수 정보를 먼저 지운다 (측정·기록 등은 cascade 로 함께 삭제) → 그다음 계정 삭제
+    if (m.player_id && !state.profiles.some(o => o.id !== m.id && o.player_id === m.player_id)) {
+      const d = await sb.from("players").delete().eq("id", m.player_id);
+      if (d.error) { toast(failMsg(d.error)); state.dirty = false; return loadAll(); }
+    }
     const r = await sb.rpc("remove_member", { target: b.dataset.id });
     if (r.error) toast(r.error.code === "PGRST202" ? "remove_member.sql 을 먼저 실행해 주세요." : (r.error.code === "42501" ? r.error.message : failMsg(r.error)));
     else toast("계정을 삭제했어요");
