@@ -4,14 +4,13 @@
 // 일정표를 못 불러올 때만 쓰는 기본값
 const DEFAULT_EVENTS = [{ name: "서울대배", kind: "major", start: "2026-11-21", end: "2026-11-22" }];
 const LOG_TYPES = { A: ["웨이트 A (점프·하체)", 75], B: ["웨이트 B (상체·코어)", 60], team: ["정규 훈련", 180], act: ["활성화", 30], match: ["경기", 90], other: ["맨몸·기타", 35] };
-// 세션 RPE (Foster 2001 CR-10). 원 척도에 말이 없는 6·8·9는 앞뒤 사이 값으로 풀어 씀
-const RPE = ["0 휴식", "1 아주 아주 쉬움", "2 쉬움", "3 보통 · 대화하며 할 수 있음", "4 약간 힘듦", "5 힘듦 · 숨이 차지만 계속할 수 있음", "6 힘듦과 매우 힘듦 사이", "7 매우 힘듦 · 짧게만 말할 수 있음", "8 매우 힘듦과 최대 사이", "9 거의 최대 · 겨우 끝냄", "10 최대 · 더는 못 함"];
+// 세션 RPE (Foster 2001 CR-10) — 원 척도에 말이 없는 6·8·9는 앞뒤 사이 값
+const RPE = ["0 휴식", "1 아주 쉬움", "2 쉬움", "3 보통", "4 약간 힘듦", "5 힘듦", "6 힘듦+", "7 매우 힘듦", "8 매우 힘듦+", "9 거의 최대", "10 최대"];
 const AREA_KO = { knee: "무릎", shoulder: "어깨", ankle: "발목", back: "허리", wrist: "손목", finger: "손가락" };
 // 통증은 두 시점(운동할 때 · 다음 날 아침)을 구간으로 고르고, 쉴 때·밤에도 아픈지 따로 체크 → painStage 로 단계 판정
 const PAIN_LEVELS = [[0, "0 없음"], [2, "1–3 살짝"], [5, "4–6 꽤 아픔"], [8, "7–10 많이 아픔"]];
 const painBucket = v => { v = Number(v) || 0; return v <= 0 ? 0 : v <= 3 ? 2 : v <= 6 ? 5 : 8; };
 const levelSelect = (id, cur, label) => `<label class="fl">${label}<select id="${id}">${PAIN_LEVELS.map(([v, t]) => `<option value="${v}" ${painBucket(cur) === v ? "selected" : ""}>${t}</option>`).join("")}</select></label>`;
-const STAGE_KEY = () => `<p class="small stage-key">${STAGE_NAMES.slice(0, 3).map((n, i) => `<span><b>${i + 1}단계 ${n}</b> ${STAGE_HINT[i]}</span>`).join("")}</p>`;
 // 부위마다 '아파요' 체크 → 펼쳐지는 두 시점 + 쉴 때 (CSS :has 로 펼침)
 function painRows(prefix, pain) {
   return `<div class="pain-rows">${PAIN_AREAS.map(a => {
@@ -49,6 +48,9 @@ const INJ_PARTS = [
   ["other", "기타", ["골절", "기타"]],
 ];
 const INJ_SIDES = [["L", "왼쪽"], ["R", "오른쪽"], ["B", "양쪽"], ["-", "해당 없음"]];
+const INJ_STATUS = [["ok", "다 나음"], ["rehab", "재활 중"], ["pain", "아직 아픔"]];
+const INJ_GRADE = [["", "진단: 모름"], ["partial", "부분 손상"], ["complete", "완전 파열"], ["fracture", "골절·탈구"]];
+const FINGER_OPTS = [["", "어느 손가락"], ...Object.entries(FINGERS)];
 const injTypes = part => (INJ_PARTS.find(x => x[0] === part) || INJ_PARTS[0])[2];
 function injRowHtml(x = {}) {
   const part = x.part || "shoulder", y = new Date().getFullYear();
@@ -58,6 +60,9 @@ function injRowHtml(x = {}) {
     <select class="inj-side" aria-label="방향">${INJ_SIDES.map(([v, l]) => o(v, x.side || "R", l)).join("")}</select>
     <select class="inj-part" aria-label="부위">${INJ_PARTS.map(([v, l]) => o(v, part, l)).join("")}</select>
     <select class="inj-type" aria-label="부상">${injTypes(part).map(t => o(t, x.type, t)).join("")}</select>
+    <select class="inj-finger" aria-label="손가락" ${part === "finger" ? "" : "hidden"}>${FINGER_OPTS.map(([v, l]) => o(v, x.finger || "", l)).join("")}</select>
+    <select class="inj-grade" aria-label="진단">${INJ_GRADE.map(([v, l]) => o(v, x.grade || "", l)).join("")}</select>
+    <select class="inj-status" aria-label="지금 상태">${INJ_STATUS.map(([v, l]) => o(v, x.status || "ok", l)).join("")}</select>
     <select class="inj-year" aria-label="연도">${years.map(v => o(v, x.year || y, v)).join("")}</select>
     <div class="inj-end"><label class="check"><input type="checkbox" class="inj-surg" ${x.surgery ? "checked" : ""}> 수술</label>
     <button class="btn link danger" type="button" data-act="delinj" aria-label="이 부상 지우기">✕ 지우기</button></div></div>`;
@@ -67,8 +72,10 @@ const injuryEditor = (prefix, list) => `<div class="inj" id="${prefix}-inj">${(l
 const readInjuries = prefix => [...document.querySelectorAll(`#${prefix}-inj .inj-row`)].map(r => ({
   side: r.querySelector(".inj-side").value, part: r.querySelector(".inj-part").value, type: r.querySelector(".inj-type").value,
   year: r.querySelector(".inj-year").value, surgery: r.querySelector(".inj-surg").checked,
+  status: r.querySelector(".inj-status").value, grade: r.querySelector(".inj-grade").value || null,
+  finger: r.querySelector(".inj-part").value === "finger" ? (r.querySelector(".inj-finger").value || null) : null,
 }));
-const injText = x => `${(INJ_SIDES.find(s => s[0] === x.side) || ["", ""])[1].replace("해당 없음", "")} ${x.type} (${x.year}${x.surgery ? ", 수술" : ""})`.trim();
+const injText = x => `${(INJ_SIDES.find(s => s[0] === x.side) || ["", ""])[1].replace("해당 없음", "")} ${x.part === "finger" && FINGERS[x.finger] ? FINGERS[x.finger] + " " : ""}${x.type} (${[x.year, x.surgery ? "수술" : "", x.status && x.status !== "ok" ? (INJ_STATUS.find(v => v[0] === x.status) || ["", ""])[1] : ""].filter(Boolean).join(", ")})`.trim();
 const confirmDel = msg => { try { return window.confirm(msg); } catch (e) { return false; } };
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
 const VIEWS = ["home", "plan", "rec", "season", "intake", "load"];
@@ -90,7 +97,7 @@ const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": 
 const state = {
   view: "home", week: null, day: null, pid: null, editPid: null,
   players: {}, tests: {}, health: {}, logs: {}, inbody: {}, events: null,
-  loaded: false, offline: false, admin: false, canWrite: null, dirty: false, armed: null,
+  loaded: false, offline: false, admin: false, coach: false, canWrite: null, dirty: false, armed: null,
   session: null, role: null, myPid: null, email: "", profiles: [], authMode: "login", authMsg: "", authErr: false, booting: true,
   selfPlayer: null, selfHealth: null, editingSelf: false, painChecks: {}, openKeys: {},
 };
@@ -113,13 +120,13 @@ function latest(pid) {
   return out;
 }
 const isMainTest = t => ["reach", "cmj", "block", "approach", "balL", "balR", "squat", "rdl", "pull"].some(k => t[k] != null);
-const isCoreHs = t => coreSum(t) != null || t.hsStage != null || t.hsWalk != null;
+const isCoreHs = t => coreSum(t) != null || t.hsStage != null || t.hsWalk != null || t.hsSec != null;
 const inbodyOf = pid => [...(state.inbody[pid] || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
 const logsOf = pid => state.logs[pid] || [];
 const checksOf = pid => [...(state.painChecks[pid] || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.created).localeCompare(String(b.created)));
 const recentChecks = pid => { const from = iso(addDays(today(), -14)); return checksOf(pid).filter(c => c.date >= from); };
 const coreRuns = pid => runs(pid).filter(t => coreSum(t) != null);
-const hsText = t => t && t.hsStage ? `${t.hsStage}단계${t.hsWalk ? ` · ${t.hsWalk}m` : ""}` : "—";
+const hsText = t => t && t.hsStage ? `${t.hsStage}단계${t.hsStage >= 5 && t.hsWalk != null ? ` · ${t.hsWalk}m` : t.hsSec != null ? ` · ${t.hsSec}초` : ""}` : "—";
 // 다시 그려도 펼친 상태가 유지되게: <details data-keep="키">
 const keepOpen = (key, dflt) => (state.openKeys[key] ?? dflt) ? "open" : "";
 // 주는 월요일 날짜(YYYY-MM-DD)로 다룬다. 어떤 날의 프로그램은 일정표(대회·방학·학기)로 정해진다 (program.js seasonDay)
@@ -147,14 +154,14 @@ function ctxFor(p) {
   return {
     player: p, test: latest(p.id),
     weight: ib ? ib.weight : p.weight,
-    rehab: h.rehab || [], pain: state.health[p.id] ? (h.pain || {}) : null, checks: recentChecks(p.id),
+    rehab: [], pain: state.health[p.id] ? (h.pain || {}) : null, checks: recentChecks(p.id),
     injuries: h.injuries || [], year: today().getFullYear(),
     ankleHistory: !!(p.adjust && p.adjust.ankleBal) || (Number(h.ankleL) || 0) + (Number(h.ankleR) || 0) > 0,
   };
 }
 const planOn = (p, date) => planForDay(ctxFor(p), infoOn(date));
 const teamPlanOn = date => planForDay({ player: {} }, infoOn(date));
-const modsFor = p => { const h = state.health[p.id] || {}; return effectiveModules(p.adjust, h.rehab, state.health[p.id] ? (h.pain || {}) : null, recentChecks(p.id)); };
+const modsFor = p => { const h = state.health[p.id] || {}; return effectiveModules(p.adjust, [], state.health[p.id] ? (h.pain || {}) : null, recentChecks(p.id)); };
 const playerOf = pid => pid && state.players[pid] ? { id: pid, ...state.players[pid] } : null;
 
 /* ---------- 공통 조각 ---------- */
@@ -193,8 +200,9 @@ function header() {
   const d = nm ? daysBetween(parseD(nm.start), today()) : null;
   document.getElementById("dday").innerHTML = !nm ? "" : d > 0 ? `${esc(nm.name)} <strong>D-${d}</strong>` : `${esc(nm.name)} <strong>${d === 0 ? "D-DAY" : "대회 중"}</strong>`;
   const who = document.getElementById("who");
-  const roleKo = state.admin ? "관리자" : state.role === "player" ? "선수" : "";
-  who.innerHTML = state.session ? `<span>${esc(myName())}${roleKo ? " " + roleKo : ""}</span><button class="btn link" type="button" data-act="logout">로그아웃</button>` : "";
+  const roleKo = state.coach ? "관리자" : state.role === "player" ? "선수" : "";
+  const modeBtn = state.coach && state.loaded ? `<button class="btn mode ${state.admin ? "" : "on"}" type="button" data-act="mode" title="관리자 화면과 선수 화면을 바꿔요">${state.admin ? "선수 화면으로" : "관리자 화면으로"}</button>` : "";
+  who.innerHTML = state.session ? `<span>${esc(myName())}${roleKo ? " " + roleKo : ""}</span>${modeBtn}<button class="btn link" type="button" data-act="logout">로그아웃</button>` : "";
   if (!state.session || !state.role || state.role === "pending" || state.offline || needsSelfReg()) { document.getElementById("tabs").innerHTML = ""; return; }
   const tabs = [["home", "홈"], ["plan", "프로그램"], ["rec", "기록"], ["season", "일정"]];
   if (state.admin) tabs.push(["intake", "등록·측정"], ["load", "부하"]);
@@ -241,6 +249,7 @@ function myStatusHtml(p) {
   const blk = t && t.block != null ? Number(t.block) - NET : null;
   const todayLog = logsOf(p.id).filter(e => e.date === iso(today()));
   const weekLogs = logsOf(p.id).filter(e => mondayOf(e.date) === thisMon());
+  const nm = nextMeasure(iso(today()), events());
   const au = weekLogs.reduce((s, e) => s + (Number(e.rpe) || 0) * (Number(e.minutes) || 0), 0);
   const jumps = weekLogs.reduce((s, e) => s + (Number(e.jumps) || 0), 0);
   const mods = modsFor(p);
@@ -261,12 +270,13 @@ function myStatusHtml(p) {
         ${stat("블로킹 네트 위", blk != null ? (blk >= 0 ? "+" : "") + blk : "—")}
         ${stat("상대 근력", rel != null ? rel.toFixed(2) : "—")}
         ${stat("코어 합계 (초)", core != null ? core : "—", dCore != null ? ` <small class="${dCore < 0 ? "neg" : ""}">${dCore > 0 ? "+" : ""}${dCore}</small>` : "")}
-        ${stat("물구나무", hsText(t))}</div>` : emptyLine("측정 후 나와요.")}
-      <button class="btn link" type="button" data-act="view" data-v="rec">코어·물구나무 기록하기 →</button>
+        ${stat("핸드스탠드", hsText(t))}</div>` : emptyLine("측정 후 나와요.")}
+      ${nm ? `<p class="small muted">다음 측정 ${md(parseD(nm))} 주${nm === thisMon() ? " (이번 주)" : ""}</p>` : ""}
+      <button class="btn link" type="button" data-act="view" data-v="rec">코어·핸드스탠드 기록하기 →</button>
     </div>
     <div class="panel tile">
       <h3>통증</h3>
-      ${mods.length ? `<ul class="plain">${mods.map(m => `<li><b>${esc(painLabel(m))}</b> <span class="muted">${esc(REHAB[m.area].pain[m.stage - 1])}</span></li>`).join("")}</ul>` : `<p class="small muted">지금 붙은 통증 단계 없음</p>`}
+      ${mods.length ? `<ul class="plain">${mods.map(m => `<li><b>${esc(painLabel(m))}</b>${m.fromCheck ? ' <span class="small muted">최근 체크</span>' : ""}</li>`).join("")}</ul>` : `<p class="small muted">지금 아픈 곳 없음</p>`}
       ${painCheckForm(p, "home")}
     </div>
   </section>`;
@@ -281,7 +291,8 @@ function teamStatusHtml() {
     const why = [];
     const pc = checksOf(p.id).filter(c => c.date >= recent && painStage({ d: c.during, m: c.morning, r: c.rest }) && painStage({ d: c.during, m: c.morning, r: c.rest }) <= 2);
     if (pc.length) { const c = pc.at(-1), st = painStage({ d: c.during, m: c.morning, r: c.rest }); why.push([st === 1 ? "crit" : "warn", `${AREA_KO[c.area]} ${c.rest ? "쉴 때도 아픔" : `운동 ${c.during ?? "—"} · 아침 ${c.morning ?? "—"}`} (${md(parseD(c.date))})`]); }
-    for (const m of modsFor(p)) why.push([m.stage === 1 ? "crit" : "warn", painLabel(m) + (m.inferred ? "?" : "") + (m.fromCheck ? " · 체크" : "")]);
+    for (const m of modsFor(p)) if (m.stage <= 2) why.push([m.stage === 1 ? "crit" : "warn", painLabel(m) + (m.fromCheck ? " · 체크" : "")]);
+    for (const x of (state.health[p.id] || {}).injuries || []) if (x.status === "rehab") why.push(["", `${injName(x)} 재활 중`]);
     const sum = m => logsOf(p.id).filter(e => mondayOf(e.date) === m).reduce((s, e) => s + (Number(e.rpe) || 0) * (Number(e.minutes) || 0), 0);
     const a = sum(mon), b = sum(dAdd(mon, -7));
     if (b > 0 && a >= 2 * b) why.push(["warn", "부하 전주 2배↑"]);
@@ -327,8 +338,7 @@ function viewPlan() {
       ${plan.landings ? `<p class="small muted">착지 약 ${plan.landings}회</p>` : ""}</div>
     ${notes.length ? `<ul class="notes callout">${notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
     ${scopedBlocks(plan)}
-  </section>
-  ${ladderHtml(p)}`;
+  </section>`;
 }
 // 팀 세션(다 같이) / 개인(포지션 · 재활 · 예방)으로 나눠 보여 주기
 // 비시즌은 '자율', 쉬는 날·대회 날은 나누지 않음
@@ -358,22 +368,6 @@ function viewTeamPlan() {
     ${extra.length ? `<h3 class="scope-h me">개인 블록이 있는 선수</h3><ul class="watch">${extra.map(({ p, b }) => `<li><button type="button" class="btn link" data-act="open" data-pid="${esc(p.id)}">${esc(p.name)}</button>${chipsHtml(b.map(x => ["", x.title.replace(/ \(.*\)$/, "")]))}</li>`).join("")}</ul>` : ""}
   </section>`;
 }
-function ladderHtml(p) {
-  const mods = modsFor(p);
-  if (!mods.length) return "";
-  const h = state.health[p.id] || {};
-  return `<section class="sec"><h3>통증 단계 <span class="private">본인·관리자만</span></h3>
-    <p class="small muted">계속 아프면 진료가 먼저예요.${mods.some(m => m.inferred) ? " ? = 통증 기록으로 정한 단계." : ""}</p>
-    ${mods.map(m => {
-      const def = REHAB[m.area], note = ((h.rehab || []).find(x => x.area === m.area) || {}).note;
-      return `<details class="panel ladder" data-keep="ladder-${m.area}" ${keepOpen("ladder-" + m.area, false)}><summary><b>${esc(painLabel(m))}${m.inferred ? "?" : ""}</b>${m.fromCheck ? ' <span class="chip warn">최근 통증 체크 기준</span>' : ""} · ${esc(def.pain[m.stage - 1])}${note ? ` <span class="muted">(${esc(note)})</span>` : ""}</summary>
-        <ol class="stages">${def.stages.map((s, i) => `<li class="${i + 1 === m.stage ? "cur" : ""}"><b>${i + 1}단계 ${STAGE_NAMES[i]} · ${esc(def.pain[i])}</b>
-          <span class="small">${s.items.map(x => esc(x.name) + " " + esc(fmtRx(x.rx))).join(" · ")}</span>
-          ${i + 1 < def.stages.length ? `<span class="small muted">다음 단계: ${esc(s.next)}</span>` : ""}</li>`).join("")}</ol>
-        ${def.always ? `<p class="small">항상: ${esc(def.always)}</p>` : ""}</details>`;
-    }).join("")}</section>`;
-}
-
 /* ---------- 기록 (세션 · 측정 · 인바디) ---------- */
 function viewRec() {
   const pid = viewPid();
@@ -441,9 +435,9 @@ function painCheckList(p) {
   const list = checksOf(p.id).slice().reverse().slice(0, 8);
   if (!list.length) return emptyLine("아직 통증 기록이 없어요.");
   const lv = v => v == null ? "—" : PAIN_LEVELS.find(([x]) => x === painBucket(v))[1];
-  return `<div class="tw"><table><thead><tr><th>날짜</th><th>부위</th><th>운동할 때</th><th>아침</th><th>단계</th><th></th></tr></thead><tbody>
+  return `<div class="tw"><table><thead><tr><th>날짜</th><th>부위</th><th>운동할 때</th><th>아침</th><th>정도</th><th></th></tr></thead><tbody>
     ${list.map(c => { const st = painStage({ d: c.during, m: c.morning, r: c.rest }); return `<tr><td class="num">${md(parseD(c.date))}</td><td>${esc(AREA_KO[c.area])}</td><td>${lv(c.during)}</td><td>${lv(c.morning)}${c.rest ? ' <span class="chip crit">쉴 때도</span>' : ""}</td>
-      <td>${st ? `<span class="chip ${st === 1 ? "crit" : st === 2 ? "warn" : ""}">${st}단계</span>` : "없음"}</td>
+      <td>${st ? `<span class="chip ${st === 1 ? "crit" : st === 2 ? "warn" : ""}">${PAIN_SEV[st - 1]}</span>` : "없음"}</td>
       <td><button class="btn link danger" type="button" data-act="delpain" data-id="${esc(c.id)}">삭제</button></td></tr>`; }).join("")}
   </tbody></table></div>`;
 }
@@ -452,14 +446,14 @@ function coreHtml(p) {
   const first = r[0];
   const delta = (t, k) => !first || first === t || t[k] == null || first[k] == null ? "" : (() => { const v = Number(t[k]) - Number(first[k]); return ` <small class="${v < 0 ? "neg" : ""}">${v > 0 ? "+" : ""}${v}</small>`; })();
   const cell = (t, k) => t[k] == null ? "—" : t[k] + delta(t, k);
-  return `<section class="sec"><h3>코어·물구나무 테스트 <span class="small muted">버틴 시간 (초)</span></h3>
-    ${all.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>사이드 왼</th><th>사이드 오른</th><th>풀 플랭크</th><th>합계</th><th>물구나무</th><th></th></tr></thead><tbody>
+  return `<section class="sec"><h3>코어·핸드스탠드 테스트 <span class="small muted">버틴 시간 (초) · 워크 (m)</span></h3>
+    ${all.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>사이드 왼</th><th>사이드 오른</th><th>풀 플랭크</th><th>합계</th><th>핸드스탠드</th><th></th></tr></thead><tbody>
       ${all.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${cell(t, "sideL")}</td><td class="num">${cell(t, "sideR")}</td><td class="num">${cell(t, "plank")}</td>
         <td class="num">${coreSum(t) != null ? `<b>${coreSum(t)}</b>${first && first !== t ? ` <small class="${coreSum(t) - coreSum(first) < 0 ? "neg" : ""}">${coreSum(t) - coreSum(first) > 0 ? "+" : ""}${coreSum(t) - coreSum(first)}</small>` : ""}` : "—"}</td>
         <td>${hsText(t)}</td>
         <td>${state.admin || t.author === state.session.user.id ? `<button class="btn link danger" type="button" data-act="deltest" data-id="${esc(t.id)}">삭제</button>` : ""}</td></tr>`).join("")}
     </tbody></table></div>` : emptyLine("아직 기록이 없어요.")}
-    ${canAdd ? `<details class="panel" data-keep="core-form" ${keepOpen("core-form", !all.length)}><summary><b>코어·물구나무 입력</b> <span class="small muted">잰 것만</span></summary>
+    ${canAdd ? `<details class="panel" data-keep="core-form" ${keepOpen("core-form", !all.length)}><summary><b>코어·핸드스탠드 입력</b> <span class="small muted">잰 것만</span></summary>
       <form class="f" id="coreForm" data-pid="${esc(p.id)}">
         <div class="fields">
           <label class="fl">날짜<input type="date" id="ct-date" value="${iso(today())}" required></label>
@@ -467,13 +461,14 @@ function coreHtml(p) {
           <label class="fl">사이드 플랭크 오른 (초)<input type="number" id="ct-sr" inputmode="numeric" min="0" max="600"></label>
           <label class="fl">풀 플랭크 (초)<input type="number" id="ct-pl" inputmode="numeric" min="0" max="900"></label>
           ${hsStageSelect("ct-hs")}
-          <label class="fl">물구나무 걷기 (m)<input type="number" id="ct-walk" inputmode="decimal" min="0" max="100" step="0.5" placeholder="5단계만"></label>
+          <label class="fl">핸드스탠드 버틴 시간 (초)<input type="number" id="ct-hsec" inputmode="numeric" min="0" max="120" placeholder="1–4단계"></label>
+          <label class="fl">핸드스탠드 워크 (m)<input type="number" id="ct-walk" inputmode="decimal" min="0" max="100" step="0.5" placeholder="5단계"></label>
         </div>
         <div class="row"><button class="btn primary" type="submit">저장</button></div>
       </form></details>` : ""}
   </section>`;
 }
-const hsStageSelect = id => `<label class="fl">물구나무 단계<select id="${id}"><option value="">—</option>${HS_STAGES.slice(1).map((n, i) => `<option value="${i + 1}">${i + 1} ${n}</option>`).join("")}</select></label>`;
+const hsStageSelect = id => `<label class="fl wide">핸드스탠드 단계<select id="${id}"><option value="">—</option>${HS_STAGES.slice(1).map((n, i) => `<option value="${i + 1}">${i + 1} ${n} · 다음 기준 ${HS_GOAL[i + 1]}</option>`).join("")}</select></label>`;
 function inbodyHtml(p) {
   const list = inbodyOf(p.id);
   const canAdd = state.admin || (state.role === "player" && p.id === state.myPid);
@@ -554,8 +549,8 @@ function viewSelfReg() {
         <h4 class="sub-h">지금 아픈 곳</h4>
         <p class="small muted">운동할 때와 다음 날 아침을 따로 골라요.</p>
         ${painRows("sf", pain)}
-        ${STAGE_KEY()}
         <h4 class="sub-h">부상 이력</h4>
+        <p class="small muted">진단·상태를 아는 만큼 골라요.</p>
         ${injuryEditor("sf", h.injuries)}
         <div class="fields">
           <label class="fl">발목 다친 횟수 (왼)<input id="sf-al" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleL ?? 0)}"></label>
@@ -594,16 +589,9 @@ function viewIntake() {
   const p = pid ? { id: pid, ...state.players[pid] } : {};
   const h = (pid && state.health[pid]) || {};
   const pain = h.pain || {};
-  const rehab = h.rehab || [];
   const list = `<div class="plist">${ps.map(x => `<button type="button" data-act="edit" data-pid="${esc(x.id)}" aria-pressed="${x.id === pid}"><span>${esc(x.name)}</span><span class="chip pos">${esc(x.pos)}</span></button>`).join("")}
     <button type="button" data-act="edit" data-pid="__new" aria-pressed="${isNew}"><span>+ 새 선수</span></button></div>`;
   const opt = (v, cur) => `value="${v}" ${String(cur ?? "") === String(v) ? "selected" : ""}`;
-  const rehabRows = REHAB_AREAS.map(a => {
-    const cur = rehab.find(m => m.area === a) || {};
-    return `<div class="rh-row"><span class="rh-lab">${esc(REHAB[a].label)}</span>
-      <select id="rh-${a}" aria-label="${esc(REHAB[a].label)} 통증 단계"><option value="">없음</option>${REHAB[a].pain.map((t, i) => `<option value="${i + 1}" ${Number(cur.stage) === i + 1 ? "selected" : ""}>${i + 1} ${STAGE_NAMES[i]} · ${esc(t)}</option>`).join("")}</select>
-      <input id="rhn-${a}" maxlength="60" placeholder="메모 (예: 오른쪽, 10/20 진단)" value="${esc(cur.note || "")}" aria-label="${esc(REHAB[a].label)} 메모"></div>`;
-  }).join("");
   return `<section class="sec"><h2>등록·측정</h2></section>
   ${membersHtml()}
   <section class="side">
@@ -621,21 +609,19 @@ function viewIntake() {
             ${wexpSelect("pf-wexp", p.weightExp, false)}
           </div>
         </fieldset>
-        <fieldset><legend>통증 단계 <span class="private">본인·관리자만</span></legend>
-          <p class="small stage-key">${STAGE_NAMES.map((n, i) => `<span><b>${i + 1} ${n}</b> ${STAGE_HINT[i]}</span>`).join("")}</p>
-          <div class="rh">${rehabRows}</div>
-        </fieldset>
-        <details class="panel inner" data-keep="intake-pain" ${keepOpen("intake-pain", false)}><summary><b>통증 · 부상 이력</b>${(h.injuries || []).length ? ` <span class="small muted">${esc(h.injuries.map(injText).join(", "))}</span>` : ""}</summary>
+        <fieldset><legend>통증 · 부상 이력 <span class="private">본인·관리자만</span></legend>
           <h4 class="sub-h">지금 아픈 곳</h4>
+          <p class="small muted">운동할 때와 다음 날 아침을 따로 골라요. 최근 통증 체크가 있으면 그게 우선이에요.</p>
           ${painRows("hf", pain)}
           <h4 class="sub-h">부상 이력</h4>
+          <p class="small muted">진단·상태를 아는 만큼 골라요. 재활 중이면 담당자 프로그램이 우선이에요.</p>
           ${injuryEditor("hf", h.injuries)}
           <div class="fields">
             <label class="fl">발목 다친 횟수 (왼)<input id="hf-al" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleL ?? 0)}"></label>
             <label class="fl">발목 다친 횟수 (오른)<input id="hf-ar" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleR ?? 0)}"></label>
             <label class="fl wide">기타<input id="hf-note" maxlength="200" value="${esc(h.note || "")}"></label>
           </div>
-        </details>
+        </fieldset>
         <label class="check"><input type="checkbox" id="hf-consent" ${h.consent ? "checked" : ""} required> 선수가 프로그램 목적의 정보 사용에 동의함</label>
         <div class="row"><button class="btn primary" type="submit">${pid ? "저장" : "선수 추가"}</button>
           ${pid ? `<button class="btn danger" type="button" data-act="delplayer" data-pid="${esc(pid)}">선수 삭제</button>` : ""}</div>
@@ -657,8 +643,8 @@ function testFormHtml(pid) {
       <label class="fl">한 발 서기 왼<select id="tf-balL"><option value="">—</option><option value="1">30초 통과</option><option value="0">미통과</option></select></label>
       <label class="fl">한 발 서기 오른<select id="tf-balR"><option value="">—</option><option value="1">30초 통과</option><option value="0">미통과</option></select></label>
       ${hsStageSelect("tf-hsStage")}
-      <label class="fl">물구나무 버티기 (초)<input type="number" id="tf-hsSec" inputmode="numeric" min="0" max="120"></label>
-      <label class="fl">물구나무 걷기 (m)<input type="number" id="tf-hsWalk" inputmode="decimal" min="0" max="100" step="0.5"></label>
+      <label class="fl">핸드스탠드 버틴 시간 (초)<input type="number" id="tf-hsSec" inputmode="numeric" min="0" max="120"></label>
+      <label class="fl">핸드스탠드 워크 (m)<input type="number" id="tf-hsWalk" inputmode="decimal" min="0" max="100" step="0.5"></label>
       <label class="fl">스쿼트 5RM (kg)<input type="number" id="tf-squat" inputmode="decimal" step="2.5"></label>
       <label class="fl">RDL 5RM (kg)<input type="number" id="tf-rdl" inputmode="decimal" step="2.5"></label>
       <label class="fl">턱걸이 (회)<input type="number" id="tf-pull" inputmode="numeric" min="0" max="50"></label>
@@ -667,8 +653,8 @@ function testFormHtml(pid) {
       <label class="fl">풀 플랭크 (초)<input type="number" id="tf-pl" inputmode="numeric" min="0" max="900"></label>
     </div>
     <div class="row"><button class="btn primary" type="submit">측정값 저장</button></div>
-    ${r.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>리치</th><th>블로킹</th><th>스파이크</th><th>맥스 버티컬</th><th>CMJ</th><th>균형</th><th>물구나무</th><th>스쿼트</th><th>RDL</th><th>턱걸이</th><th></th></tr></thead><tbody>
-    ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${t.reach ?? "—"}</td><td class="num">${t.block ?? "—"}</td><td class="num">${t.approach ?? "—"}</td><td class="num">${maxVertOf(t) ?? "—"}</td><td class="num">${t.cmj ?? "—"}</td><td>${bal(t.balL)}/${bal(t.balR)}</td><td>${hsText(t)}${t.hsSec ? " · " + esc(t.hsSec) + "초" : ""}</td><td class="num">${t.squat ?? "—"}</td><td class="num">${t.rdl ?? "—"}</td><td class="num">${t.pull ?? "—"}</td>
+    ${r.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>리치</th><th>블로킹</th><th>스파이크</th><th>맥스 버티컬</th><th>CMJ</th><th>균형</th><th>핸드스탠드</th><th>스쿼트</th><th>RDL</th><th>턱걸이</th><th></th></tr></thead><tbody>
+    ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${t.reach ?? "—"}</td><td class="num">${t.block ?? "—"}</td><td class="num">${t.approach ?? "—"}</td><td class="num">${maxVertOf(t) ?? "—"}</td><td class="num">${t.cmj ?? "—"}</td><td>${bal(t.balL)}/${bal(t.balR)}</td><td>${hsText(t)}</td><td class="num">${t.squat ?? "—"}</td><td class="num">${t.rdl ?? "—"}</td><td class="num">${t.pull ?? "—"}</td>
     <td><button class="btn link danger" type="button" data-act="deltest" data-id="${esc(t.id)}">삭제</button></td></tr>`).join("")}
     </tbody></table></div>` : ""}
   </form>`;
@@ -711,18 +697,12 @@ function viewSeason() {
   // 앞으로 16주 흐름
   const weeks = Array.from({ length: 16 }, (_, k) => dAdd(thisMon(), 7 * k)).map(mon => {
     const infos = DAYS.map((_, d) => infoOn(dAdd(mon, d)));
-    const i = infos[3], tag = infos.some(x => x.slot === "match") ? "cup" : infos.every(x => x.optional) ? "opt" : i.w === 0 ? "test" : "";
-    const note = infos.some(x => x.slot === "match") ? "" : infos.every(x => x.optional) ? "" : i.w === 0 ? "측정·가볍게" : "";
+    const i = infos[3], tag = infos.some(x => x.slot === "match") ? "cup" : infos.every(x => x.optional) ? "opt" : i.measure ? "test" : "";
+    const note = tag === "test" ? "측정" : "";
     return `<li class="${tag}"><span class="num">${md(parseD(mon))}</span><span>${esc(weekLabel(mon))}${note ? ` <span class="chip">${note}</span>` : ""}</span></li>`;
   }).join("");
   return `<section class="sec"><div><h2>일정 <span class="small muted">${sy}.3 – ${sy + 1}.2</span></h2>
-    <p class="lede">일정에 맞춰 프로그램이 자동으로 바뀌어요.</p></div>
-    <ul class="plain small rules">
-      <li><b>1학기</b> (3–8월) 정규 훈련 월·목 · <b>2학기</b> (9–2월) 수·금 — 요일 배치가 따라 바뀜</li>
-      <li><b>주요 대회</b> 대회 날에 맞춰 측정 → 쌓기 → 최대 → 대회 주(양 절반)로 거꾸로 맞춤</li>
-      <li><b>9인제·기타 대회</b> 그 주만 컨디셔닝 주간, 끝나면 원래 흐름</li>
-      <li><b>비시즌·방학</b> 첫 주 회복, 그다음 자율 프로그램</li>
-    </ul></section>
+    <p class="lede">정규 훈련 1학기 월·목 · 2학기 수·금. 일정을 넣으면 프로그램이 자동으로 맞춰져요.</p></div></section>
   <div class="cols">
     <div class="col"><section class="sec"><h3>대회·일정</h3>
       ${list.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>이름</th><th>종류</th>${state.admin ? "<th></th>" : ""}</tr></thead><tbody>
@@ -798,6 +778,13 @@ document.addEventListener("keydown", ev => {
 function offlineHtml() {
   return `<div class="panel empty"><strong>팀 데이터에 연결하지 못했어요</strong><span>인터넷 연결을 확인하고 새로고침해 주세요.</span></div>`;
 }
+const savedMode = () => { try { return localStorage.getItem("snuvt-mode"); } catch (e) { return null; } };
+function setMode(admin) {
+  state.admin = admin; state.pid = null; state.editPid = null; state.dirty = false;
+  try { localStorage.setItem("snuvt-mode", admin ? "admin" : "player"); } catch (e) {}
+  if (!admin && ["intake", "load"].includes(state.view)) state.view = "home";
+  render(); window.scrollTo(0, 0);
+}
 const needsSelfReg = () => state.session && state.role === "player" && !state.myPid && state.loaded;
 function render() {
   header();
@@ -807,7 +794,7 @@ function render() {
   else if (state.offline) html = offlineHtml();
   else if (!state.session) html = viewAuth();
   else if (!state.role || state.role === "pending") html = viewPending();
-  else if (needsSelfReg() || (state.admin && state.editingSelf)) html = viewSelfReg();
+  else if (needsSelfReg() || (state.coach && state.editingSelf)) html = viewSelfReg();
   else {
     const v = state.view;
     html = v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : v === "load" ? viewLoad() : viewHome();
@@ -852,6 +839,7 @@ document.addEventListener("click", async ev => {
   if (act === "edit") { state.editPid = b.dataset.pid; state.dirty = false; state.armed = null; return render(); }
   if (act === "authmode") { state.authMode = state.authMode === "login" ? "signup" : "login"; state.authMsg = ""; state.dirty = false; return render(); }
   if (act === "logout") { await sb.auth.signOut(); return; }
+  if (act === "mode") return setMode(!state.admin);
   if (act === "refresh") { await loadProfile(); if (state.role === "pending") toast("아직 승인 전이에요."); return; }
   if (act === "editself") { state.editingSelf = true; state.dirty = false; return render(); }
   if (act === "canceledit") { state.editingSelf = false; state.dirty = false; return render(); }
@@ -889,8 +877,9 @@ document.addEventListener("click", async ev => {
 });
 document.addEventListener("change", ev => {
   if (ev.target.classList.contains("inj-part")) {
-    const t = ev.target.closest(".inj-row").querySelector(".inj-type");
+    const row = ev.target.closest(".inj-row"), t = row.querySelector(".inj-type");
     t.innerHTML = injTypes(ev.target.value).map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
+    row.querySelector(".inj-finger").hidden = ev.target.value !== "finger";
     return;
   }
   if (ev.target.id === "pp-select") { state.pid = ev.target.value; state.dirty = false; render(); return; }
@@ -970,8 +959,6 @@ document.addEventListener("submit", async ev => {
         ankleBal: (ankleL + ankleR) > 0 || injuries.some(x => x.part === "ankle") ? true : null,
         refer: PAIN_AREAS.some(a => mx(a) >= 3) ? true : null,
       };
-      const rehab = REHAB_AREAS.map(a => ({ area: a, stage: Number(document.getElementById("rh-" + a).value) || 0, note: txt("rhn-" + a) || null }))
-        .filter(m => m.stage > 0);
       const prevPid = f.dataset.pid || null;
       const row = {
         name, pos: document.getElementById("pf-pos").value, year: txt("pf-year") || null,
@@ -985,7 +972,7 @@ document.addEventListener("submit", async ev => {
       ok(await sb.from("health").upsert({
         player_id: id, ankle_l: ankleL, ankle_r: ankleR, injuries,
         knee_injury: injuries.some(x => x.part === "knee"), pain, note: txt("hf-note") || null,
-        rehab, consent: true, updated_at: new Date().toISOString(),
+        rehab: [], consent: true, updated_at: new Date().toISOString(),
       }));
       state.editPid = id;
       toast(prevPid ? "저장했어요" : `${name} 선수를 추가했어요`);
@@ -1020,10 +1007,11 @@ document.addEventListener("submit", async ev => {
       toast("통증을 기록했어요");
     } else if (f.id === "coreForm") {
       const hs = document.getElementById("ct-hs").value;
-      const row = { player_id: f.dataset.pid, date: txt("ct-date"), side_l: num("ct-sl"), side_r: num("ct-sr"), plank: num("ct-pl"), hs_stage: hs ? Number(hs) : null, hs_walk: num("ct-walk") };
+      const row = { player_id: f.dataset.pid, date: txt("ct-date"), side_l: num("ct-sl"), side_r: num("ct-sr"), plank: num("ct-pl"), hs_stage: hs ? Number(hs) : null, hs_sec: num("ct-hsec"), hs_walk: num("ct-walk") };
       const core = [row.side_l, row.side_r, row.plank].filter(v => v != null).length;
       if (core && core < 3) { toast("코어는 세 가지를 모두 입력해 주세요."); return; }
-      if (!core && row.hs_stage == null && row.hs_walk == null) { toast("값을 하나 이상 입력해 주세요."); return; }
+      if (!core && row.hs_stage == null && row.hs_walk == null && row.hs_sec == null) { toast("값을 하나 이상 입력해 주세요."); return; }
+      if ((row.hs_sec != null || row.hs_walk != null) && row.hs_stage == null) { toast("핸드스탠드 단계를 골라 주세요."); return; }
       ok(await sb.from("tests").insert(row));
       toast("저장했어요");
     } else if (f.id === "eventForm") {
@@ -1059,7 +1047,8 @@ async function loadProfile() {
   if (r.error) { state.offline = true; state.booting = false; render(); return; }
   state.role = r.data ? r.data.role : "pending";
   state.myPid = r.data ? r.data.player_id : null;
-  state.admin = state.role === "coach";
+  state.coach = state.role === "coach";
+  state.admin = state.coach && savedMode() !== "player"; // 관리자는 관리자 화면 ↔ 선수 화면 전환
   state.canWrite = state.role === "coach" || state.role === "player";
   if (state.canWrite) await loadAll();
   else if (state.role === "pending" && state.myPid) await loadSelf();
@@ -1088,9 +1077,9 @@ async function loadAll() {
       sb.from("pain_checks").select("*").order("date"),
       sb.from("events").select("*").order("start_date"),
     ];
-    if (state.admin) q.push(sb.from("profiles").select("*").order("created_at"));
+    if (state.coach) q.push(sb.from("profiles").select("*").order("created_at"));
     const res = await Promise.all(q);
-    const [st, pl, ts, hl, lg, ib, pcs, evq] = res, pr = state.admin ? res[8] : null;
+    const [st, pl, ts, hl, lg, ib, pcs, evq] = res, pr = state.coach ? res[8] : null;
     for (const r of [pl, ts, hl, lg]) if (r.error) throw r.error;
     state.events = evq && !evq.error ? evq.data.map(r => ({ id: r.id, name: r.name, kind: r.kind, start: r.start_date, end: r.end_date, note: r.note })) : null;
     state.players = Object.fromEntries(pl.data.map(r => [r.id, {

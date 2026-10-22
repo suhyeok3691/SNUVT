@@ -216,9 +216,14 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 .sub-h { font-size: 13.5px; font-weight: 700; margin: 4px 0 0; }
 /* 부상 이력 */
 .inj { display: grid; gap: 6px; }
-.inj-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) minmax(0, 1.6fr) 84px auto; gap: 6px; align-items: center; padding: 6px; border: 1px solid var(--line); border-radius: 8px; }
-.inj-end { display: flex; align-items: center; gap: 10px; justify-content: space-between; }
-@media (max-width: 640px) { .inj-row { grid-template-columns: 1fr 1fr; } .inj-row .inj-type { grid-column: 1 / -1; } }
+.inj-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 6px; border: 1px solid var(--line); border-radius: 8px; }
+.inj-row select { min-width: 0; }
+.inj-row .inj-side { flex: 0 0 92px; } .inj-row .inj-part { flex: 1 1 120px; } .inj-row .inj-type { flex: 2 1 200px; }
+.inj-row .inj-finger { flex: 0 0 110px; } .inj-row .inj-grade { flex: 1 1 110px; } .inj-row .inj-status { flex: 1 1 100px; } .inj-row .inj-year { flex: 0 0 84px; }
+.inj-row [hidden] { display: none; }
+.inj-end { display: flex; align-items: center; gap: 10px; justify-content: space-between; flex: 1 1 140px; }
+.btn.mode { padding: 3px 9px; font-size: 12.5px; border-radius: 999px; white-space: nowrap; }
+.btn.mode.on { background: var(--blue); color: var(--surface); border-color: var(--blue); }
 /* 운동 설명 시트 */
 .rows li.tap { cursor: pointer; }
 .rows li.tap .nm::after { content: " ›"; color: var(--muted); }
@@ -294,8 +299,8 @@ td .btn.link { white-space: nowrap; }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=13"></script>
-<script src="guide.js?v=13"></script>
-<script src="app.js?v=13"></script>
+<script src="program.js?v=14"></script>
+<script src="guide.js?v=14"></script>
+<script src="app.js?v=14"></script>
 </body>
 </html>

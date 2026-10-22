@@ -23,13 +23,18 @@ const COOLDOWN = [
   { name: "통증 체크", rx: "—", cue: "아픈 곳이 있으면 ‘통증 체크’에 남기고, 다음 날 아침에도 한 번 더" },
   { name: "세션 RPE 기록", rx: "30분 안에", cue: "‘기록’ 탭" },
 ];
-// 물구나무 단계 — 목표는 버티기를 넘어 다 같이 코트를 걸어가는 것 (5단계)
+// 핸드스탠드 단계 — 목표는 버티기를 넘어 다 같이 코트를 걸어가는 것 (5단계 핸드스탠드 워크)
+// 1–4단계는 버틴 시간(초), 5단계는 걸은 거리(m)로 기록. 기준을 넘으면 다음 단계로.
+const HS_STAGES = ["", "파이크 핸드스탠드 홀드", "체스트 투 월 핸드스탠드", "월 토 풀 (벽에서 발 떼기)", "프리스탠딩 핸드스탠드", "핸드스탠드 워크"];
+const HS_GOAL = ["", "30초", "60초", "발 떼고 10초", "30초", "18m (코트)"];
 const HANDSTAND = [
-  "", "파이크 버티기 (손은 바닥, 발은 벤치) 30초 × 3", "벽 걸어 올라가기 3–5회",
-  "벽 물구나무 버티기 30–60초 × 3 · 어깨 터치", "킥업 → 벽 없이 버티기 · 파트너가 다리 잡고 걷기",
-  "혼자 물구나무 걷기 · 회마다 거리 늘리기 (목표 코트 18m)",
+  "",
+  "박스에 발 올리고 엉덩이를 어깨 위로 · 다음 단계 기준 30초",
+  "벽을 보고 가슴·배를 벽에 붙여 버티기 · 다음 단계 기준 60초",
+  "체스트 투 월에서 발끝을 벽에서 떼고 균형 잡기 · 다음 단계 기준 발 떼고 10초",
+  "벽 없이 킥업 → 버티기 · 다음 단계 기준 30초",
+  "핸드스탠드로 걷기 · 회마다 거리 재기 (목표 코트 18m)",
 ];
-const HS_STAGES = ["", "파이크 버티기", "벽 걸어 오르기", "벽 물구나무", "킥업 · 잡아 주면 걷기", "혼자 걷기"];
 const POSJ = { MB: "슬라이드 스텝 후 블록 점프", OP: "공격 어프로치 + 블록 번갈아", OH: "공격 어프로치 점프", S: "점프 토스 테이크오프 (양발 착지)" };
 
 /* ---------- 점프 라이브러리 (웨이트 A) ----------
@@ -81,7 +86,7 @@ const THU = [
   { key: "row", name: "한 팔 덤벨 로우", rx: "3×8", cue: "견갑을 뒤로 모으며" },
   { key: "er", name: "옆으로 누워 덤벨 외회전", rx: "2×15", cue: "팔꿈치 옆구리에 고정 · 스파이크 감속 근육" },
   { key: "ytw", name: "엎드려 Y·T·W 들기", rx: "각 2×8", cue: "맨손 → 0.5–1kg" },
-  { key: "hs", name: "물구나무", rx: "10분", cue: "" },
+  { key: "hs", name: "핸드스탠드", rx: "10분", cue: "" },
   { key: "cph", name: "코펜하겐 플랭크", rx: "2×20초 (좌우)", rx2: "3×25초 (좌우)", cue: "무릎 대고 → 발목 대고 · 사타구니 부상 예방" },
   { key: "core", name: "할로우 홀드 · 데드버그 · 덤벨 들고 걷기", rx: "각 2–3세트", cue: "몸통이 버티는 운동" },
 ];
@@ -90,50 +95,120 @@ const LIBERO_THU = [
   { name: "셔플 → 앞 다이빙 준비 자세", rx: "좌우 각 5회", cue: "옆 셔플 3m → 낮게 한 걸음 + 손 뻗기" },
   { name: "수비 자세 월싯", rx: "3×30초", cue: "무릎 약 90°, 팔은 리시브 자세" },
 ];
-/* ---------- 부상 이력 → 재발 예방 (개인 블록) ----------
- * 한 번 다친 곳은 다시 다치기 쉽다. 부위별로 짧은 예방 운동을 그 부위를 쓰는 날에 붙인다.
- * 발목: 균형·고유감각 훈련이 재발을 줄임 (Verhagen 2004, Kosik 2017) · 사타구니: 코펜하겐 (Harøy 2019)
- * 햄스트링: 노르딕 (van der Horst 2015) · 무릎: 착지 자세·한 발 근력 (신경근 훈련, Petushek 2019) */
+/* ---------- 부상 이력 → 처방 (개인 블록) ----------
+ * 부상 하나마다 받는 것: 부위 · 종류 · 진단 정도(모름 / 부분 손상 / 완전 파열 / 골절·탈구) · 지금 상태(다 나음 / 재활 중 / 아직 아픔)
+ *   · 손가락이면 어느 손가락 · 연도 · 수술.
+ * 원칙
+ *  1) 진단에 따라 달라지는 처방(테이핑 방식, 고정, 수술 뒤 프로토콜)은 하지 않는다 — 의료진이 정한다.
+ *  2) 재활 중이면 사이트는 그 부위 운동을 처방하지 않고 부하만 줄인다 (담당자 재활 프로그램이 우선).
+ *  3) 아직 아프면 '지금 아픈 곳'·통증 체크로 받은 통증 정도에 따라 부하를 줄이고, 진단 없이도 안전한 기본 관리만 한다.
+ *  4) 다 나았으면 그 부위·종류에 근거가 있는 예방 운동을, 그 부위를 쓰는 날에 짧게 붙인다.
+ * 근거: 발목 균형 훈련 (Verhagen 2004) · 어깨 OSTRC 프로그램 (Andersson 2017) · 노르딕 (van der Horst 2015)
+ *       코펜하겐 (Harøy 2019) · 족저근막 고부하 근력 (Rathleff 2015) · 팔꿈치 편심 (Tyler 2010) · 맥길 3종 · 무릎 신경근 훈련 */
 const ANKLE_PREV = [
   { name: "밴드 바깥쪽 밀기 (외번)", rx: "2×15" },
   { name: "한 발 균형 (눈 감고 → 쿠션)", rx: "좌우 각 30초 × 2" },
   { name: "한 발 서서 공 받기", rx: "2×10 (좌우)", not: ["bwL"] },
   { name: "양발 → 한 발 홉 착지 고정", rx: "2×5 (좌우)", jump: true },
 ];
-const INJ_PREV = {
-  ankle: { label: "발목", area: "ankle", slots: ["gymA", "bwL"], items: ANKLE_PREV },
-  knee: { label: "무릎", area: "knee", slots: ["gymA", "bwL"], items: [
+const INJ_PART_LABEL = { shoulder: "어깨", elbow: "팔꿈치", wrist: "손목", finger: "손가락", neck: "목", back: "허리", hip: "엉덩이·사타구니", thigh: "허벅지", knee: "무릎", calf: "종아리·아킬레스", ankle: "발목", foot: "발", head: "머리", other: "기타" };
+const INJ_AREA = { shoulder: "shoulder", knee: "knee", ankle: "ankle", back: "back", wrist: "wrist", finger: "finger" }; // 통증 부위와 같은 것
+const FINGERS = { thumb: "엄지", index: "검지", middle: "중지", ring: "약지", little: "새끼" };
+// 규칙: part · type(정규식, 없으면 그 부위 전부) · slots(붙는 날) · items · note(정규 훈련 날 알림)
+const INJ_RULES = [
+  { part: "ankle", slots: ["gymA", "bwL"], items: ANKLE_PREV },
+  { part: "knee", type: /인대|반월상/, slots: ["gymA", "bwL"], items: [
     { name: "한 발 착지 고정 (앞·옆)", rx: "2×4 (다리당)", cue: "무릎이 안으로 모이지 않게, 2초 멈춤", jump: true },
-    { name: "스페인 스쿼트 등척성 (밴드)", rx: "45초 × 3", cue: "무릎 힘줄 관리" }] },
-  shoulder: { label: "어깨", area: "shoulder", slots: ["gymB", "bwU"], items: [
+    { name: "스텝다운 (박스, 천천히)", rx: "2×8 (다리당)", cue: "무릎이 둘째 발가락 방향" }] },
+  { part: "knee", type: /슬개건병증/, slots: ["gymA", "bwL"], items: [
+    { name: "스페인 스쿼트 등척성 (밴드)", rx: "45초 × 3", cue: "무릎 힘줄 관리 · 점프 다음 날 아침 통증 체크" }] },
+  { part: "knee", type: /슬개대퇴|슬개골/, slots: ["gymA", "bwL"], items: [
+    { name: "밴드 사이드 스텝", rx: "2×10m", cue: "엉덩이 옆 근육" },
+    { name: "스텝다운 (박스, 천천히)", rx: "2×8 (다리당)", cue: "무릎이 둘째 발가락 방향" }] },
+  { part: "shoulder", slots: ["gymB", "bwU"], items: [
     { name: "밴드 90/90 외회전", rx: "2×12", cue: "3초 동안 천천히 되돌리기" },
-    { name: "견갑 푸시업 플러스", rx: "2×12", cue: "어깨뼈를 끝까지 밀어내기" }] },
-  back: { label: "허리", area: "back", slots: ["gymA", "bwU"], items: [
-    { name: "맥길 컬업", rx: "10초 × 5", cue: "허리는 바닥에서 띄운 채 그대로" },
+    { name: "견갑 푸시업 플러스", rx: "2×12", cue: "어깨뼈를 끝까지 밀어내기" },
+    { name: "오픈북 흉추 회전", rx: "좌우 8회" }] },
+  { part: "back", slots: ["gymA", "bwU"], items: [
+    { name: "맥길 컬업", rx: "10초 × 5", cue: "허리는 누르지도 띄우지도 않게" },
     { name: "버드독", rx: "2×8 (좌우)" }] },
-  thigh: { label: "허벅지", slots: ["gymB", "bwU"], items: [
-    { name: "롱 레버 한 발 브리지", rx: "2×8 (다리당)", cue: "발을 멀리 두고 햄스트링으로" }] },
-  hip: { label: "사타구니", slots: ["gymA", "bwU"], items: [
+  { part: "thigh", type: /햄스트링/, slots: ["gymB", "bwU"], items: [
+    { name: "롱 레버 한 발 브리지", rx: "2×8 (다리당)", cue: "노르딕은 팀 전체가 이미 함" }] },
+  { part: "thigh", type: /대퇴사두/, slots: ["gymB"], items: [
+    { name: "레그 익스텐션 (3초 내리기)", rx: "2×10" }] },
+  { part: "hip", type: /사타구니|내전근/, slots: ["gymA", "bwU"], items: [
     { name: "내전근 공 쥐기 (무릎 사이)", rx: "5초 × 10" },
     { name: "코펜하겐 플랭크 (무릎 대고)", rx: "2×20초 (좌우)" }] },
-  calf: { label: "종아리", slots: ["gymB", "bwU"], items: [
+  { part: "hip", type: /고관절|굴곡근/, slots: ["gymB"], items: [
+    { name: "옆으로 누워 다리 들기 (힙 어브덕션)", rx: "2×12 (좌우)" },
+    { name: "글루트 브리지", rx: "2×12" }] },
+  { part: "calf", type: /아킬레스|종아리/, slots: ["gymB", "bwU"], items: [
     { name: "한 발 카프레이즈 (3초 내리기)", rx: "3×12 (다리당)", cue: "계단 끝에서 뒤꿈치 끝까지" }] },
-  foot: { label: "발", slots: ["bwL"], items: [
-    { name: "발가락으로 수건 당기기", rx: "2×1분" }] },
-  wrist: { label: "손목", area: "wrist", slots: ["gymB", "bwU"], items: [
-    { name: "손목 굽히기·펴기 (1–2kg)", rx: "각 2×15", cue: "물구나무 전에" },
+  { part: "calf", type: /정강이|피로골절/, slots: ["gymB"], items: [
+    { name: "한 발 카프레이즈 (3초 내리기)", rx: "2×12 (다리당)" }], note: "정강이·피로골절 이력 · 점프 양이 갑자기 늘지 않게, 아프면 바로 통증 체크" },
+  { part: "foot", type: /족저근막/, slots: ["gymB", "bwL"], items: [
+    { name: "수건 대고 카프레이즈 (발가락 젖히고)", rx: "3×12", cue: "3초 올리고 2초 멈추고 3초 내리기" },
+    { name: "족저근막 스트레칭 (발가락 젖히기)", rx: "10초 × 10" }] },
+  { part: "foot", type: /피로골절/, slots: [], items: [], note: "발 피로골절 이력 · 점프 양이 갑자기 늘지 않게, 아프면 바로 통증 체크" },
+  { part: "wrist", slots: ["gymB", "bwU"], items: [
+    { name: "손목 굽히기·펴기 (1–2kg)", rx: "각 2×15", cue: "핸드스탠드 전에" },
     { name: "네발 자세에서 앞뒤로 체중 싣기", rx: "30초 × 2" }] },
-  elbow: { label: "팔꿈치", slots: ["gymB"], items: [
+  { part: "finger", slots: ["gymB"], items: [
+    { name: "핸드 그리퍼 또는 테라퍼티 쥐기", rx: "3×10" },
+    { name: "손가락 힘줄 글라이딩 (주먹 모양 5가지)", rx: "각 5회" }],
+    note: "손가락 부상 이력 · 테이핑은 의료진·트레이너와 정한 방식으로" },
+  { part: "elbow", type: /엘보|힘줄/, slots: ["gymB"], items: [
     { name: "덤벨 손목 펴기 (3초 내리기)", rx: "3×15" }] },
-  finger: { label: "손가락", area: "finger", slots: ["team"], items: [
-    { name: "옆 손가락과 같이 테이핑", rx: "훈련 전" },
-    { name: "고무줄 손가락 벌리기", rx: "2×15" }] },
-};
+  { part: "neck", slots: ["gymB"], items: [
+    { name: "목 등척성 (앞·뒤·옆)", rx: "10초 × 3", cue: "손으로 밀고 목은 버티기, 절반 힘" }] },
+  { part: "head", slots: [], items: [], note: "뇌진탕 이력 · 머리를 부딪힌 뒤 두통·어지럼이 있으면 바로 멈추고 알리기" },
+];
+const injStatus = x => x.status || "ok";
+// 재활 중인 부위: 사이트는 운동을 처방하지 않고 그 부위 부하만 줄임
+const REHAB_LIMIT = { knee: "착지 연습 외 점프 빼기", ankle: "착지 연습 외 점프 빼기", shoulder: "머리 위 동작·던지기 빼기", wrist: "핸드스탠드 빼기", back: "바벨 무게 줄이기", finger: "토스·블로킹 강도는 담당자와 상의" };
+const injName = x => INJ_PART_LABEL[x.part] + (x.part === "finger" && FINGERS[x.finger] ? `(${FINGERS[x.finger]})` : "");
+function prevBlock(c, slot) {
+  const items = [], seen = new Set();
+  for (const x of c.injuries) {
+    if (injStatus(x) !== "ok") continue;
+    const area = INJ_AREA[x.part];
+    if (area && c.mods.some(m => m.area === area)) continue; // 지금 아프면 통증 관리가 대신
+    for (const r of INJ_RULES) {
+      if (r.part !== x.part || (r.type && !r.type.test(x.type || "")) || !r.slots.includes(slot)) continue;
+      for (const it of r.items) {
+        if (it.jump && c.fx.noJumps) continue;
+        if (it.not && it.not.includes(slot)) continue;
+        let name = it.name;
+        if (x.part === "ankle" && c.kneeHx && name.includes("쿠션")) name = "한 발 균형 (눈 감고)";
+        if (seen.has(name)) continue; seen.add(name);
+        items.push({ name, rx: it.rx, cue: it.cue, mod: INJ_PART_LABEL[x.part] });
+      }
+    }
+  }
+  return items.length ? { key: "prev", scope: "me", title: "부상 이력 · 재발 예방", items } : null;
+}
+// 재활 중 · 아직 아픔 알림
+function injuryNotes(c) {
+  const notes = [], done = new Set();
+  for (const x of c.injuries) {
+    const st = injStatus(x), lab = injName(x);
+    if (st === "rehab" && !done.has("r" + x.part)) { done.add("r" + x.part); notes.push(`${lab} 재활 중 · 담당자 재활 프로그램이 우선${REHAB_LIMIT[x.part] ? ` · 여기선 ${REHAB_LIMIT[x.part]}` : ""}`); }
+    if (st === "pain" && !done.has("p" + x.part) && !(INJ_AREA[x.part] && c.mods.some(m => m.area === INJ_AREA[x.part]))) { done.add("p" + x.part); notes.push(`${lab} 아직 아픔 · 통증 체크에 남기면 프로그램이 맞춰져요`); }
+  }
+  return notes;
+}
+// 정규 훈련 날 알림
+function teamNotes(c) {
+  const notes = [];
+  for (const r of INJ_RULES) if (r.note && !notes.includes(r.note) && c.injuries.some(x => x.part === r.part && injStatus(x) === "ok" && (!r.type || r.type.test(x.type || "")))) notes.push(r.note);
+  if (c.p.pos === "S" && c.injuries.some(x => x.part === "finger")) notes.push("세터는 토스하는 손가락을 옆 손가락과 묶는 테이핑(버디 테이핑)은 하지 않기");
+  return notes;
+}
 /* ---------- 맨몸 (팀 필수 세션, 점프 없음) ---------- */
 const BW_U = [
   { key: "push", name: "푸시업", rx: "3세트 (최대보다 2회 적게)", cue: "몸통 일자, 가슴이 먼저 닿게" },
   { key: "pull", name: "턱걸이 또는 인버티드 로우", rx: "3×6–8", cue: "견갑부터 당기기" },
-  { key: "pike", name: "파이크 푸시업", rx: "3×6", cue: "머리 위로 미는 힘 · 물구나무 준비" },
+  { key: "pike", name: "파이크 푸시업", rx: "3×6", cue: "머리 위로 미는 힘 · 핸드스탠드 준비" },
   { key: "hs" },
   { key: "walk" },
   { key: "hollow", name: "할로우 홀드 · 슈퍼맨", rx: "3×20초 · 2×10", cue: "허리 뜨지 않게" },
@@ -176,9 +251,9 @@ function painStage(v) {
 const REHAB = {
   shoulder: { label: "어깨", pain: ["쉬거나 밤에도 아프고 팔이 끝까지 안 올라감", "공격·서브할 때나 다음 날 꽤 아픔", "세게 때린 뒤 살짝 불편", "안 아픔 · 공격 복귀 중"], stages: [
     { title: "통증·가동성", items: [
-      { name: "슬리퍼 스트레치 · 크로스바디 스트레치", rx: "각 30초 × 3–5" },
       { name: "견갑 모으고 내리기 (등척)", rx: "10초 × 10" },
-      { name: "벽 밀기 외회전 (등척)", rx: "10초 × 5" }],
+      { name: "벽 밀기 외회전 (등척)", rx: "10초 × 5", cue: "통증 없는 힘으로" },
+      { name: "오픈북 흉추 회전", rx: "좌우 8회 × 2" }],
       next: "팔을 머리 위로 들어도 안 아픔" },
     { title: "근력", items: [
       { name: "옆으로 누워 덤벨 외회전", rx: "3×15" },
@@ -219,21 +294,21 @@ const REHAB = {
       next: "정규 훈련 이틀 연속 문제없이" },
   ], always: "다친 뒤 1년은 훈련·경기 때 보조기나 테이핑" },
   finger: { label: "손가락", pain: ["가만히 있어도 아프고 부어 있음", "공 받을 때나 다음 날 꽤 아픔", "공 받을 때 살짝 불편", "안 아픔 · 복귀 중"], stages: [
-    { title: "보호·가동성", items: [
-      { name: "손가락 힘줄 미끄러짐 운동 (주먹 모양 5종)", rx: "각 10회, 하루 3번", cue: "통증 없는 범위" },
-      { name: "옆 손가락과 같이 테이핑", rx: "훈련·일상" }],
+    { title: "진료 · 보호", items: [
+      { name: "진료 먼저 (어느 손가락·인대·골절 확인)", rx: "—", cue: "엄지 인대 완전 파열·골절은 수술이 필요할 수 있어 진단 없이 운동으로 버티지 않기" },
+      { name: "손가락 힘줄 글라이딩 (주먹 모양 5가지)", rx: "각 5회, 하루 3번", cue: "통증 없는 범위만" }],
       next: "주먹을 끝까지 쥐고 펼 수 있음" },
-    { title: "근력", items: [
-      { name: "고무줄 손가락 벌리기", rx: "3×15" },
-      { name: "수건·공 쥐기 (5초 유지)", rx: "3×10" }],
-      next: "쥐는 힘 좌우 비슷" },
-    { title: "공 감각", items: [
-      { name: "벽 오버 토스 (가볍게)", rx: "3×20" },
-      { name: "블로킹 손 모양 만들기 → 가벼운 공 막기", rx: "2×10" }],
+    { title: "가동성 · 가벼운 악력", items: [
+      { name: "손가락 힘줄 글라이딩 (주먹 모양 5가지)", rx: "각 5회" },
+      { name: "테라퍼티 쥐기 (부드러운 것)", rx: "2×10", cue: "통증 3 이하" }],
+      next: "쥐는 힘이 반대쪽과 비슷해짐" },
+    { title: "악력 · 공 감각", items: [
+      { name: "핸드 그리퍼 또는 단단한 테라퍼티 쥐기", rx: "3×10" },
+      { name: "벽 오버 토스 (가볍게)", rx: "3×20", cue: "통증 3 이하에서 거리·세기 늘리기" }],
       next: "공 받아도 통증 3 이하" },
-    { title: "배구 동작", items: [{ name: "정규 훈련 토스·블로킹 참여", rx: "단계적으로", cue: "테이핑 유지" }],
+    { title: "배구 동작", items: [{ name: "정규 훈련 토스·블로킹 참여", rx: "단계적으로" }],
       next: "—" },
-  ], always: "훈련 때 옆 손가락과 같이 테이핑" },
+  ], always: "테이핑은 의료진·트레이너와 정한 방식으로 (세터는 토스하는 손가락을 옆 손가락과 묶지 않기)" },
   wrist: { label: "손목", pain: ["가만히 있어도 아픔", "손 짚을 때나 다음 날 꽤 아픔", "체중 실은 뒤 살짝 불편", "안 아픔 · 복귀 중"], stages: [
     { title: "가동성·체중 싣기", items: [
       { name: "손목 원 그리기 · 손바닥 스트레칭", rx: "각 30초" },
@@ -247,9 +322,9 @@ const REHAB = {
       next: "손목 운동 무게가 반대쪽과 비슷" },
     { title: "체중 지지", items: [
       { name: "플랭크 → 푸시업", rx: "3×30초 → 3×8" },
-      { name: "물구나무 1단계 (파이크 버티기)", rx: "3×30초" }],
+      { name: "파이크 핸드스탠드 홀드", rx: "3×30초" }],
       next: "푸시업·파이크에서 통증 없음" },
-    { title: "배구 동작", items: [{ name: "토스·디그 정상 참여, 물구나무 단계 복귀", rx: "단계적으로" }],
+    { title: "배구 동작", items: [{ name: "토스·디그 정상 참여, 핸드스탠드 단계 복귀", rx: "단계적으로" }],
       next: "정규 훈련 이틀 연속 문제없이" },
   ] },
   knee: { label: "무릎", pain: ["쉬어도 아프거나 계단·쪼그려 앉기도 아픔", "점프할 때나 다음 날 아침 꽤 아픔", "점프 후·다음 날 살짝 뻐근함", "안 아픔 · 복귀 중"], stages: [
@@ -308,7 +383,9 @@ function effectiveModules(adjust, rehab, pain, checks) {
   }
   return mods;
 }
-const painLabel = m => `${REHAB[m.area].label} 통증 ${m.stage}단계 (${STAGE_NAMES[m.stage - 1]})`;
+// 통증 정도 (화면에는 '단계' 대신 정도로만 보여 줌)
+const PAIN_SEV = ["심함", "중간", "약함", "복귀"];
+const painLabel = m => `${REHAB[m.area].label} 통증 · ${PAIN_SEV[m.stage - 1]}`;
 function moduleEffects(mods, ankleHistory) {
   const st = a => (mods.find(m => m.area === a) || {}).stage || 0;
   const knee = st("knee"), ankle = st("ankle"), sh = st("shoulder"), wr = st("wrist"), back = st("back");
@@ -316,7 +393,7 @@ function moduleEffects(mods, ankleHistory) {
     noJumps: knee === 1 || knee === 2 || ankle === 1,
     kneeJumps: false,
     tierMax: ankle === 2 ? 1 : knee === 3 ? 2 : 3, // 무릎 3단계: 1–2단계 점프로 진행 (드롭·실전 점프 제외)
-    noOverhead: sh === 1 || sh === 2,     // 메디신볼·물구나무 제외, 벤치 가볍게
+    noOverhead: sh === 1 || sh === 2,     // 메디신볼·핸드스탠드 제외, 벤치 가볍게
     lightMedball: sh === 3,
     handstandMax: wr === 1 || wr === 2 ? 0 : wr === 3 ? 1 : 5,
     goblet: back === 1 || back === 2,
@@ -329,27 +406,36 @@ function moduleEffects(mods, ankleHistory) {
 
 /* ---------- 프로그램 만들기 ----------
  * 슬롯(하루의 종류)마다 프로그램을 만든다. 어느 날이 어떤 슬롯인지는 아래 '1년 주기'가 정한다.
- *   gymA 점프 + 하체 근력 · gymB 상체·엉덩이·코어 · team 정규 훈련 · bwU 맨몸 상체·물구나무 · bwL 맨몸 하체·발목
+ *   gymA 점프 + 하체 근력 · gymB 상체·엉덩이·코어 · team 정규 훈련 · bwU 맨몸 상체·핸드스탠드 · bwL 맨몸 하체·발목
  *   act 활성화 · prep 대회 전날 · match 대회 · recover 회복 · tryout 트라이아웃 · rest 휴식
  * ctx: { player, test(최신 측정), weight(인바디 우선), rehab, pain, checks, injuries, year, ankleHistory } */
 function prepCtx(ctx) {
   const p = ctx.player || {};
   const t = ctx.test || null;
   const mods = effectiveModules(p.adjust, ctx.rehab, ctx.pain, ctx.checks);
-  const inj = Array.isArray(ctx.injuries) ? ctx.injuries : [];
+  const inj = (Array.isArray(ctx.injuries) ? ctx.injuries : []).filter(x => x && x.part);
+  if (ctx.ankleHistory && !inj.some(x => x.part === "ankle")) inj.push({ part: "ankle", type: "발목 염좌", status: "ok" });
   const thisYear = Number(ctx.year) || new Date().getFullYear();
   const recent = x => Number(x.year) >= thisYear - 1; // 올해·작년
   const parts = new Set(inj.map(x => x.part));
-  if (ctx.ankleHistory) parts.add("ankle");
   const fx = moduleEffects(mods, parts.has("ankle"));
-  // 십자인대 손상·무릎 수술 1년 안: 드롭 점프·실전 점프(3단계) 빼기
-  const kneeRecent = inj.some(x => x.part === "knee" && recent(x) && (x.surgery || /십자인대/.test(x.type || "")));
+  const severe = x => x.surgery || x.grade === "complete" || x.grade === "fracture";
+  // 무릎 수술·십자인대·완전 파열 1년 안: 드롭 점프·실전 점프(3단계) 빼기
+  const kneeRecent = inj.some(x => x.part === "knee" && recent(x) && (severe(x) || /십자인대/.test(x.type || "")));
+  // 재활 중인 부위: 그 부위 부하만 줄임 (처방은 담당자)
+  const rehabbing = new Set(inj.filter(x => injStatus(x) === "rehab").map(x => x.part));
+  if (rehabbing.has("knee") || rehabbing.has("ankle")) fx.tierMax = Math.min(fx.tierMax, 1);
+  if (rehabbing.has("shoulder")) fx.noOverhead = true;
+  if (rehabbing.has("wrist")) fx.handstandMax = 0;
+  if (rehabbing.has("back")) { fx.goblet = true; fx.rdlLight = true; }
+  const kneeRecentNote = kneeRecent && !rehabbing.has("knee");
   if (kneeRecent) fx.tierMax = Math.min(fx.tierMax, 2);
   return {
-    p, t, mods, fx, parts, kneeRecent, team: !p.pos,
+    p, t, mods, fx, parts, kneeRecent: kneeRecentNote, team: !p.pos, injuries: inj,
     kneeHx: parts.has("knee"),
-    recentAnkle: inj.some(x => x.part === "ankle" && recent(x)),
-    shoulderRecent: inj.some(x => x.part === "shoulder" && recent(x) && /탈구|와순|파열|불안정/.test(x.type || "")),
+    noExt: inj.some(x => x.part === "back" && /분리증/.test(x.type || "")), // 허리 과신전 줄이기
+    recentAnkle: inj.some(x => x.part === "ankle" && recent(x) && injStatus(x) !== "rehab"),
+    shoulderRecent: inj.some(x => x.part === "shoulder" && recent(x) && (severe(x) || /탈구|와순|파열|불안정/.test(x.type || ""))),
     novice: p.weightExp === "none",                                  // 초보자: 웨이트 처음
     machineOnly: p.weightExp === "machine" || p.weightExp === "lt6", // 중급자: 기구만 → 프리웨이트는 가볍게 익히며
     rel: relStrength(t, ctx.weight),
@@ -357,37 +443,21 @@ function prepCtx(ctx) {
     hsStage: Math.max(1, Math.min(5, Number((t && t.hsStage) || 1))),
   };
 }
-// 부상 이력 → 재발 예방 (개인). 그 부위에 통증 단계가 붙어 있으면 재활 운동이 대신한다.
-function prevBlock(c, slot) {
-  const items = [];
-  for (const [part, def] of Object.entries(INJ_PREV)) {
-    if (!c.parts.has(part) || !def.slots.includes(slot)) continue;
-    if (def.area && c.mods.some(m => m.area === def.area)) continue;
-    for (const x of def.items) {
-      if (x.jump && c.fx.noJumps) continue;
-      if (x.not && x.not.includes(slot)) continue;
-      const it = { name: x.name, rx: x.rx, cue: x.cue, mod: def.label };
-      if (part === "ankle" && c.kneeHx && it.name.includes("쿠션")) it.name = "한 발 균형 (눈 감고)";
-      items.push(it);
-    }
-  }
-  return items.length ? { key: "prev", scope: "me", title: "부상 이력 · 재발 예방", items } : null;
-}
 function hsItem(c, rx) {
   const max = c.fx.handstandMax;
-  if (c.fx.noOverhead || max < 1) return { name: "물구나무 대신 견갑·외회전 운동", rx, cue: "통증 없는 범위에서", mod: c.fx.noOverhead ? "어깨 통증" : "손목 통증" };
-  if (c.team) return { name: "물구나무 단계 연습", rx, cue: "각자 단계대로 (1 파이크 → 5 걷기)" };
+  if (c.fx.noOverhead || max < 1) return { name: "핸드스탠드 대신 견갑·외회전 운동", rx, cue: "통증 없는 범위에서", mod: c.fx.noOverhead ? "어깨" : "손목" };
+  if (c.team) return { name: "핸드스탠드 단계 연습", rx, cue: "각자 단계대로 (1 파이크 홀드 → 5 핸드스탠드 워크)" };
   const s = Math.min(max, c.hsStage);
-  return { name: `물구나무 ${s}단계`, rx, cue: HANDSTAND[s] + (c.p.pos === "S" ? " · 세터는 매번 빠짐없이" : ""), mod: s < c.hsStage ? "손목 통증" : "" };
+  return { name: `핸드스탠드 ${s}단계 · ${HS_STAGES[s]}`, rx, cue: HANDSTAND[s] + (c.p.pos === "S" ? " · 세터는 매번 빠짐없이" : ""), mod: s < c.hsStage ? "손목" : "" };
 }
-// 다 같이 코트 물구나무 걷기 — 단계에 맞춰 손 수레 → 파트너가 다리 잡기 → 혼자
+// 다 같이 코트 핸드스탠드 워크 — 단계에 맞춰 휠배로 워크 → 파트너 보조 → 혼자
 function walkItem(c) {
   if (c.fx.noOverhead || c.fx.handstandMax < 1) return null;
-  if (c.team) return { name: "다 같이 물구나무 걷기", rx: "코트 3회", cue: "단계에 맞게: 손 수레 → 파트너가 다리 잡기 → 혼자 · 목표는 다 같이 코트 18m" };
+  if (c.team) return { name: "다 같이 핸드스탠드 워크", rx: "코트 3회", cue: "단계에 맞게: 휠배로 워크 → 파트너 보조 → 혼자 · 목표는 다 같이 코트 18m" };
   const s = Math.min(c.fx.handstandMax, c.hsStage);
-  if (s >= 5) return { name: "물구나무 걷기 (혼자)", rx: "3회", cue: "회마다 거리 늘리기 · 목표 코트 18m" };
-  if (s === 4) return { name: "파트너가 다리 잡고 물구나무 걷기", rx: "3×5m", cue: "파트너는 발목을 가볍게만" };
-  return { name: "손 수레 걷기 (파트너가 발목 잡기)", rx: "3×5m", cue: "몸통 일자, 허리 처지지 않게" };
+  if (s >= 5) return { name: "핸드스탠드 워크", rx: "3회", cue: "회마다 거리 재기 · 목표 코트 18m" };
+  if (s === 4) return { name: "파트너 보조 핸드스탠드 워크", rx: "3×5m", cue: "파트너는 발목을 가볍게만" };
+  return { name: "휠배로 워크 (파트너가 발목 잡기)", rx: "3×5m", cue: "몸통 일자, 허리 처지지 않게" };
 }
 
 function slotPlan(ctx, slot, w, o = {}) {
@@ -407,10 +477,11 @@ function slotPlan(ctx, slot, w, o = {}) {
       const def = REHAB[m.area], s = def.stages[m.stage - 1];
       items.push(...s.items.map(x => ({ ...x, mod: mods.length > 1 ? def.label : "" })));
     }
-    return items.length ? { key: "rehab", scope: "me", title, items } : null;
+    return items.length ? { key: "rehab", scope: "me", title, items, note: "진단 전 기본 관리예요. 의료진 지시가 있으면 그게 우선 · 쉴 때도 아프거나 7점 이상이면 진료부터." } : null;
   };
   const h = { add, warm, rehabBlock };
   (SLOT_FN[slot] || SLOT_FN.rest)(c, w, o, out, h);
+  if (!["rest", "match", "recover", "prep"].includes(slot)) out.notes.push(...injuryNotes(c));
   if (o.optional && out.title && !/^(자율|회복|휴식)/.test(out.title)) out.title = "자율 · " + out.title;
   return out;
 }
@@ -420,8 +491,8 @@ const SLOT_FN = {
   gymA(c, w, o, out, h) {
     const { p, fx, rel, novice, machineOnly } = c;
     out.kind = "점프 + 하체 근력"; out.logType = "A"; out.minutes = 75;
-    out.title = w === 0 ? "측정 · 가벼운 점프 · 동작 연습" : w === 3 ? "점프·근력 절반 (무게 유지)" : "점프 + 하체 근력";
-    if (w === 0 && !o.optional) out.notes.push("측정 주 · 시작 전에 점프·근력 측정, 측정 후 가볍게");
+    out.title = o.measure ? "측정 · 가벼운 점프 · 동작 연습" : w === 0 ? "가볍게 · 동작 다듬기" : w === 3 ? "점프·근력 절반 (무게 유지)" : "점프 + 하체 근력";
+    if (o.measure) out.notes.push("측정 주 · 시작 전에 측정 (리치·블로킹·스파이크 높이·CMJ·한 발 서기·스쿼트 5RM), 측정 후 가볍게");
     if (w === 3) out.notes.push((o.weekEvent && o.weekEvent.kind === "minor" ? "컨디셔닝 주간" : "대회 주") + " · 양은 줄이고 무게는 유지");
     h.add(h.warm());
     let plyo = PLYO.map(x => ({ ...x, sets: x.sets[w], reps: x.reps[w] })).filter(x => x.sets > 0);
@@ -494,10 +565,10 @@ const SLOT_FN = {
     out.landings = fx.noJumps ? 0 : 20;
     const cut = items.findIndex(x => x.name.startsWith("바벨 힙"));
     const power = items.slice(0, cut), main = items.slice(cut);
-    const isCore = x => ["물구나무", "코펜하겐", "할로우"].some(k => x.name.startsWith(k));
+    const isCore = x => ["핸드스탠드", "코펜하겐", "할로우"].some(k => x.name.startsWith(k));
     if (power.length) h.add({ key: "thu", title: "파워", items: power });
     h.add({ key: "thu2", title: "근력", items: main.filter(x => !isCore(x)) });
-    h.add({ key: "core", title: "물구나무 · 코어", items: main.filter(isCore) });
+    h.add({ key: "core", title: "핸드스탠드 · 코어", items: main.filter(isCore) });
     if (p.pos === "Li") h.add({ key: "li", scope: "me", title: "리베로 수비 이동", items: LIBERO_THU });
     h.add(prevBlock(c, "gymB"));
     h.add(h.rehabBlock("재활 운동"));
@@ -528,6 +599,7 @@ const SLOT_FN = {
     h.add({ key: "team", title: "정규 훈련", items: [{ name: "정규 훈련", rx: "18:00–21:00" }] });
     h.add({ key: "after", title: "훈련 후", items: [{ name: "통증 체크", rx: "아픈 곳 있으면" }, { name: "세션 RPE 기록", rx: "30분 안에" }] });
     h.add(prevBlock(c, "team"));
+    out.notes.push(...teamNotes(c));
   },
   bwU(c, w, o, out, h) { bwPlan(c, w, o, out, h, true); },
   bwL(c, w, o, out, h) { bwPlan(c, w, o, out, h, false); },
@@ -581,21 +653,22 @@ const TRYOUT_TESTS = [
   { name: "스파이크 높이 (도움닫기 점프 최고 도달)", rx: "3회 중 최고", cue: "실전 어프로치, 한 손" },
   { name: "CMJ (팔 없이, 점프 앱)", rx: "3회 중 최고" },
   { name: "한 발 서기 30초", rx: "좌우 각 1회", cue: "눈 감고, 손은 허리" },
-  { name: "물구나무 단계 확인 · 걷기 거리", rx: "1회" },
+  { name: "핸드스탠드 단계 · 버틴 시간 (5단계는 걸은 거리)", rx: "1회" },
   { name: "사이드 플랭크 좌·우 · 풀 플랭크 최대 버티기", rx: "각 1회" },
 ];
-// ---- 맨몸 (팀 필수, 점프 없음): 상체·코어·물구나무 / 하체·발목·균형
+// ---- 맨몸 (팀 필수, 점프 없음): 상체·코어·핸드스탠드 / 하체·발목·균형
 function bwPlan(c, w, o, out, h, upper) {
   const { fx, mods, novice } = c;
   out.kind = upper ? "맨몸 상체·코어" : "맨몸 하체·균형"; out.minutes = 40;
   const two = w === 0 || w === 3;
-  out.title = (upper ? "맨몸 상체·코어·물구나무" : "맨몸 하체·발목·균형") + (two ? " (2세트)" : "");
+  out.title = (upper ? "맨몸 상체·코어·핸드스탠드" : "맨몸 하체·발목·균형") + (two ? " (2세트)" : "");
   const kneeLow = mods.some(m => m.area === "knee" && m.stage <= 2);
   const ankleLow = mods.some(m => m.area === "ankle" && m.stage === 1);
   const items = (upper ? BW_U : BW_L).map(x => {
     let name = x.name, rx = (w === 2 && x.rx2) ? x.rx2 : x.rx, cue = x.cue, mod = "";
     if (x.key === "hs") return hsItem(c, "8분");
     if (x.key === "walk") return walkItem(c);
+    if (x.key === "hollow" && c.noExt) return { name: "할로우 홀드 · 버드독", rx: "3×20초 · 2×8 (좌우)", cue: "허리 젖히는 동작 대신", mod: "허리" };
     if (upper && x.key === "pike" && (fx.noOverhead || fx.handstandMax < 1)) return { name: "견갑 푸시업 · 엎드려 Y·T·W", rx: "각 2×10", mod: fx.noOverhead ? "어깨 통증" : "손목 통증" };
     if (upper && x.key === "push" && fx.handstandMax < 1) { name = "푸시업 (덤벨 손잡이 잡고)"; mod = "손목 통증"; }
     if (!upper && kneeLow && ["split", "latl", "pistol"].includes(x.key)) return x.key === "pistol" ? { name: "벽 기대 앉기 (무릎 60–90°)", rx: "4×45초", cue: "통증 5 이하로", mod: "무릎 통증" } : null;
@@ -604,11 +677,11 @@ function bwPlan(c, w, o, out, h, upper) {
     if (two) rx = String(rx).replace(/^3×/, "2×");
     return { name, rx, cue, mod };
   }).filter(Boolean);
-  h.add({ key: "bw", title: upper ? "맨몸 상체·코어·물구나무" : "맨몸 하체·발목·균형", items });
-  if (upper && w === 2) h.add({ key: "test", title: "코어·물구나무 테스트", note: "기록 탭에 직접 입력", items: [
+  h.add({ key: "bw", title: upper ? "맨몸 상체·코어·핸드스탠드" : "맨몸 하체·발목·균형", items });
+  if (upper && o.measure) h.add({ key: "test", title: "코어·핸드스탠드 테스트", note: "기록 탭에 직접 입력", items: [
     { name: "사이드 플랭크 좌·우 최대 버티기", rx: "각 1회" },
     { name: "풀 플랭크 최대 버티기", rx: "1회" },
-    { name: "물구나무 단계 확인 · 걷기 거리", rx: "1회" },
+    { name: "핸드스탠드 단계 · 버틴 시간 (5단계는 걸은 거리)", rx: "1회" },
   ] });
   h.add(prevBlock(c, upper ? "bwU" : "bwL"));
   h.add(h.rehabBlock("재활 운동", m => (m.area === "knee" && m.stage === 1) || (m.area === "finger" && m.stage <= 2) || (m.area === "ankle" && m.stage <= 2) || (m.area === "shoulder" && m.stage === 1) || (m.area === "back" && m.stage <= 2)));
@@ -646,6 +719,52 @@ const normEvents = events => (events || []).filter(e => e && e.start && e.kind)
 // 다음(또는 진행 중인) 주요 대회
 const nextMajor = (events, date) => normEvents(events).find(e => e.kind === "major" && e.end >= date) || null;
 
+// 주 하나의 흐름: 기준 주(학기 시작·방학·대회 뒤), 다음 주요 대회까지 남은 주, 단계 w
+function weekPhase(mon, evs) {
+  const sun = dAdd(mon, 6), th = dAdd(mon, 3);
+  const comp = evs.some(e => (e.kind === "major" || e.kind === "minor") && e.start <= sun && e.end >= mon);
+  const resets = evs.filter(e => (e.kind === "off" || e.kind === "major") && e.end < mon).map(e => mondayOf(dAdd(e.end, 1)));
+  const reset = [semesterStart(mon), ...resets].filter(x => x <= mon).sort().at(-1);
+  const since = Math.floor(dDiff(mon, reset) / 7);
+  const nm = evs.find(e => e.kind === "major" && e.end >= mon) || null;
+  const k = nm ? Math.floor(dDiff(mondayOf(nm.start), mon) / 7) : null;
+  const offBetween = !!nm && evs.some(e => e.kind === "off" && e.end >= mon && e.start < nm.start);
+  const off = evs.some(e => e.kind === "off" && e.start <= th && th <= e.end);
+  let w;
+  if (comp) w = 3;
+  else if (since === 0 || evs.some(e => e.kind === "tryout" && e.start <= sun && e.end >= mon)) w = 0;
+  else if (nm && k >= 1 && !offBetween) w = k <= 3 ? [0, 2, 1, 0][k] : [2, 1, 1, 0][(k - 4) % 4]; // 마지막 블록: 측정 → 쌓기 → 최대 → 대회 주
+  else w = [0, 1, 1, 2][since % 4];
+  if (since > 0 && since < 3 && !comp) w = 1; // 쉰 뒤 2주는 쌓기부터
+  return { reset, since, k, nm, offBetween, off, comp, w };
+}
+/* 측정 주 — 성장을 보는 것이라 자주 재지 않는다 (근력·점프 변화는 6–8주는 지나야 의미 있게 보임)
+ *  1) 시즌·학기 시작 주 (방학이 끝난 뒤 첫 주, 트라이아웃 주 포함)
+ *  2) 주요 대회 블록 첫 주 (대회 3주 전) — 대회 전 상태 확인
+ *  3) 주요 대회가 끝난 다음 주 — 시즌 정리
+ *  4) 그 밖엔 마지막 측정에서 8주 넘게 지난 가벼운 주(w 0)
+ * 비시즌·대회 주에는 재지 않는다. */
+const _measureCache = new Map();
+function measureWeeks(mon, evs) {
+  const key = mon + "|" + evs.map(e => e.kind + e.start + e.end).join(",");
+  if (_measureCache.has(key)) return _measureCache.get(key);
+  const out = new Set();
+  let last = null;
+  for (let m = weekPhase(mon, evs).reset; m <= mon; m = dAdd(m, 7)) {
+    const ph = weekPhase(m, evs);
+    if (ph.off || ph.comp) continue;
+    if (ph.since === 0 || (ph.nm && ph.k === 3 && !ph.offBetween) || (last && dDiff(m, last) >= 56 && ph.w === 0) || (!last && ph.since >= 8 && ph.w === 0)) { out.add(m); last = m; }
+  }
+  if (_measureCache.size > 500) _measureCache.clear();
+  _measureCache.set(key, out);
+  return out;
+}
+// 다음 측정 주 (오늘 주 포함, 최대 30주 앞까지)
+function nextMeasure(date, events) {
+  const evs = normEvents(events);
+  for (let i = 0, m = mondayOf(date); i < 30; i++, m = dAdd(m, 7)) if (measureWeeks(m, evs).has(m)) return m;
+  return null;
+}
 // 날짜 하나 → { slot, w, 학기, 그 주 대회, 라벨 … }
 function seasonDay(date, events) {
   const evs = normEvents(events);
@@ -654,18 +773,8 @@ function seasonDay(date, events) {
   const comps = evs.filter(e => (e.kind === "major" || e.kind === "minor") && e.start <= sun && e.end >= mon);
   const weekEvent = comps.find(e => e.kind === "major") || comps[0] || null;
   const sem = semesterOf(mon);
-  const info = { date, mon, d, sem, slot: SLOT_WEEK[sem][d], w: 1, event: null, weekEvent, optional: false, label: "", nordicHere: false, noNordic: false };
-  const resets = evs.filter(e => (e.kind === "off" || e.kind === "major") && e.end < mon).map(e => mondayOf(dAdd(e.end, 1)));
-  const reset = [semesterStart(mon), ...resets].filter(x => x <= mon).sort().at(-1);
-  const since = Math.floor(dDiff(mon, reset) / 7);
-  const nm = evs.find(e => e.kind === "major" && e.end >= mon);
-  const k = nm ? Math.floor(dDiff(mondayOf(nm.start), mon) / 7) : null;
-  const offBetween = nm && evs.some(e => e.kind === "off" && e.end >= mon && e.start < nm.start);
-  if (weekEvent) info.w = 3;
-  else if (since === 0 || evs.some(e => e.kind === "tryout" && e.start <= sun && e.end >= mon)) info.w = 0;
-  else if (nm && k >= 1 && !offBetween) info.w = k <= 3 ? [0, 2, 1, 0][k] : [2, 1, 1, 0][(k - 4) % 4]; // 마지막 블록: 측정 → 쌓기 → 최대 → 대회 주
-  else info.w = [0, 1, 1, 2][since % 4];
-  if (since > 0 && since < 3 && !weekEvent) info.w = 1; // 쉰 뒤 2주는 쌓기부터
+  const info = { date, mon, d, sem, slot: SLOT_WEEK[sem][d], w: 1, event: null, weekEvent, optional: false, label: "", nordicHere: false, noNordic: false, measure: measureWeeks(mon, evs).has(mon) };
+  info.w = weekPhase(mon, evs).w;
   info.label = `${sem === "S1" ? "1학기" : "2학기"} · 정규 훈련 ${TEAM_DAYS[sem]}`;
   if (weekEvent) info.label = (weekEvent.kind === "major" ? "대회 주 · " : "컨디셔닝 주간 · ") + weekEvent.name;
 
@@ -674,10 +783,10 @@ function seasonDay(date, events) {
   if (comp) {
     return { ...info, slot: "match", event: comp, dayNo: dDiff(date, comp.start) + 1, days: dDiff(comp.end, comp.start) + 1 };
   }
-  if (tryout) return { ...info, slot: "tryout", event: tryout, w: 0, label: "트라이아웃 주" };
+  if (tryout) return { ...info, slot: "tryout", event: tryout, w: 0, measure: false, label: "트라이아웃 주" };
   if (off) {
     const wk = Math.floor(dDiff(mon, mondayOf(off.start)) / 7);
-    const r = { ...info, optional: true, event: off, label: `${off.name} · 자율 훈련` };
+    const r = { ...info, optional: true, measure: false, event: off, label: `${off.name} · 자율 훈련` };
     if (wk <= 0) return { ...r, slot: d % 2 === 0 && d < 6 ? "recover" : "rest", w: 0, label: `${off.name} · 회복 주` };
     return { ...r, slot: SLOT_WEEK.OFF[d], w: [0, 1, 1, 2][(wk - 1) % 4] };
   }
@@ -700,7 +809,7 @@ const planForDay = (ctx, info) => ({ ...slotPlan(ctx, info.slot, info.w, info), 
 
 // 예전 방식(2학기, 서울대배가 4주차 토·일) — 엔진 시험용
 function dayPlan(ctx, w, d) {
-  const o = {};
+  const o = { measure: w === 0 };
   let slot = SLOT_WEEK.S2[d];
   if (w === 3) {
     if (d >= 5) return slotPlan(ctx, "match", 3, { event: { name: "서울대배", kind: "major" }, dayNo: d - 4, days: 2, weekEvent: { kind: "major" } });
@@ -729,4 +838,4 @@ function daySummary(plan) {
   return { kind: plan.kind, title: plan.title, landings: plan.landings, items: main ? main.items.length : 0 };
 }
 
-if (typeof module !== "undefined") module.exports = { fmtRx, painStage, normPain, PAIN_AREAS, STAGE_NAMES, STAGE_HINT, PAIN_RULE, NEXT_RULE, painLabel, dayPlan, daySummary, slotPlan, seasonDay, planForDay, nextMajor, normEvents, mondayOf, dAdd, dDiff, SLOT_WEEK, EVENT_KINDS, HANDSTAND, HS_STAGES, effectiveModules, moduleEffects, relStrength, REHAB, REHAB_AREAS, DAYS, POS, POS_ORDER, NET };
+if (typeof module !== "undefined") module.exports = { fmtRx, painStage, normPain, PAIN_AREAS, STAGE_NAMES, STAGE_HINT, PAIN_RULE, NEXT_RULE, painLabel, dayPlan, daySummary, slotPlan, seasonDay, planForDay, measureWeeks, nextMeasure, HS_GOAL, INJ_PART_LABEL, FINGERS, PAIN_SEV, nextMajor, normEvents, mondayOf, dAdd, dDiff, SLOT_WEEK, EVENT_KINDS, HANDSTAND, HS_STAGES, effectiveModules, moduleEffects, relStrength, REHAB, REHAB_AREAS, DAYS, POS, POS_ORDER, NET };
