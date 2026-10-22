@@ -3,7 +3,8 @@
 /* ---------- 기준값 ---------- */
 const DEFAULT_SETTINGS = { name: "서울대배", blockStart: "2026-10-26", start: "2026-11-21", end: "2026-11-22" };
 const LOG_TYPES = { A: ["월 웨이트", 75], B: ["목 웨이트", 60], team: ["정규 훈련", 180], act: ["활성화", 30], match: ["경기", 90], other: ["맨몸·기타", 35] };
-const RPE = ["0 휴식", "1 아주 쉬움", "2 쉬움", "3 보통", "4 약간 힘듦", "5 힘듦", "6", "7 매우 힘듦", "8", "9", "10 최대"];
+// 세션 RPE (Foster 2001 CR-10). 원 척도에 말이 없는 6·8·9는 앞뒤 사이 값으로 풀어 씀
+const RPE = ["0 휴식", "1 아주 아주 쉬움", "2 쉬움", "3 보통 · 대화하며 할 수 있음", "4 약간 힘듦", "5 힘듦 · 숨이 차지만 계속할 수 있음", "6 힘듦과 매우 힘듦 사이", "7 매우 힘듦 · 짧게만 말할 수 있음", "8 매우 힘듦과 최대 사이", "9 거의 최대 · 겨우 끝냄", "10 최대 · 더는 못 함"];
 const AREA_KO = { knee: "무릎", shoulder: "어깨", ankle: "발목", back: "허리", wrist: "손목", finger: "손가락" };
 // 통증은 두 시점(운동할 때 · 다음 날 아침)을 구간으로 고르고, 쉴 때·밤에도 아픈지 따로 체크 → painStage 로 단계 판정
 const PAIN_LEVELS = [[0, "0 없음"], [2, "1–3 살짝"], [5, "4–6 꽤 아픔"], [8, "7–10 많이 아픔"]];
@@ -172,7 +173,7 @@ function daysHtml(w, sel, planOf, act = "day", doneDates = new Set()) {
 }
 function playerPicker(pid) {
   if (!state.admin) return "";
-  return `<label class="fl picker">선수<select id="pp-select">${sortedPlayers().map(x => `<option value="${esc(x.id)}" ${x.id === pid ? "selected" : ""}>${esc(x.name)} · ${esc(x.pos)}</option>`).join("")}</select></label>`;
+  return `<label class="fl picker">선수<select id="pp-select">${state.view === "plan" ? `<option value="__team" ${pid === "__team" ? "selected" : ""}>팀 세션만 보기</option>` : ""}${sortedPlayers().map(x => `<option value="${esc(x.id)}" ${x.id === pid ? "selected" : ""}>${esc(x.name)} · ${esc(x.pos)}</option>`).join("")}</select></label>`;
 }
 function myName() {
   const p = (state.myPid && state.players[state.myPid]) || state.selfPlayer;
@@ -227,7 +228,7 @@ function todayHtml(p) {
   return `<section class="panel today-card">
     <p class="eyebrow">오늘 · ${longDate(t)} · ${WEEKS[w].label}</p>
     <h2>${esc(plan.title)}</h2>
-    ${items.length ? `<ul class="mini">${items.map(x => `<li><span>${esc(x.name)}</span><b>${esc(x.rx ?? "")}</b></li>`).join("")}</ul>` : ""}
+    ${items.length ? `<ul class="mini">${items.map(x => `<li><span>${esc(x.name)}</span><b>${esc(fmtRx(x.rx))}</b></li>`).join("")}</ul>` : ""}
     <div class="row between">
       <span class="small muted">${plan.landings ? `착지 약 ${plan.landings}회` : ""}${rehab ? `${plan.landings ? " · " : ""}재활 운동 ${rehab.items.length}개` : ""}</span>
       <button class="btn primary" type="button" data-act="openday" data-w="${w}" data-d="${d}">전체 프로그램 보기</button>
@@ -307,10 +308,11 @@ function blockHtml(b) {
   return `<section class="blk b-${esc(b.key)}"><h4>${esc(b.title)}</h4><ul class="rows">${b.items.map(x => {
     const tap = exGuide(x.name) || exSeconds(x.rx);
     return `<li${tap ? ` class="tap" data-act="ex" data-n="${esc(x.name)}" data-r="${esc(x.rx ?? "")}" data-c="${esc(x.cue || "")}" role="button" tabindex="0"` : ""}>
-    <div class="nm">${esc(x.name)}${x.mod ? ` <span class="mod">${esc(x.mod)}</span>` : ""}</div><div class="rx">${esc(x.rx ?? "")}</div></li>`; }).join("")}</ul>
+    <div class="nm">${esc(x.name)}${x.mod ? ` <span class="mod">${esc(x.mod)}</span>` : ""}</div><div class="rx">${esc(fmtRx(x.rx))}</div></li>`; }).join("")}</ul>
     ${b.note ? `<p class="bnote">${esc(b.note).replace(/\n/g, "<br>")}</p>` : ""}</section>`;
 }
 function viewPlan() {
+  if (state.admin && state.pid === "__team") return viewTeamPlan();
   const pid = viewPid();
   if (!pid) return state.admin ? `<div class="panel empty"><strong>등록된 선수가 없어요</strong><button class="btn primary" data-act="view" data-v="intake">선수 등록하기</button></div>`
     : `<div class="panel empty"><strong>계정이 선수와 연결되지 않았어요</strong><span>관리자에게 연결을 요청해 주세요.</span></div>`;
@@ -326,11 +328,36 @@ function viewPlan() {
   </section>
   <section class="sec">
     <div><h3 class="day-title">${longDate(dateOf(w, d))} · ${esc(plan.title)}</h3>
-      <p class="small muted">${WEEKS[w].label} ${esc(WEEKS[w].goal)}${plan.landings ? ` · 착지 약 ${plan.landings}회` : ""}</p></div>
+      <p class="small muted">${WEEKS[w].label}${plan.landings ? ` · 착지 약 ${plan.landings}회` : ""}</p></div>
     ${notes.length ? `<ul class="notes callout">${notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
-    <div class="blocks">${plan.blocks.map(blockHtml).join("")}</div>
+    ${scopedBlocks(plan)}
   </section>
   ${ladderHtml(p)}`;
+}
+// 팀 세션(다 같이) / 개인(포지션 · 재활 · 예방)으로 나눠 보여 주기
+function scopedBlocks(plan, teamOnly) {
+  const team = plan.blocks.filter(b => b.scope !== "me"), me = teamOnly ? [] : plan.blocks.filter(b => b.scope === "me");
+  if (!me.length) return `<div class="blocks">${team.map(blockHtml).join("")}</div>`;
+  return `<h3 class="scope-h">팀 세션 <span class="small muted">다 같이</span></h3><div class="blocks">${team.map(blockHtml).join("")}</div>
+    <h3 class="scope-h me">개인 <span class="small muted">포지션 · 재활 · 예방</span></h3><div class="blocks">${me.map(blockHtml).join("")}</div>`;
+}
+function viewTeamPlan() {
+  const w = selWeek(), d = selDay();
+  const plan = dayPlan({ player: {} }, w, d);
+  const ps = sortedPlayers();
+  // 이날 개인 블록이 있는 선수 (관리자 확인용)
+  const extra = ps.map(p => ({ p, b: planFor(p, w, d).blocks.filter(b => b.scope === "me") })).filter(x => x.b.length);
+  return `
+  <section class="sec">
+    <div class="sec-head"><h2>팀 세션</h2>${playerPicker("__team")}</div>
+    ${weeksHtml(w)}
+    ${daysHtml(w, d, x => dayPlan({ player: {} }, w, x))}
+  </section>
+  <section class="sec">
+    <div><h3 class="day-title">${longDate(dateOf(w, d))} · ${esc(plan.title)}</h3><p class="small muted">${WEEKS[w].label}</p></div>
+    ${scopedBlocks(plan, true)}
+    ${extra.length ? `<h3 class="scope-h me">개인 블록이 있는 선수</h3><ul class="watch">${extra.map(({ p, b }) => `<li><button type="button" class="btn link" data-act="open" data-pid="${esc(p.id)}">${esc(p.name)}</button>${chipsHtml(b.map(x => ["", x.title.replace(/ \(.*\)$/, "")]))}</li>`).join("")}</ul>` : ""}
+  </section>`;
 }
 function ladderHtml(p) {
   const mods = modsFor(p);
@@ -342,7 +369,7 @@ function ladderHtml(p) {
       const def = REHAB[m.area], note = ((h.rehab || []).find(x => x.area === m.area) || {}).note;
       return `<details class="panel ladder" data-keep="ladder-${m.area}" ${keepOpen("ladder-" + m.area, false)}><summary><b>${esc(painLabel(m))}${m.inferred ? "?" : ""}</b>${m.fromCheck ? ' <span class="chip warn">최근 통증 체크 기준</span>' : ""} · ${esc(def.pain[m.stage - 1])}${note ? ` <span class="muted">(${esc(note)})</span>` : ""}</summary>
         <ol class="stages">${def.stages.map((s, i) => `<li class="${i + 1 === m.stage ? "cur" : ""}"><b>${i + 1}단계 ${STAGE_NAMES[i]} · ${esc(def.pain[i])}</b>
-          <span class="small">${s.items.map(x => esc(x.name) + " " + esc(x.rx)).join(" · ")}</span>
+          <span class="small">${s.items.map(x => esc(x.name) + " " + esc(fmtRx(x.rx))).join(" · ")}</span>
           ${i + 1 < def.stages.length ? `<span class="small muted">다음 단계: ${esc(s.next)}</span>` : ""}</li>`).join("")}</ol>
         ${def.always ? `<p class="small">항상: ${esc(def.always)}</p>` : ""}</details>`;
     }).join("")}</section>`;
@@ -704,7 +731,7 @@ function openSheet(name, rx, cue) {
   const el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `
     <div class="row between"><h3>${esc(name)}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
-    ${rx ? `<p class="sheet-rx">${esc(rx)}</p>` : ""}
+    ${rx ? `<p class="sheet-rx">${esc(fmtRx(rx))}</p>` : ""}
     ${steps.length ? `<ol class="sheet-steps">${steps.map(t => `<li>${esc(t)}</li>`).join("")}</ol>` : ""}
     ${cue ? `<p class="small muted">${esc(cue)}</p>` : ""}
     <div class="timer"><div class="t-time" id="t-time">0:00</div><div class="small muted" id="t-mode"></div>

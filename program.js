@@ -8,10 +8,7 @@ const POS = { OH: "아웃사이드 히터", MB: "미들블로커", OP: "아포�
 const POS_ORDER = ["OH", "MB", "OP", "S", "Li"];
 const DAYS = ["월", "화", "수", "목", "금", "토", "일"]; // 0 = 월요일
 const WEEKS = [
-  { label: "1주차", goal: "측정 · 적응" },
-  { label: "2주차", goal: "발달" },
-  { label: "3주차", goal: "발달 · 최고 강도" },
-  { label: "4주차", goal: "감량 · 대회" },
+  { label: "1주차" }, { label: "2주차" }, { label: "3주차" }, { label: "4주차" },
 ];
 
 /* ---------- 공통 블록 ---------- */
@@ -79,7 +76,7 @@ const THU = [
   { key: "clap", name: "박수 푸시업", rx: "3×5", cue: "바닥을 세게 밀어 손 떼기 · 어렵다면 무릎 대고", weeks: [1, 2] },
   { key: "hip", name: "바벨 힙 쓰러스트", rx: "3×8 · RIR 2", rx2: "3×6 · 무게 ↑", cue: "엉덩이로 끝까지 펴기 · 세트 간 2분" },
   { key: "slrdl", name: "덤벨 한 발 루마니안 데드리프트", rx: "3×8 (다리당)", cue: "골반 수평 유지" },
-  { key: "pull", name: "턱걸이", rx: "4×3–6", rx2: "4×최대 −1회", cue: "못 하면 뛰어 올라가서 3–5초 동안 내려오기" },
+  { key: "pull", name: "턱걸이", rx: "4×3–6", rx2: "4세트 (최대보다 1회 적게)", cue: "못 하면 뛰어 올라가서 3–5초 동안 내려오기" },
   { key: "bench", name: "덤벨 벤치프레스", rx: "3×8 · RIR 2", rx2: "3×6 · 무게 ↑", cue: "올릴 땐 빠르게" },
   { key: "row", name: "한 팔 덤벨 로우", rx: "3×8", cue: "견갑을 뒤로 모으며" },
   { key: "er", name: "옆으로 누워 덤벨 외회전", rx: "2×15", cue: "팔꿈치 옆구리에 고정 · 스파이크 감속 근육" },
@@ -102,7 +99,7 @@ const ANKLE_PREV = [
 ];
 /* ---------- 화: 맨몸 상체·코어 / 토: 맨몸 하체·균형 (권장, 점프 없음) ---------- */
 const TUE_BW = [
-  { key: "push", name: "푸시업", rx: "3×최대 −2회", cue: "몸통 일자, 가슴이 먼저 닿게" },
+  { key: "push", name: "푸시업", rx: "3세트 (최대보다 2회 적게)", cue: "몸통 일자, 가슴이 먼저 닿게" },
   { key: "pull", name: "턱걸이 또는 인버티드 로우", rx: "3×6–8", cue: "견갑부터 당기기" },
   { key: "pike", name: "파이크 푸시업 → 물구나무 단계 연습", rx: "3×6 + 5분", cue: "머리 위로 미는 힘 · 세터 필수" },
   { key: "crawl", name: "곰 기기 앞뒤 · 게 걷기", rx: "각 2×10m", cue: "무릎 바닥에서 5cm 띄우기" },
@@ -188,7 +185,7 @@ const REHAB = {
   ], always: "다친 뒤 1년은 훈련·경기 때 보조기나 테이핑" },
   finger: { label: "손가락", pain: ["가만히 있어도 아프고 부어 있음", "공 받을 때나 다음 날 꽤 아픔", "공 받을 때 살짝 불편", "안 아픔 · 복귀 중"], stages: [
     { title: "보호·가동성", items: [
-      { name: "손가락 힘줄 미끄러짐 운동 (주먹 모양 5종)", rx: "각 10회 × 하루 3번", cue: "통증 없는 범위" },
+      { name: "손가락 힘줄 미끄러짐 운동 (주먹 모양 5종)", rx: "각 10회, 하루 3번", cue: "통증 없는 범위" },
       { name: "옆 손가락과 같이 테이핑", rx: "훈련·일상" }],
       next: "주먹을 끝까지 쥐고 펼 수 있음" },
     { title: "근력", items: [
@@ -224,7 +221,7 @@ const REHAB = {
     { title: "등척성 (통증 조절)", items: [{ name: "레그 익스텐션 등척성 (무릎 약 60°)", rx: "45초 × 5", cue: "세트 간 2분 · 매일 가능" }],
       next: "한 발 스쿼트 통증 3 이하" },
     { title: "무겁고 느린 근력", items: [
-      { name: "레그 익스텐션 · 스쿼트 · 한 발 레그프레스", rx: "3–4세트 × 15 → 8–6회", cue: "3초 올리고 3초 내리기 · 주 3회" }],
+      { name: "레그 익스텐션 · 스쿼트 · 한 발 레그프레스", rx: "15회 → 6회, 3–4세트", cue: "3초 올리고 3초 내리기 · 주 3회" }],
       next: "체중만큼 스쿼트 6회, 통증 3 이하" },
     { title: "에너지 저장 (점프)", items: [
       { name: "레그 익스텐션 · 스쿼트 무겁고 느리게 (유지)", rx: "주 2회 3×8", cue: "3초 올리고 3초 내리기" },
@@ -310,7 +307,7 @@ function dayPlan(ctx, w, d) {
   const novice = p.weightExp === "none";                                  // 초보자: 웨이트 처음
   const machineOnly = p.weightExp === "machine" || p.weightExp === "lt6"; // 중급자: 기구만 다룸 → 프리웨이트는 가볍게 익히며
   const ankleMod = mods.some(m => m.area === "ankle");
-  const anklePrev = () => ankleHx && !ankleMod ? { key: "ankle", title: "발목 재발 예방", items: ANKLE_PREV.filter(x => !(fx.noJumps && x.name.includes("홉"))).map(x => kneeHx && x.name.includes("쿠션") ? { ...x, name: "한 발 균형 (눈 감고)" } : x) } : null;
+  const anklePrev = () => ankleHx && !ankleMod ? { key: "ankle", scope: "me", title: "발목 재발 예방", items: ANKLE_PREV.filter(x => !(fx.noJumps && x.name.includes("홉"))).map(x => kneeHx && x.name.includes("쿠션") ? { ...x, name: "한 발 균형 (눈 감고)" } : x) } : null;
   const rel = relStrength(t, ctx.weight);
   const balanceFail = !!t && (t.balL === false || t.balR === false);
   const tournament = w === 3 && d >= 5;
@@ -328,7 +325,7 @@ function dayPlan(ctx, w, d) {
       const def = REHAB[m.area], s = def.stages[m.stage - 1];
       items.push(...s.items.map(x => ({ ...x, mod: mods.length > 1 ? def.label : "" })));
     }
-    return items.length ? { key: "rehab", title, items } : null;
+    return items.length ? { key: "rehab", scope: "me", title, items } : null;
   };
 
   // ---- 대회 (4주차 토·일)
@@ -379,7 +376,10 @@ function dayPlan(ctx, w, d) {
     }
     plyo.sort((a, b) => PLYO_ORDER.indexOf(a.key) - PLYO_ORDER.indexOf(b.key));
     out.landings = plyo.reduce((s, x) => s + (typeof x.reps === "number" ? x.sets * x.reps * (x.sides || 1) : 0), 0);
-    if (plyo.length) out.blocks.push({ key: "plyo", title: "점프", items: plyo.map(x => ({ name: x.name, rx: plyoRx(x), cue: x.cue, mod: x.mod })) });
+    // 포지션별 점프(리베로는 방향 전환)는 개인 블록으로, 나머지는 팀 공통 점프
+    const posPlyo = plyo.filter(x => x.key === "posj" || x.key === "step" || x.key === "drop"), teamPlyo = plyo.filter(x => !posPlyo.includes(x));
+    if (teamPlyo.length) out.blocks.push({ key: "plyo", title: "점프", items: teamPlyo.map(x => ({ name: x.name, rx: plyoRx(x), cue: x.cue, mod: x.mod })) });
+    var posBlock = posPlyo.length ? { key: "pos", scope: "me", title: "포지션·추가 점프 (팀 점프 바로 다음에)", items: posPlyo.map(x => ({ name: x.name, rx: plyoRx(x), cue: x.cue })) } : null;
     // 근력
     const strength = MON_STRENGTH.filter(x => x.rx[w]).map(x => {
       let name = x.name, rx = x.rx[w], mod = "";
@@ -396,6 +396,7 @@ function dayPlan(ctx, w, d) {
     }).filter(Boolean);
     if (strength[0] && strength[0].name.startsWith("컨트라스트") && strength[1]) strength.splice(0, 2, strength[1], strength[0]); // 무거운 스쿼트 다음에
     out.blocks.push({ key: "str", title: "근력", items: strength });
+    if (posBlock) out.blocks.push(posBlock);
     const ap = anklePrev(); if (ap) out.blocks.push(ap);
     const rb = rehabBlock("재활 운동"); if (rb) out.blocks.push(rb);
     out.notes.push("공 터치는 자율.");
@@ -447,7 +448,7 @@ function dayPlan(ctx, w, d) {
     if (power.length) out.blocks.push({ key: "thu", title: "파워", items: power });
     out.blocks.push({ key: "thu2", title: "근력", items: main.filter(x => !isCore(x)) });
     out.blocks.push({ key: "core", title: "물구나무 · 코어", items: main.filter(isCore) });
-    if (p.pos === "Li") out.blocks.push({ key: "li", title: "리베로 수비 이동", items: LIBERO_THU });
+    if (p.pos === "Li") out.blocks.push({ key: "li", scope: "me", title: "리베로 수비 이동", items: LIBERO_THU });
     const rb = rehabBlock("재활 운동"); if (rb) out.blocks.push(rb);
     out.notes.push("공 터치는 자율.");
     return out;
@@ -458,7 +459,7 @@ function dayPlan(ctx, w, d) {
     if (recentAnkle) out.notes.push("발목 다친 지 1년 안 · 훈련 때 보조기나 테이핑");
     out.kind = "정규 훈련"; out.logType = "team"; out.minutes = 180;
     out.title = w === 3 && d === 4 ? "가벼운 정규 훈련" : "정규 훈련";
-    if (fx.preIso) out.blocks.push({ key: "pre", title: "훈련 전", items: [{ name: "레그 익스텐션 등척성 (무릎 약 60°)", rx: "45초 × 5", cue: "세트 간 2분", mod: "무릎 통증" }] });
+    if (fx.preIso) out.blocks.push({ key: "pre", scope: "me", title: "훈련 전", items: [{ name: "레그 익스텐션 등척성 (무릎 약 60°)", rx: "45초 × 5", cue: "세트 간 2분", mod: "무릎 통증" }] });
     out.blocks.push({ key: "team", title: "정규 훈련", items: [{ name: "정규 훈련", rx: "18:00–21:00" }] });
     out.blocks.push({ key: "after", title: "훈련 후", items: [{ name: "통증 체크", rx: "아픈 곳 있으면" }, { name: "세션 RPE 기록", rx: "30분 안에" }] });
     return out;
@@ -497,10 +498,17 @@ function dayPlan(ctx, w, d) {
   return out;
 }
 function plyoRx(x) {
-  if (x.fmt === "chain") return `${x.sets}세트 × 3연속`;
-  if (x.fmt === "time") return `${x.sets}×${x.reps}`;
+  if (x.fmt === "chain") return `3연속 ${x.sets}세트`;
+  if (x.fmt === "time") return `${x.reps} ${x.sets}세트`;
   if (x.fmt === "count") return `${x.sets}회`;
   return `${x.sets}×${x.reps}`;
+}
+// 처방 표기를 풀어서: "3×8 · RIR 2" → "8회 3세트 · RIR 2", "3×20초" → "20초 3세트", "45초 × 5" → "45초씩 5회"
+function fmtRx(rx) {
+  return String(rx ?? "")
+    .replace(/(\d+(?:[–-]\d+)?)\s*×\s*(최대\s*[−-]\s*\d+회|최대|\d+(?:[–-]\d+)?(?:초|분|m|회)?)/g, (_, sets, reps) =>
+      `${/^최대|[초분m회]$/.test(reps) ? reps : reps + "회"} ${sets}세트`)
+    .replace(/(\d+(?:초|분))\s*×\s*(\d+(?:[–-]\d+)?)(?!세트)/g, "$1씩 $2회");
 }
 // 팀 카드용 한 줄 요약
 function daySummary(plan) {
@@ -508,4 +516,4 @@ function daySummary(plan) {
   return { kind: plan.kind, title: plan.title, landings: plan.landings, items: main ? main.items.length : 0 };
 }
 
-if (typeof module !== "undefined") module.exports = { painStage, normPain, PAIN_AREAS, STAGE_NAMES, STAGE_HINT, PAIN_RULE, NEXT_RULE, painLabel, dayPlan, daySummary, effectiveModules, moduleEffects, relStrength, REHAB, REHAB_AREAS, DAYS, WEEKS, POS, POS_ORDER, NET };
+if (typeof module !== "undefined") module.exports = { fmtRx, painStage, normPain, PAIN_AREAS, STAGE_NAMES, STAGE_HINT, PAIN_RULE, NEXT_RULE, painLabel, dayPlan, daySummary, effectiveModules, moduleEffects, relStrength, REHAB, REHAB_AREAS, DAYS, WEEKS, POS, POS_ORDER, NET };
