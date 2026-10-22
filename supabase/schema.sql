@@ -295,3 +295,8 @@ create policy "coach or self removes inbody" on public.inbody for delete
 alter table public.logs drop constraint if exists logs_pain_area_check;
 alter table public.logs add constraint logs_pain_area_check
   check (pain_area = any (array['knee','shoulder','ankle','back','wrist','finger']));
+
+-- ---------- 통증 체크 · 코어 테스트 · 정보 없는 승인 계정 (2026-10-23, 이미 적용됨: 마이그레이션 pain_checks_core_tests_selfreg) ----------
+-- tests: side_l, side_r, sorensen, flexor, author 추가. 선수는 코어 항목만 있는 행을 직접 추가·삭제 가능
+-- pain_checks: 부위별 운동 중(during) · 다음 날 아침(morning) · 쉴 때(rest) 통증 기록, 본인·관리자만
+-- submit_my_info: 승인 대기이거나 player_id 가 없는 계정이면 호출 가능, 통증은 {d, m, r} 형식으로 저장

@@ -26,7 +26,7 @@ const WARMUP = [
 const COOLDOWN = [
   { name: "가볍게 걷기·조깅", rx: "3분", cue: "심박 내리기" },
   { name: "종아리 · 엉덩이 굴곡근 · 햄스트링 · 어깨 뒤쪽 스트레칭", rx: "부위당 30초", cue: "통증 없는 범위" },
-  { name: "아픈 곳 체크", rx: "—", cue: "3 이상이면 기록에 부위와 함께 남기기" },
+  { name: "통증 체크", rx: "—", cue: "아픈 곳이 있으면 ‘통증 체크’에 남기고, 다음 날 아침에도 한 번 더" },
   { name: "세션 RPE 기록", rx: "30분 안에", cue: "‘기록’ 탭" },
 ];
 const HANDSTAND = [
@@ -113,19 +113,29 @@ const SAT_BW = [
 ];
 
 /* ---------- 통증 단계별 재활 ----------
- * 단계 = 조직 자극 민감도(irritability: 높음·중간·낮음, Kelley 등 어깨 임상지침) + 복귀.
- *   1 높음: 통증 7 이상, 쉬거나 밤에도 아픔 → 통증 없는 범위 가동성·등척성, 그 부위 부하 줄이기
- *   2 중간: 통증 4–6, 움직임 끝이나 운동 중 아픔 → 등척성 + 가벼운 근력
- *   3 낮음: 통증 3 이하, 세게 할 때만 → 무거운 근력·파워·점프
- *   4 복귀: 통증 없음 → 배구 동작을 단계적으로
- * 진행 규칙은 통증 모니터링 모델 (Thomeé 1997, Silbernagel 2007).
- * 무릎은 점퍼스니 Blazina 분류와 같은 방향으로 설명을 맞췄다. */
+ * 단계는 두 시점의 통증과 쉴 때 통증으로 정한다 (통증 모니터링 모델: 운동 중 통증 + 다음 날 아침 반응, Silbernagel 2007).
+ *   1 높음: 쉬거나 밤에도 아픔, 또는 운동 중·다음 날 아침 7점 이상
+ *   2 중간: 운동 중 또는 다음 날 아침 4–6점 (운동 땐 괜찮았는데 다음 날 꽤 아픈 경우 포함)
+ *   3 낮음: 운동 중·다음 날 아침 모두 1–3점
+ *   4 복귀: 통증 없음 (관리자가 복귀 단계로 지정)
+ * 운동 강도는 자극 민감도(높음·중간·낮음, Kelley 등 어깨 임상지침)에 맞춘다. */
 const STAGE_NAMES = ["높음", "중간", "낮음", "복귀"];
-const STAGE_HINT = ["7점 이상 · 쉬어도 아픔", "4–6점 · 운동하면 아픔", "3점 이하 · 세게 할 때만", "통증 없음"];
-const PAIN_RULE = "운동 중 통증 5 이하 · 다음 날 아침 평소대로 · 주마다 늘지 않기. 지키면 그대로, 어기면 양을 줄이거나 한 단계 내려요.";
-const NEXT_RULE = "규칙을 1–2주 지키고 통증이 다음 구간으로 내려가면 다음 단계로.";
+const STAGE_HINT = ["쉬거나 밤에도 아픔, 또는 7점 이상", "운동 중이나 다음 날 아침 4–6점", "운동 중·다음 날 모두 1–3점", "통증 없음"];
+const PAIN_RULE = "운동 중 통증 5 이하 · 다음 날 아침 평소대로 · 주마다 늘지 않기. 다음 날 아침 4점 이상이면 그 부위는 2단계로 내려가요.";
+const NEXT_RULE = "규칙을 1–2주 지키고 운동 중·다음 날 통증이 다음 구간으로 내려가면 다음 단계로.";
+const PAIN_AREAS = ["knee", "shoulder", "ankle", "back", "wrist", "finger"];
+// 통증 값: 예전 숫자 형식(운동 중 값)과 {d: 운동 중, m: 다음 날 아침, r: 쉴 때·밤에도} 둘 다 받는다
+const normPain = v => v == null ? null : typeof v === "object" ? { d: Number(v.d) || 0, m: Number(v.m) || 0, r: !!v.r } : { d: Number(v) || 0, m: 0, r: false };
+function painStage(v) {
+  const p = normPain(v); if (!p) return 0;
+  const mx = Math.max(p.d, p.m);
+  if (p.r || mx >= 7) return 1;
+  if (mx >= 4) return 2;
+  if (mx >= 1) return 3;
+  return 0;
+}
 const REHAB = {
-  shoulder: { label: "어깨", pain: ["쉬거나 밤에도 아프고 팔이 끝까지 안 올라감", "팔을 끝까지 올리거나 운동하면 아픔", "스파이크·서브처럼 세게 할 때만 아픔", "안 아픔 · 공격 복귀 중"], stages: [
+  shoulder: { label: "어깨", pain: ["쉬거나 밤에도 아프고 팔이 끝까지 안 올라감", "공격·서브할 때나 다음 날 꽤 아픔", "세게 때린 뒤 살짝 불편", "안 아픔 · 공격 복귀 중"], stages: [
     { title: "통증·가동성", items: [
       { name: "슬리퍼 스트레치 · 크로스바디 스트레치", rx: "각 30초 × 3–5" },
       { name: "견갑 모으고 내리기 (등척)", rx: "10초 × 10" },
@@ -147,7 +157,7 @@ const REHAB = {
       { name: "서서 벽에 때리기 → 서브 → 점프 스파이크", rx: "20 → 20 → 10회", cue: "조금씩 늘리기" }],
       next: "정규 훈련 공격을 이틀 연속 문제없이" },
   ] },
-  ankle: { label: "발목", pain: ["걸을 때도 아프고 부어 있음", "걷기는 괜찮고 뛰거나 운동하면 아픔", "점프·방향 전환 때만 아픔", "안 아픔 · 복귀 중"], stages: [
+  ankle: { label: "발목", pain: ["걸어도 아프고 부어 있음", "뛸 때나 다음 날 아침 꽤 아픔", "점프·방향 전환 뒤 살짝 불편", "안 아픔 · 복귀 중"], stages: [
     { title: "가동성", items: [
       { name: "무릎 벽 대기 (발끝-벽 거리 늘리기)", rx: "2×10" },
       { name: "발목 알파벳 그리기", rx: "2회" },
@@ -169,7 +179,7 @@ const REHAB = {
       { name: "어프로치 점프", rx: "3×3" }],
       next: "정규 훈련 이틀 연속 문제없이" },
   ], always: "다친 뒤 1년은 훈련·경기 때 보조기나 테이핑" },
-  finger: { label: "손가락", pain: ["가만히 있어도 아프고 부어 있음", "주먹 쥐거나 힘줄 때 아픔", "공 받을 때만 아픔", "안 아픔 · 복귀 중"], stages: [
+  finger: { label: "손가락", pain: ["가만히 있어도 아프고 부어 있음", "공 받을 때나 다음 날 꽤 아픔", "공 받을 때 살짝 불편", "안 아픔 · 복귀 중"], stages: [
     { title: "보호·가동성", items: [
       { name: "손가락 힘줄 미끄러짐 운동 (주먹 모양 5종)", rx: "각 10회 × 하루 3번", cue: "통증 없는 범위" },
       { name: "옆 손가락과 같이 테이핑", rx: "훈련·일상" }],
@@ -185,7 +195,7 @@ const REHAB = {
     { title: "배구 동작", items: [{ name: "정규 훈련 토스·블로킹 참여", rx: "단계적으로", cue: "테이핑 유지" }],
       next: "—" },
   ], always: "훈련 때 옆 손가락과 같이 테이핑" },
-  wrist: { label: "손목", pain: ["가만히 있어도 아픔", "손을 짚거나 운동하면 아픔", "푸시업·물구나무처럼 체중 실을 때만 아픔", "안 아픔 · 복귀 중"], stages: [
+  wrist: { label: "손목", pain: ["가만히 있어도 아픔", "손 짚을 때나 다음 날 꽤 아픔", "체중 실은 뒤 살짝 불편", "안 아픔 · 복귀 중"], stages: [
     { title: "가동성·체중 싣기", items: [
       { name: "손목 원 그리기 · 손바닥 스트레칭", rx: "각 30초" },
       { name: "네발 자세에서 앞뒤로 체중 싣기", rx: "30초 × 3" }],
@@ -203,19 +213,20 @@ const REHAB = {
     { title: "배구 동작", items: [{ name: "토스·디그 정상 참여, 물구나무 단계 복귀", rx: "단계적으로" }],
       next: "정규 훈련 이틀 연속 문제없이" },
   ] },
-  knee: { label: "무릎", pain: ["운동 중·후 오래 아프고 경기력이 떨어짐", "운동 중·후에 아프지만 뛸 수는 있음", "운동 끝난 뒤에만 아픔", "안 아픔 · 복귀 중"], stages: [
+  knee: { label: "무릎", pain: ["쉬어도 아프거나 계단·쪼그려 앉기도 아픔", "점프할 때나 다음 날 아침 꽤 아픔", "점프 후·다음 날 살짝 뻐근함", "안 아픔 · 복귀 중"], stages: [
     { title: "등척성 (통증 조절)", items: [{ name: "레그 익스텐션 등척성 (무릎 약 60°)", rx: "45초 × 5", cue: "세트 간 2분 · 매일 가능" }],
       next: "한 발 스쿼트 통증 3 이하" },
     { title: "무겁고 느린 근력", items: [
       { name: "레그 익스텐션 · 스쿼트 · 한 발 레그프레스", rx: "3–4세트 × 15 → 8–6회", cue: "3초 올리고 3초 내리기 · 주 3회" }],
       next: "체중만큼 스쿼트 6회, 통증 3 이하" },
     { title: "에너지 저장 (점프)", items: [
-      { name: "포고 → 스쿼트 점프 → 연속 멀리뛰기 → 한 발 홉", rx: "단계마다 착지 수 점차 ↑", cue: "주 2–3회" }],
+      { name: "레그 익스텐션 · 스쿼트 무겁고 느리게 (유지)", rx: "주 2회 3×8", cue: "3초 올리고 3초 내리기" },
+      { name: "점프는 월요일 점프 블록(1–2단계)으로", rx: "—", cue: "점프 다음 날 아침 통증 체크" }],
       next: "점프 다음 날 아침 통증이 늘지 않음" },
     { title: "종목 복귀", items: [{ name: "어프로치 점프 → 블록 점프 → 정규 훈련 점프 드릴", rx: "단계적 참여" }],
       next: "정규 훈련 이틀 연속 문제없이" },
   ], always: "점프 다음 날 아침 통증이 늘면 점프 양을 줄여요" },
-  back: { label: "허리", pain: ["쉬어도 아프고 움직이기 힘듦", "숙이거나 운동하면 아픔", "무거운 무게 들 때만 아픔", "안 아픔 · 복귀 중"], stages: [
+  back: { label: "허리", pain: ["쉬어도 아프고 움직이기 힘듦", "운동할 때나 다음 날 아침 꽤 아픔", "무거운 무게 뒤 살짝 뻐근함", "안 아픔 · 복귀 중"], stages: [
     { title: "가동성", items: [
       { name: "오픈북 흉추 회전", rx: "좌우 8회 × 2" },
       { name: "폼롤러 위 흉추 신전", rx: "5회 × 2" },
@@ -239,18 +250,22 @@ function relStrength(t, weight) {
   const sq = t && Number(t.squat), bw = Number(weight);
   return sq > 0 && bw > 0 ? sq / bw : null;
 }
-// 관리자가 지정한 모듈 + (모듈이 없는 부위는) 가입 때 자가 보고한 통증으로 추정한 모듈
-// pain: 자가 보고 통증 (0–10). 7 이상 → 1단계, 4–6 → 2단계, 3 → 3단계. 값을 못 보면 adjust 로 1단계
-function effectiveModules(adjust, rehab, pain) {
+// 관리자가 지정한 단계 + 통증 기록으로 정한 단계
+// pain: 가입·관리자 입력 통증, checks: 최근 통증 체크 [{area, date, during, morning, rest}] — 부위마다 가장 최근 체크가 가입 통증보다 우선
+// 관리자 단계가 있어도 최근 체크가 더 나쁘면 그 단계로 내린다 (fromCheck)
+function effectiveModules(adjust, rehab, pain, checks) {
   const mods = (rehab || []).filter(m => REHAB[m.area]).map(m => ({ ...m, stage: Math.min(REHAB[m.area].stages.length, Math.max(1, Number(m.stage) || 1)) }));
-  const has = a => mods.some(m => m.area === a);
   const a = adjust || {};
   const flagged = { knee: a.plyo === "iso", ankle: a.plyo === "hold", shoulder: !!a.overhead, back: !!a.back };
-  for (const area of ["knee", "shoulder", "ankle", "back", "wrist", "finger"]) {
-    if (has(area)) continue;
-    const v = pain ? Number(pain[area]) || 0 : null;
-    if (v != null && v >= 3) mods.push({ area, stage: v >= 7 ? 1 : v >= 4 ? 2 : 3, inferred: true });
-    else if (v == null && flagged[area]) mods.push({ area, stage: 1, inferred: true });
+  const last = {};
+  for (const c of checks || []) if (!last[c.area] || String(c.date) >= String(last[c.area].date)) last[c.area] = c;
+  for (const area of PAIN_AREAS) {
+    const c = last[area];
+    const src = c ? { d: c.during, m: c.morning, r: c.rest } : pain ? pain[area] : null;
+    const st = src != null ? painStage(src) : (pain == null && flagged[area] ? 1 : 0);
+    const cur = mods.find(m => m.area === area);
+    if (cur) { if (c && st && st < cur.stage) { cur.stage = st; cur.fromCheck = true; } continue; }
+    if (st) mods.push({ area, stage: Math.min(REHAB[area].stages.length, st), inferred: true, fromCheck: !!c });
   }
   return mods;
 }
@@ -259,9 +274,9 @@ function moduleEffects(mods, ankleHistory) {
   const st = a => (mods.find(m => m.area === a) || {}).stage || 0;
   const knee = st("knee"), ankle = st("ankle"), sh = st("shoulder"), wr = st("wrist"), back = st("back");
   return {
-    noJumps: (knee >= 1 && knee <= 3) || ankle === 1,
-    kneeJumps: knee === 3,               // 일반 점프 대신 무릎 모듈의 점프 단계를 씀
-    tierMax: ankle === 2 ? 1 : 3,
+    noJumps: knee === 1 || knee === 2 || ankle === 1,
+    kneeJumps: false,
+    tierMax: ankle === 2 ? 1 : knee === 3 ? 2 : 3, // 무릎 3단계: 1–2단계 점프로 진행 (드롭·실전 점프 제외)
     noOverhead: sh === 1 || sh === 2,     // 메디신볼·물구나무 제외, 벤치 가볍게
     lightMedball: sh === 3,
     handstandMax: wr === 1 || wr === 2 ? 0 : wr === 3 ? 1 : 4,
@@ -278,7 +293,7 @@ function moduleEffects(mods, ankleHistory) {
 function dayPlan(ctx, w, d) {
   const p = ctx.player || {};
   const t = ctx.test || null;
-  const mods = effectiveModules(p.adjust, ctx.rehab, ctx.pain);
+  const mods = effectiveModules(p.adjust, ctx.rehab, ctx.pain, ctx.checks);
   const fx = moduleEffects(mods, ctx.ankleHistory);
   const novice = p.weightExp === "none";
   const rel = relStrength(t, ctx.weight);
@@ -323,7 +338,7 @@ function dayPlan(ctx, w, d) {
   if (d === 0) {
     out.kind = "점프 + 하체 근력"; out.title = w === 0 ? "측정 · 가벼운 점프 · 동작 연습" : w === 3 ? "재측정 · 점프·근력 절반 (무게 유지)" : "점프 + 하체 근력";
     out.logType = "A"; out.minutes = 75;
-    if (w === 0) out.notes.push("측정날이에요. 측정 후 남는 시간에 가볍게 해요.");
+    if (w === 0) out.notes.push("측정날이에요 (점프·근력·코어 테스트). 측정 후 남는 시간에 가볍게 해요.");
     if (w === 3) out.notes.push("대회 주예요. 양은 줄이고 무게·강도는 유지. 시작 전 CMJ·블록 리치 재측정.");
     out.blocks.push(warm());
     // 점프
@@ -345,6 +360,7 @@ function dayPlan(ctx, w, d) {
       plyo = plyo.filter(x => x.tier <= tierMax);
       if (!plyo.some(x => x.key === "stick")) plyo.push({ ...PLYO[1], sets: w === 3 ? 2 : 3, reps: 5, mod: "고강도 대신" });
       if (balanceFail) out.notes.push("한 발 서기 30초 미통과라 강한 점프는 보류. 통과하면 열려요.");
+      else if (fx.tierMax === 2) out.notes.push("무릎 통증 3단계라 드롭·실전 점프는 빼요. 다음 날 아침 통증을 체크해요.");
     }
     if (fx.noJumps) {
       plyo = [];
@@ -460,6 +476,11 @@ function dayPlan(ctx, w, d) {
   out.blocks.push({ key: "bw", title: tue ? "맨몸 상체·코어" : "맨몸 하체·균형", items: bw,
     note: tue ? "점프 없음. 월요일 다리 회복일이라 상체·코어 위주." : "점프 없음. 월요일 웨이트 전이라 RIR 3, 다리가 무거우면 세트를 줄여요." });
   if (w === 3) out.notes.push("대회 주라 2세트만.");
+  if (tue && w === 2) out.blocks.push({ key: "test", title: "코어 테스트 (2주 만에 다시)", items: [
+    { name: "사이드 플랭크 좌·우 최대 버티기", rx: "각 1회", cue: "팔꿈치·발 옆면, 엉덩이가 내려가면 끝" },
+    { name: "등 버티기 (벤치 끝에 상체 내밀기)", rx: "1회", cue: "파트너가 다리 고정, 수평이 무너지면 끝" },
+    { name: "앞쪽 버티기 (60° 기대 앉기)", rx: "1회", cue: "등받이를 5cm 떼고 버티기, 등이 닿으면 끝" },
+  ], note: "결과는 기록 탭 ‘코어 테스트’에. 5초 안팎의 차이는 오차로 봐요." });
   const rb = rehabBlock("재활 운동", m => (m.area === "knee" && m.stage === 1) || (m.area === "finger" && m.stage <= 2) || (m.area === "ankle" && m.stage <= 2) || (m.area === "shoulder" && m.stage === 1) || (m.area === "back" && m.stage <= 2));
   if (rb) out.blocks.push(rb);
   return out;
@@ -476,4 +497,4 @@ function daySummary(plan) {
   return { kind: plan.kind, title: plan.title, landings: plan.landings, items: main ? main.items.length : 0 };
 }
 
-if (typeof module !== "undefined") module.exports = { STAGE_NAMES, STAGE_HINT, PAIN_RULE, NEXT_RULE, painLabel, dayPlan, daySummary, effectiveModules, moduleEffects, relStrength, REHAB, REHAB_AREAS, DAYS, WEEKS, POS, POS_ORDER, NET };
+if (typeof module !== "undefined") module.exports = { painStage, normPain, PAIN_AREAS, STAGE_NAMES, STAGE_HINT, PAIN_RULE, NEXT_RULE, painLabel, dayPlan, daySummary, effectiveModules, moduleEffects, relStrength, REHAB, REHAB_AREAS, DAYS, WEEKS, POS, POS_ORDER, NET };

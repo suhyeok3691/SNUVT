@@ -5,10 +5,27 @@ const DEFAULT_SETTINGS = { name: "서울대배", blockStart: "2026-10-26", start
 const LOG_TYPES = { A: ["월 웨이트", 75], B: ["목 웨이트", 60], team: ["정규 훈련", 180], act: ["활성화", 30], match: ["경기", 90], other: ["맨몸·기타", 35] };
 const RPE = ["0 휴식", "1 아주 쉬움", "2 쉬움", "3 보통", "4 약간 힘듦", "5 힘듦", "6", "7 매우 힘듦", "8", "9", "10 최대"];
 const AREA_KO = { knee: "무릎", shoulder: "어깨", ankle: "발목", back: "허리", wrist: "손목", finger: "손가락" };
-// 통증 점수 고르기: 숫자 대신 상태로 고르고, 값은 구간 대표값으로 저장 (통증 단계 기준과 같은 구간)
-const PAIN_SCALE = [[0, "0 · 안 아픔"], [2, "1–2 · 살짝 느껴지는 정도"], [3, "3 · 세게 할 때만 아픔"], [5, "4–6 · 운동하면 아픔"], [7, "7–8 · 쉬거나 밤에도 아픔"], [9, "9–10 · 걷기·일상도 힘듦"]];
-const painBucket = v => { v = Number(v) || 0; return v <= 0 ? 0 : v <= 2 ? 2 : v <= 3 ? 3 : v <= 6 ? 5 : v <= 8 ? 7 : 9; };
-const painSelect = (id, cur, label) => `<label class="fl">${label}<select id="${id}">${PAIN_SCALE.map(([v, t]) => `<option value="${v}" ${painBucket(cur) === v ? "selected" : ""}>${t}</option>`).join("")}</select></label>`;
+// 통증은 두 시점(운동할 때 · 다음 날 아침)을 구간으로 고르고, 쉴 때·밤에도 아픈지 따로 체크 → painStage 로 단계 판정
+const PAIN_LEVELS = [[0, "0 없음"], [2, "1–3 살짝"], [5, "4–6 꽤 아픔"], [8, "7–10 많이 아픔"]];
+const painBucket = v => { v = Number(v) || 0; return v <= 0 ? 0 : v <= 3 ? 2 : v <= 6 ? 5 : 8; };
+const levelSelect = (id, cur, label) => `<label class="fl">${label}<select id="${id}">${PAIN_LEVELS.map(([v, t]) => `<option value="${v}" ${painBucket(cur) === v ? "selected" : ""}>${t}</option>`).join("")}</select></label>`;
+const STAGE_KEY = () => `<p class="small stage-key">${STAGE_NAMES.slice(0, 3).map((n, i) => `<span><b>${i + 1}단계 ${n}</b> ${STAGE_HINT[i]}</span>`).join("")}</p>`;
+// 부위마다 '아파요' 체크 → 펼쳐지는 두 시점 + 쉴 때 (CSS :has 로 펼침)
+function painRows(prefix, pain) {
+  return `<div class="pain-rows">${PAIN_AREAS.map(a => {
+    const v = normPain((pain || {})[a]) || { d: 0, m: 0, r: false }, on = v.d > 0 || v.m > 0 || v.r;
+    return `<div class="pain-row"><label class="check"><input type="checkbox" class="pain-on" id="${prefix}-${a}-on" ${on ? "checked" : ""}> ${AREA_KO[a]}</label>
+      <div class="pain-detail fields">${levelSelect(`${prefix}-${a}-d`, v.d, "운동할 때")}${levelSelect(`${prefix}-${a}-m`, v.m, "다음 날 아침")}
+      <label class="check"><input type="checkbox" id="${prefix}-${a}-r" ${v.r ? "checked" : ""}> 쉴 때·밤에도 아파요</label></div></div>`;
+  }).join("")}</div>`;
+}
+const readPain = prefix => Object.fromEntries(PAIN_AREAS.map(a => {
+  const on = document.getElementById(`${prefix}-${a}-on`).checked;
+  return [a, on ? { d: Number(document.getElementById(`${prefix}-${a}-d`).value) || 0, m: Number(document.getElementById(`${prefix}-${a}-m`).value) || 0, r: document.getElementById(`${prefix}-${a}-r`).checked } : { d: 0, m: 0, r: false }];
+}));
+const painMax = v => { const p = normPain(v); return !p ? 0 : p.r ? 10 : Math.max(p.d, p.m); };
+const coreSum = t => t && [t.sideL, t.sideR, t.sorensen, t.flexor].every(v => v != null) ? Number(t.sideL) + Number(t.sideR) + Number(t.sorensen) + Number(t.flexor) : null;
+const confirmDel = msg => { try { return window.confirm(msg); } catch (e) { return false; } };
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
 const VIEWS = ["home", "plan", "rec", "intake", "load"];
 
@@ -34,7 +51,7 @@ const state = {
   players: {}, tests: {}, health: {}, logs: {}, inbody: {}, settings: null,
   loaded: false, offline: false, admin: false, canWrite: null, dirty: false, armed: null,
   session: null, role: null, myPid: null, email: "", profiles: [], authMode: "login", authMsg: "", authErr: false, booting: true,
-  selfPlayer: null, selfHealth: null, editingSelf: false,
+  selfPlayer: null, selfHealth: null, editingSelf: false, painChecks: {}, openKeys: {},
 };
 let sb = null;
 
@@ -43,10 +60,23 @@ function sortedPlayers() {
     .sort((a, b) => (POS_ORDER.indexOf(a.pos) - POS_ORDER.indexOf(b.pos)) || ((a.order ?? 99) - (b.order ?? 99)) || String(a.name).localeCompare(String(b.name), "ko"));
 }
 function runs(pid) { return [...((state.tests[pid] || {}).runs || [])].sort((a, b) => String(a.date).localeCompare(String(b.date))); }
-const latest = pid => runs(pid).at(-1) || null;
-const first = pid => runs(pid)[0] || null;
+// 측정은 날마다 일부 항목만 잴 수 있어서, 항목별로 가장 최근 값을 모은다 (코어만 잰 날이 점프·근력 값을 지우지 않게)
+const TEST_KEYS = ["reach", "cmj", "block", "approach", "balL", "balR", "hsStage", "hsSec", "squat", "rdl", "pull", "sideL", "sideR", "sorensen", "flexor"];
+function latest(pid) {
+  const r = runs(pid); if (!r.length) return null;
+  const out = { date: r.at(-1).date };
+  for (const t of r) for (const k of TEST_KEYS) if (t[k] != null) out[k] = t[k];
+  return out;
+}
+const first = pid => runs(pid).find(t => t.cmj != null) || null;
+const isMainTest = t => ["reach", "cmj", "block", "approach", "balL", "balR", "hsStage", "squat", "rdl", "pull"].some(k => t[k] != null);
 const inbodyOf = pid => [...(state.inbody[pid] || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)));
 const logsOf = pid => state.logs[pid] || [];
+const checksOf = pid => [...(state.painChecks[pid] || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.created).localeCompare(String(b.created)));
+const recentChecks = pid => { const from = iso(addDays(today(), -14)); return checksOf(pid).filter(c => c.date >= from); };
+const coreRuns = pid => runs(pid).filter(t => coreSum(t) != null);
+// 다시 그려도 펼친 상태가 유지되게: <details data-keep="키">
+const keepOpen = (key, dflt) => (state.openKeys[key] ?? dflt) ? "open" : "";
 const blockWeek = () => weekOf(today()); // 블록 밖이면 음수 또는 3 초과
 const inBlock = () => blockWeek() >= 0 && blockWeek() <= 3;
 const curWeek = () => Math.min(3, Math.max(0, blockWeek()));
@@ -69,12 +99,12 @@ function ctxFor(p) {
   return {
     player: p, test: latest(p.id),
     weight: ib ? ib.weight : p.weight,
-    rehab: h.rehab || [], pain: state.health[p.id] ? (h.pain || {}) : null,
+    rehab: h.rehab || [], pain: state.health[p.id] ? (h.pain || {}) : null, checks: recentChecks(p.id),
     ankleHistory: !!(p.adjust && p.adjust.ankleBal) || (Number(h.ankleL) || 0) + (Number(h.ankleR) || 0) > 0,
   };
 }
 const planFor = (p, w, d) => dayPlan(ctxFor(p), w, d);
-const modsFor = p => { const h = state.health[p.id] || {}; return effectiveModules(p.adjust, h.rehab, state.health[p.id] ? (h.pain || {}) : null); };
+const modsFor = p => { const h = state.health[p.id] || {}; return effectiveModules(p.adjust, h.rehab, state.health[p.id] ? (h.pain || {}) : null, recentChecks(p.id)); };
 const playerOf = pid => pid && state.players[pid] ? { id: pid, ...state.players[pid] } : null;
 
 /* ---------- 공통 조각 ---------- */
@@ -115,7 +145,7 @@ function header() {
   const who = document.getElementById("who");
   const roleKo = state.admin ? "관리자" : state.role === "player" ? "선수" : "";
   who.innerHTML = state.session ? `<span>${esc(myName())}${roleKo ? " " + roleKo : ""}</span><button class="btn link" type="button" data-act="logout">로그아웃</button>` : "";
-  if (!state.session || !state.role || state.role === "pending" || state.offline) { document.getElementById("tabs").innerHTML = ""; return; }
+  if (!state.session || !state.role || state.role === "pending" || state.offline || needsSelfReg()) { document.getElementById("tabs").innerHTML = ""; return; }
   const tabs = [["home", "홈"], ["plan", "프로그램"], ["rec", "기록"]];
   if (state.admin) tabs.push(["intake", "등록·측정"], ["load", "훈련 부하"]);
   document.getElementById("tabs").innerHTML = tabs.map(([k, l]) =>
@@ -128,6 +158,7 @@ function viewHome() {
   const me = playerOf(state.myPid);
   const parts = [];
   if (state.admin) parts.push(teamStatusHtml());
+  if (state.admin && !me) parts.push(`<section class="panel row between"><div><h3>내 선수 정보가 아직 없어요</h3><p class="small muted">입력하면 홈에 내 프로그램이 나와요.</p></div><button class="btn primary" type="button" data-act="editself">내 정보 입력</button></section>`);
   if (me) parts.push(todayHtml(me), myStatusHtml(me));
   else if (!state.admin) parts.push(`<div class="panel empty"><strong>계정이 선수와 연결되지 않았어요</strong><span>관리자에게 연결을 요청해 주세요.</span></div>`);
   return parts.join("");
@@ -165,7 +196,7 @@ function myStatusHtml(p) {
   const ib = inbodyOf(p.id).filter(x => x.weight != null).at(-1);
   const rel = relStrength(t, ib ? ib.weight : p.weight);
   const cmj = t && t.cmj != null ? Number(t.cmj) : null;
-  const dCmj = cmj != null && f0 && f0 !== t && f0.cmj != null ? cmj - Number(f0.cmj) : null;
+  const dCmj = cmj != null && runs(p.id).filter(x => x.cmj != null).length > 1 ? cmj - Number(f0.cmj) : null;
   const blk = t && t.block != null ? Number(t.block) - NET : null;
   const todayLog = logsOf(p.id).filter(e => e.date === iso(today()));
   const wk = blockWeek();
@@ -173,6 +204,7 @@ function myStatusHtml(p) {
   const au = weekLogs.reduce((s, e) => s + (Number(e.rpe) || 0) * (Number(e.minutes) || 0), 0);
   const jumps = weekLogs.reduce((s, e) => s + (Number(e.jumps) || 0), 0);
   const mods = modsFor(p);
+  const cr = coreRuns(p.id), core = cr.length ? coreSum(cr.at(-1)) : null, dCore = cr.length > 1 ? core - coreSum(cr[0]) : null;
   const stat = (k, v, sub = "") => `<div class="stat"><div class="k">${k}</div><div class="v">${v}${sub}</div></div>`;
   return `<section class="tiles">
     <div class="panel tile">
@@ -187,13 +219,16 @@ function myStatusHtml(p) {
         ${stat("CMJ", cmj != null ? cmj.toFixed(1) : "—", dCmj != null ? ` <small class="${dCmj < 0 ? "neg" : ""}">${dCmj > 0 ? "+" : ""}${dCmj.toFixed(1)}</small>` : "")}
         ${stat("블록 네트 위", blk != null ? (blk >= 0 ? "+" : "") + blk : "—")}
         ${stat("체중", ib ? ib.weight : (p.weight ?? "—"))}
-        ${stat("상대 근력", rel != null ? rel.toFixed(2) : "—")}</div>` : emptyLine("10/26 측정 후 나와요.")}
+        ${stat("상대 근력", rel != null ? rel.toFixed(2) : "—")}
+        ${stat("코어 합계 (초)", core != null ? core : "—", dCore != null ? ` <small class="${dCore < 0 ? "neg" : ""}">${dCore > 0 ? "+" : ""}${dCore}</small>` : "")}
+        ${stat("물구나무", t && t.hsStage ? t.hsStage + "단계" : "—")}</div>` : emptyLine("10/26 측정 후 나와요.")}
+      <button class="btn link" type="button" data-act="view" data-v="rec">코어 테스트 기록하기 →</button>
     </div>
-    ${mods.length ? `<div class="panel tile">
-      <h3>통증 단계</h3>
-      <ul class="plain">${mods.map(m => `<li><b>${esc(painLabel(m))}</b> <span class="muted">${esc(REHAB[m.area].pain[m.stage - 1])}</span></li>`).join("")}</ul>
-      <p class="small muted">운동 중 통증 5 이하, 다음 날 아침 평소대로면 OK.${state.admin ? "" : " 달라지면 관리자에게 알려 주세요."}</p>
-    </div>` : ""}
+    <div class="panel tile">
+      <h3>통증</h3>
+      ${mods.length ? `<ul class="plain">${mods.map(m => `<li><b>${esc(painLabel(m))}</b> <span class="muted">${esc(REHAB[m.area].pain[m.stage - 1])}</span></li>`).join("")}</ul>` : `<p class="small muted">지금 붙은 통증 단계 없음</p>`}
+      ${painCheckForm(p, "home")}
+    </div>
   </section>`;
 }
 function teamStatusHtml() {
@@ -204,9 +239,9 @@ function teamStatusHtml() {
   const watch = [];
   for (const p of ps) {
     const why = [];
-    const pains = logsOf(p.id).filter(e => e.date >= recent && e.painArea && Number(e.pain) >= 3);
-    if (pains.length) { const e = pains.at(-1); why.push([Number(e.pain) > 5 ? "crit" : "warn", `${AREA_KO[e.painArea]} 통증 ${e.pain} (${md(parseD(e.date))})`]); }
-    for (const m of modsFor(p)) why.push(["warn", painLabel(m) + (m.inferred ? "?" : "")]);
+    const pc = checksOf(p.id).filter(c => c.date >= recent && painStage({ d: c.during, m: c.morning, r: c.rest }) && painStage({ d: c.during, m: c.morning, r: c.rest }) <= 2);
+    if (pc.length) { const c = pc.at(-1), st = painStage({ d: c.during, m: c.morning, r: c.rest }); why.push([st === 1 ? "crit" : "warn", `${AREA_KO[c.area]} ${c.rest ? "쉴 때도 아픔" : `운동 ${c.during ?? "—"} · 아침 ${c.morning ?? "—"}`} (${md(parseD(c.date))})`]); }
+    for (const m of modsFor(p)) why.push([m.stage === 1 ? "crit" : "warn", painLabel(m) + (m.inferred ? "?" : "") + (m.fromCheck ? " · 체크" : "")]);
     const sum = k => logsOf(p.id).filter(e => weekOf(parseD(e.date)) === k).reduce((s, e) => s + (Number(e.rpe) || 0) * (Number(e.minutes) || 0), 0);
     const a = sum(wk), b = sum(wk - 1);
     if (b > 0 && a >= 2 * b) why.push(["warn", "부하 전주 2배↑"]);
@@ -259,10 +294,10 @@ function ladderHtml(p) {
   if (!mods.length) return "";
   const h = state.health[p.id] || {};
   return `<section class="sec"><h3>통증 단계 <span class="private">본인·관리자만</span></h3>
-    <p class="small muted">${esc(NEXT_RULE)}${mods.some(m => m.inferred) ? " ? = 입력한 통증 점수로 정한 임시 단계." : ""}</p>
+    <p class="small muted">${esc(NEXT_RULE)}${mods.some(m => m.inferred) ? " ? = 통증 기록으로 정한 단계 (관리자 확인 전)." : ""}</p>
     ${mods.map(m => {
       const def = REHAB[m.area], note = ((h.rehab || []).find(x => x.area === m.area) || {}).note;
-      return `<details class="panel ladder"><summary><b>${esc(painLabel(m))}${m.inferred ? "?" : ""}</b> · ${esc(def.pain[m.stage - 1])}${note ? ` <span class="muted">(${esc(note)})</span>` : ""}</summary>
+      return `<details class="panel ladder" data-keep="ladder-${m.area}" ${keepOpen("ladder-" + m.area, false)}><summary><b>${esc(painLabel(m))}${m.inferred ? "?" : ""}</b>${m.fromCheck ? ' <span class="chip warn">최근 통증 체크 기준</span>' : ""} · ${esc(def.pain[m.stage - 1])}${note ? ` <span class="muted">(${esc(note)})</span>` : ""}</summary>
         <ol class="stages">${def.stages.map((s, i) => `<li class="${i + 1 === m.stage ? "cur" : ""}"><b>${i + 1}단계 ${STAGE_NAMES[i]} · ${esc(def.pain[i])}</b>
           <span class="small">${s.items.map(x => esc(x.name) + " " + esc(x.rx)).join(" · ")}</span>
           ${i + 1 < def.stages.length ? `<span class="small muted">다음 단계: ${esc(s.next)}</span>` : ""}</li>`).join("")}</ol>
@@ -277,8 +312,8 @@ function viewRec() {
   const p = playerOf(pid);
   return `<section class="sec"><div class="sec-head"><h2>${esc(p.name)} <span class="chip pos">${esc(p.pos)}</span></h2>${playerPicker(pid)}</div></section>
   <div class="cols">
-    <div class="col">${logHtml(p)}</div>
-    <div class="col">${testsHtml(p)}${inbodyHtml(p)}</div>
+    <div class="col">${logHtml(p)}<section class="sec"><h3>통증 기록 <span class="private">본인·관리자만</span></h3>${painCheckForm(p, "rec")}${painCheckList(p)}</section></div>
+    <div class="col">${coreHtml(p)}${testsHtml(p)}${inbodyHtml(p)}</div>
   </div>`;
 }
 function logHtml(p) {
@@ -294,20 +329,18 @@ function logHtml(p) {
         <label class="fl">시간 (분)<input type="number" id="lg-min" inputmode="numeric" min="1" max="400" value="${inBlock() ? tplan.minutes : LOG_TYPES.other[1]}" required></label>
         <label class="fl">힘든 정도 (RPE)<select id="lg-rpe">${RPE.map((l, i) => `<option value="${i}" ${i === 5 ? "selected" : ""}>${l}</option>`).join("")}</select></label>
         <label class="fl">점프·착지 수<input type="number" id="lg-jumps" inputmode="numeric" min="0" max="2000" value="${inBlock() && tplan.landings ? tplan.landings : ""}" placeholder="모르면 비우기"></label>
-        <label class="fl">통증 부위<select id="lg-area"><option value="">없음</option>${Object.entries(AREA_KO).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
-        ${painSelect("lg-pain", 0, "통증 정도")}
         <label class="fl wide">메모<input type="text" id="lg-note" maxlength="200" placeholder="무게, 컨디션, 손목·손가락 통증 등"></label>
       </div>
-      <div class="row"><button class="btn primary" type="submit">저장</button><span class="small muted">훈련 후 30분 안에</span></div>
+      <div class="row"><button class="btn primary" type="submit">저장</button><span class="small muted">훈련 후 30분 안에 · 아픈 곳은 아래 ‘통증 체크’에</span></div>
     </form>` : ""}
     ${entries.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>종류</th><th>RPE×분</th><th>착지</th><th>통증</th>${state.admin ? "<th></th>" : ""}</tr></thead><tbody>
       ${entries.map(e => `<tr><td class="num">${md(parseD(e.date))}</td><td>${esc((LOG_TYPES[e.type] || ["기타"])[0])}</td><td class="num">${Number(e.rpe) * Number(e.minutes)}</td><td class="num">${e.jumps ?? "—"}</td><td>${e.painArea ? `<span class="chip ${Number(e.pain) >= 3 ? "crit" : ""}">${esc(AREA_KO[e.painArea] || "")} ${esc(e.pain)}</span>` : "—"}</td>
-      ${state.admin ? `<td><button class="btn link danger ${state.armed === "log:" + e._id ? "armed" : ""}" data-act="dellog" data-id="${esc(e._id)}">${state.armed === "log:" + e._id ? "정말 삭제" : "삭제"}</button></td>` : ""}</tr>`).join("")}
+      ${state.admin ? `<td><button class="btn link danger" data-act="dellog" data-id="${esc(e._id)}">삭제</button></td>` : ""}</tr>`).join("")}
     </tbody></table></div>` : emptyLine("아직 기록이 없어요.")}
   </section>`;
 }
 function testsHtml(p) {
-  const r = runs(p.id);
+  const r = runs(p.id).filter(isMainTest);
   const ib = inbodyOf(p.id).filter(x => x.weight != null).at(-1);
   const rel = relStrength(latest(p.id), ib ? ib.weight : p.weight);
   const above = v => v == null || v === "" ? "—" : ((Number(v) - NET >= 0 ? "+" : "") + (Number(v) - NET));
@@ -319,6 +352,55 @@ function testsHtml(p) {
   </section>`;
 }
 const bal = v => v === true ? "○" : v === false ? "×" : "—";
+function canEditSelf(p) { return state.admin || (state.role === "player" && p.id === state.myPid); }
+function painCheckForm(p, where) {
+  if (!canEditSelf(p)) return "";
+  const key = "pain-" + where, open = where === "rec" || modsFor(p).length > 0;
+  return `<details class="pcheck" data-keep="${key}" ${keepOpen(key, open)}><summary><b>통증 체크</b> <span class="small muted">운동 땐 괜찮다가 다음 날 아픈 것도 여기에</span></summary>
+    <form class="f" id="painForm" data-pid="${esc(p.id)}" data-where="${where}">
+      <div class="fields">
+        <label class="fl">날짜<input type="date" id="pc-date-${where}" value="${iso(today())}" required></label>
+        <label class="fl">부위<select id="pc-area-${where}">${PAIN_AREAS.map(a => `<option value="${a}">${AREA_KO[a]}</option>`).join("")}</select></label>
+        ${levelSelect("pc-d-" + where, 0, "운동할 때 (어제·오늘)")}
+        ${levelSelect("pc-m-" + where, 0, "오늘 아침")}
+      </div>
+      <label class="check"><input type="checkbox" id="pc-r-${where}"> 쉴 때·밤에도 아파요</label>
+      <div class="row"><button class="btn primary" type="submit">저장</button><span class="small muted">나아졌으면 0으로 남겨요. 최근 기록으로 단계가 바뀌어요.</span></div>
+    </form>${where === "home" ? STAGE_KEY() : ""}</details>`;
+}
+function painCheckList(p) {
+  const list = checksOf(p.id).slice().reverse().slice(0, 8);
+  if (!list.length) return emptyLine("아직 통증 기록이 없어요.");
+  const lv = v => v == null ? "—" : PAIN_LEVELS.find(([x]) => x === painBucket(v))[1];
+  return `<div class="tw"><table><thead><tr><th>날짜</th><th>부위</th><th>운동할 때</th><th>아침</th><th>단계</th><th></th></tr></thead><tbody>
+    ${list.map(c => { const st = painStage({ d: c.during, m: c.morning, r: c.rest }); return `<tr><td class="num">${md(parseD(c.date))}</td><td>${esc(AREA_KO[c.area])}</td><td>${lv(c.during)}</td><td>${lv(c.morning)}${c.rest ? ' <span class="chip crit">쉴 때도</span>' : ""}</td>
+      <td>${st ? `<span class="chip ${st === 1 ? "crit" : st === 2 ? "warn" : ""}">${st}단계</span>` : "없음"}</td>
+      <td><button class="btn link danger" type="button" data-act="delpain" data-id="${esc(c.id)}">삭제</button></td></tr>`; }).join("")}
+  </tbody></table></div>`;
+}
+function coreHtml(p) {
+  const r = coreRuns(p.id), canAdd = canEditSelf(p);
+  const first = r[0];
+  const delta = (t, k) => !first || first === t || t[k] == null || first[k] == null ? "" : (() => { const v = Number(t[k]) - Number(first[k]); return ` <small class="${v < 0 ? "neg" : ""}">${v > 0 ? "+" : ""}${v}</small>`; })();
+  return `<section class="sec"><h3>코어 테스트 <span class="small muted">버틴 시간 (초)</span></h3>
+    ${r.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>사이드 왼</th><th>사이드 오른</th><th>등</th><th>앞쪽</th><th>합계</th><th></th></tr></thead><tbody>
+      ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${t.sideL}${delta(t, "sideL")}</td><td class="num">${t.sideR}${delta(t, "sideR")}</td><td class="num">${t.sorensen}${delta(t, "sorensen")}</td><td class="num">${t.flexor}${delta(t, "flexor")}</td>
+        <td class="num"><b>${coreSum(t)}</b>${first && first !== t ? ` <small class="${coreSum(t) - coreSum(first) < 0 ? "neg" : ""}">${coreSum(t) - coreSum(first) > 0 ? "+" : ""}${coreSum(t) - coreSum(first)}</small>` : ""}</td>
+        <td>${state.admin || t.author === state.session.user.id ? `<button class="btn link danger" type="button" data-act="deltest" data-id="${esc(t.id)}">삭제</button>` : ""}</td></tr>`).join("")}
+    </tbody></table></div><p class="small muted">변화는 첫 기록 대비. 5초 안팎은 오차로 봐요. 사이드 좌우 차이가 크면 약한 쪽을 1세트 더.</p>` : emptyLine("아직 기록이 없어요. 10/26 측정 또는 2주차 화요일에 재요.")}
+    ${canAdd ? `<details class="panel" data-keep="core-form" ${keepOpen("core-form", !r.length)}><summary><b>코어 테스트 입력</b> <span class="small muted">각 1회, 자세가 무너지면 끝</span></summary>
+      <form class="f" id="coreForm" data-pid="${esc(p.id)}">
+        <div class="fields">
+          <label class="fl">날짜<input type="date" id="ct-date" value="${iso(today())}" required></label>
+          <label class="fl">사이드 플랭크 왼쪽<input type="number" id="ct-sl" inputmode="numeric" min="0" max="600" required></label>
+          <label class="fl">사이드 플랭크 오른쪽<input type="number" id="ct-sr" inputmode="numeric" min="0" max="600" required></label>
+          <label class="fl">등 버티기 (벤치 끝 상체 수평)<input type="number" id="ct-so" inputmode="numeric" min="0" max="600" required></label>
+          <label class="fl">앞쪽 버티기 (60° 기대 앉기)<input type="number" id="ct-fl" inputmode="numeric" min="0" max="900" required></label>
+        </div>
+        <div class="row"><button class="btn primary" type="submit">저장</button></div>
+      </form></details>` : ""}
+  </section>`;
+}
 function inbodyHtml(p) {
   const list = inbodyOf(p.id);
   const canAdd = state.admin || (state.role === "player" && p.id === state.myPid);
@@ -329,11 +411,11 @@ function inbodyHtml(p) {
     return `<tr><td class="num">${md(parseD(x.date))}${x.standardized ? "" : ' <span class="chip" title="아침 공복·운동 전이 아님">조건 다름</span>'}</td>
       <td class="num">${x.weight ?? "—"}${diff(x, prev, "weight")}</td><td class="num">${x.smm ?? "—"}${diff(x, prev, "smm")}</td><td class="num">${x.pbf ?? "—"}</td>
       <td class="num">${x.legL ?? "—"} / ${x.legR ?? "—"}${gap != null && gap >= 10 ? ' <span class="chip warn">차이 10%↑</span>' : ""}</td>
-      <td>${canAdd ? `<button class="btn link danger ${state.armed === "inbody:" + x.id ? "armed" : ""}" type="button" data-act="delinbody" data-id="${esc(x.id)}">${state.armed === "inbody:" + x.id ? "정말 삭제" : "삭제"}</button>` : ""}</td></tr>`;
+      <td>${canAdd ? `<button class="btn link danger" type="button" data-act="delinbody" data-id="${esc(x.id)}">삭제</button>` : ""}</td></tr>`;
   }).join("");
   return `<section class="sec"><h3>인바디 <span class="private">본인·관리자만</span></h3>
     ${rows ? `<div class="tw"><table><thead><tr><th>날짜</th><th>체중</th><th>골격근</th><th>체지방률</th><th>다리 L/R</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : emptyLine("아직 기록이 없어요.")}
-    ${canAdd ? `<details class="panel"${rows ? "" : " open"}><summary><b>인바디 입력</b> <span class="small muted">아침 공복 · 운동 전 · 같은 기기</span></summary>
+    ${canAdd ? `<details class="panel" data-keep="inbody-form" ${keepOpen("inbody-form", !rows)}><summary><b>인바디 입력</b> <span class="small muted">아침 공복 · 운동 전 · 같은 기기</span></summary>
     <form class="f" id="inbodyForm" data-pid="${esc(p.id)}">
       <div class="fields">
         <label class="fl">측정일<input type="date" id="ib-date" value="${iso(today())}" required></label>
@@ -382,7 +464,7 @@ function viewSelfReg() {
   const p = state.selfPlayer || {}, h = state.selfHealth || {}, pain = h.pain || {};
   const opt = (v, cur, l) => `<option value="${v}" ${String(cur ?? "") === String(v) ? "selected" : ""}>${l}</option>`;
   return `<section class="sec narrow">
-    <div><h2>내 정보</h2><p class="lede">프로그램을 내 몸에 맞추는 데 써요. 제출하면 관리자가 승인해요.</p></div>
+    <div><h2>내 정보</h2><p class="lede">${state.role === "pending" ? "프로그램을 내 몸에 맞추는 데 써요. 제출하면 관리자가 승인해요." : state.admin ? "관리자 계정에 연결할 내 선수 정보예요." : "승인은 됐어요. 내 정보를 입력하면 프로그램이 열려요."}</p></div>
     <form class="f panel" id="selfForm">
       <fieldset><legend>기본 정보</legend>
         <div class="fields">
@@ -396,10 +478,9 @@ function viewSelfReg() {
         </div>
       </fieldset>
       <fieldset><legend>부상·통증 <span class="private">본인·관리자만</span></legend>
-        <p class="small muted">부위마다 <b>지금</b> 상태에 가장 가까운 걸 골라요. 3 이상이면 그 부위 재활 운동이 같이 붙어요.</p>
-        <div class="fields pain-fields">
-          ${["knee", "shoulder", "ankle", "back", "wrist", "finger"].map(a => painSelect("sf-" + a, pain[a], AREA_KO[a])).join("")}
-        </div>
+        <p class="small muted">아픈 곳만 체크하고, <b>운동할 때</b>와 <b>다음 날 아침</b>을 따로 골라요. 운동 땐 괜찮다가 다음 날 아픈 것도 통증이에요.</p>
+        ${painRows("sf", pain)}
+        ${STAGE_KEY()}
         <div class="fields">
           <label class="fl">발목 삔 횟수 (왼)<input id="sf-al" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleL ?? 0)}"></label>
           <label class="fl">발목 삔 횟수 (오른)<input id="sf-ar" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleR ?? 0)}"></label>
@@ -409,7 +490,7 @@ function viewSelfReg() {
         <label class="check"><input type="checkbox" id="sf-knee-hx" ${h.kneeInjury ? "checked" : ""}> 무릎을 다친 적 있어요</label>
         <label class="check"><input type="checkbox" id="sf-consent" ${h.consent ? "checked" : ""}> 트레이닝 프로그램에만 쓰는 데 동의해요</label>
       </fieldset>
-      <div class="row"><button class="btn primary" type="submit">${state.myPid ? "수정 내용 내기" : "제출"}</button>
+      <div class="row"><button class="btn primary" type="submit">${state.myPid ? "수정 내용 내기" : state.role === "pending" ? "제출" : "저장"}</button>
         ${state.editingSelf ? '<button class="btn" type="button" data-act="canceledit">취소</button>' : ""}</div>
     </form>
   </section>`;
@@ -422,15 +503,15 @@ function membersHtml() {
   if (!list.length) return "";
   const roleOpt = (v, cur, l) => `<option value="${v}" ${v === cur ? "selected" : ""}>${l}</option>`;
   const nameOf = m => (m.player_id && state.players[m.player_id] && state.players[m.player_id].name) || "";
-  return `<details class="sec members" ${list.some(m => m.role === "pending") ? "open" : ""}><summary><h3>팀원 계정 <span class="muted small">${list.length}명${list.some(m => m.role === "pending") ? ` · 대기 ${list.filter(m => m.role === "pending").length}` : ""}</span></h3></summary>
+  return `<details class="sec members" data-keep="members" ${keepOpen("members", list.some(m => m.role === "pending"))}><summary><h3>팀원 계정 <span class="muted small">${list.length}명${list.some(m => m.role === "pending") ? ` · 대기 ${list.filter(m => m.role === "pending").length}` : ""}</span></h3></summary>
     <p class="small muted">역할을 ‘선수’로 저장하면 승인. 대기 계정을 지우면 낸 정보도 지워져요.</p>
     <div class="tw"><table><thead><tr><th>이름</th><th>역할</th><th>선수 연결</th><th></th></tr></thead><tbody>
     ${list.map(m => `<tr><td>${nameOf(m) ? `<b>${esc(nameOf(m))}</b>` : `<span class="muted">정보 없음</span>`}<br><span class="small muted">${esc(m.email || "")}</span>${m.role === "pending" ? ' <span class="chip warn">대기</span>' : ""}</td>
-      <td><select id="mr-${esc(m.id)}" aria-label="역할">${roleOpt("pending", m.role, "대기")}${roleOpt("player", m.role, "선수")}${roleOpt("coach", m.role, "관리자")}</select></td>
+      <td><select id="mr-${esc(m.id)}" aria-label="역할" ${m.id === state.session.user.id ? "disabled" : ""}>${roleOpt("pending", m.role, "대기")}${roleOpt("player", m.role, "선수")}${roleOpt("coach", m.role, "관리자")}</select></td>
       <td><select id="mp-${esc(m.id)}" aria-label="선수 연결"><option value="">없음</option>${ps.map(p => `<option value="${esc(p.id)}" ${p.id === m.player_id ? "selected" : ""}>${esc(p.name)} · ${esc(p.pos)}</option>`).join("")}</select></td>
-      <td>${m.id === state.session.user.id ? '<span class="small muted">나</span>' : `<div class="row nowrap">
+      <td><div class="row nowrap">
         <button class="btn" type="button" data-act="savemember" data-id="${esc(m.id)}">저장</button>
-        <button class="btn danger ${state.armed === "member:" + m.id ? "armed" : ""}" type="button" data-act="delmember" data-id="${esc(m.id)}">${state.armed === "member:" + m.id ? "정말 삭제" : "삭제"}</button></div>`}</td></tr>`).join("")}
+        ${m.id === state.session.user.id ? '<span class="small muted">나</span>' : `<button class="btn danger" type="button" data-act="delmember" data-id="${esc(m.id)}">삭제</button>`}</div></td></tr>`).join("")}
     </tbody></table></div></details>`;
 }
 function viewIntake() {
@@ -469,13 +550,13 @@ function viewIntake() {
           </div>
         </fieldset>
         <fieldset><legend>통증 단계 <span class="private">본인·관리자만</span></legend>
-          <p class="small muted">지금 통증 정도로 고르면 그 단계 재활 운동이 프로그램에 붙어요. 진단은 의료진이 해요.</p>
+          <p class="small muted">고른 단계의 재활 운동이 프로그램에 붙어요. 최근 통증 체크가 더 나쁘면 그 단계가 먼저 적용돼요. 진단은 의료진이 해요.</p>
           <p class="small stage-key">${STAGE_NAMES.map((n, i) => `<span><b>${i + 1} ${n}</b> ${STAGE_HINT[i]}</span>`).join("")}</p>
           <div class="rh">${rehabRows}</div>
         </fieldset>
-        <details class="panel inner"><summary><b>가입 때 낸 통증·부상 이력</b> <span class="small muted">통증 3 이상이면 단계를 안 골라도 임시 적용</span></summary>
+        <details class="panel inner" data-keep="intake-pain" ${keepOpen("intake-pain", false)}><summary><b>가입 때 낸 통증·부상 이력</b> <span class="small muted">단계를 안 고르면 이 통증과 최근 통증 체크로 단계가 정해져요</span></summary>
+          ${painRows("hf", pain)}
           <div class="fields">
-            ${["knee", "shoulder", "ankle", "back", "wrist", "finger"].map(a => painSelect("hf-" + a, pain[a], AREA_KO[a] + " 통증")).join("")}
             <label class="fl">발목 삔 횟수 (왼)<input id="hf-al" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleL ?? 0)}"></label>
             <label class="fl">발목 삔 횟수 (오른)<input id="hf-ar" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleR ?? 0)}"></label>
             <label class="fl">마지막으로 삔 때<input id="hf-alast" maxlength="30" value="${esc(h.ankleLast || "")}"></label>
@@ -485,7 +566,7 @@ function viewIntake() {
         </details>
         <label class="check"><input type="checkbox" id="hf-consent" ${h.consent ? "checked" : ""} required> 선수가 프로그램 목적의 정보 사용에 동의함</label>
         <div class="row"><button class="btn primary" type="submit">${pid ? "저장" : "선수 추가"}</button>
-          ${pid ? `<button class="btn danger ${state.armed === "player:" + pid ? "armed" : ""}" type="button" data-act="delplayer" data-pid="${esc(pid)}">${state.armed === "player:" + pid ? "정말 삭제 (기록 포함)" : "선수 삭제"}</button>` : ""}</div>
+          ${pid ? `<button class="btn danger" type="button" data-act="delplayer" data-pid="${esc(pid)}">선수 삭제</button>` : ""}</div>
       </form>
       ${pid ? testFormHtml(pid) : ""}
     </div>
@@ -508,11 +589,15 @@ function testFormHtml(pid) {
       <label class="fl">스쿼트 5RM (kg)<input type="number" id="tf-squat" inputmode="decimal" step="2.5"></label>
       <label class="fl">RDL 5RM (kg)<input type="number" id="tf-rdl" inputmode="decimal" step="2.5"></label>
       <label class="fl">턱걸이 (회)<input type="number" id="tf-pull" inputmode="numeric" min="0" max="50"></label>
+      <label class="fl">사이드 플랭크 왼 (초)<input type="number" id="tf-sl" inputmode="numeric" min="0" max="600"></label>
+      <label class="fl">사이드 플랭크 오른 (초)<input type="number" id="tf-sr" inputmode="numeric" min="0" max="600"></label>
+      <label class="fl">등 버티기 (초)<input type="number" id="tf-so" inputmode="numeric" min="0" max="600"></label>
+      <label class="fl">앞쪽 버티기 (초)<input type="number" id="tf-fl" inputmode="numeric" min="0" max="900"></label>
     </div>
     <div class="row"><button class="btn primary" type="submit">측정값 저장</button></div>
     ${r.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>리치</th><th>CMJ</th><th>블록</th><th>어프로치</th><th>균형</th><th>물구나무</th><th>스쿼트</th><th>RDL</th><th>턱걸이</th><th></th></tr></thead><tbody>
     ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${t.reach ?? "—"}</td><td class="num">${t.cmj ?? "—"}</td><td class="num">${t.block ?? "—"}</td><td class="num">${t.approach ?? "—"}</td><td>${bal(t.balL)}/${bal(t.balR)}</td><td>${t.hsStage ? esc(t.hsStage) : "—"}${t.hsSec ? " · " + esc(t.hsSec) + "초" : ""}</td><td class="num">${t.squat ?? "—"}</td><td class="num">${t.rdl ?? "—"}</td><td class="num">${t.pull ?? "—"}</td>
-    <td><button class="btn link danger ${state.armed === "test:" + t.id ? "armed" : ""}" type="button" data-act="deltest" data-id="${esc(t.id)}">${state.armed === "test:" + t.id ? "정말 삭제" : "삭제"}</button></td></tr>`).join("")}
+    <td><button class="btn link danger" type="button" data-act="deltest" data-id="${esc(t.id)}">삭제</button></td></tr>`).join("")}
     </tbody></table></div>` : ""}
   </form>`;
 }
@@ -549,6 +634,7 @@ function viewLoad() {
 function offlineHtml() {
   return `<div class="panel empty"><strong>팀 데이터에 연결하지 못했어요</strong><span>인터넷 연결을 확인하고 새로고침해 주세요.</span></div>`;
 }
+const needsSelfReg = () => state.session && state.role === "player" && !state.myPid && state.loaded;
 function render() {
   header();
   if (state.dirty) return; // 입력 중인 폼은 덮어쓰지 않음
@@ -557,6 +643,7 @@ function render() {
   else if (state.offline) html = offlineHtml();
   else if (!state.session) html = viewAuth();
   else if (!state.role || state.role === "pending") html = viewPending();
+  else if (needsSelfReg() || (state.admin && state.editingSelf)) html = viewSelfReg();
   else {
     const v = state.view;
     html = v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "intake" ? viewIntake() : v === "load" ? viewLoad() : viewHome();
@@ -606,21 +693,20 @@ document.addEventListener("click", async ev => {
     state.dirty = false; return loadAll();
   }
   if (act === "delmember") {
-    const key = "member:" + b.dataset.id;
-    if (state.armed !== key) { state.armed = key; state.dirty = false; return render(); }
-    state.armed = null;
+    const m = state.profiles.find(x => x.id === b.dataset.id) || {};
+    const who = (m.player_id && state.players[m.player_id] && state.players[m.player_id].name) || m.email || "이 계정";
+    if (!confirmDel(`${who} 계정을 삭제할까요?${m.role === "pending" ? "\n승인 대기 계정이라 낸 정보도 함께 지워져요." : "\n측정·기록은 남고 계정만 지워져요."}`)) return;
     const r = await sb.rpc("remove_member", { target: b.dataset.id });
     if (r.error) toast(r.error.code === "PGRST202" ? "remove_member.sql 을 먼저 실행해 주세요." : (r.error.code === "42501" ? r.error.message : failMsg(r.error)));
     else toast("계정을 삭제했어요");
     state.dirty = false; return loadAll();
   }
-  if (["delplayer", "deltest", "dellog", "delinbody"].includes(act)) {
-    const key = act === "delplayer" ? "player:" + b.dataset.pid : act === "deltest" ? "test:" + b.dataset.id : act === "dellog" ? "log:" + b.dataset.id : "inbody:" + b.dataset.id;
-    if (state.armed !== key) { state.armed = key; state.dirty = false; return render(); }
-    state.armed = null;
+  if (["delplayer", "deltest", "dellog", "delinbody", "delpain"].includes(act)) {
+    const msg = { delplayer: `${(state.players[b.dataset.pid] || {}).name || "이 선수"}를 삭제할까요?\n측정·기록·부상 정보도 함께 지워져요.`, deltest: "이 측정 기록을 삭제할까요?", dellog: "이 세션 기록을 삭제할까요?", delinbody: "이 인바디 기록을 삭제할까요?", delpain: "이 통증 기록을 삭제할까요?" }[act];
+    if (!confirmDel(msg)) return;
     try {
       if (act === "delplayer") { ok(await sb.from("players").delete().eq("id", b.dataset.pid)); state.editPid = null; } // 부상·측정·기록도 함께 삭제됨
-      else ok(await sb.from(act === "deltest" ? "tests" : act === "dellog" ? "logs" : "inbody").delete().eq("id", b.dataset.id));
+      else ok(await sb.from({ deltest: "tests", dellog: "logs", delinbody: "inbody", delpain: "pain_checks" }[act]).delete().eq("id", b.dataset.id));
       toast("삭제했어요");
     } catch (e) { toast(failMsg(e)); }
     state.dirty = false; return loadAll();
@@ -633,6 +719,7 @@ document.addEventListener("change", ev => {
     if (m) m.value = LOG_TYPES[k][1];
   }
 });
+document.addEventListener("toggle", ev => { const d = ev.target; if (d && d.dataset && d.dataset.keep) state.openKeys[d.dataset.keep] = d.open; }, true);
 document.addEventListener("input", ev => { const f = ev.target.closest("form.f"); if (f && f.id !== "authForm") state.dirty = true; });
 
 const num = id => { const v = document.getElementById(id).value; return v === "" ? null : Number(v); };
@@ -651,15 +738,16 @@ document.addEventListener("submit", async ev => {
       weight_exp: document.getElementById("sf-wexp").value || null,
       ankle_l: txt("sf-al"), ankle_r: txt("sf-ar"), ankle_last: txt("sf-alast"),
       knee_injury: document.getElementById("sf-knee-hx").checked,
-      pain: Object.fromEntries(["knee", "shoulder", "ankle", "back", "wrist", "finger"].map(a => [a, txt("sf-" + a)])),
+      pain: readPain("sf"),
       note: txt("sf-note"), consent: document.getElementById("sf-consent").checked,
     };
     try {
       if (!info.consent) { toast("동의해야 제출할 수 있어요."); return; }
       const r = await sb.rpc("submit_my_info", { info });
       if (r.error) { toast(r.error.code === "23514" || r.error.code === "42501" ? r.error.message : failMsg(r.error)); return; }
+      const wasPending = state.role === "pending";
       state.editingSelf = false; state.dirty = false;
-      toast("제출했어요. 승인을 기다려 주세요.");
+      toast(wasPending ? "제출했어요. 승인을 기다려 주세요." : "저장했어요. 프로그램이 열렸어요.");
       await loadProfile();
     } finally { if (btn) btn.disabled = false; }
     return;
@@ -694,14 +782,14 @@ document.addEventListener("submit", async ev => {
       const name = txt("pf-name");
       if (!name) { toast("이름을 입력해 주세요."); return; }
       if (!document.getElementById("hf-consent").checked) { toast("정보 사용 동의를 받은 뒤 저장해 주세요."); return; }
-      const pain = Object.fromEntries(["knee", "shoulder", "ankle", "back", "wrist", "finger"].map(a => [a, num("hf-" + a) || 0]));
+      const pain = readPain("hf"), mx = a => painMax(pain[a]);
       const ankleL = num("hf-al") || 0, ankleR = num("hf-ar") || 0;
       const adjust = {
-        plyo: pain.ankle >= 3 ? "hold" : pain.knee >= 3 ? "iso" : null,
-        overhead: pain.shoulder >= 3 ? true : null,
-        back: pain.back >= 3 ? true : null,
+        plyo: mx("ankle") >= 3 ? "hold" : mx("knee") >= 3 ? "iso" : null,
+        overhead: mx("shoulder") >= 3 ? true : null,
+        back: mx("back") >= 3 ? true : null,
         ankleBal: (ankleL + ankleR) > 0 ? true : null,
-        refer: Object.values(pain).some(v => v >= 3) ? true : null,
+        refer: PAIN_AREAS.some(a => mx(a) >= 3) ? true : null,
       };
       const rehab = REHAB_AREAS.map(a => ({ area: a, stage: Number(document.getElementById("rh-" + a).value) || 0, note: txt("rhn-" + a) || null }))
         .filter(m => m.stage > 0);
@@ -730,6 +818,7 @@ document.addEventListener("submit", async ev => {
         reach: num("tf-reach"), cmj: num("tf-cmj"), block: num("tf-block"), approach: num("tf-approach"),
         bal_l: balv("tf-balL"), bal_r: balv("tf-balR"), hs_stage: st ? Number(st) : null, hs_sec: num("tf-hsSec"),
         squat: num("tf-squat"), rdl: num("tf-rdl"), pull: num("tf-pull"),
+        side_l: num("tf-sl"), side_r: num("tf-sr"), sorensen: num("tf-so"), flexor: num("tf-fl"),
       };
       const filled = Object.entries(row).filter(([k, v]) => !["player_id", "date"].includes(k) && v != null && !Number.isNaN(v));
       if (!filled.length) { toast("측정값을 하나 이상 입력해 주세요."); return; }
@@ -742,12 +831,25 @@ document.addEventListener("submit", async ev => {
         standardized: document.getElementById("ib-std").checked, note: txt("ib-note") || null,
       }));
       toast("인바디를 저장했어요");
+    } else if (f.id === "painForm") {
+      const w = f.dataset.where;
+      ok(await sb.from("pain_checks").insert({
+        player_id: f.dataset.pid, date: txt("pc-date-" + w), area: document.getElementById("pc-area-" + w).value,
+        during: Number(document.getElementById("pc-d-" + w).value), morning: Number(document.getElementById("pc-m-" + w).value),
+        rest: document.getElementById("pc-r-" + w).checked,
+      }));
+      toast("통증을 기록했어요");
+    } else if (f.id === "coreForm") {
+      ok(await sb.from("tests").insert({
+        player_id: f.dataset.pid, date: txt("ct-date"),
+        side_l: num("ct-sl"), side_r: num("ct-sr"), sorensen: num("ct-so"), flexor: num("ct-fl"),
+      }));
+      toast("코어 테스트를 저장했어요");
     } else if (f.id === "logForm") {
-      const area = document.getElementById("lg-area").value;
       ok(await sb.from("logs").insert({
         player_id: f.dataset.pid, date: txt("lg-date"), type: document.getElementById("lg-type").value,
         minutes: num("lg-min") || 1, rpe: Number(document.getElementById("lg-rpe").value),
-        jumps: num("lg-jumps"), pain_area: area || null, pain: area ? (num("lg-pain") || 0) : 0, note: txt("lg-note") || null,
+        jumps: num("lg-jumps"), pain: 0, note: txt("lg-note") || null,
       }));
       toast("기록했어요");
     }
@@ -797,9 +899,11 @@ async function loadAll() {
       sb.from("health").select("*"),
       sb.from("logs").select("*").order("date"),
       sb.from("inbody").select("*").order("date"),
+      sb.from("pain_checks").select("*").order("date"),
     ];
     if (state.admin) q.push(sb.from("profiles").select("*").order("created_at"));
-    const [st, pl, ts, hl, lg, ib, pr] = await Promise.all(q);
+    const res = await Promise.all(q);
+    const [st, pl, ts, hl, lg, ib, pcs] = res, pr = state.admin ? res[7] : null;
     for (const r of [st, pl, ts, hl, lg]) if (r.error) throw r.error;
     const s = st.data;
     state.settings = s ? { name: s.name, blockStart: s.block_start, start: s.start_date, end: s.end_date } : null;
@@ -812,6 +916,7 @@ async function loadAll() {
       (tests[r.player_id] = tests[r.player_id] || { runs: [] }).runs.push({
         id: r.id, date: r.date, reach: r.reach, cmj: r.cmj, block: r.block, approach: r.approach,
         balL: r.bal_l, balR: r.bal_r, hsStage: r.hs_stage, hsSec: r.hs_sec, squat: r.squat, rdl: r.rdl, pull: r.pull,
+        sideL: r.side_l, sideR: r.side_r, sorensen: r.sorensen, flexor: r.flexor, author: r.author,
       });
     }
     state.tests = tests;
@@ -835,6 +940,11 @@ async function loadAll() {
       });
     }
     state.inbody = inbody;
+    const checks = {};
+    for (const r of (pcs && !pcs.error ? pcs.data : [])) {
+      (checks[r.player_id] = checks[r.player_id] || []).push({ id: r.id, date: r.date, area: r.area, during: r.during, morning: r.morning, rest: r.rest, created: r.created_at });
+    }
+    state.painChecks = checks;
     state.profiles = pr && !pr.error ? pr.data : [];
     state.loaded = true; state.offline = false;
   } catch (e) { state.offline = true; }
