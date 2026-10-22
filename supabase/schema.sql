@@ -188,3 +188,78 @@ insert into public.players (name, pos, sort) values
 -- update public.profiles
 --   set role = 'coach', player_id = (select id from public.players where name = '최수혁')
 --   where email = '내-가입-이메일@example.com';
+
+-- ---------- 가입한 사람의 자기 정보 제출 (2026-10-22 추가) ----------
+-- 승인 대기(pending) 상태에서만 제출·수정할 수 있고, 승인 후 수정은 담당자가 한다.
+create or replace function public.submit_my_info(info jsonb) returns uuid
+language plpgsql security definer set search_path = public as $$
+declare
+  me        public.profiles%rowtype;
+  pid       uuid;
+  v_name    text := btrim(coalesce(info->>'name', ''));
+  v_pos     text := info->>'pos';
+  v_wexp    text := info->>'weight_exp';
+  v_height  numeric := nullif(info->>'height', '')::numeric;
+  v_weight  numeric := nullif(info->>'weight', '')::numeric;
+  v_exp     numeric := nullif(info->>'exp', '')::numeric;
+  a_l int := coalesce(nullif(info->>'ankle_l', '')::int, 0);
+  a_r int := coalesce(nullif(info->>'ankle_r', '')::int, 0);
+  p_knee int := coalesce(nullif(info#>>'{pain,knee}', '')::int, 0);
+  p_sh   int := coalesce(nullif(info#>>'{pain,shoulder}', '')::int, 0);
+  p_an   int := coalesce(nullif(info#>>'{pain,ankle}', '')::int, 0);
+  p_bk   int := coalesce(nullif(info#>>'{pain,back}', '')::int, 0);
+  v_adjust jsonb;
+begin
+  select * into me from public.profiles where id = auth.uid();
+  if not found then raise exception '로그인이 필요해요' using errcode = '42501'; end if;
+  if me.role <> 'pending' then raise exception '승인된 계정의 정보는 담당자가 수정해요' using errcode = '42501'; end if;
+  if coalesce((info->>'consent')::boolean, false) is not true then raise exception '정보 사용 동의가 필요해요' using errcode = '23514'; end if;
+  if v_name = '' or length(v_name) > 20 then raise exception '이름을 1–20자로 입력해 주세요' using errcode = '23514'; end if;
+  if v_pos is null or v_pos not in ('OH','MB','OP','S','Li') then raise exception '포지션을 골라 주세요' using errcode = '23514'; end if;
+  if v_wexp is not null and v_wexp not in ('none','lt6','gte6') then raise exception '웨이트 경험을 골라 주세요' using errcode = '23514'; end if;
+  if v_height is not null and (v_height < 140 or v_height > 220) then raise exception '키를 확인해 주세요' using errcode = '23514'; end if;
+  if v_weight is not null and (v_weight < 40 or v_weight > 150) then raise exception '몸무게를 확인해 주세요' using errcode = '23514'; end if;
+  if v_exp is not null and (v_exp < 0 or v_exp > 20) then raise exception '배구 경력을 확인해 주세요' using errcode = '23514'; end if;
+  if least(a_l, a_r) < 0 or greatest(a_l, a_r) > 30 then raise exception '발목 염좌 횟수를 확인해 주세요' using errcode = '23514'; end if;
+  if least(p_knee, p_sh, p_an, p_bk) < 0 or greatest(p_knee, p_sh, p_an, p_bk) > 10 then raise exception '통증은 0–10으로 입력해 주세요' using errcode = '23514'; end if;
+
+  v_adjust := jsonb_strip_nulls(jsonb_build_object(
+    'plyo',     case when p_an >= 3 then 'hold' when p_knee >= 3 then 'iso' end,
+    'overhead', case when p_sh >= 3 then true end,
+    'back',     case when p_bk >= 3 then true end,
+    'ankleBal', case when a_l + a_r > 0 then true end,
+    'refer',    case when greatest(p_knee, p_sh, p_an, p_bk) >= 3 then true end
+  ));
+
+  if me.player_id is null then
+    insert into public.players (name, pos, year, height, weight, exp, weight_exp, adjust, sort)
+    values (v_name, v_pos, nullif(btrim(coalesce(info->>'year', '')), ''), v_height, v_weight, v_exp, v_wexp, v_adjust,
+            (select coalesce(max(sort), 0) + 1 from public.players))
+    returning id into pid;
+    update public.profiles set player_id = pid where id = me.id;
+  else
+    pid := me.player_id;
+    update public.players
+       set name = v_name, pos = v_pos, year = nullif(btrim(coalesce(info->>'year', '')), ''),
+           height = v_height, weight = v_weight, exp = v_exp, weight_exp = v_wexp, adjust = v_adjust
+     where id = pid;
+  end if;
+
+  insert into public.health (player_id, ankle_l, ankle_r, ankle_last, knee_injury, pain, note, consent, updated_at)
+  values (pid, a_l, a_r, nullif(btrim(coalesce(info->>'ankle_last', '')), ''),
+          coalesce((info->>'knee_injury')::boolean, false),
+          jsonb_build_object('knee', p_knee, 'shoulder', p_sh, 'ankle', p_an, 'back', p_bk),
+          nullif(btrim(coalesce(info->>'note', '')), ''), true, now())
+  on conflict (player_id) do update
+    set ankle_l = excluded.ankle_l, ankle_r = excluded.ankle_r, ankle_last = excluded.ankle_last,
+        knee_injury = excluded.knee_injury, pain = excluded.pain, note = excluded.note,
+        consent = true, updated_at = now();
+  return pid;
+end;
+$$;
+
+revoke execute on function public.submit_my_info(jsonb) from public, anon;
+grant execute on function public.submit_my_info(jsonb) to authenticated;
+
+create policy "self reads own player" on public.players for select using (id = private.my_player_id());
+create policy "pending self reads own health" on public.health for select using (player_id = private.my_player_id());
