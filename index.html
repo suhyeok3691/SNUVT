@@ -99,14 +99,20 @@ summary h3 { display: inline; }
 .chips { display: flex; flex-wrap: wrap; gap: 4px; }
 
 /* 주차 · 요일 */
-.weeks { display: flex; gap: 4px; flex-wrap: wrap; }
-.weeks .wk { position: relative; flex: 1 1 0; min-width: 64px; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; display: grid; gap: 0; text-align: left; cursor: pointer; }
-.weeks .wk b { font-family: var(--f-display); font-weight: 400; font-size: 16px; line-height: 1.2; }
-.weeks .wk span { font-family: var(--f-data); font-size: 11px; color: var(--muted); white-space: nowrap; }
-.weeks .wk[aria-pressed="true"] { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); background: var(--blue-soft); }
-.weeks .wk .dot { position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: var(--blue); }
-.weeks .wk.cup { background: var(--yellow); border-color: var(--yellow); color: var(--on-yellow); cursor: default; }
-.weeks .wk.cup span { color: var(--on-yellow); opacity: 0.8; }
+.wnav { display: flex; align-items: center; gap: 6px; }
+.wnav > .btn:not(.link) { min-width: 40px; padding: 6px 10px; font-size: 18px; line-height: 1; }
+.wnav .wcur { flex: 1 1 auto; min-width: 0; display: grid; text-align: center; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
+.wnav .wcur b { font-family: var(--f-display); font-weight: 400; font-size: 17px; line-height: 1.2; }
+.wnav .wcur span { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wnav .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--blue); vertical-align: middle; }
+.day.opt { border-style: dashed; }
+.season-weeks { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.season-weeks li { display: grid; grid-template-columns: 52px 1fr; gap: 8px; padding: 5px 8px; border-radius: 6px; background: var(--surface); font-size: 13.5px; }
+.season-weeks li.cup { background: var(--yellow-soft); }
+.season-weeks li.opt { background: var(--surface-2); color: var(--muted); }
+.season-weeks li .num { font-family: var(--f-data); color: var(--muted); }
+.rules li { padding: 2px 0; }
+tr.past td { opacity: 0.55; }
 .days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; padding-top: 6px; }
 .day { position: relative; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 2px; cursor: pointer; display: grid; gap: 0; justify-items: center; min-width: 0; }
 .day .dw { font-family: var(--f-display); font-size: 17px; line-height: 1.15; }
@@ -269,7 +275,6 @@ td .btn.link { white-space: nowrap; }
 .auth .msg.err { color: var(--crit); }
 
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--surface); padding: 10px 16px; border-radius: 8px; font-size: 14px; font-weight: 600; z-index: 20; max-width: calc(100% - 32px); }
-@media (max-width: 600px) { .weeks .wk { min-width: 0; } .weeks .wk.cup { flex-basis: 100%; display: flex; gap: 8px; align-items: baseline; } }
 @media (max-width: 520px) { .brand h1 { font-size: 21px; } .logo { height: 32px; } .day .dw { font-size: 15px; } .day .kd { font-size: 10.5px; } .days { gap: 3px; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
@@ -289,8 +294,8 @@ td .btn.link { white-space: nowrap; }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=12"></script>
-<script src="guide.js?v=12"></script>
-<script src="app.js?v=12"></script>
+<script src="program.js?v=13"></script>
+<script src="guide.js?v=13"></script>
+<script src="app.js?v=13"></script>
 </body>
 </html>

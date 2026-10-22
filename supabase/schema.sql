@@ -304,3 +304,8 @@ alter table public.logs add constraint logs_pain_area_check
 -- ---------- 웨이트 경험 3단계 · 부상 이력 · 풀 플랭크 (2026-10-23, 이미 적용됨: 마이그레이션 weight_levels_injuries_plank) ----------
 -- players.weight_exp: none 초보자 · machine 중급자 · free 숙련자 (lt6→machine, gte6→free 로 바꿈)
 -- health.injuries jsonb: [{side, part, type, year, surgery}], tests.plank (풀 플랭크 초)
+
+-- ---------- 1년 일정 · 물구나무 걷기 (2026-10-23, 이미 적용됨: 마이그레이션 season_events_handstand_walk) ----------
+-- events: 대회·트라이아웃·비시즌 일정 (kind: major 주요 대회 · minor 9인제·기타 · tryout · off 비시즌·방학)
+--   팀원 모두 읽기, 관리자만 추가·삭제. 프로그램은 이 일정과 날짜(학기)로 자동으로 정해짐 → settings 는 더 안 씀
+-- tests.hs_stage 1–5 (5 = 혼자 걷기), tests.hs_walk 물구나무 걷기 거리 (m). 선수도 직접 기록 가능
