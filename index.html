@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>SNUVT 피지컬 보드</title>
+<title>SNUVT Physical</title>
+<link rel="icon" type="image/png" href="favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
@@ -53,7 +54,15 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .wrap { max-width: 1100px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--surface); border-bottom: 1px solid var(--line); }
 .top-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 12px 8px; flex-wrap: wrap; }
-.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex-wrap: wrap; }
+.logo { height: 40px; width: auto; flex: none; }
+.logo-dark { display: none; }
+@media (prefers-color-scheme: dark) { .logo-light { display: none; } .logo-dark { display: block; } }
+.auth-hero { display: grid; justify-items: center; gap: 10px; text-align: center; }
+.auth-hero .logo { height: 128px; }
+.auth-hero h2 { font-family: var(--f-display); font-size: 34px; letter-spacing: 0.02em; }
+.auth-hero h2 b { color: var(--blue); font-weight: 400; }
+.auth-hero p { margin: 0; color: var(--muted); }
 .brand h1 { font-family: var(--f-display); font-weight: 400; font-size: 26px; letter-spacing: 0.01em; margin: 0; line-height: 1.1; }
 .brand h1 b { color: var(--blue); font-weight: 400; }
 .brand span { color: var(--muted); font-size: 13px; }
@@ -169,7 +178,7 @@ tfoot td { font-weight: 700; background: var(--surface-2); }
 <header class="top">
   <div class="wrap">
     <div class="top-row">
-      <div class="brand"><h1>SNUVT <b>피지컬 보드</b></h1><span id="weekTag"></span></div>
+      <div class="brand"><img class="logo logo-light" src="logo.png" alt="" width="40" height="39"><img class="logo logo-dark" src="logo-white.png" alt="" width="40" height="39"><h1>SNUVT <b>Physical</b></h1><span id="weekTag"></span></div>
       <div class="right"><div class="dday" id="dday"></div><div class="who" id="who"></div></div>
     </div>
     <nav class="tabs" id="tabs" aria-label="화면"></nav>
@@ -387,7 +396,7 @@ function header() {
   const w = weekOf(today());
   document.getElementById("weekTag").textContent = w < 0 ? "블록 시작 전" : (w > 3 ? "블록 종료" : `${WEEKS[w].label} · ${WEEKS[w].goal}`);
   const who = document.getElementById("who");
-  who.innerHTML = state.session ? `<span>${esc(state.email)}${state.admin ? " · 담당자" : state.role === "player" ? " · 선수" : ""}</span><button class="btn link" type="button" data-act="logout">로그아웃</button>` : "";
+  who.innerHTML = state.session ? `<span>${esc(state.email)}${state.admin ? " · 관리자" : state.role === "player" ? " · 선수" : ""}</span><button class="btn link" type="button" data-act="logout">로그아웃</button>` : "";
   const tabs = [["team", "이번 주"], ["player", "선수별 처방"], ["guide", "워밍업·원칙"]];
   if (state.admin) tabs.splice(2, 0, ["intake", "등록·측정"], ["load", "훈련 부하"]);
   if (!state.session || state.role === "pending") { document.getElementById("tabs").innerHTML = ""; return; }
@@ -403,7 +412,7 @@ function viewTeam() {
   let body;
   if (state.offline) body = offlineHtml();
   else if (!state.loaded) body = `<div class="panel empty"><strong>선수 명단을 불러오는 중</strong><span>잠시만 기다려 주세요.</span></div>`;
-  else if (!ps.length) body = `<div class="panel empty"><strong>아직 등록된 선수가 없어요</strong><span>${state.admin ? "‘등록·측정’에서 주전부터 추가하면 이 화면에 포지션별 카드가 생겨요." : "피지컬 담당자가 선수를 등록하면 여기에 처방이 나타나요."}</span>${state.admin ? '<button class="btn primary" data-act="view" data-v="intake">선수 등록하기</button>' : ""}</div>`;
+  else if (!ps.length) body = `<div class="panel empty"><strong>아직 등록된 선수가 없어요</strong><span>${state.admin ? "‘등록·측정’에서 주전부터 추가하면 이 화면에 포지션별 카드가 생겨요." : "관리자가 선수를 등록하면 여기에 처방이 나타나요."}</span>${state.admin ? '<button class="btn primary" data-act="view" data-v="intake">선수 등록하기</button>' : ""}</div>`;
   else {
     body = POS_ORDER.filter(pos => ps.some(p => p.pos === pos)).map(pos => `
       <div class="pos-group"><h3>${POS[pos]} · ${pos}</h3><div class="grid">
@@ -445,7 +454,13 @@ function offlineHtml() {
 function viewAuth() {
   const login = state.authMode === "login";
   return `<section class="auth">
-    <div><h2>${login ? "로그인" : "가입하기"}</h2><p class="lede">${login ? "서울대 배구부 피지컬 보드예요. 가입 후 피지컬 담당자가 승인하면 처방을 볼 수 있어요." : "가입하고 로그인하면 내 정보(포지션, 키, 부상 이력 등)를 입력하는 화면이 나와요. 피지컬 담당자가 승인하면 내 처방과 기록 화면이 열려요."}</p></div>
+    <div class="auth-hero">
+      <img class="logo logo-light" src="logo.png" alt="서울대학교 배구부 엠블럼" width="131" height="128">
+      <img class="logo logo-dark" src="logo-white.png" alt="서울대학교 배구부 엠블럼" width="131" height="128">
+      <h2>SNUVT <b>Physical</b></h2>
+      <p>서울대학교 배구부 피지컬 트레이닝</p>
+    </div>
+    <div><h3>${login ? "로그인" : "가입하기"}</h3><p class="small muted">${login ? "관리자 승인 후 로그인할 수 있어요." : "가입 후 내 정보를 입력하면 관리자가 확인하고 승인해요."}</p></div>
     <form class="f panel" id="authForm">
       <label class="fl">이메일<input type="email" id="au-email" autocomplete="email" required></label>
       <label class="fl">비밀번호 (6자 이상)<input type="password" id="au-pw" autocomplete="${login ? "current-password" : "new-password"}" minlength="6" required></label>
@@ -458,15 +473,15 @@ function viewAuth() {
 function viewPending() {
   if (!state.myPid || state.editingSelf) return viewSelfReg();
   const p = state.selfPlayer || {};
-  return `<section class="auth"><div class="panel empty"><strong>담당자 승인을 기다리고 있어요</strong>
-    <span>${esc(p.name || "")}${p.pos ? " · " + esc(POS[p.pos] || p.pos) : ""} 정보를 제출했어요. 피지컬 담당자가 승인하면 이 화면이 내 처방으로 바뀌어요.</span>
+  return `<section class="auth"><div class="panel empty"><strong>관리자 승인을 기다리고 있어요</strong>
+    <span>${esc(p.name || "")}${p.pos ? " · " + esc(POS[p.pos] || p.pos) : ""} 정보를 제출했어요. 관리자가 승인하면 이 화면이 내 처방으로 바뀌어요.</span>
     <div class="row" style="justify-content:center"><button class="btn primary" type="button" data-act="refresh">승인됐는지 확인</button><button class="btn" type="button" data-act="editself">제출한 정보 수정</button></div></div></section>`;
 }
 function viewSelfReg() {
   const p = state.selfPlayer || {}, h = state.selfHealth || {}, pain = h.pain || {};
   const opt = (v, cur, l) => `<option value="${v}" ${String(cur ?? "") === String(v) ? "selected" : ""}>${l}</option>`;
   return `<section class="sec" style="max-width:760px;margin:0 auto;width:100%">
-    <div><h2>내 정보 입력</h2><p class="lede">처방을 내 몸에 맞추는 데 쓰는 정보예요. 제출하면 피지컬 담당자가 확인하고 승인해요. 승인 전까지는 여기서 다시 고칠 수 있어요.</p></div>
+    <div><h2>내 정보 입력</h2><p class="lede">처방을 내 몸에 맞추는 데 쓰는 정보예요. 제출하면 관리자가 확인하고 승인해요. 승인 전까지는 여기서 다시 고칠 수 있어요.</p></div>
     <form class="f panel" id="selfForm">
       <fieldset><legend>기본 정보</legend>
         <div class="fields">
@@ -479,7 +494,7 @@ function viewSelfReg() {
           <label class="fl">웨이트 경험<select id="sf-wexp" required><option value="">고르기</option>${opt("none", p.weightExp, "없음")}${opt("lt6", p.weightExp, "6개월 미만")}${opt("gte6", p.weightExp, "6개월 이상")}</select></label>
         </div>
       </fieldset>
-      <fieldset><legend>부상·통증 <span class="private">나와 피지컬 담당자만 봐요</span></legend>
+      <fieldset><legend>부상·통증 <span class="private">나와 관리자만 봐요</span></legend>
         <div class="fields">
           <label class="fl">발목 염좌 (왼쪽, 회)<input id="sf-al" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleL ?? 0)}"></label>
           <label class="fl">발목 염좌 (오른쪽, 회)<input id="sf-ar" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleR ?? 0)}"></label>
@@ -490,7 +505,7 @@ function viewSelfReg() {
           <label class="fl">지금 허리 통증 (0–10)<input id="sf-back" type="number" inputmode="numeric" min="0" max="10" value="${esc(pain.back ?? 0)}"></label>
           <label class="fl wide">수술 이력·그 외 알려줄 것<input id="sf-note" maxlength="200" value="${esc(h.note || "")}"></label>
         </div>
-        <p class="small muted">통증 0 = 없음, 10 = 참을 수 없음. 3 이상이면 점프나 머리 위 동작이 자동으로 조정되고, 담당자가 상담을 권할 수 있어요.</p>
+        <p class="small muted">통증 0 = 없음, 10 = 참을 수 없음. 3 이상이면 점프나 머리 위 동작이 자동으로 조정되고, 관리자가 상담을 권할 수 있어요.</p>
         <label class="check"><input type="checkbox" id="sf-knee-hx" ${h.kneeInjury ? "checked" : ""}> 무릎을 다친 적이 있어요</label>
         <label class="check"><input type="checkbox" id="sf-consent" ${h.consent ? "checked" : ""}> 이 정보를 트레이닝 처방 목적으로만 쓰는 데 동의해요</label>
       </fieldset>
@@ -500,18 +515,20 @@ function viewSelfReg() {
   </section>`;
 }
 
-/* ---------- 화면: 팀원 계정 (담당자) ---------- */
+/* ---------- 화면: 팀원 계정 (관리자) ---------- */
 function membersHtml() {
   const ps = sortedPlayers();
   const list = state.profiles.slice().sort((a, b) => (a.role === "pending" ? -1 : 0) - (b.role === "pending" ? -1 : 0));
   if (!list.length) return "";
   const roleOpt = (v, cur, l) => `<option value="${v}" ${v === cur ? "selected" : ""}>${l}</option>`;
-  return `<section class="sec"><div><h3>팀원 계정</h3><p class="small muted">가입한 사람이 낸 정보는 자동으로 명단에 연결돼요. 내용을 확인하고 역할을 ‘선수’로 바꿔 저장하면 승인돼요. 가입을 거절하려면 ‘등록·측정’에서 그 선수를 삭제해요.</p></div>
+  return `<section class="sec"><div><h3>팀원 계정</h3><p class="small muted">가입한 사람이 낸 정보는 자동으로 명단에 연결돼요. 내용을 확인하고 역할을 ‘선수’로 바꿔 저장하면 승인돼요. ‘삭제’는 계정을 없애요. 승인 대기 계정은 제출한 정보도 함께 지워지고, 승인된 선수는 측정·기록을 남긴 채 계정만 지워져요.</p></div>
     <div class="tw"><table><thead><tr><th>이메일</th><th>역할</th><th>연결할 선수</th><th></th></tr></thead><tbody>
     ${list.map(m => `<tr><td>${esc(m.email || "")}${m.role === "pending" ? (m.player_id ? ' <span class="chip warn">승인 대기 · 정보 제출함</span>' : ' <span class="chip">정보 미제출</span>') : ""}</td>
-      <td><select id="mr-${esc(m.id)}" aria-label="역할">${roleOpt("pending", m.role, "대기")}${roleOpt("player", m.role, "선수")}${roleOpt("coach", m.role, "담당자")}</select></td>
+      <td><select id="mr-${esc(m.id)}" aria-label="역할">${roleOpt("pending", m.role, "대기")}${roleOpt("player", m.role, "선수")}${roleOpt("coach", m.role, "관리자")}</select></td>
       <td><select id="mp-${esc(m.id)}" aria-label="연결할 선수"><option value="">연결 안 함</option>${ps.map(p => `<option value="${esc(p.id)}" ${p.id === m.player_id ? "selected" : ""}>${esc(p.name)} · ${esc(p.pos)}</option>`).join("")}</select></td>
-      <td><button class="btn" type="button" data-act="savemember" data-id="${esc(m.id)}" ${m.id === state.session.user.id ? "disabled title=\"내 역할은 여기서 바꿀 수 없어요\"" : ""}>저장</button></td></tr>`).join("")}
+      <td>${m.id === state.session.user.id ? '<span class="small muted">내 계정</span>' : `<div class="row" style="flex-wrap:nowrap">
+        <button class="btn" type="button" data-act="savemember" data-id="${esc(m.id)}">저장</button>
+        <button class="btn danger ${state.armed === "member:" + m.id ? "armed" : ""}" type="button" data-act="delmember" data-id="${esc(m.id)}">${state.armed === "member:" + m.id ? "정말 삭제" : "삭제"}</button></div>`}</td></tr>`).join("")}
     </tbody></table></div></section>`;
 }
 
@@ -586,8 +603,8 @@ function logSectionHtml(p, w, rx) {
           <label class="fl">통증 (0–10)<input type="number" id="lg-pain" inputmode="numeric" min="0" max="10" value="0"></label>
           <label class="fl wide">메모<input type="text" id="lg-note" maxlength="200" placeholder="무게, 컨디션 등"></label>
         </div>
-        <div class="row"><button class="btn primary" type="submit">기록 저장</button><span class="small muted">기록은 본인과 피지컬 담당자만 볼 수 있어요.</span></div>
-      </form>` : `<div class="panel small muted">${state.myPid ? "기록은 본인 이름으로만 남길 수 있어요. 선수 선택에서 내 이름을 골라 주세요." : "계정이 아직 선수 이름과 연결되지 않았어요. 피지컬 담당자에게 연결을 요청해 주세요."}</div>`}
+        <div class="row"><button class="btn primary" type="submit">기록 저장</button><span class="small muted">기록은 본인과 관리자만 볼 수 있어요.</span></div>
+      </form>` : `<div class="panel small muted">${state.myPid ? "기록은 본인 이름으로만 남길 수 있어요. 선수 선택에서 내 이름을 골라 주세요." : "계정이 아직 선수 이름과 연결되지 않았어요. 관리자에게 연결을 요청해 주세요."}</div>`}
     </div>
     <div class="sec">
       <div><h3>최근 기록</h3></div>
@@ -602,7 +619,7 @@ function logSectionHtml(p, w, rx) {
 
 /* ---------- 화면: 등록·측정 ---------- */
 function viewIntake() {
-  if (!state.admin) return `<div class="panel empty"><strong>피지컬 담당자 전용 화면이에요</strong></div>`;
+  if (!state.admin) return `<div class="panel empty"><strong>관리자 전용 화면이에요</strong></div>`;
   if (state.offline) return offlineHtml();
   const ps = sortedPlayers();
   const isNew = state.editPid === "__new" || !ps.length;
@@ -613,7 +630,7 @@ function viewIntake() {
   const list = `<div class="plist">${ps.map(x => `<button type="button" data-act="edit" data-pid="${esc(x.id)}" aria-pressed="${x.id === pid}"><span>${esc(x.name)}</span><span class="chip pos">${esc(x.pos)}</span></button>`).join("")}
     <button type="button" data-act="edit" data-pid="__new" aria-pressed="${isNew}"><span>+ 새 선수</span></button></div>`;
   const opt = (v, cur) => `value="${v}" ${String(cur ?? "") === String(v) ? "selected" : ""}`;
-  return `<section class="sec"><div><h2>등록·측정</h2><p class="lede">가입 질문과 측정값을 넣으면 처방이 자동으로 바뀌어요. 부상·통증 정보는 피지컬 담당자와 그 선수 본인만 볼 수 있어요.</p></div></section>
+  return `<section class="sec"><div><h2>등록·측정</h2><p class="lede">가입 질문과 측정값을 넣으면 처방이 자동으로 바뀌어요. 부상·통증 정보는 관리자와 그 선수 본인만 볼 수 있어요.</p></div></section>
   ${membersHtml()}
   <section class="side">
     <div class="panel">${list}</div>
@@ -630,7 +647,7 @@ function viewIntake() {
             <label class="fl">웨이트 경험<select id="pf-wexp"><option ${opt("none", p.weightExp)}>없음</option><option ${opt("lt6", p.weightExp)}>6개월 미만</option><option ${opt("gte6", p.weightExp)}>6개월 이상</option></select></label>
           </div>
         </fieldset>
-        <fieldset><legend>부상·통증 <span class="private">담당자만 열람</span></legend>
+        <fieldset><legend>부상·통증 <span class="private">관리자만 열람</span></legend>
           <div class="fields">
             <label class="fl">발목 염좌 (왼쪽, 회)<input id="hf-al" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleL ?? 0)}"></label>
             <label class="fl">발목 염좌 (오른쪽, 회)<input id="hf-ar" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleR ?? 0)}"></label>
@@ -679,7 +696,7 @@ function testFormHtml(pid) {
 
 /* ---------- 화면: 훈련 부하 ---------- */
 function viewLoad() {
-  if (!state.admin) return `<div class="panel empty"><strong>피지컬 담당자 전용 화면이에요</strong></div>`;
+  if (!state.admin) return `<div class="panel empty"><strong>관리자 전용 화면이에요</strong></div>`;
   const ps = sortedPlayers();
   const weeks = [-1, 0, 1, 2, 3];
   const wl = k => k < 0 ? "블록 전" : WEEKS[k].label;
@@ -761,7 +778,7 @@ function toast(msg) {
 }
 function failMsg(e) {
   const c = e && e.code;
-  if (c === "42501") return "이 작업을 할 권한이 없어요. 피지컬 담당자에게 요청해 주세요.";
+  if (c === "42501") return "이 작업을 할 권한이 없어요. 관리자에게 요청해 주세요.";
   if (c === "23514") return "입력값이 허용 범위를 벗어났어요. 숫자를 확인해 주세요.";
   return "저장하지 못했어요. 잠시 후 다시 시도해 주세요." + (e && e.message ? ` (${e.message})` : "");
 }
@@ -787,6 +804,15 @@ document.addEventListener("click", async ev => {
     const pid = document.getElementById("mp-" + id).value || null;
     try { ok(await sb.from("profiles").update({ role, player_id: pid }).eq("id", id)); toast("팀원 계정을 저장했어요"); }
     catch (e) { toast(failMsg(e)); }
+    state.dirty = false; return loadAll();
+  }
+  if (act === "delmember") {
+    const key = "member:" + b.dataset.id;
+    if (state.armed !== key) { state.armed = key; state.dirty = false; return render(); }
+    state.armed = null;
+    const r = await sb.rpc("remove_member", { target: b.dataset.id });
+    if (r.error) toast(r.error.code === "PGRST202" ? "삭제 기능이 아직 데이터베이스에 설치되지 않았어요. remove_member.sql 을 실행해 주세요." : (r.error.code === "42501" ? r.error.message : failMsg(r.error)));
+    else toast("계정을 삭제했어요");
     state.dirty = false; return loadAll();
   }
   if (act === "delplayer" || act === "deltest" || act === "dellog") {
@@ -839,7 +865,7 @@ document.addEventListener("submit", async ev => {
       const r = await sb.rpc("submit_my_info", { info });
       if (r.error) { toast(r.error.code === "23514" || r.error.code === "42501" ? r.error.message : failMsg(r.error)); return; }
       state.editingSelf = false; state.dirty = false;
-      toast("제출했어요. 담당자 승인을 기다려 주세요.");
+      toast("제출했어요. 관리자 승인을 기다려 주세요.");
       await loadProfile();
     } finally { if (btn) btn.disabled = false; }
     return;
