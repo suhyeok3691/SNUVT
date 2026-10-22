@@ -263,3 +263,29 @@ grant execute on function public.submit_my_info(jsonb) to authenticated;
 
 create policy "self reads own player" on public.players for select using (id = private.my_player_id());
 create policy "pending self reads own health" on public.health for select using (player_id = private.my_player_id());
+
+-- ---------- 상황별 처방 모듈 · 인바디 (2026-10-22 추가, 이미 적용됨) ----------
+alter table public.health add column if not exists rehab jsonb not null default '[]'::jsonb; -- [{area, stage 1–4, note}]
+
+create table if not exists public.inbody (
+  id uuid primary key default gen_random_uuid(),
+  player_id uuid not null references public.players(id) on delete cascade,
+  date date not null,
+  weight numeric check (weight between 30 and 200),
+  smm numeric check (smm between 10 and 80),
+  fat_mass numeric check (fat_mass between 0 and 100),
+  pbf numeric check (pbf between 1 and 60),
+  leg_r numeric check (leg_r between 1 and 30),
+  leg_l numeric check (leg_l between 1 and 30),
+  standardized boolean not null default false,
+  note text,
+  author uuid default auth.uid() references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+alter table public.inbody enable row level security;
+create policy "coach or self reads inbody" on public.inbody for select
+  using (private.is_coach() or (private.is_member() and player_id = private.my_player_id()));
+create policy "coach or self inserts inbody" on public.inbody for insert
+  with check (private.is_coach() or (private.my_role() = 'player' and player_id = private.my_player_id() and author = auth.uid()));
+create policy "coach or self removes inbody" on public.inbody for delete
+  using (private.is_coach() or (private.my_role() = 'player' and player_id = private.my_player_id()));
