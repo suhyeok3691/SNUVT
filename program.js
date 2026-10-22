@@ -1,6 +1,6 @@
-/* SNUVT Physical — 처방 엔진
+/* SNUVT Physical — 프로그램 엔진
  * 'SNUVT Physical 운동 처방 라이브러리' 문서의 규칙을 코드로 옮긴 것.
- * 화면과 분리된 순수 함수만 둔다 (입력: 선수·측정·인바디·부상 모듈 / 출력: 요일 처방).
+ * 화면과 분리된 순수 함수만 둔다 (입력: 선수·측정·인바디·통증 단계 / 출력: 요일 프로그램).
  */
 
 const NET = 243; // 남자부 네트 높이 (cm)
@@ -86,9 +86,20 @@ const LIBERO_THU = [
   { name: "수비 자세 월싯", rx: "3×30초", cue: "무릎 약 90°, 팔은 리시브 자세" },
 ];
 
-/* ---------- 상황별 처방 모듈 (부상·통증) ---------- */
+/* ---------- 통증 단계별 재활 ----------
+ * 단계 = 조직 자극 민감도(irritability: 높음·중간·낮음, Kelley 등 어깨 임상지침) + 복귀.
+ *   1 높음: 통증 7 이상, 쉬거나 밤에도 아픔 → 통증 없는 범위 가동성·등척성, 그 부위 부하 줄이기
+ *   2 중간: 통증 4–6, 움직임 끝이나 운동 중 아픔 → 등척성 + 가벼운 근력
+ *   3 낮음: 통증 3 이하, 세게 할 때만 → 무거운 근력·파워·점프
+ *   4 복귀: 통증 없음 → 배구 동작을 단계적으로
+ * 진행 규칙은 통증 모니터링 모델 (Thomeé 1997, Silbernagel 2007).
+ * 무릎은 점퍼스니 Blazina 분류와 같은 방향으로 설명을 맞췄다. */
+const STAGE_NAMES = ["높음", "중간", "낮음", "복귀"];
+const STAGE_HINT = ["7점 이상 · 쉬어도 아픔", "4–6점 · 운동하면 아픔", "3점 이하 · 세게 할 때만", "통증 없음"];
+const PAIN_RULE = "운동 중 통증 5 이하 · 다음 날 아침 평소대로 · 주마다 늘지 않기. 지키면 그대로, 어기면 양을 줄이거나 한 단계 내려요.";
+const NEXT_RULE = "규칙을 1–2주 지키고 통증이 다음 구간으로 내려가면 다음 단계로.";
 const REHAB = {
-  shoulder: { label: "어깨", pain: ["팔을 들기만 해도 아픔", "운동할 때 아픔", "세게 때리거나 던질 때만 불편", "안 아픔 · 복귀 중"], stages: [
+  shoulder: { label: "어깨", pain: ["쉬거나 밤에도 아프고 팔이 끝까지 안 올라감", "팔을 끝까지 올리거나 운동하면 아픔", "스파이크·서브처럼 세게 할 때만 아픔", "안 아픔 · 공격 복귀 중"], stages: [
     { title: "통증·가동성", items: [
       { name: "슬리퍼 스트레치 · 크로스바디 스트레치", rx: "각 30초 × 3–5" },
       { name: "견갑 모으고 내리기 (등척)", rx: "10초 × 10" },
@@ -110,7 +121,7 @@ const REHAB = {
       { name: "서서 벽에 때리기 → 서브 → 점프 스파이크", rx: "20 → 20 → 10회", cue: "조금씩 늘리기" }],
       next: "정규 훈련 공격을 이틀 연속 문제없이" },
   ] },
-  ankle: { label: "발목", pain: ["걸을 때도 아픔", "걷기는 괜찮고 운동할 때 아픔", "점프·방향 전환 때만 불편", "안 아픔 · 복귀 중"], stages: [
+  ankle: { label: "발목", pain: ["걸을 때도 아프고 부어 있음", "걷기는 괜찮고 뛰거나 운동하면 아픔", "점프·방향 전환 때만 아픔", "안 아픔 · 복귀 중"], stages: [
     { title: "가동성", items: [
       { name: "무릎 벽 대기 (발끝-벽 거리 늘리기)", rx: "2×10" },
       { name: "발목 알파벳 그리기", rx: "2회" },
@@ -132,17 +143,23 @@ const REHAB = {
       { name: "어프로치 점프", rx: "3×3" }],
       next: "정규 훈련 이틀 연속 문제없이" },
   ], always: "다친 뒤 1년은 훈련·경기 때 보조기나 테이핑" },
-  finger: { label: "손가락", pain: ["주먹 쥘 때도 아픔", "공 받을 때 아픔", "안 아픔 · 복귀 중"], stages: [
-    { title: "가동성", items: [{ name: "손가락 힘줄 미끄러짐 운동 (주먹 모양 5종)", rx: "각 10회 × 하루 3번" }],
+  finger: { label: "손가락", pain: ["가만히 있어도 아프고 부어 있음", "주먹 쥐거나 힘줄 때 아픔", "공 받을 때만 아픔", "안 아픔 · 복귀 중"], stages: [
+    { title: "보호·가동성", items: [
+      { name: "손가락 힘줄 미끄러짐 운동 (주먹 모양 5종)", rx: "각 10회 × 하루 3번", cue: "통증 없는 범위" },
+      { name: "옆 손가락과 같이 테이핑", rx: "훈련·일상" }],
       next: "주먹을 끝까지 쥐고 펼 수 있음" },
     { title: "근력", items: [
       { name: "고무줄 손가락 벌리기", rx: "3×15" },
       { name: "수건·공 쥐기 (5초 유지)", rx: "3×10" }],
       next: "쥐는 힘 좌우 비슷" },
-    { title: "배구 동작", items: [{ name: "벽 오버 토스 → 블로킹 손 모양 → 정규 훈련", rx: "단계적으로", cue: "버디 테이핑 유지" }],
+    { title: "공 감각", items: [
+      { name: "벽 오버 토스 (가볍게)", rx: "3×20" },
+      { name: "블로킹 손 모양 만들기 → 가벼운 공 막기", rx: "2×10" }],
       next: "공 받아도 통증 3 이하" },
+    { title: "배구 동작", items: [{ name: "정규 훈련 토스·블로킹 참여", rx: "단계적으로", cue: "테이핑 유지" }],
+      next: "—" },
   ], always: "훈련 때 옆 손가락과 같이 테이핑" },
-  wrist: { label: "손목", pain: ["손 짚을 때 아픔", "짚기는 괜찮고 운동할 때 아픔", "푸시업·물구나무 때만 불편", "안 아픔 · 복귀 중"], stages: [
+  wrist: { label: "손목", pain: ["가만히 있어도 아픔", "손을 짚거나 운동하면 아픔", "푸시업·물구나무처럼 체중 실을 때만 아픔", "안 아픔 · 복귀 중"], stages: [
     { title: "가동성·체중 싣기", items: [
       { name: "손목 원 그리기 · 손바닥 스트레칭", rx: "각 30초" },
       { name: "네발 자세에서 앞뒤로 체중 싣기", rx: "30초 × 3" }],
@@ -160,7 +177,7 @@ const REHAB = {
     { title: "배구 동작", items: [{ name: "토스·디그 정상 참여, 물구나무 단계 복귀", rx: "단계적으로" }],
       next: "정규 훈련 이틀 연속 문제없이" },
   ] },
-  knee: { label: "무릎", pain: ["계단·쪼그려 앉기도 아픔", "점프하면 아픔", "점프 많이 한 다음 날만 뻐근함", "안 아픔 · 복귀 중"], stages: [
+  knee: { label: "무릎", pain: ["운동 중·후 오래 아프고 경기력이 떨어짐", "운동 중·후에 아프지만 뛸 수는 있음", "운동 끝난 뒤에만 아픔", "안 아픔 · 복귀 중"], stages: [
     { title: "등척성 (통증 조절)", items: [{ name: "레그 익스텐션 등척성 (무릎 약 60°)", rx: "45초 × 5", cue: "세트 간 2분 · 매일 가능" }],
       next: "한 발 스쿼트 통증 3 이하" },
     { title: "무겁고 느린 근력", items: [
@@ -171,8 +188,8 @@ const REHAB = {
       next: "점프 다음 날 아침 통증이 늘지 않음" },
     { title: "종목 복귀", items: [{ name: "어프로치 점프 → 블록 점프 → 정규 훈련 점프 드릴", rx: "단계적 참여" }],
       next: "정규 훈련 이틀 연속 문제없이" },
-  ], always: "운동 중 통증 3 이하, 다음 날 아침 평소대로면 계속" },
-  back: { label: "허리", pain: ["일상에서도 아픔", "운동할 때 아픔", "무거운 무게 들 때만 불편", "안 아픔 · 복귀 중"], stages: [
+  ], always: "점프 다음 날 아침 통증이 늘면 점프 양을 줄여요" },
+  back: { label: "허리", pain: ["쉬어도 아프고 움직이기 힘듦", "숙이거나 운동하면 아픔", "무거운 무게 들 때만 아픔", "안 아픔 · 복귀 중"], stages: [
     { title: "가동성", items: [
       { name: "오픈북 흉추 회전", rx: "좌우 8회 × 2" },
       { name: "폼롤러 위 흉추 신전", rx: "5회 × 2" },
@@ -197,7 +214,7 @@ function relStrength(t, weight) {
   return sq > 0 && bw > 0 ? sq / bw : null;
 }
 // 관리자가 지정한 모듈 + (모듈이 없는 부위는) 가입 때 자가 보고한 통증으로 추정한 모듈
-// pain: 자가 보고 통증 (0–10). 5 이상 → 통증 1단계, 3–4 → 2단계. 값을 못 보면 adjust 로 1단계
+// pain: 자가 보고 통증 (0–10). 7 이상 → 1단계, 4–6 → 2단계, 3 → 3단계. 값을 못 보면 adjust 로 1단계
 function effectiveModules(adjust, rehab, pain) {
   const mods = (rehab || []).filter(m => REHAB[m.area]).map(m => ({ ...m, stage: Math.min(REHAB[m.area].stages.length, Math.max(1, Number(m.stage) || 1)) }));
   const has = a => mods.some(m => m.area === a);
@@ -206,12 +223,12 @@ function effectiveModules(adjust, rehab, pain) {
   for (const area of ["knee", "shoulder", "ankle", "back"]) {
     if (has(area)) continue;
     const v = pain ? Number(pain[area]) || 0 : null;
-    if (v != null && v >= 3) mods.push({ area, stage: v >= 5 ? 1 : 2, inferred: true });
+    if (v != null && v >= 3) mods.push({ area, stage: v >= 7 ? 1 : v >= 4 ? 2 : 3, inferred: true });
     else if (v == null && flagged[area]) mods.push({ area, stage: 1, inferred: true });
   }
   return mods;
 }
-const painLabel = m => `${REHAB[m.area].label} 통증 ${m.stage}단계`;
+const painLabel = m => `${REHAB[m.area].label} 통증 ${m.stage}단계 (${STAGE_NAMES[m.stage - 1]})`;
 function moduleEffects(mods, ankleHistory) {
   const st = a => (mods.find(m => m.area === a) || {}).stage || 0;
   const knee = st("knee"), ankle = st("ankle"), sh = st("shoulder"), wr = st("wrist"), back = st("back");
@@ -230,7 +247,7 @@ function moduleEffects(mods, ankleHistory) {
   };
 }
 
-/* ---------- 요일 처방 ---------- */
+/* ---------- 요일 프로그램 ---------- */
 // ctx: { player, test(최신 측정), weight(인바디 우선), rehab(관리자 지정 모듈), ankleHistory(bool), kneeHistory(bool) }
 function dayPlan(ctx, w, d) {
   const p = ctx.player || {};
@@ -257,8 +274,8 @@ function dayPlan(ctx, w, d) {
     }
     return items.length ? { key: "rehab", title, items, note: mods.filter(m => !filter || filter(m)).map(m => {
       const def = REHAB[m.area], s = def.stages[m.stage - 1];
-      return `${painLabel(m)} (${def.pain[m.stage - 1]}) → 다음 단계: ${s.next}`;
-    }).join("\n") } : null;
+      return `${painLabel(m)} · ${def.pain[m.stage - 1]}${m.stage < def.stages.length ? ` → 다음: ${s.next}` : ""}`;
+    }).concat(PAIN_RULE).join("\n") } : null;
   };
 
   // ---- 대회 (4주차 토·일)
@@ -408,7 +425,7 @@ function dayPlan(ctx, w, d) {
        ...(fx.handstandMax >= 1 && !fx.noOverhead ? [{ name: "물구나무 단계 연습", rx: "5분" }] : [])];
   if (fx.ankleBal) opt.push({ name: "한 발 균형 (눈 감고 → 쿠션 위)", rx: "5분", mod: "발목" });
   out.blocks.push({ key: "opt", title: "선택 운동 (피곤하면 쉬기 · 30분 이내)", items: opt, note: "" });
-  const rb = rehabBlock("재활 운동", m => (m.area === "knee" && m.stage === 1) || m.area === "finger" || (m.area === "ankle" && m.stage <= 2) || (m.area === "shoulder" && m.stage === 1) || (m.area === "back" && m.stage <= 2));
+  const rb = rehabBlock("재활 운동", m => (m.area === "knee" && m.stage === 1) || (m.area === "finger" && m.stage <= 2) || (m.area === "ankle" && m.stage <= 2) || (m.area === "shoulder" && m.stage === 1) || (m.area === "back" && m.stage <= 2));
   if (rb) out.blocks.push(rb);
   return out;
 }
@@ -424,4 +441,4 @@ function daySummary(plan) {
   return { kind: plan.kind, title: plan.title, landings: plan.landings, items: main ? main.items.length : 0 };
 }
 
-if (typeof module !== "undefined") module.exports = { painLabel, dayPlan, daySummary, effectiveModules, moduleEffects, relStrength, REHAB, REHAB_AREAS, DAYS, WEEKS, POS, POS_ORDER, NET };
+if (typeof module !== "undefined") module.exports = { STAGE_NAMES, STAGE_HINT, PAIN_RULE, NEXT_RULE, painLabel, dayPlan, daySummary, effectiveModules, moduleEffects, relStrength, REHAB, REHAB_AREAS, DAYS, WEEKS, POS, POS_ORDER, NET };

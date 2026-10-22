@@ -1,4 +1,4 @@
-/* SNUVT Physical — 화면·데이터 (처방 규칙은 program.js) */
+/* SNUVT Physical — 화면·데이터 (프로그램 규칙은 program.js) */
 
 /* ---------- 기준값 ---------- */
 const DEFAULT_SETTINGS = { name: "서울대배", blockStart: "2026-10-26", start: "2026-11-21", end: "2026-11-22" };
@@ -58,7 +58,7 @@ function viewPid() {
   const ps = sortedPlayers(); return ps.length ? ps[0].id : null;
 }
 
-/* ---------- 처방 연결 ---------- */
+/* ---------- 프로그램 연결 ---------- */
 function ctxFor(p) {
   const h = state.health[p.id] || {};
   const ib = inbodyOf(p.id).filter(x => x.weight != null).at(-1);
@@ -112,7 +112,7 @@ function header() {
   const roleKo = state.admin ? "관리자" : state.role === "player" ? "선수" : "";
   who.innerHTML = state.session ? `<span>${esc(myName())}${roleKo ? " " + roleKo : ""}</span><button class="btn link" type="button" data-act="logout">로그아웃</button>` : "";
   if (!state.session || !state.role || state.role === "pending" || state.offline) { document.getElementById("tabs").innerHTML = ""; return; }
-  const tabs = [["home", "홈"], ["plan", "처방"], ["rec", "기록"]];
+  const tabs = [["home", "홈"], ["plan", "프로그램"], ["rec", "기록"]];
   if (state.admin) tabs.push(["intake", "등록·측정"], ["load", "훈련 부하"]);
   document.getElementById("tabs").innerHTML = tabs.map(([k, l]) =>
     `<button type="button" data-act="view" data-v="${k}" ${state.view === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
@@ -152,7 +152,7 @@ function todayHtml(p) {
     ${items.length ? `<ul class="mini">${items.map(x => `<li><span>${esc(x.name)}</span><b>${esc(x.rx ?? "")}</b></li>`).join("")}</ul>` : ""}
     <div class="row between">
       <span class="small muted">${plan.landings ? `착지 약 ${plan.landings}회` : ""}${rehab ? `${plan.landings ? " · " : ""}재활 운동 ${rehab.items.length}개` : ""}</span>
-      <button class="btn primary" type="button" data-act="openday" data-w="${w}" data-d="${d}">전체 처방 보기</button>
+      <button class="btn primary" type="button" data-act="openday" data-w="${w}" data-d="${d}">전체 프로그램 보기</button>
     </div>
     <p class="sub">이번 주</p>${strip}</section>`;
 }
@@ -188,7 +188,7 @@ function myStatusHtml(p) {
     ${mods.length ? `<div class="panel tile">
       <h3>통증 단계</h3>
       <ul class="plain">${mods.map(m => `<li><b>${esc(painLabel(m))}</b> <span class="muted">${esc(REHAB[m.area].pain[m.stage - 1])}</span></li>`).join("")}</ul>
-      <p class="small muted">${state.admin ? "" : "바뀌면 관리자에게 알려 주세요."}</p>
+      <p class="small muted">운동 중 통증 5 이하, 다음 날 아침 평소대로면 OK.${state.admin ? "" : " 달라지면 관리자에게 알려 주세요."}</p>
     </div>` : ""}
   </section>`;
 }
@@ -201,7 +201,7 @@ function teamStatusHtml() {
   for (const p of ps) {
     const why = [];
     const pains = logsOf(p.id).filter(e => e.date >= recent && e.painArea && Number(e.pain) >= 3);
-    if (pains.length) { const e = pains.at(-1); why.push(["crit", `${AREA_KO[e.painArea]} 통증 ${e.pain} (${md(parseD(e.date))})`]); }
+    if (pains.length) { const e = pains.at(-1); why.push([Number(e.pain) > 5 ? "crit" : "warn", `${AREA_KO[e.painArea]} 통증 ${e.pain} (${md(parseD(e.date))})`]); }
     for (const m of modsFor(p)) why.push(["warn", painLabel(m) + (m.inferred ? "?" : "")]);
     const sum = k => logsOf(p.id).filter(e => weekOf(parseD(e.date)) === k).reduce((s, e) => s + (Number(e.rpe) || 0) * (Number(e.minutes) || 0), 0);
     const a = sum(wk), b = sum(wk - 1);
@@ -220,7 +220,7 @@ function teamStatusHtml() {
   </section>`;
 }
 
-/* ---------- 처방 ---------- */
+/* ---------- 프로그램 ---------- */
 function blockHtml(b) {
   return `<section class="blk b-${esc(b.key)}"><h4>${esc(b.title)}</h4><ul class="rows">${b.items.map(x => `<li>
     <div class="nm">${esc(x.name)}${x.mod ? ` <span class="mod">${esc(x.mod)}</span>` : ""}</div><div class="rx">${esc(x.rx ?? "")}</div>
@@ -255,11 +255,11 @@ function ladderHtml(p) {
   if (!mods.length) return "";
   const h = state.health[p.id] || {};
   return `<section class="sec"><h3>통증 단계 <span class="private">본인·관리자만</span></h3>
-    ${mods.some(m => m.inferred) ? `<p class="small muted">? = 입력한 통증 점수로 정한 임시 단계예요.</p>` : ""}
+    <p class="small muted">${esc(NEXT_RULE)}${mods.some(m => m.inferred) ? " ? = 입력한 통증 점수로 정한 임시 단계." : ""}</p>
     ${mods.map(m => {
       const def = REHAB[m.area], note = ((h.rehab || []).find(x => x.area === m.area) || {}).note;
       return `<details class="panel ladder"><summary><b>${esc(painLabel(m))}${m.inferred ? "?" : ""}</b> · ${esc(def.pain[m.stage - 1])}${note ? ` <span class="muted">(${esc(note)})</span>` : ""}</summary>
-        <ol class="stages">${def.stages.map((s, i) => `<li class="${i + 1 === m.stage ? "cur" : ""}"><b>${i + 1}단계 · ${esc(def.pain[i])}</b>
+        <ol class="stages">${def.stages.map((s, i) => `<li class="${i + 1 === m.stage ? "cur" : ""}"><b>${i + 1}단계 ${STAGE_NAMES[i]} · ${esc(def.pain[i])}</b>
           <span class="small">${s.items.map(x => esc(x.name) + " " + esc(x.rx)).join(" · ")}</span>
           ${i + 1 < def.stages.length ? `<span class="small muted">다음 단계: ${esc(s.next)}</span>` : ""}</li>`).join("")}</ol>
         ${def.always ? `<p class="small">항상: ${esc(def.always)}</p>` : ""}</details>`;
@@ -358,7 +358,7 @@ function viewAuth() {
       <p>서울대학교 배구부 피지컬 트레이닝</p>
     </div>
     <form class="f panel" id="authForm">
-      <div><h3>${login ? "로그인" : "가입하기"}</h3><p class="small muted">${login ? "관리자 승인 후 로그인할 수 있어요." : "가입 후 내 정보를 내면 관리자가 승인해요."}</p></div>
+      <div><h3>${login ? "로그인" : "가입하기"}</h3><p class="small muted">${login ? "가입 → 내 정보 입력 → 관리자 승인 순서예요." : "가입하면 바로 내 정보 입력으로 넘어가요."}</p></div>
       <label class="fl">이메일<input type="email" id="au-email" autocomplete="email" required></label>
       <label class="fl">비밀번호 (6자 이상)<input type="password" id="au-pw" autocomplete="${login ? "current-password" : "new-password"}" minlength="6" required></label>
       <div class="row"><button class="btn primary" type="submit">${login ? "로그인" : "가입하기"}</button>
@@ -378,7 +378,7 @@ function viewSelfReg() {
   const p = state.selfPlayer || {}, h = state.selfHealth || {}, pain = h.pain || {};
   const opt = (v, cur, l) => `<option value="${v}" ${String(cur ?? "") === String(v) ? "selected" : ""}>${l}</option>`;
   return `<section class="sec narrow">
-    <div><h2>내 정보</h2><p class="lede">처방을 내 몸에 맞추는 데 써요. 승인 전까지 고칠 수 있어요.</p></div>
+    <div><h2>내 정보</h2><p class="lede">프로그램을 내 몸에 맞추는 데 써요. 제출하면 관리자가 승인해요.</p></div>
     <form class="f panel" id="selfForm">
       <fieldset><legend>기본 정보</legend>
         <div class="fields">
@@ -404,7 +404,7 @@ function viewSelfReg() {
           <label class="fl wide">수술·진단받은 부상·손목·손가락 등<input id="sf-note" maxlength="200" placeholder="예: 오른쪽 어깨 와순 파열 (2025)" value="${esc(h.note || "")}"></label>
         </div>
         <label class="check"><input type="checkbox" id="sf-knee-hx" ${h.kneeInjury ? "checked" : ""}> 무릎을 다친 적 있어요</label>
-        <label class="check"><input type="checkbox" id="sf-consent" ${h.consent ? "checked" : ""}> 트레이닝 처방에만 쓰는 데 동의해요</label>
+        <label class="check"><input type="checkbox" id="sf-consent" ${h.consent ? "checked" : ""}> 트레이닝 프로그램에만 쓰는 데 동의해요</label>
       </fieldset>
       <div class="row"><button class="btn primary" type="submit">${state.myPid ? "수정 내용 내기" : "제출"}</button>
         ${state.editingSelf ? '<button class="btn" type="button" data-act="canceledit">취소</button>' : ""}</div>
@@ -445,7 +445,7 @@ function viewIntake() {
   const rehabRows = REHAB_AREAS.map(a => {
     const cur = rehab.find(m => m.area === a) || {};
     return `<div class="rh-row"><span class="rh-lab">${esc(REHAB[a].label)}</span>
-      <select id="rh-${a}" aria-label="${esc(REHAB[a].label)} 통증 단계"><option value="">없음</option>${REHAB[a].pain.map((t, i) => `<option value="${i + 1}" ${Number(cur.stage) === i + 1 ? "selected" : ""}>${i + 1}단계 · ${esc(t)}</option>`).join("")}</select>
+      <select id="rh-${a}" aria-label="${esc(REHAB[a].label)} 통증 단계"><option value="">없음</option>${REHAB[a].pain.map((t, i) => `<option value="${i + 1}" ${Number(cur.stage) === i + 1 ? "selected" : ""}>${i + 1} ${STAGE_NAMES[i]} · ${esc(t)}</option>`).join("")}</select>
       <input id="rhn-${a}" maxlength="60" placeholder="메모 (예: 오른쪽, 10/20 진단)" value="${esc(cur.note || "")}" aria-label="${esc(REHAB[a].label)} 메모"></div>`;
   }).join("");
   return `<section class="sec"><h2>등록·측정</h2></section>
@@ -466,7 +466,8 @@ function viewIntake() {
           </div>
         </fieldset>
         <fieldset><legend>통증 단계 <span class="private">본인·관리자만</span></legend>
-          <p class="small muted">지금 상태에 맞는 단계를 고르면 재활 운동이 처방에 붙어요. 진단은 의료진이 해요.</p>
+          <p class="small muted">지금 통증 정도로 고르면 그 단계 재활 운동이 프로그램에 붙어요. 진단은 의료진이 해요.</p>
+          <p class="small stage-key">${STAGE_NAMES.map((n, i) => `<span><b>${i + 1} ${n}</b> ${STAGE_HINT[i]}</span>`).join("")}</p>
           <div class="rh">${rehabRows}</div>
         </fieldset>
         <details class="panel inner"><summary><b>가입 때 낸 통증·부상 이력</b> <span class="small muted">통증 3 이상이면 단계를 안 골라도 임시 적용</span></summary>
@@ -482,7 +483,7 @@ function viewIntake() {
           </div>
           <label class="check"><input type="checkbox" id="hf-knee-hx" ${h.kneeInjury ? "checked" : ""}> 무릎 부상 이력</label>
         </details>
-        <label class="check"><input type="checkbox" id="hf-consent" ${h.consent ? "checked" : ""} required> 선수가 처방 목적의 정보 사용에 동의함</label>
+        <label class="check"><input type="checkbox" id="hf-consent" ${h.consent ? "checked" : ""} required> 선수가 프로그램 목적의 정보 사용에 동의함</label>
         <div class="row"><button class="btn primary" type="submit">${pid ? "저장" : "선수 추가"}</button>
           ${pid ? `<button class="btn danger ${state.armed === "player:" + pid ? "armed" : ""}" type="button" data-act="delplayer" data-pid="${esc(pid)}">${state.armed === "player:" + pid ? "정말 삭제 (기록 포함)" : "선수 삭제"}</button>` : ""}</div>
       </form>
@@ -677,7 +678,11 @@ document.addEventListener("submit", async ev => {
       } else {
         const r = await sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } });
         if (r.error) { state.authErr = true; state.authMsg = "가입하지 못했어요: " + r.error.message; }
-        else if (!r.data.session) { state.authErr = false; state.authMode = "login"; state.authMsg = "확인 메일을 보냈어요. 링크를 누른 뒤 로그인해 주세요."; }
+        else if (!r.data.session) { // 이메일 확인이 켜져 있으면 세션이 없다 → 바로 로그인 시도
+          const li = await sb.auth.signInWithPassword({ email, password });
+          state.authMode = "login"; state.authErr = !!li.error;
+          state.authMsg = li.error ? "가입은 됐어요. 확인 메일의 링크를 누른 뒤 로그인해 주세요." : "";
+        }
         else { state.authMsg = ""; }
       }
     } finally { if (btn) btn.disabled = false; }

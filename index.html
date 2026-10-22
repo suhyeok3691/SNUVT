@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
 <style>
-/* 레이아웃: 위에는 오늘·요일, 아래는 처방 블록을 빈칸 없이 쌓는다 (다단 배치) */
+/* 레이아웃: 위에는 오늘·요일, 아래는 프로그램 블록을 빈칸 없이 쌓는다 (다단 배치) */
 :root {
   --bg: #eef1f6; --surface: #ffffff; --surface-2: #f5f7fb; --ink: #142039; --muted: #5b667c; --line: #dde2eb;
   --blue: #173f8f; --blue-soft: #e3ebfa; --yellow: #f2c230; --on-yellow: #2a1f00; --yellow-soft: #fbf1cc;
@@ -145,7 +145,7 @@ small.neg { color: var(--crit) !important; }
 .watch li { display: flex; align-items: center; gap: 4px 10px; flex-wrap: wrap; padding: 6px 0; border-top: 1px solid var(--line); }
 .watch .btn.link { font-weight: 700; color: var(--ink); }
 
-/* 처방 블록: 다단 배치로 빈칸 없이 */
+/* 프로그램 블록: 다단 배치로 빈칸 없이 */
 .day-title { font-family: var(--f-display); font-weight: 400; font-size: 20px; }
 .blocks { columns: 2 340px; column-gap: 12px; }
 .blk { break-inside: avoid; margin: 0 0 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
@@ -197,6 +197,8 @@ fieldset { border: 1px solid var(--line); border-radius: var(--r); padding: 10px
 legend { font-weight: 700; padding: 0 6px; font-size: 14px; }
 .inner { background: var(--surface-2); }
 .rh { display: grid; gap: 6px; }
+.stage-key { display: flex; flex-wrap: wrap; gap: 2px 14px; color: var(--muted); }
+.stage-key b { color: var(--ink); }
 .rh-row { display: grid; grid-template-columns: 56px minmax(0, 1.3fr) minmax(0, 1fr); gap: 8px; align-items: center; }
 .rh-lab { font-size: 14px; font-weight: 600; }
 @media (max-width: 640px) { .rh-row { grid-template-columns: 56px minmax(0, 1fr); } .rh-row input { grid-column: 2; } }
@@ -218,6 +220,7 @@ td .btn.link { white-space: nowrap; }
 .plist button[aria-pressed="true"] { background: var(--blue-soft); border-color: var(--blue); }
 .members > summary { padding: 2px 0; }
 .members[open] > summary { margin-bottom: 6px; }
+.members table { min-width: 600px; }
 
 /* 로그인 */
 .auth { max-width: 400px; margin: 32px auto; display: grid; gap: 16px; }
@@ -249,7 +252,7 @@ td .btn.link { white-space: nowrap; }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=4"></script>
-<script src="app.js?v=4"></script>
+<script src="program.js?v=5"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
