@@ -289,3 +289,9 @@ create policy "coach or self inserts inbody" on public.inbody for insert
   with check (private.is_coach() or (private.my_role() = 'player' and player_id = private.my_player_id() and author = auth.uid()));
 create policy "coach or self removes inbody" on public.inbody for delete
   using (private.is_coach() or (private.my_role() = 'player' and player_id = private.my_player_id()));
+
+-- ---------- 손목·손가락 통증 (2026-10-22 추가, 이미 적용됨) ----------
+-- logs.pain_area 에 wrist·finger 허용, submit_my_info 가 pain.wrist·pain.finger 도 저장 (마이그레이션 pain_wrist_finger)
+alter table public.logs drop constraint if exists logs_pain_area_check;
+alter table public.logs add constraint logs_pain_area_check
+  check (pain_area = any (array['knee','shoulder','ankle','back','wrist','finger']));

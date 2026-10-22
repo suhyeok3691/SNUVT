@@ -2,9 +2,13 @@
 
 /* ---------- 기준값 ---------- */
 const DEFAULT_SETTINGS = { name: "서울대배", blockStart: "2026-10-26", start: "2026-11-21", end: "2026-11-22" };
-const LOG_TYPES = { A: ["월 웨이트", 75], B: ["목 웨이트", 60], team: ["정규 훈련", 180], act: ["활성화", 30], match: ["경기", 90], other: ["선택 운동·기타", 30] };
+const LOG_TYPES = { A: ["월 웨이트", 75], B: ["목 웨이트", 60], team: ["정규 훈련", 180], act: ["활성화", 30], match: ["경기", 90], other: ["맨몸·기타", 35] };
 const RPE = ["0 휴식", "1 아주 쉬움", "2 쉬움", "3 보통", "4 약간 힘듦", "5 힘듦", "6", "7 매우 힘듦", "8", "9", "10 최대"];
-const AREA_KO = { knee: "무릎", shoulder: "어깨", ankle: "발목", back: "허리" };
+const AREA_KO = { knee: "무릎", shoulder: "어깨", ankle: "발목", back: "허리", wrist: "손목", finger: "손가락" };
+// 통증 점수 고르기: 숫자 대신 상태로 고르고, 값은 구간 대표값으로 저장 (통증 단계 기준과 같은 구간)
+const PAIN_SCALE = [[0, "0 · 안 아픔"], [2, "1–2 · 살짝 느껴지는 정도"], [3, "3 · 세게 할 때만 아픔"], [5, "4–6 · 운동하면 아픔"], [7, "7–8 · 쉬거나 밤에도 아픔"], [9, "9–10 · 걷기·일상도 힘듦"]];
+const painBucket = v => { v = Number(v) || 0; return v <= 0 ? 0 : v <= 2 ? 2 : v <= 3 ? 3 : v <= 6 ? 5 : v <= 8 ? 7 : 9; };
+const painSelect = (id, cur, label) => `<label class="fl">${label}<select id="${id}">${PAIN_SCALE.map(([v, t]) => `<option value="${v}" ${painBucket(cur) === v ? "selected" : ""}>${t}</option>`).join("")}</select></label>`;
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
 const VIEWS = ["home", "plan", "rec", "intake", "load"];
 
@@ -76,7 +80,7 @@ const playerOf = pid => pid && state.players[pid] ? { id: pid, ...state.players[
 /* ---------- 공통 조각 ---------- */
 const chipsHtml = list => list.length ? `<div class="chips">${list.map(([c, t]) => `<span class="chip ${c}">${esc(t)}</span>`).join("")}</div>` : "";
 const emptyLine = t => `<p class="empty-line">${t}</p>`;
-const SHORT = { "점프 + 하체 근력": "하체", "상체·엉덩이·코어": "상체", "활성화 30분": "활성화", "정규 훈련": "훈련", "휴식": "휴식", "완전 휴식": "휴식", "대회 1일차": "대회", "대회 2일차": "대회" };
+const SHORT = { "점프 + 하체 근력": "하체", "상체·엉덩이·코어": "상체", "활성화 30분": "활성화", "정규 훈련": "훈련", "맨몸 상체·코어": "맨몸", "맨몸 하체·균형": "맨몸", "완전 휴식": "휴식", "대회 1일차": "대회", "대회 2일차": "대회" };
 function weeksHtml(sel) {
   const s = S(), now = blockWeek();
   return `<div class="weeks" role="group" aria-label="주차">${WEEKS.map((wk, i) =>
@@ -291,7 +295,7 @@ function logHtml(p) {
         <label class="fl">힘든 정도 (RPE)<select id="lg-rpe">${RPE.map((l, i) => `<option value="${i}" ${i === 5 ? "selected" : ""}>${l}</option>`).join("")}</select></label>
         <label class="fl">점프·착지 수<input type="number" id="lg-jumps" inputmode="numeric" min="0" max="2000" value="${inBlock() && tplan.landings ? tplan.landings : ""}" placeholder="모르면 비우기"></label>
         <label class="fl">통증 부위<select id="lg-area"><option value="">없음</option>${Object.entries(AREA_KO).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
-        <label class="fl">통증 (0–10)<input type="number" id="lg-pain" inputmode="numeric" min="0" max="10" value="0"></label>
+        ${painSelect("lg-pain", 0, "통증 정도")}
         <label class="fl wide">메모<input type="text" id="lg-note" maxlength="200" placeholder="무게, 컨디션, 손목·손가락 통증 등"></label>
       </div>
       <div class="row"><button class="btn primary" type="submit">저장</button><span class="small muted">훈련 후 30분 안에</span></div>
@@ -392,12 +396,11 @@ function viewSelfReg() {
         </div>
       </fieldset>
       <fieldset><legend>부상·통증 <span class="private">본인·관리자만</span></legend>
-        <p class="small muted">지금 통증 0 없음 ~ 10 최악. 3 이상이면 그 부위 재활 운동이 붙어요.</p>
+        <p class="small muted">부위마다 <b>지금</b> 상태에 가장 가까운 걸 골라요. 3 이상이면 그 부위 재활 운동이 같이 붙어요.</p>
+        <div class="fields pain-fields">
+          ${["knee", "shoulder", "ankle", "back", "wrist", "finger"].map(a => painSelect("sf-" + a, pain[a], AREA_KO[a])).join("")}
+        </div>
         <div class="fields">
-          <label class="fl">무릎<input id="sf-knee" type="number" inputmode="numeric" min="0" max="10" value="${esc(pain.knee ?? 0)}"></label>
-          <label class="fl">어깨<input id="sf-shoulder" type="number" inputmode="numeric" min="0" max="10" value="${esc(pain.shoulder ?? 0)}"></label>
-          <label class="fl">발목<input id="sf-ankle" type="number" inputmode="numeric" min="0" max="10" value="${esc(pain.ankle ?? 0)}"></label>
-          <label class="fl">허리<input id="sf-back" type="number" inputmode="numeric" min="0" max="10" value="${esc(pain.back ?? 0)}"></label>
           <label class="fl">발목 삔 횟수 (왼)<input id="sf-al" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleL ?? 0)}"></label>
           <label class="fl">발목 삔 횟수 (오른)<input id="sf-ar" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleR ?? 0)}"></label>
           <label class="fl">마지막으로 삔 때<input id="sf-alast" maxlength="30" placeholder="예: 2026년 5월" value="${esc(h.ankleLast || "")}"></label>
@@ -472,10 +475,7 @@ function viewIntake() {
         </fieldset>
         <details class="panel inner"><summary><b>가입 때 낸 통증·부상 이력</b> <span class="small muted">통증 3 이상이면 단계를 안 골라도 임시 적용</span></summary>
           <div class="fields">
-            <label class="fl">무릎 통증<input id="hf-knee" type="number" inputmode="numeric" min="0" max="10" value="${esc(pain.knee ?? 0)}"></label>
-            <label class="fl">어깨 통증<input id="hf-shoulder" type="number" inputmode="numeric" min="0" max="10" value="${esc(pain.shoulder ?? 0)}"></label>
-            <label class="fl">발목 통증<input id="hf-ankle" type="number" inputmode="numeric" min="0" max="10" value="${esc(pain.ankle ?? 0)}"></label>
-            <label class="fl">허리 통증<input id="hf-back" type="number" inputmode="numeric" min="0" max="10" value="${esc(pain.back ?? 0)}"></label>
+            ${["knee", "shoulder", "ankle", "back", "wrist", "finger"].map(a => painSelect("hf-" + a, pain[a], AREA_KO[a] + " 통증")).join("")}
             <label class="fl">발목 삔 횟수 (왼)<input id="hf-al" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleL ?? 0)}"></label>
             <label class="fl">발목 삔 횟수 (오른)<input id="hf-ar" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleR ?? 0)}"></label>
             <label class="fl">마지막으로 삔 때<input id="hf-alast" maxlength="30" value="${esc(h.ankleLast || "")}"></label>
@@ -651,7 +651,7 @@ document.addEventListener("submit", async ev => {
       weight_exp: document.getElementById("sf-wexp").value || null,
       ankle_l: txt("sf-al"), ankle_r: txt("sf-ar"), ankle_last: txt("sf-alast"),
       knee_injury: document.getElementById("sf-knee-hx").checked,
-      pain: { knee: txt("sf-knee"), shoulder: txt("sf-shoulder"), ankle: txt("sf-ankle"), back: txt("sf-back") },
+      pain: Object.fromEntries(["knee", "shoulder", "ankle", "back", "wrist", "finger"].map(a => [a, txt("sf-" + a)])),
       note: txt("sf-note"), consent: document.getElementById("sf-consent").checked,
     };
     try {
@@ -694,14 +694,14 @@ document.addEventListener("submit", async ev => {
       const name = txt("pf-name");
       if (!name) { toast("이름을 입력해 주세요."); return; }
       if (!document.getElementById("hf-consent").checked) { toast("정보 사용 동의를 받은 뒤 저장해 주세요."); return; }
-      const pain = { knee: num("hf-knee") || 0, shoulder: num("hf-shoulder") || 0, ankle: num("hf-ankle") || 0, back: num("hf-back") || 0 };
+      const pain = Object.fromEntries(["knee", "shoulder", "ankle", "back", "wrist", "finger"].map(a => [a, num("hf-" + a) || 0]));
       const ankleL = num("hf-al") || 0, ankleR = num("hf-ar") || 0;
       const adjust = {
         plyo: pain.ankle >= 3 ? "hold" : pain.knee >= 3 ? "iso" : null,
         overhead: pain.shoulder >= 3 ? true : null,
         back: pain.back >= 3 ? true : null,
         ankleBal: (ankleL + ankleR) > 0 ? true : null,
-        refer: (pain.knee >= 3 || pain.shoulder >= 3 || pain.back >= 3 || pain.ankle >= 3) ? true : null,
+        refer: Object.values(pain).some(v => v >= 3) ? true : null,
       };
       const rehab = REHAB_AREAS.map(a => ({ area: a, stage: Number(document.getElementById("rh-" + a).value) || 0, note: txt("rhn-" + a) || null }))
         .filter(m => m.stage > 0);
