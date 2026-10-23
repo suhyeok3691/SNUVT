@@ -322,3 +322,12 @@ alter table public.logs add constraint logs_pain_area_check
 -- tests.vert(버티컬, 제자리 점프 높이 cm) · tests.max_vert(맥스 버티컬, 도움닫기 점프 높이 cm) 추가
 -- 정책 "player inserts own tests": 선수는 본인 측정 행을 직접 추가 (화면은 측정 주·트라이아웃·첫 측정 때만 입력 칸을 보여 줌)
 -- 2학기 종강 = 학사일정의 보강 기간 마지막 날 (2026: 12/21)
+
+-- migration: readiness_lifts_practice_media
+--   wellness (player_id, date unique; sleep·fatigue·soreness·stress·mood 1–5) — 본인·관리자만
+--   practice (date PK; level light|normal|heavy) — 팀원 읽기, 관리자 쓰기
+--   lifts (player_id, date, lift squat|rdl|bench|hip|clean, kg, reps 1–20, rir 0–6) — 본인·관리자만
+--   media (name PK, https url) — 팀원 읽기, 관리자 쓰기
+--   health.custom jsonb {memo, skip[], swap[{from,to}]}
+--   tests: rsi, ktw_l, ktw_r, ir_d, ir_n, er_d, er_n, hop_l, hop_r
+--   logs.completion all|part|none
