@@ -634,28 +634,16 @@ function slotPlan(ctx, slot, w, o = {}) {
   if (!["rest", "match", "recover", "prep"].includes(slot)) out.notes.push(...injuryNotes(c));
   if (o.optional && out.title && !/^(자율|자유|회복|휴식)/.test(out.title)) out.title = "자율 · " + out.title;
   dedupe(out);
-  if (!c.team && TRIM[slot]) { capAddons(out, slot); trimTeam(out, slot); }
+  if (!c.team && ADDON_MAX[slot]) capAddons(out, slot);
   return out;
 }
 // 재활 블록 크기: 부위마다 꼭 필요한 것만 (단계 항목의 앞쪽부터)
 // 재활은 최소한만: 부위마다 그 단계의 가장 중요한 1개, 하루 2개까지 (대회 앞뒤는 1개)
 const REHAB_CAP = { per: 1, total: 2 }, REHAB_CAP_LIGHT = { per: 1, total: 1 };
-/* 개인 운동(재활·부상 예방·측정 보완)이 붙으면 그만큼 그 선수의 팀 세션을 줄인다.
- * 개인 운동 1개 ≈ 3분, 3개(약 10분)까지는 그대로. 넘는 시간만큼
- *  1) 보조 운동을 덜 중요한 것부터 빼고 (1개 ≈ 6분, 최대 3개)
- *  2) 그래도 넘으면 주요 운동이 아닌 3–4세트 운동을 1세트씩 줄인다 (1세트 ≈ 2분).
- * 플라이오메트릭·주요 근력 운동(스쿼트·RDL·힙 쓰러스트·턱걸이·벤치·클린)은 건드리지 않는다. */
-const TRIM = {
-  gymA: [/^햄스트링 컬/, /^덤벨 스텝업/, /^한 발 카프레이즈 \(덤벨\)/],
-  gymB: [/^덤벨 한 발 루마니안/, /^한 팔 덤벨 로우/, /^엎드려 Y·T·W 들기/],
-  bwU: [/^가동성 스트레칭/, /^할로우/, /^파이크 푸시업/],
-  bwL: [/^옆 런지/, /^한 발 서서 공 받기/, /^Y 밸런스/],
-};
-const MAIN_LIFT = /백스쿼트|고블릿 스쿼트|루마니안 데드리프트|바벨 힙 쓰러스트|^턱걸이|인버티드 로우|덤벨 벤치프레스|행 파워 클린|노르딕|핸드스탠드|푸시업/;
-const TEAM_KEYS = ["str", "thu2", "core", "bw"], ADDON_KEYS = ["rehab", "prev", "meas"];
+const ADDON_KEYS = ["rehab", "prev", "meas"];
 // 하루 개인 운동 상한: 재활(지금 아픈 곳)은 그대로 두고, 넘치면 측정 보완의 '1세트 더' →
 // 부상 이력 예방 중 부위마다 첫 번째가 아닌 것 → 측정 보완 두 번째부터 → 나머지 예방 → 나머지 측정 보완 순으로 뺀다
-const ADDON_MAX = { gymA: 5, gymB: 5, bwU: 3, bwL: 3 };
+const ADDON_MAX = { gymA: 3, gymB: 3, bwU: 2, bwL: 2 }; // 팀 세션은 줄이지 않고 개인 보강을 최소한으로
 function capAddons(out, slot) {
   const blk = k => out.blocks.find(b => b.key === k);
   const count = () => ADDON_KEYS.reduce((a, k) => a + ((blk(k) || {}).items || []).length, 0);
@@ -670,29 +658,6 @@ function capAddons(out, slot) {
   ];
   for (const step of steps) while (count() > ADDON_MAX[slot] && step()) {}
   out.blocks = out.blocks.filter(b => b.items.length || b.key === "team");
-}
-function trimTeam(out, slot) {
-  const addOn = out.blocks.filter(b => ADDON_KEYS.includes(b.key)).reduce((a, b) => a + b.items.length, 0);
-  let over = addOn * 3 - 9;
-  if (over <= 0) return;
-  const cut = [], less = [];
-  for (const re of TRIM[slot]) {
-    if (over <= 0 || cut.length >= 3) break;
-    for (const b of out.blocks.filter(b => TEAM_KEYS.includes(b.key))) {
-      const i = b.items.findIndex(x => re.test(x.name));
-      if (i >= 0) { cut.push(baseName(b.items[i].name)); b.items.splice(i, 1); over -= 6; break; }
-    }
-  }
-  for (const b of out.blocks.filter(b => TEAM_KEYS.includes(b.key))) for (const x of b.items) {
-    if (over <= 0) break;
-    const m = String(x.rx).match(/^([34])×/);
-    if (!m || MAIN_LIFT.test(x.name)) continue;
-    x.rx = String(x.rx).replace(/^[34]×/, `${Number(m[1]) - 1}×`);
-    x.mod = x.mod ? x.mod + " · −1세트" : "−1세트";
-    less.push(baseName(x.name)); over -= 2;
-  }
-  out.blocks = out.blocks.filter(b => b.items.length || b.key === "team");
-  if (cut.length || less.length) out.notes.push(`개인 운동 시간만큼 팀 세션 줄임${cut.length ? ` · 빼기: ${cut.join(", ")}` : ""}${less.length ? ` · 1세트 줄이기: ${less.join(", ")}` : ""}`);
 }
 
 const SLOT_FN = {
@@ -883,11 +848,6 @@ const SLOT_FN = {
     });
     h.add({ key: "test", title: "측정", items: tests });
     if (skip.length) out.notes.push(`통증·제한 때문에 ${skip.join("·")} 측정은 빼요`);
-  },
-  // ---- 정규 훈련 없는 날: 고르기 전
-  pick(c, w, o, out, h) {
-    out.kind = "고르기"; out.title = "정규 훈련 없음 · 골라서 하기"; out.minutes = 60;
-    h.add({ key: "pick", title: "오늘 할 것 고르기", items: Object.keys(PICKS).map(k => { const l = pickLabel(c, k); return { name: l.label, rx: l.desc }; }) });
   },
   rest(c, w, o, out, h) {
     out.kind = "완전 휴식"; out.title = o.free ? "자유 주 · 쉬기" : o.optional ? "휴식 (자율)" : "완전 휴식";
@@ -1104,46 +1064,76 @@ function readiness(well, lastRpe) {
   return why;
 }
 const TRAIN_SLOTS = ["gymA", "gymB", "bwU", "bwL"];
-/* 정규 훈련이 없는 날(체육관 통제 등, 관리자 지정): 선수가 부족한 부분을 골라서 한다.
- * 고르기 전엔 선택지와 추천(컨디션·대회 주 → 회복, 상대 근력 1.0 미만 → 하체, 핸드스탠드 2단계 이하·코어 약함 → 코어)을 보여 주고,
- * 앞뒤 날과 같은 종류는 추천하지 않는다 (예: 다음 날 웨이트 B면 상체 근력 추천 안 함). */
+/* 고를 수 있는 날: 웨이트·맨몸 날과 정규 훈련 없는 날(관리자 지정).
+ * 그날의 '권고'를 보여 주고 선수가 바꿀 수 있다 (예: 헬스장에 못 가면 맨몸). 고른 것에 따라 그 주의 남은 날 권고가 바뀐다.
+ * 권고 규칙 (weekFlow)
+ *  - 그 주 일정의 웨이트·맨몸 횟수를 목표로, 지금까지 한 것 + 뒤에 남은 일정으로 못 채우는 종류가 있으면 그걸 권고
+ *    (하체 웨이트 → 상체 웨이트 → 맨몸 하체 → 맨몸 상체 순, 전날·다음 날과 같은 종류는 피함)
+ *  - 정규 훈련 없는 날 기본은 하체 (하체가 가장 중요). 다음 날이 정규 훈련이거나 앞뒤가 하체면 상체 → 맨몸
+ *  - 대회 주는 바꾸지 않고, 정규 훈련 없는 날은 회복 */
 const PICKS = {
-  lower: { label: "하체", desc: "웨이트 A · 플라이오메트릭 + 하체 근력", slot: "gymA" },
-  upper: { label: "상체", desc: "웨이트 B · 상체·엉덩이·코어", slot: "gymB" },
-  core: { label: "맨몸", desc: "맨몸 상체·핸드스탠드 또는 맨몸 하체", slot: "bw" },
-  recover: { label: "회복", desc: "가볍게 유산소 + 스트레칭", slot: "recover" },
+  lower: { label: "하체", slot: "gymA" },
+  upper: { label: "상체", slot: "gymB" },
+  core: { label: "맨몸", slot: "bw" },
+  recover: { label: "회복", slot: "recover" },
 };
-// 맨몸은 앞뒤 날과 겹치지 않는 쪽 (전날·다음 날이 맨몸 상체면 맨몸 하체)
-const bwSlotFor = info => (info.near || []).includes("bwU") ? "bwL" : "bwU";
-const pickLabel = (c, key) => ({ label: PICKS[key].label, desc: PICKS[key].desc });
-function pickOptions(ctx, info) {
-  const c = prepCtx(ctx), near = info.near || [], rel = c.rel;
-  const ok = { lower: !near.includes("gymA") && !(c.fx.knee && c.fx.knee <= 2) && c.fx.ankle !== 1, upper: !near.includes("gymB"), core: !(near.includes("bwU") && near.includes("bwL")), recover: true };
-  const low = ctx.ready ? readiness(ctx.ready.well, ctx.ready.lastRpe) : [];
-  const t = c.t || {}, core = [t.sideL, t.sideR, t.plank].every(v => v != null) ? Number(t.sideL) + Number(t.sideR) + Number(t.plank) : null;
-  const cand = [];
-  if (low.length) cand.push(["recover", "컨디션 낮음"]);
-  else if (info.w === PH.TAPER || info.light) cand.push(["recover", "대회 주"]);
-  if (rel != null && rel < 1.0) cand.push(["lower", `상대 근력 ${rel.toFixed(2)}`]);
-  if (!c.team && c.hsStage <= 2) cand.push(["core", `핸드스탠드 ${c.hsStage}단계`]);
-  if (core != null && core < 240) cand.push(["core", `코어 ${core}초`]);
-  cand.push(["upper", ""], ["lower", ""], ["core", ""], ["recover", ""]);
-  const [rec, why] = c.team ? [null, ""] : cand.find(([k]) => ok[k]);
-  return Object.entries(PICKS).map(([key, v]) => ({ key, ...pickLabel(c, key), rec: key === rec, why: key === rec ? why : "", ok: ok[key], sel: ctx.pick === key }));
+const KEY_OF = { gymA: "lower", gymB: "upper", bwU: "core", bwL: "core", recover: "recover" };
+const FLOW_NAME = { gymA: "하체 웨이트", gymB: "상체 웨이트", bwU: "맨몸 상체", bwL: "맨몸 하체" };
+// 고른 것 → 그날 슬롯. 맨몸은 원래 하체 날이면 맨몸 하체, 상체 날이면 맨몸 상체
+function resolvePick(pick, base, near) {
+  if (pick === "lower") return "gymA";
+  if (pick === "upper") return "gymB";
+  if (pick === "recover") return "recover";
+  if (base === "gymA" || base === "bwL") return "bwL";
+  if (base === "gymB" || base === "bwU") return "bwU";
+  return (near || []).includes("bwU") ? "bwL" : "bwU";
 }
+// days: 월–일 [{ slot (일정), off (정규 훈련 없음), pick (고른 것), event (대회 주) }] → 날마다 { rec (권고 슬롯), why, slot (실제) }
+function weekFlow(days) {
+  const TR = x => TRAIN_SLOTS.includes(x);
+  const cnt = arr => arr.reduce((m, x) => (m[x] = (m[x] || 0) + 1, m), {});
+  const target = cnt(days.filter(d => TR(d.slot)).map(d => d.slot));
+  const eff = [], out = [];
+  days.forEach((d, i) => {
+    const flex = TR(d.slot) || (d.slot === "team" && d.off);
+    if (!flex) { eff[i] = d.slot; out[i] = null; return; }
+    const prev = eff[i - 1], nx = days[i + 1], next = nx ? (nx.off ? "pick" : nx.slot) : null;
+    const clash = x => prev === x || next === x || (x === "gymA" && (next === "team" || prev === "gymA" || next === "gymA"));
+    let rec = null, why = "";
+    if (d.event) rec = TR(d.slot) ? d.slot : "recover";
+    else {
+      const done = cnt(eff.slice(0, i).filter(TR)), later = cnt(days.slice(i + 1).filter(x => TR(x.slot)).map(x => x.slot));
+      const missing = Object.keys(target).filter(k => target[k] - (done[k] || 0) - (later[k] || 0) > 0);
+      if (TR(d.slot) && (missing.includes(d.slot) || !missing.length)) rec = d.slot;
+      else {
+        const m = ["gymA", "gymB", "bwL", "bwU"].find(x => missing.includes(x) && !clash(x));
+        if (m) { rec = m; why = `이번 주 ${FLOW_NAME[m]} 아직`; }
+      }
+      // 같은 웨이트가 그 주에 이미 2번이면 다른 걸로 (하체 웨이트 3번은 많음)
+      const twice = x => (x === "gymA" || x === "gymB") && (done[x] || 0) + (later[x] || 0) >= 2;
+      if (!rec) rec = TR(d.slot) ? d.slot : (["gymA", "gymB", "bwU", "bwL"].find(x => !clash(x) && !twice(x)) || "recover");
+    }
+    eff[i] = d.pick && PICKS[d.pick] ? resolvePick(d.pick, TR(d.slot) ? d.slot : rec, [prev, next]) : rec;
+    out[i] = { rec, why, slot: eff[i] };
+  });
+  return out;
+}
+const choicesFor = (rec, slot) => Object.entries(PICKS).map(([key, v]) => ({ key, label: v.label, rec: KEY_OF[rec] === key, sel: KEY_OF[slot] === key }));
 function planForDay(ctx, info) {
   let i = info;
   const p = ctx.player || {};
-  if (i.slot === "team" && i.teamOff) {
+  // 고를 수 있는 날: 권고(그 주 흐름) 또는 선수가 고른 것으로
+  let flow = null;
+  const flex = !!p.pos && (TRAIN_SLOTS.includes(i.slot) || (i.slot === "team" && i.teamOff));
+  if (flex || (i.slot === "team" && i.teamOff)) {
+    flow = info.flow || { rec: i.teamOff ? (i.w === PH.TAPER || i.light ? "recover" : "gymA") : i.slot, why: "" };
+    let rec = flow.rec;
+    // 정규 훈련 없는 날 하체 권고인데 무릎·발목이 많이 아프면 상체로
+    if (i.teamOff && rec === "gymA" && p.pos) { const fx = prepCtx(ctx).fx; if ((fx.knee && fx.knee <= 2) || fx.ankle === 1) rec = "gymB"; }
     const pk = ctx.pick && PICKS[ctx.pick];
-    if (!pk) {
-      const out = slotPlan(ctx, "pick", i.w, i);
-      out.choices = pickOptions(ctx, i);
-      if (i.teamOffNote) out.notes.unshift(`정규 훈련 없음 · ${i.teamOffNote}`);
-      out.season = info;
-      return out;
-    }
-    i = { ...i, slot: pk.slot === "bw" ? bwSlotFor(i) : pk.slot, measure: false, picked: ctx.pick };
+    const slot = pk ? resolvePick(ctx.pick, i.teamOff ? rec : i.slot, i.near) : rec;
+    flow = { ...flow, rec, slot };
+    if (slot !== i.slot) i = { ...i, slot, measure: false, second: false, picked: ctx.pick || null };
   }
   const rel = relOf(ctx);
   // 개인 단계: 웨이트 입문이거나 상대 근력 0.8 미만이면 근력·파워 대신 기초 근력, 피크 대신 회복 주 (기초가 먼저)
@@ -1172,7 +1162,12 @@ function planForDay(ctx, info) {
     out.blocks = out.blocks.filter(b => b.items.length);
   }
   if (cu.memo) out.notes.unshift(`관리자 메모 · ${cu.memo}`);
-  if (i.picked) { out.title = `정규 훈련 없음 · ${out.title}`; out.picked = i.picked; out.choices = pickOptions(ctx, info); }
+  if (flow) {
+    out.choices = choicesFor(flow.rec, flow.slot);
+    out.picked = ctx.pick || null;
+    if (info.teamOff) { out.title = `정규 훈련 없음 · ${out.title}`; if (info.teamOffNote) out.notes.unshift(`정규 훈련 없음 · ${info.teamOffNote}`); }
+    if (!ctx.pick && flow.why && flow.slot !== info.slot) out.notes.unshift(`권고 바뀜 · ${flow.why}`);
+  }
   out.season = info;
   return out;
 }
@@ -1209,4 +1204,4 @@ function daySummary(plan) {
   return { kind: plan.kind, title: plan.title, landings: plan.landings, items: main ? main.items.length : 0 };
 }
 
-if (typeof module !== "undefined") module.exports = { fmtRx, painStage, normPain, PAIN_AREAS, STAGE_NAMES, STAGE_HINT, PAIN_RULE, NEXT_RULE, painLabel, dayPlan, daySummary, slotPlan, PH, PHASE_NAMES, POS_EXTRA, readiness, WELL_KEYS, WELL_OPTS, WELL_LOW, PICKS, pickOptions, relOf, baseName, e1rmOf, LIFT_OF, JUMP_RE, seasonDay, planForDay, measureWeeks, nextMeasure, HS_GOAL, INJ_PART_LABEL, FINGERS, PAIN_SEV, nextMajor, normEvents, mondayOf, dAdd, dDiff, SLOT_WEEK, EVENT_KINDS, HANDSTAND, HS_STAGES, effectiveModules, moduleEffects, relStrength, REHAB, REHAB_AREAS, DAYS, POS, POS_ORDER, NET };
+if (typeof module !== "undefined") module.exports = { fmtRx, painStage, normPain, PAIN_AREAS, STAGE_NAMES, STAGE_HINT, PAIN_RULE, NEXT_RULE, painLabel, dayPlan, daySummary, slotPlan, PH, PHASE_NAMES, POS_EXTRA, readiness, WELL_KEYS, WELL_OPTS, WELL_LOW, PICKS, weekFlow, resolvePick, relOf, baseName, e1rmOf, LIFT_OF, JUMP_RE, seasonDay, planForDay, measureWeeks, nextMeasure, HS_GOAL, INJ_PART_LABEL, FINGERS, PAIN_SEV, nextMajor, normEvents, mondayOf, dAdd, dDiff, SLOT_WEEK, EVENT_KINDS, HANDSTAND, HS_STAGES, effectiveModules, moduleEffects, relStrength, REHAB, REHAB_AREAS, DAYS, POS, POS_ORDER, NET };

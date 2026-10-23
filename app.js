@@ -210,7 +210,17 @@ function ctxFor(p, date) {
 }
 // 최근 3일 정규 훈련·경기를 본인이 RPE 7 이상으로 기록한 횟수 → 웨이트 A 플라이오메트릭 양
 const hardTeamOf = (pid, date) => logsOf(pid).filter(e => (e.type === "team" || e.type === "match") && Number(e.rpe) >= 7 && e.date < date && e.date >= dAdd(date, -3)).length;
-const planOn = (p, date) => planForDay(ctxFor(p, date), { ...infoOn(date), hardTeam: hardTeamOf(p.id, date) });
+// 그 주 흐름: 고른 것에 따라 남은 날 권고가 바뀜 (선수·주마다 계산, 다시 그릴 때 새로)
+const flowCache = new Map();
+function flowFor(pid, date) {
+  const mon = mondayOf(date), k = pid + mon;
+  if (!flowCache.has(k)) {
+    const picks = state.picks[pid] || {};
+    flowCache.set(k, weekFlow(DAYS.map((_, d) => { const dt = dAdd(mon, d), i = infoOn(dt); return { slot: i.slot, off: !!i.teamOff, pick: picks[dt] || null, event: !!i.weekEvent }; })));
+  }
+  return flowCache.get(k)[dDiff(date, mon)];
+}
+const planOn = (p, date) => planForDay(ctxFor(p, date), { ...infoOn(date), hardTeam: hardTeamOf(p.id, date), flow: flowFor(p.id, date) });
 const teamPlanOn = date => planForDay({ player: {} }, infoOn(date));
 const modsFor = p => { const h = state.health[p.id] || {}; return effectiveModules(p.adjust, [], state.health[p.id] ? (h.pain || {}) : null, recentChecks(p.id)); };
 const playerOf = pid => pid && state.players[pid] ? { id: pid, ...state.players[pid] } : null;
@@ -285,13 +295,12 @@ function wellnessHtml(p) {
     </form></details>
   </section>`;
 }
+// 오늘 할 것: 권고가 표시되고, 눌러서 바꿈 (권고를 다시 누르면 원래대로)
 function picksHtml(plan, pid, date) {
   if (!plan.choices) return "";
   const can = pid && canEditSelf(playerOf(pid));
-  return `<div class="picks">${plan.choices.map(c => `<button type="button" class="pick${c.rec ? " rec" : ""}" aria-pressed="${!!c.sel}" ${can ? `data-act="pick" data-pid="${esc(pid)}" data-date="${esc(date)}" data-k="${c.key}"` : "disabled"}>
-    <b>${esc(c.label)}</b><span>${esc(c.desc)}</span>${c.rec ? `<em>추천${c.why ? " · " + esc(c.why) : ""}</em>` : ""}</button>`).join("")}</div>`;
+  return `<div class="picks" role="group" aria-label="오늘 할 것">${plan.choices.map(c => `<button type="button" class="pick${c.rec ? " rec" : ""}" aria-pressed="${!!c.sel}" ${can ? `data-act="pick" data-pid="${esc(pid)}" data-date="${esc(date)}" data-k="${c.key}" data-rec="${c.rec ? 1 : 0}"` : "disabled"}>${esc(c.label)}${c.rec ? "<em>권고</em>" : ""}</button>`).join("")}</div>`;
 }
-const unpickHtml = () => "";
 function todayHtml(p) {
   const t = iso(today()), mon = thisMon(), d = dowMon(today());
   const done = new Set(logsOf(p.id).map(e => e.date));
@@ -303,8 +312,8 @@ function todayHtml(p) {
   return `<section class="panel today-card">
     <p class="eyebrow">오늘 · ${longDate(today())} · ${esc(weekLabel(mon))}</p>
     <h2>${esc(plan.title)}</h2>
-    ${picksHtml(plan, p.id, t)}${unpickHtml(plan, p, t)}
-    ${(!plan.choices || plan.picked) && items.length ? `<ul class="mini">${items.map(x => `<li><span>${esc(x.name)}</span><b>${esc(rxMain(x.rx))}</b></li>`).join("")}</ul>` : ""}
+    ${picksHtml(plan, p.id, t)}
+    ${items.length ? `<ul class="mini">${items.map(x => `<li><span>${esc(x.name)}</span><b>${esc(rxMain(x.rx))}</b></li>`).join("")}</ul>` : ""}
     <div class="row between">
       <span class="small muted">${[plan.landings ? `착지 약 ${plan.landings}회` : "", mine.length ? `개인 ${mine.map(b => b.title.replace(/ \(.*\)$/, "")).join(" · ")}` : ""].filter(Boolean).join(" · ")}</span>
       <button class="btn primary" type="button" data-act="openday" data-m="${mon}" data-d="${d}">전체 프로그램 보기</button>
@@ -415,7 +424,7 @@ function viewPlan() {
     <div><h3 class="day-title">${longDate(parseD(date))} · ${esc(plan.title)}</h3>
       ${plan.landings ? `<p class="small muted">착지 약 ${plan.landings}회</p>` : ""}</div>
     ${notes.length ? `<ul class="notes callout">${notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
-    ${plan.choices ? picksHtml(plan, pid, date) : ""}${plan.choices && !plan.picked ? "" : scopedBlocks(plan)}
+    ${picksHtml(plan, pid, date)}${scopedBlocks(plan)}
   </section>`;
 }
 // 팀 세션(다 같이) / 개인(포지션 · 재활 · 예방)으로 나눠 보여 주기
@@ -444,7 +453,7 @@ function viewTeamPlan() {
   <section class="sec">
     <div class="row between"><h3 class="day-title">${longDate(parseD(date))} · ${esc(plan.title)}</h3>
       ${seasonDay(date, events()).slot === "team" ? `<button class="btn" type="button" data-act="teamoff" data-date="${esc(date)}">${state.teamOff[date] ? "정규 훈련 다시 있음" : "정규 훈련 없음으로"}</button>` : ""}</div>
-    ${plan.choices ? picksHtml(plan, null, date) : scopedBlocks(plan, true)}
+    ${scopedBlocks(plan, true)}
     ${extra.length ? `<h3 class="scope-h me">개인 블록이 있는 선수</h3><ul class="watch">${extra.map(({ p, b }) => `<li><button type="button" class="btn link" data-act="open" data-pid="${esc(p.id)}">${esc(p.name)}</button>${chipsHtml(b.map(x => ["", x.title.replace(/ \(.*\)$/, "")]))}</li>`).join("")}</ul>` : ""}
   </section>`;
 }
@@ -472,13 +481,13 @@ function logHtml(p) {
         <label class="fl">시간 (분)<input type="number" id="lg-min" inputmode="numeric" min="1" max="400" value="${tplan.minutes}" required></label>
         <label class="fl">힘든 정도 (RPE)<select id="lg-rpe">${RPE.map((l, i) => `<option value="${i}" ${i === 5 ? "selected" : ""}>${l}</option>`).join("")}</select></label>
         <label class="fl">점프·착지 수<input type="number" id="lg-jumps" inputmode="numeric" min="0" max="2000" value="${tplan.landings || ""}" placeholder="모르면 비우기"></label>
-        <label class="fl">다 했나요<select id="lg-done"><option value="all">다 했어요</option><option value="part">일부</option><option value="none">못 했어요</option></select></label>
+        <label class="fl">완료율<select id="lg-done"><option value="all">100%</option><option value="part">50%</option><option value="none">0%</option></select></label>
         <label class="fl wide">메모<input type="text" id="lg-note" maxlength="200" placeholder="컨디션, 손목·손가락 통증 등"></label>
       </div>
       <div class="row"><button class="btn primary" type="submit">저장</button></div>
     </form>` : ""}
     ${entries.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>종류</th><th>RPE×분</th><th>착지</th><th>통증</th>${state.admin ? "<th></th>" : ""}</tr></thead><tbody>
-      ${entries.map(e => `<tr><td class="num">${md(parseD(e.date))}</td><td>${esc((LOG_TYPES[e.type] || ["기타"])[0])}${e.completion && e.completion !== "all" ? ` <span class="chip">${e.completion === "part" ? "일부" : "못 함"}</span>` : ""}</td><td class="num">${Number(e.rpe) * Number(e.minutes)}</td><td class="num">${e.jumps ?? "—"}</td><td>${e.painArea ? `<span class="chip ${Number(e.pain) >= 3 ? "crit" : ""}">${esc(AREA_KO[e.painArea] || "")} ${esc(e.pain)}</span>` : "—"}</td>
+      ${entries.map(e => `<tr><td class="num">${md(parseD(e.date))}</td><td>${esc((LOG_TYPES[e.type] || ["기타"])[0])}${e.completion && e.completion !== "all" ? ` <span class="chip">${e.completion === "part" ? "50%" : "0%"}</span>` : ""}</td><td class="num">${Number(e.rpe) * Number(e.minutes)}</td><td class="num">${e.jumps ?? "—"}</td><td>${e.painArea ? `<span class="chip ${Number(e.pain) >= 3 ? "crit" : ""}">${esc(AREA_KO[e.painArea] || "")} ${esc(e.pain)}</span>` : "—"}</td>
       ${state.admin ? `<td><button class="btn link danger" data-act="dellog" data-id="${esc(e._id)}">삭제</button></td>` : ""}</tr>`).join("")}
     </tbody></table></div>` : emptyLine("아직 기록이 없어요.")}
   </section>`;
@@ -969,7 +978,7 @@ function openSheet(name, rx, cue) {
     ${rx ? `<p class="sheet-rx">${esc(fmtRx(rx))}</p>` : ""}
     ${steps.length ? `<ol class="sheet-steps">${steps.map(t => `<li>${esc(t)}</li>`).join("")}</ol>` : ""}
     ${cue ? `<p class="small muted">${esc(cue)}</p>` : ""}
-    ${link ? `<p><a class="btn" href="${esc(link.url)}" target="_blank" rel="noopener noreferrer">운동 가이드 · ${esc(link.src)} ↗</a></p>` : ""}
+    ${link ? `<p><a class="exlink" href="${esc(link.url)}" target="_blank" rel="noopener noreferrer">운동 가이드 · ${esc(link.src)} ↗</a></p>` : ""}
     ${setLogHtml(name, rx)}
     <div class="timer"><div class="t-time" id="t-time">0:00</div><div class="small muted" id="t-mode"></div>
       <div class="row center"><button class="btn primary" type="button" id="t-go" data-act="tgo">시작</button><button class="btn" type="button" data-act="treset">다시</button></div>
@@ -997,6 +1006,7 @@ function setMode(admin) {
 }
 const needsSelfReg = () => state.session && state.role === "player" && !state.myPid && state.loaded;
 function render() {
+  flowCache.clear();
   header();
   if (state.dirty) return; // 입력 중인 폼은 덮어쓰지 않음
   let html;
@@ -1050,10 +1060,11 @@ document.addEventListener("click", async ev => {
   if (act === "pick" || act === "unpick") {
     const pid = b.dataset.pid, date = b.dataset.date;
     try {
-      if (act === "pick") ok(await sb.from("day_picks").upsert({ player_id: pid, date, pick: b.dataset.k }, { onConflict: "player_id,date" }));
-      else ok(await sb.from("day_picks").delete().eq("player_id", pid).eq("date", date));
+      const back = act === "unpick" || b.dataset.rec === "1"; // 권고를 누르면 고른 걸 지우고 흐름대로
+      if (back) ok(await sb.from("day_picks").delete().eq("player_id", pid).eq("date", date));
+      else ok(await sb.from("day_picks").upsert({ player_id: pid, date, pick: b.dataset.k }, { onConflict: "player_id,date" }));
       const m = state.picks[pid] = state.picks[pid] || {};
-      if (act === "pick") m[date] = b.dataset.k; else delete m[date];
+      if (back) delete m[date]; else m[date] = b.dataset.k;
     } catch (e) { toast(failMsg(e)); }
     state.dirty = false; return render();
   }
