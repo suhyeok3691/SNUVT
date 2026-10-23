@@ -513,7 +513,7 @@ function slotPlan(ctx, slot, w, o = {}) {
   const h = { add, warm, rehabBlock };
   (SLOT_FN[slot] || SLOT_FN.rest)(c, w, o, out, h);
   if (!["rest", "match", "recover", "prep"].includes(slot)) out.notes.push(...injuryNotes(c));
-  if (o.optional && out.title && !/^(자율|회복|휴식)/.test(out.title)) out.title = "자율 · " + out.title;
+  if (o.optional && out.title && !/^(자율|자유|회복|휴식)/.test(out.title)) out.title = "자율 · " + out.title;
   return out;
 }
 
@@ -523,8 +523,9 @@ const SLOT_FN = {
     const { p, fx, rel, novice, machineOnly } = c;
     out.kind = "점프 + 하체 근력"; out.logType = "A"; out.minutes = 75;
     out.title = ["적응 · 동작 연습 (가볍게)", "점프 + 하체 근력 · 기초", "회복 주 · 양 줄이기", "점프 + 하체 근력·파워", "피크 · 적게, 최대 속도로", "점프·근력 절반 (무게 유지)"][w];
-    if (o.measure === "full") out.notes.push("측정 주 · 시작 전에 측정 (리치·블로킹·스파이크 높이·CMJ·스쿼트 5RM), 측정 후 가볍게");
-    else if (o.measure === "jump") out.notes.push("피크 주 · 시작 전에 점프만 측정 (리치·블로킹·스파이크 높이·CMJ)");
+    if (o.second) out.title = "하체 근력 (점프 없이)" + (LIGHT(w) ? " · 가볍게" : "");
+    if (o.measure === "full") out.notes.push("측정 주 · 시작 전에 측정 (리치·버티컬·맥스 버티컬·CMJ·스쿼트 5RM) → 기록 탭에 입력");
+    else if (o.measure === "jump") out.notes.push("피크 주 · 시작 전에 점프만 측정 (버티컬·맥스 버티컬·CMJ) → 기록 탭에 입력");
     else if (!c.team && !o.optional && !c.t && w !== PH.TAPER) out.notes.push("아직 측정 기록이 없어요 · 오늘 시작 전에 측정");
     if (w === PH.TAPER) out.notes.push((o.weekEvent && o.weekEvent.kind === "minor" ? "컨디셔닝 주간" : "대회 주") + " · 양은 줄이고 무게는 유지");
     h.add(h.warm());
@@ -547,7 +548,8 @@ const SLOT_FN = {
       if (!plyo.some(x => x.key === "stick")) plyo.push({ ...PLYO[1], sets: LIGHT(w) ? 2 : 3, reps: 5, mod: "고강도 대신" });
       if (c.kneeRecent) out.notes.push("무릎 수술·십자인대 1년 안 · 드롭·실전 점프 빼고, 재활 담당 지시가 우선");
     }
-    if (fx.noJumps) { plyo = []; out.notes.push("통증 단계 때문에 점프는 쉬어요"); }
+    if (fx.noJumps) { plyo = []; out.notes.push("통증 때문에 점프는 쉬어요"); }
+    if (o.second) plyo = [];
     plyo.sort((a, b) => PLYO_ORDER.indexOf(a.key) - PLYO_ORDER.indexOf(b.key));
     out.landings = plyo.reduce((s, x) => s + (typeof x.reps === "number" ? x.sets * x.reps * (x.sides || 1) : 0), 0);
     // 포지션별 점프(리베로는 방향 전환)·드롭은 개인, 나머지는 팀 공통 점프
@@ -675,14 +677,14 @@ const SLOT_FN = {
     h.add({ key: "test", title: "측정", items: TRYOUT_TESTS });
   },
   rest(c, w, o, out, h) {
-    out.kind = "완전 휴식"; out.title = o.optional ? "휴식 (자율)" : "완전 휴식";
+    out.kind = "완전 휴식"; out.title = o.free ? "자유 주 · 쉬기" : o.optional ? "휴식 (자율)" : "완전 휴식";
     h.add({ key: "rest", title: "오늘", items: [o.optional ? { name: "가볍게 걷기 · 자전거 (선택)", rx: "20–30분" } : { name: "휴식", rx: "—" }] });
   },
 };
 const TRYOUT_TESTS = [
   { name: "스탠딩 리치", rx: "1회", cue: "한 손을 벽에 최대한 뻗어 닿는 높이" },
-  { name: "블로킹 높이 (제자리 점프 최고 도달)", rx: "3회 중 최고", cue: "양손 블록 점프" },
-  { name: "스파이크 높이 (도움닫기 점프 최고 도달)", rx: "3회 중 최고", cue: "실전 어프로치, 한 손" },
+  { name: "버티컬 (제자리 점프 높이)", rx: "3회 중 최고", cue: "제자리 양손 점프 도달 높이 − 스탠딩 리치" },
+  { name: "맥스 버티컬 (도움닫기 점프 높이)", rx: "3회 중 최고", cue: "실전 어프로치 한 손 도달 높이 − 스탠딩 리치" },
   { name: "CMJ (팔 없이, 점프 앱)", rx: "3회 중 최고" },
   { name: "핸드스탠드 단계 · 버틴 시간 (5단계는 걸은 거리)", rx: "1회" },
   { name: "사이드 플랭크 좌·우 · 풀 플랭크 최대 버티기", rx: "각 1회" },
@@ -726,12 +728,13 @@ function bwPlan(c, w, o, out, h, upper) {
  *   다음 주요 대회까지 남은 주(k)로 거꾸로 센다: k1 피크 · k2–4 근력·파워 · k5 회복 · 그 앞은 기초 근력(4주마다 회복).
  *   주요 대회 다음 주는 회복 주, 그다음은 기초 근력 (다음 시즌 준비).
  * 9인제·기타 대회 주는 컨디셔닝 주간 (대회 주처럼 줄이고, 끝나면 원래 흐름으로).
- * 겨울 방학은 자동: 2학기 종강일 ~ 2월 말. 첫 주 회복, 그다음 자율 프로그램 (기초 근력 위주, 4주마다 회복).
+ * 겨울 방학(비시즌)은 자동: 2학기 종강일(보강 기간 끝) ~ 2월 말. 첫 주는 자유, 그다음은 볼 대신 몸 만들기:
+ *   웨이트 주 4회(A·B·A·B) + 맨몸 2회, 기초 근력 3주 → 회복 → 근력·파워 3주 → 회복을 반복.
  * 여름 방학은 대회가 많아 비시즌으로 두지 않는다. */
 const SLOT_WEEK = {
   S1: ["team", "bwL", "gymB", "team", "gymA", "bwU", "rest"],
   S2: ["gymA", "bwU", "team", "gymB", "team", "bwL", "rest"],
-  OFF: ["gymA", "rest", "bwU", "gymB", "rest", "bwL", "rest"],
+  OFF: ["gymA", "gymB", "bwU", "gymA", "gymB", "bwL", "rest"], // 비시즌: 웨이트 주 4회 (볼 대신 몸 만들기)
 };
 const TEAM_DAYS = { S1: "월·목", S2: "수·금" };
 const EVENT_KINDS = { major: "주요 대회", minor: "9인제·기타 대회", tryout: "트라이아웃", termend: "2학기 종강", off: "비시즌·방학" };
@@ -746,13 +749,13 @@ function semesterStart(mon) {
   const th = dAdd(mon, 3), y = Number(th.slice(0, 4)), m = Number(th.slice(5, 7));
   return mondayOf(dAdd(m >= 3 && m <= 8 ? `${y}-03-01` : m >= 9 ? `${y}-09-01` : `${y - 1}-09-01`, 3));
 }
-// 겨울 방학(비시즌)은 자동: 2학기 종강일(일정의 '2학기 종강') ~ 2월 말. 종강일이 없으면 12/15부터.
+// 겨울 방학(비시즌)은 자동: 2학기 종강일(일정의 '2학기 종강' = 학사일정의 보강 기간 마지막 날) ~ 2월 말. 없으면 12/21부터.
 // 여름 방학은 대회가 많아 비시즌으로 두지 않는다 (1학기 흐름을 그대로 이어감).
 function autoOffs(evs) {
   const out = [];
   for (let y = 2025; y <= 2035; y++) {
     const te = evs.filter(e => e.kind === "termend" && e.start.slice(0, 4) === String(y) && e.start.slice(5, 7) >= "11").map(e => e.start).sort()[0];
-    out.push({ name: "겨울 방학", kind: "off", start: te || `${y}-12-15`, end: dAdd(`${y + 1}-03-01`, -1), auto: true });
+    out.push({ name: "겨울 방학", kind: "off", start: te || `${y}-12-21`, end: dAdd(`${y + 1}-03-01`, -1), auto: true });
   }
   // 관리자가 직접 넣은 방학과 겹치면 그쪽을 쓴다
   return out.filter(a => !evs.some(e => e.kind === "off" && e.start <= a.end && e.end >= a.start));
@@ -840,9 +843,11 @@ function seasonDay(date, events) {
   if (tryout) return { ...info, slot: "tryout", event: tryout, w: PH.INTRO, measure: false, label: "트라이아웃 주" };
   if (off) {
     const wk = Math.floor(dDiff(mon, mondayOf(off.start)) / 7);
-    const r = { ...info, optional: true, measure: false, event: off, label: `${off.name} · 자율 훈련` };
-    if (wk <= 0) return { ...r, slot: d % 2 === 0 && d < 6 ? "recover" : "rest", w: PH.DELOAD, label: `${off.name} · 회복 주` };
-    return { ...r, slot: SLOT_WEEK.OFF[d], w: wk === 1 ? PH.INTRO : (wk - 1) % 4 === 0 ? PH.DELOAD : PH.BASE };
+    // 비시즌: 종강 첫 주는 자유, 그다음은 웨이트 집중 (기초 근력 3주 → 회복 → 근력·파워 3주 → 회복 …)
+    const r = { ...info, measure: false, event: off, offSeason: true, label: `${off.name} · 몸 만들기` };
+    if (wk <= 0) return { ...r, optional: true, free: true, slot: "rest", w: PH.DELOAD, label: `${off.name} · 자유 주` };
+    const ow = [PH.BASE, PH.BASE, PH.BASE, PH.DELOAD, PH.POWER, PH.POWER, PH.POWER, PH.DELOAD][(wk - 1) % 8];
+    return { ...r, slot: SLOT_WEEK.OFF[d], w: ow, second: d === 3 };
   }
   if (weekEvent) {
     const base = info.slot;

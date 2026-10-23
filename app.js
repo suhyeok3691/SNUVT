@@ -114,17 +114,19 @@ function sortedPlayers() {
 }
 function runs(pid) { return [...((state.tests[pid] || {}).runs || [])].sort((a, b) => String(a.date).localeCompare(String(b.date))); }
 // 측정은 날마다 일부 항목만 잴 수 있어서, 항목별로 가장 최근 값을 모은다 (코어만 잰 날이 점프·근력 값을 지우지 않게)
-const TEST_KEYS = ["reach", "cmj", "block", "approach", "balL", "balR", "hsStage", "hsSec", "hsWalk", "squat", "rdl", "pull", "sideL", "sideR", "plank"];
-// 버티컬 점프 = 블로킹 높이(제자리 점프 최고 도달) − 스탠딩 리치, 맥스 버티컬 = 스파이크 높이(도움닫기) − 스탠딩 리치
-const vertOf = t => t && t.reach != null && t.block != null ? Number(t.block) - Number(t.reach) : null;
-const maxVertOf = t => t && t.reach != null && t.approach != null ? Number(t.approach) - Number(t.reach) : null;
+const TEST_KEYS = ["reach", "vert", "maxVert", "cmj", "block", "approach", "hsStage", "hsSec", "hsWalk", "squat", "rdl", "pull", "sideL", "sideR", "plank"];
+// 버티컬(제자리 점프 높이) · 맥스 버티컬(도움닫기 점프 높이) — 직접 입력. 예전 도달 높이(block·approach)는 리치를 빼서 읽음
+const vertOf = t => t && t.vert != null ? Number(t.vert) : t && t.reach != null && t.block != null ? Number(t.block) - Number(t.reach) : null;
+const maxVertOf = t => t && t.maxVert != null ? Number(t.maxVert) : t && t.reach != null && t.approach != null ? Number(t.approach) - Number(t.reach) : null;
+// 네트 위 높이 = 스탠딩 리치 + 점프 높이 − 네트
+const overNet = (t, v) => t && t.reach != null && v != null ? Number(t.reach) + v - NET : null;
 function latest(pid) {
   const r = runs(pid); if (!r.length) return null;
   const out = { date: r.at(-1).date };
   for (const t of r) for (const k of TEST_KEYS) if (t[k] != null) out[k] = t[k];
   return out;
 }
-const isMainTest = t => ["reach", "cmj", "block", "approach", "squat", "rdl", "pull"].some(k => t[k] != null);
+const isMainTest = t => ["reach", "vert", "maxVert", "cmj", "block", "approach", "squat", "rdl", "pull"].some(k => t[k] != null);
 const isCoreHs = t => coreSum(t) != null || t.hsStage != null || t.hsWalk != null || t.hsSec != null;
 const logsOf = pid => state.logs[pid] || [];
 const checksOf = pid => [...(state.painChecks[pid] || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.created).localeCompare(String(b.created)));
@@ -251,7 +253,7 @@ function myStatusHtml(p) {
   const mv = maxVertOf(t), v = vertOf(t);
   const mvRuns = runs(p.id).filter(x => maxVertOf(x) != null);
   const dMv = mv != null && mvRuns.length > 1 ? mv - maxVertOf(mvRuns[0]) : null;
-  const blk = t && t.block != null ? Number(t.block) - NET : null;
+  const blk = overNet(t, mv);
   const todayLog = logsOf(p.id).filter(e => e.date === iso(today()));
   const weekLogs = logsOf(p.id).filter(e => mondayOf(e.date) === thisMon());
   const nm = nextMeasure(iso(today()), events());
@@ -271,8 +273,8 @@ function myStatusHtml(p) {
       <h3>내 지표</h3>
       ${t ? `<div class="stats">
         ${stat("맥스 버티컬", mv != null ? mv : "—", dMv != null ? ` <small class="${dMv < 0 ? "neg" : ""}">${dMv > 0 ? "+" : ""}${dMv}</small>` : "")}
-        ${stat("버티컬 점프", v != null ? v : "—")}
-        ${stat("블로킹 네트 위", blk != null ? (blk >= 0 ? "+" : "") + blk : "—")}
+        ${stat("버티컬", v != null ? v : "—")}
+        ${stat("스파이크 네트 위", blk != null ? (blk >= 0 ? "+" : "") + blk : "—")}
         ${stat("상대 근력", rel != null ? rel.toFixed(2) : "—")}
         ${stat("코어 합계 (초)", core != null ? core : "—", dCore != null ? ` <small class="${dCore < 0 ? "neg" : ""}">${dCore > 0 ? "+" : ""}${dCore}</small>` : "")}
         ${stat("핸드스탠드", hsText(t))}</div>` : emptyLine("측정 후 나와요.")}
@@ -318,6 +320,8 @@ function teamStatusHtml() {
 /* ---------- 프로그램 ---------- */
 function blockHtml(b) {
   return `<section class="blk b-${esc(b.key)}"><h4>${esc(b.title)}</h4><ul class="rows">${b.items.map(x => {
+    const rec = x.name === "통증 체크" ? "pain" : x.name === "세션 RPE 기록" ? "log" : "";
+    if (rec) return `<li class="tap" data-act="gorec" data-focus="${rec}" role="button" tabindex="0"><div class="nm">${esc(x.name)} <span class="mod">기록 →</span></div><div class="rx">${esc(fmtRx(x.rx))}</div></li>`;
     const tap = exGuide(x.name) || exSeconds(x.rx);
     return `<li${tap ? ` class="tap" data-act="ex" data-n="${esc(x.name)}" data-r="${esc(x.rx ?? "")}" data-c="${esc(x.cue || "")}" role="button" tabindex="0"` : ""}>
     <div class="nm">${esc(x.name)}${x.mod ? ` <span class="mod">${esc(x.mod)}</span>` : ""}</div><div class="rx">${esc(fmtRx(x.rx))}</div></li>`; }).join("")}</ul>
@@ -350,9 +354,9 @@ function viewPlan() {
 function scopedBlocks(plan, teamOnly) {
   const team = plan.blocks.filter(b => b.scope !== "me"), me = teamOnly ? [] : plan.blocks.filter(b => b.scope === "me");
   if (["rest", "recover", "match", "prep"].includes(plan.slot) && !me.length) return `<div class="blocks">${team.map(blockHtml).join("")}</div>`;
-  const teamH = plan.optional ? `자율 <span class="small muted">비시즌 · 각자 선택</span>` : `팀 세션 <span class="small muted">다 같이</span>`;
+  const teamH = plan.optional ? "자율" : "팀 세션";
   return `<h3 class="scope-h">${teamH}</h3><div class="blocks">${team.map(blockHtml).join("")}</div>
-    ${teamOnly ? "" : `<h3 class="scope-h me">개인 <span class="small muted">나만 · 포지션 · 부상 이력 · 재활</span></h3>
+    ${teamOnly ? "" : `<h3 class="scope-h me">개인</h3>
     ${me.length ? `<div class="blocks">${me.map(blockHtml).join("")}</div>` : `<p class="small muted">오늘은 개인 운동이 없어요.</p>`}`}`;
 }
 function viewTeamPlan() {
@@ -406,16 +410,35 @@ function logHtml(p) {
     </tbody></table></div>` : emptyLine("아직 기록이 없어요.")}
   </section>`;
 }
+function measureMode(p) {
+  if (state.admin) return "full";
+  if (!(state.role === "player" && p.id === state.myPid)) return null;
+  const info = infoOn(iso(today()));
+  if (!runs(p.id).some(isMainTest)) return "full";        // 아직 측정이 없으면 언제든 첫 측정
+  if (info.slot === "tryout") return "full";
+  return info.measure || null;                              // 측정 주: full / 피크 주: jump
+}
 function testsHtml(p) {
   const r = runs(p.id).filter(isMainTest);
   const rel = relStrength(latest(p.id), p.weight);
-  const above = v => v == null || v === "" ? "—" : ((Number(v) - NET >= 0 ? "+" : "") + (Number(v) - NET));
+  const sign = v => v == null ? "—" : (v >= 0 ? "+" : "") + v;
+  const mode = measureMode(p), mine = t => state.admin || t.author === (state.session && state.session.user.id);
+  const nf = (id, label, step = "0.5", max = 400) => `<label class="fl">${label}<input type="number" id="${id}" inputmode="decimal" step="${step}" min="0" max="${max}"></label>`;
   return `<section class="sec"><h3>측정</h3>
     ${r.length ? `${rel != null ? `<p class="small muted">상대 근력 <b>${rel.toFixed(2)}</b></p>` : ""}
-    <div class="tw"><table><thead><tr><th>날짜</th><th>맥스 버티컬</th><th>버티컬 점프</th><th>스파이크 네트 위</th><th>블로킹 네트 위</th><th>CMJ</th><th>스쿼트</th></tr></thead><tbody>
-    ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${maxVertOf(t) ?? "—"}</td><td class="num">${vertOf(t) ?? "—"}</td><td class="num">${above(t.approach)}</td><td class="num">${above(t.block)}</td><td class="num">${t.cmj ?? "—"}</td><td class="num">${t.squat ?? "—"}</td></tr>`).join("")}
-    </tbody></table></div>
-    <p class="small muted">버티컬 점프 = 블로킹 높이 − 스탠딩 리치 · 맥스 버티컬 = 스파이크 높이 − 스탠딩 리치 (cm)</p>` : emptyLine(state.admin ? "측정값은 ‘등록·측정’에서 넣어요." : "측정 후 나와요.")}
+    <div class="tw"><table><thead><tr><th>날짜</th><th>버티컬</th><th>맥스 버티컬</th><th>스파이크 네트 위</th><th>CMJ</th><th>스쿼트</th><th></th></tr></thead><tbody>
+    ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${vertOf(t) ?? "—"}</td><td class="num">${maxVertOf(t) ?? "—"}</td><td class="num">${sign(overNet(t, maxVertOf(t)))}</td><td class="num">${t.cmj ?? "—"}</td><td class="num">${t.squat ?? "—"}</td>
+      <td>${mine(t) ? `<button class="btn link danger" type="button" data-act="deltest" data-id="${esc(t.id)}">삭제</button>` : ""}</td></tr>`).join("")}
+    </tbody></table></div>` : emptyLine("아직 측정이 없어요.")}
+    ${mode && !state.admin ? `<details class="panel" data-keep="measure-form" open><summary><b>${mode === "jump" ? "점프 측정 입력" : "측정 입력"}</b></summary>
+      <form class="f" id="measureForm" data-pid="${esc(p.id)}" data-mode="${mode}">
+        <div class="fields">
+          <label class="fl">날짜<input type="date" id="ms-date" value="${iso(today())}" required></label>
+          ${nf("ms-reach", "스탠딩 리치 (cm)")}${nf("ms-vert", "버티컬 (cm)", "0.5", 150)}${nf("ms-maxvert", "맥스 버티컬 (cm)", "0.5", 150)}${nf("ms-cmj", "CMJ (cm)", "0.1", 150)}
+          ${mode === "full" ? `${nf("ms-squat", "스쿼트 5RM (kg)", "2.5")}${nf("ms-rdl", "RDL 5RM (kg)", "2.5")}${nf("ms-pull", "턱걸이 (회)", "1", 50)}` : ""}
+        </div>
+        <div class="row"><button class="btn primary" type="submit">저장</button></div>
+      </form></details>` : ""}
   </section>`;
 }
 const bal = v => v === true ? "○" : v === false ? "×" : "—";
@@ -423,7 +446,7 @@ function canEditSelf(p) { return state.admin || (state.role === "player" && p.id
 function painCheckForm(p, where) {
   if (!canEditSelf(p)) return "";
   const key = "pain-" + where, open = where === "rec" || modsFor(p).length > 0;
-  return `<details class="pcheck" data-keep="${key}" ${keepOpen(key, open)}><summary><b>통증 체크</b> <span class="small muted">다음 날 아픈 것도</span></summary>
+  return `<details class="pcheck" data-keep="${key}" ${keepOpen(key, open)}><summary><b>통증 체크</b></summary>
     <form class="f" id="painForm" data-pid="${esc(p.id)}" data-where="${where}">
       <div class="fields">
         <label class="fl">날짜<input type="date" id="pc-date-${where}" value="${iso(today())}" required></label>
@@ -450,14 +473,14 @@ function coreHtml(p) {
   const first = r[0];
   const delta = (t, k) => !first || first === t || t[k] == null || first[k] == null ? "" : (() => { const v = Number(t[k]) - Number(first[k]); return ` <small class="${v < 0 ? "neg" : ""}">${v > 0 ? "+" : ""}${v}</small>`; })();
   const cell = (t, k) => t[k] == null ? "—" : t[k] + delta(t, k);
-  return `<section class="sec"><h3>코어·핸드스탠드 테스트 <span class="small muted">버틴 시간 (초) · 워크 (m)</span></h3>
+  return `<section class="sec"><h3>코어·핸드스탠드</h3>
     ${all.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>사이드 왼</th><th>사이드 오른</th><th>풀 플랭크</th><th>합계</th><th>핸드스탠드</th><th></th></tr></thead><tbody>
       ${all.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${cell(t, "sideL")}</td><td class="num">${cell(t, "sideR")}</td><td class="num">${cell(t, "plank")}</td>
         <td class="num">${coreSum(t) != null ? `<b>${coreSum(t)}</b>${first && first !== t ? ` <small class="${coreSum(t) - coreSum(first) < 0 ? "neg" : ""}">${coreSum(t) - coreSum(first) > 0 ? "+" : ""}${coreSum(t) - coreSum(first)}</small>` : ""}` : "—"}</td>
         <td>${hsText(t)}</td>
         <td>${state.admin || t.author === state.session.user.id ? `<button class="btn link danger" type="button" data-act="deltest" data-id="${esc(t.id)}">삭제</button>` : ""}</td></tr>`).join("")}
     </tbody></table></div>` : emptyLine("아직 기록이 없어요.")}
-    ${canAdd ? `<details class="panel" data-keep="core-form" ${keepOpen("core-form", !all.length)}><summary><b>코어·핸드스탠드 입력</b> <span class="small muted">잰 것만</span></summary>
+    ${canAdd ? `<details class="panel" data-keep="core-form" ${keepOpen("core-form", !all.length)}><summary><b>코어·핸드스탠드 입력</b></summary>
       <form class="f" id="coreForm" data-pid="${esc(p.id)}">
         <div class="fields">
           <label class="fl">날짜<input type="date" id="ct-date" value="${iso(today())}" required></label>
@@ -465,14 +488,15 @@ function coreHtml(p) {
           <label class="fl">사이드 플랭크 오른 (초)<input type="number" id="ct-sr" inputmode="numeric" min="0" max="600"></label>
           <label class="fl">풀 플랭크 (초)<input type="number" id="ct-pl" inputmode="numeric" min="0" max="900"></label>
           ${hsStageSelect("ct-hs")}
-          <label class="fl">핸드스탠드 버틴 시간 (초)<input type="number" id="ct-hsec" inputmode="numeric" min="0" max="120" placeholder="1–4단계"></label>
-          <label class="fl">핸드스탠드 워크 (m)<input type="number" id="ct-walk" inputmode="decimal" min="0" max="100" step="0.5" placeholder="5단계"></label>
+          <label class="fl">버틴 시간 (초)<input type="number" id="ct-hsec" inputmode="numeric" min="0" max="120"></label>
+          <label class="fl">워크 (m)<input type="number" id="ct-walk" inputmode="decimal" min="0" max="100" step="0.5"></label>
         </div>
         <div class="row"><button class="btn primary" type="submit">저장</button></div>
       </form></details>` : ""}
   </section>`;
 }
-const hsStageSelect = id => `<label class="fl wide">핸드스탠드 단계<select id="${id}"><option value="">—</option>${HS_STAGES.slice(1).map((n, i) => `<option value="${i + 1}">${i + 1} ${n} · 다음 기준 ${HS_GOAL[i + 1]}</option>`).join("")}</select></label>`;
+const HS_SHORT = ["", "파이크 홀드", "백 투 월", "힐 풀", "프리스탠딩", "워크"];
+const hsStageSelect = id => `<label class="fl">핸드스탠드 단계<select id="${id}"><option value="">—</option>${HS_SHORT.slice(1).map((n, i) => `<option value="${i + 1}">${i + 1} ${n}</option>`).join("")}</select></label>`;
 /* ---------- 로그인 · 승인 대기 · 가입 정보 ---------- */
 function viewAuth() {
   const login = state.authMode === "login";
@@ -519,10 +543,8 @@ function viewSelfReg() {
       </fieldset>
       <fieldset><legend>부상·통증 <span class="private">본인·관리자만</span></legend>
         <h4 class="sub-h">지금 아픈 곳</h4>
-        <p class="small muted">운동할 때와 다음 날 아침을 따로 골라요.</p>
         ${painRows("sf", pain)}
         <h4 class="sub-h">부상 이력</h4>
-        <p class="small muted">진단·상태를 아는 만큼 골라요.</p>
         ${injuryEditor("sf", h.injuries)}
         <div class="fields">
           <label class="fl">발목 다친 횟수 (왼)<input id="sf-al" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleL ?? 0)}"></label>
@@ -583,10 +605,8 @@ function viewIntake() {
         </fieldset>
         <fieldset><legend>통증 · 부상 이력 <span class="private">본인·관리자만</span></legend>
           <h4 class="sub-h">지금 아픈 곳</h4>
-          <p class="small muted">운동할 때와 다음 날 아침을 따로 골라요. 최근 통증 체크가 있으면 그게 우선이에요.</p>
           ${painRows("hf", pain)}
           <h4 class="sub-h">부상 이력</h4>
-          <p class="small muted">진단·상태를 아는 만큼 골라요. 재활 중이면 담당자 프로그램이 우선이에요.</p>
           ${injuryEditor("hf", h.injuries)}
           <div class="fields">
             <label class="fl">발목 다친 횟수 (왼)<input id="hf-al" type="number" inputmode="numeric" min="0" max="30" value="${esc(h.ankleL ?? 0)}"></label>
@@ -609,22 +629,22 @@ function testFormHtml(pid) {
     <div class="fields">
       <label class="fl">날짜<input type="date" id="tf-date" value="${iso(today())}" required></label>
       <label class="fl">스탠딩 리치 (cm)<input type="number" id="tf-reach" inputmode="decimal" step="0.5"></label>
-      <label class="fl">블로킹 높이 (cm) · 제자리 점프<input type="number" id="tf-block" inputmode="decimal" step="0.5"></label>
-      <label class="fl">스파이크 높이 (cm) · 도움닫기<input type="number" id="tf-approach" inputmode="decimal" step="0.5"></label>
-      <label class="fl">CMJ (cm) · 팔 없이, 앱<input type="number" id="tf-cmj" inputmode="decimal" step="0.1"></label>
-      ${hsStageSelect("tf-hsStage")}
-      <label class="fl">핸드스탠드 버틴 시간 (초)<input type="number" id="tf-hsSec" inputmode="numeric" min="0" max="120"></label>
-      <label class="fl">핸드스탠드 워크 (m)<input type="number" id="tf-hsWalk" inputmode="decimal" min="0" max="100" step="0.5"></label>
+      <label class="fl">버티컬 (cm)<input type="number" id="tf-vert" inputmode="decimal" step="0.5" min="0" max="150"></label>
+      <label class="fl">맥스 버티컬 (cm)<input type="number" id="tf-maxvert" inputmode="decimal" step="0.5" min="0" max="150"></label>
+      <label class="fl">CMJ (cm)<input type="number" id="tf-cmj" inputmode="decimal" step="0.1"></label>
       <label class="fl">스쿼트 5RM (kg)<input type="number" id="tf-squat" inputmode="decimal" step="2.5"></label>
       <label class="fl">RDL 5RM (kg)<input type="number" id="tf-rdl" inputmode="decimal" step="2.5"></label>
       <label class="fl">턱걸이 (회)<input type="number" id="tf-pull" inputmode="numeric" min="0" max="50"></label>
       <label class="fl">사이드 플랭크 왼 (초)<input type="number" id="tf-sl" inputmode="numeric" min="0" max="600"></label>
       <label class="fl">사이드 플랭크 오른 (초)<input type="number" id="tf-sr" inputmode="numeric" min="0" max="600"></label>
       <label class="fl">풀 플랭크 (초)<input type="number" id="tf-pl" inputmode="numeric" min="0" max="900"></label>
+      ${hsStageSelect("tf-hsStage")}
+      <label class="fl">버틴 시간 (초)<input type="number" id="tf-hsSec" inputmode="numeric" min="0" max="120"></label>
+      <label class="fl">워크 (m)<input type="number" id="tf-hsWalk" inputmode="decimal" min="0" max="100" step="0.5"></label>
     </div>
     <div class="row"><button class="btn primary" type="submit">측정값 저장</button></div>
-    ${r.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>리치</th><th>블로킹</th><th>스파이크</th><th>맥스 버티컬</th><th>CMJ</th><th>핸드스탠드</th><th>스쿼트</th><th>RDL</th><th>턱걸이</th><th></th></tr></thead><tbody>
-    ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${t.reach ?? "—"}</td><td class="num">${t.block ?? "—"}</td><td class="num">${t.approach ?? "—"}</td><td class="num">${maxVertOf(t) ?? "—"}</td><td class="num">${t.cmj ?? "—"}</td><td>${hsText(t)}</td><td class="num">${t.squat ?? "—"}</td><td class="num">${t.rdl ?? "—"}</td><td class="num">${t.pull ?? "—"}</td>
+    ${r.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>리치</th><th>버티컬</th><th>맥스 버티컬</th><th>CMJ</th><th>핸드스탠드</th><th>스쿼트</th><th>RDL</th><th>턱걸이</th><th></th></tr></thead><tbody>
+    ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${t.reach ?? "—"}</td><td class="num">${vertOf(t) ?? "—"}</td><td class="num">${maxVertOf(t) ?? "—"}</td><td class="num">${t.cmj ?? "—"}</td><td>${hsText(t)}</td><td class="num">${t.squat ?? "—"}</td><td class="num">${t.rdl ?? "—"}</td><td class="num">${t.pull ?? "—"}</td>
     <td><button class="btn link danger" type="button" data-act="deltest" data-id="${esc(t.id)}">삭제</button></td></tr>`).join("")}
     </tbody></table></div>` : ""}
   </form>`;
@@ -672,7 +692,7 @@ function viewSeason() {
     return `<li class="${tag}"><span class="num">${md(parseD(mon))}</span><span>${esc(weekLabel(mon).replace(/^[12]학기 · 정규 훈련 [^ ]+ · /, ""))}${note ? ` <span class="chip">${note}</span>` : ""}</span></li>`;
   }).join("");
   return `<section class="sec"><div><h2>일정 <span class="small muted">${sy}.3 – ${sy + 1}.2</span></h2>
-    <p class="lede">정규 훈련 1학기 월·목 · 2학기 수·금. 대회를 넣으면 그날에 맞춰 피크를 잡고, '2학기 종강'을 넣으면 그날부터 2월 말까지 겨울 방학이에요.</p></div></section>
+    </div></section>
   <div class="cols">
     <div class="col"><section class="sec"><h3>대회·일정</h3>
       ${list.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>이름</th><th>종류</th>${state.admin ? "<th></th>" : ""}</tr></thead><tbody>
@@ -684,8 +704,8 @@ function viewSeason() {
         <div class="fields">
           <label class="fl">이름<input id="ev-name" required maxlength="40" placeholder="예: KUSF 중부 예선"></label>
           <label class="fl">종류<select id="ev-kind">${Object.entries(EVENT_KINDS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
-          <label class="fl">시작<input type="date" id="ev-start" required></label>
-          <label class="fl">끝 (하루면 비우기)<input type="date" id="ev-end"></label>
+          <div class="pair"><label class="fl">시작<input type="date" id="ev-start" required></label>
+          <label class="fl">끝<input type="date" id="ev-end"></label></div>
           <label class="fl wide">메모<input id="ev-note" maxlength="100" placeholder="예: 본선 진출 시에만"></label>
         </div>
         <div class="row"><button class="btn primary" type="submit">추가</button></div>
@@ -707,7 +727,7 @@ function timerDraw() {
   const v = timer.total ? timer.left : timer.base + (timer.running ? (Date.now() - timer.startAt) / 1000 : 0);
   el.textContent = fmtT(Math.max(0, timer.total ? Math.ceil(v) : Math.floor(v)));
   document.getElementById("t-go").textContent = timer.running ? "멈춤" : "시작";
-  document.getElementById("t-mode").textContent = timer.total ? "카운트다운" : "스톱워치";
+  document.getElementById("t-mode").textContent = timer.label || "";
 }
 function timerTick() {
   if (!timer.running) return;
@@ -723,9 +743,24 @@ function timerToggle() {
   timerDraw();
 }
 function timerSet(sec) { clearInterval(timer.h); Object.assign(timer, { total: sec, left: sec, running: false, base: 0 }); timerDraw(); }
+// 진행 중에도 남은 시간을 더하고 뺌
+function timerAdd(d) {
+  timer.total = Math.max(5, timer.total + d);
+  if (timer.running) timer.base = Math.max(1, timer.base + d);
+  timer.left = Math.max(0, timer.left + d);
+  timerDraw();
+}
+// 기본 시간: 처방에 시간이 있으면 그 시간, 없으면 세트 사이 휴식(설명의 '세트 간 N분'), 그것도 없으면 60초
+function defaultSeconds(rx, cue) {
+  const s = exSeconds(rx);
+  if (s) return [s, "운동 시간"];
+  const m = String(cue || "").match(/세트 간\s*(\d+)\s*(분|초)/);
+  if (m) return [Number(m[1]) * (m[2] === "분" ? 60 : 1), "세트 사이 휴식"];
+  return [60, "세트 사이 휴식"];
+}
 function openSheet(name, rx, cue) {
-  const steps = exGuide(name) || [], sec = exSeconds(rx);
-  const presets = [...new Set([sec, 30, 60, 90, 180].filter(Boolean))];
+  const steps = exGuide(name) || [], [sec, label] = defaultSeconds(rx, cue);
+  timer.label = label;
   const el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `
     <div class="row between"><h3>${esc(name)}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
@@ -734,8 +769,9 @@ function openSheet(name, rx, cue) {
     ${cue ? `<p class="small muted">${esc(cue)}</p>` : ""}
     <div class="timer"><div class="t-time" id="t-time">0:00</div><div class="small muted" id="t-mode"></div>
       <div class="row center"><button class="btn primary" type="button" id="t-go" data-act="tgo">시작</button><button class="btn" type="button" data-act="treset">다시</button></div>
-      <div class="row center chips-t">${presets.map(v => `<button class="btn chip-t" type="button" data-act="tset" data-s="${v}">${v >= 60 ? v / 60 + "분" : v + "초"}</button>`).join("")}<button class="btn chip-t" type="button" data-act="tset" data-s="0">스톱워치</button></div></div>`;
+      <div class="row center chips-t">${[-30, -15, 15, 30].map(v => `<button class="btn chip-t" type="button" data-act="tadd" data-s="${v}">${v > 0 ? "+" : "−"}${Math.abs(v)}초</button>`).join("")}</div></div>`;
   el.hidden = false; document.body.classList.add("noscroll");
+  timer.def = sec;
   timerSet(sec);
 }
 function closeSheet() { clearInterval(timer.h); timer.running = false; document.getElementById("sheet").hidden = true; document.body.classList.remove("noscroll"); }
@@ -798,9 +834,18 @@ document.addEventListener("click", async ev => {
   if (act === "addinj") { document.getElementById(b.dataset.prefix + "-inj").insertAdjacentHTML("beforeend", injRowHtml()); state.dirty = true; return; }
   if (act === "delinj") { b.closest(".inj-row").remove(); state.dirty = true; return; }
   if (act === "ex") return openSheet(b.dataset.n, b.dataset.r, b.dataset.c);
+  if (act === "gorec") {
+    const focus = b.dataset.focus;
+    if (focus === "pain") state.openKeys["pain-rec"] = true;
+    go("rec");
+    const el = document.getElementById(focus === "pain" ? "painForm" : "logForm");
+    if (el) { el.scrollIntoView({ block: "center" }); const f = el.querySelector(focus === "pain" ? "select" : "#lg-rpe"); if (f) f.focus(); }
+    return;
+  }
+  if (act === "tadd") return timerAdd(Number(b.dataset.s));
   if (act === "sheetclose") return closeSheet();
   if (act === "tgo") return timerToggle();
-  if (act === "treset") return timerSet(timer.total);
+  if (act === "treset") return timerSet(timer.def || timer.total);
   if (act === "tset") return timerSet(Number(b.dataset.s));
   if (act === "week") { state.week = b.dataset.m; state.day = null; state.dirty = false; return render(); }
   if (act === "day") { state.day = Number(b.dataset.d); state.dirty = false; return render(); }
@@ -950,7 +995,7 @@ document.addEventListener("submit", async ev => {
       const st = document.getElementById("tf-hsStage").value;
       const row = {
         player_id: f.dataset.pid, date: txt("tf-date"),
-        reach: num("tf-reach"), cmj: num("tf-cmj"), block: num("tf-block"), approach: num("tf-approach"),
+        reach: num("tf-reach"), cmj: num("tf-cmj"), vert: num("tf-vert"), max_vert: num("tf-maxvert"),
         hs_stage: st ? Number(st) : null, hs_sec: num("tf-hsSec"), hs_walk: num("tf-hsWalk"),
         squat: num("tf-squat"), rdl: num("tf-rdl"), pull: num("tf-pull"),
         side_l: num("tf-sl"), side_r: num("tf-sr"), plank: num("tf-pl"),
@@ -976,6 +1021,12 @@ document.addEventListener("submit", async ev => {
       if ((row.hs_sec != null || row.hs_walk != null) && row.hs_stage == null) { toast("핸드스탠드 단계를 골라 주세요."); return; }
       ok(await sb.from("tests").insert(row));
       toast("저장했어요");
+    } else if (f.id === "measureForm") {
+      const g = id => document.getElementById(id) ? num(id) : null;
+      const row = { player_id: f.dataset.pid, date: txt("ms-date"), reach: g("ms-reach"), vert: g("ms-vert"), max_vert: g("ms-maxvert"), cmj: g("ms-cmj"), squat: g("ms-squat"), rdl: g("ms-rdl"), pull: g("ms-pull") };
+      if (!Object.entries(row).some(([k, v]) => !["player_id", "date"].includes(k) && v != null)) { toast("값을 하나 이상 입력해 주세요."); return; }
+      ok(await sb.from("tests").insert(row));
+      toast("측정을 저장했어요");
     } else if (f.id === "eventForm") {
       const start = txt("ev-start"), end = txt("ev-end") || start;
       if (end < start) { toast("끝 날짜가 시작보다 앞이에요."); return; }
@@ -1051,7 +1102,7 @@ async function loadAll() {
     for (const r of ts.data) {
       (tests[r.player_id] = tests[r.player_id] || { runs: [] }).runs.push({
         id: r.id, date: r.date, reach: r.reach, cmj: r.cmj, block: r.block, approach: r.approach,
-        balL: r.bal_l, balR: r.bal_r, hsStage: r.hs_stage, hsSec: r.hs_sec, hsWalk: r.hs_walk == null ? null : Number(r.hs_walk), squat: r.squat, rdl: r.rdl, pull: r.pull,
+        vert: r.vert == null ? null : Number(r.vert), maxVert: r.max_vert == null ? null : Number(r.max_vert), hsStage: r.hs_stage, hsSec: r.hs_sec, hsWalk: r.hs_walk == null ? null : Number(r.hs_walk), squat: r.squat, rdl: r.rdl, pull: r.pull,
         sideL: r.side_l, sideR: r.side_r, plank: r.plank, author: r.author,
       });
     }

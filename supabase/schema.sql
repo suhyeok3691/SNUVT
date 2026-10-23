@@ -317,3 +317,8 @@ alter table public.logs add constraint logs_pain_area_check
 
 -- ---------- 2학기 종강 (2026-10-23, 이미 적용됨: 마이그레이션 events_term_end) ----------
 -- events.kind 에 termend(2학기 종강) 추가. 겨울 방학(비시즌)은 앱이 자동으로 종강일 ~ 2월 말로 넣음. 여름 방학은 비시즌 아님.
+
+-- ---------- 버티컬 · 선수 측정 입력 (2026-10-23, 이미 적용됨: 마이그레이션 tests_vertical_player_measure) ----------
+-- tests.vert(버티컬, 제자리 점프 높이 cm) · tests.max_vert(맥스 버티컬, 도움닫기 점프 높이 cm) 추가
+-- 정책 "player inserts own tests": 선수는 본인 측정 행을 직접 추가 (화면은 측정 주·트라이아웃·첫 측정 때만 입력 칸을 보여 줌)
+-- 2학기 종강 = 학사일정의 보강 기간 마지막 날 (2026: 12/21)
