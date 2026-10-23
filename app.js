@@ -304,8 +304,6 @@ function picksHtml(plan, pid, date) {
 }
 function todayHtml(p) {
   const t = iso(today()), mon = thisMon(), d = dowMon(today());
-  const done = new Set(logsOf(p.id).map(e => e.date));
-  const strip = daysHtml(mon, d, x => planOn(p, x), "openday", done);
   const plan = planOn(p, t);
   const main = plan.blocks.filter(b => !["warm", "cool"].includes(b.key));
   const items = main.flatMap(b => b.items).slice(0, 5);
@@ -316,10 +314,10 @@ function todayHtml(p) {
     ${picksHtml(plan, p.id, t)}
     ${items.length ? `<ul class="mini">${items.map(x => `<li><span>${esc(x.name)}</span><b>${esc(rxMain(x.rx))}</b></li>`).join("")}</ul>` : ""}
     <div class="row between">
-      <span class="small muted">${[plan.landings ? `착지 약 ${plan.landings}회` : "", mine.length ? `개인 ${mine.map(b => b.title.replace(/ \(.*\)$/, "")).join(" · ")}` : ""].filter(Boolean).join(" · ")}</span>
+      <span class="small muted">${mine.length ? `개인 ${mine.map(b => b.title.replace(/ \(.*\)$/, "")).join(" · ")}` : ""}</span>
       <button class="btn primary" type="button" data-act="openday" data-m="${mon}" data-d="${d}">전체 프로그램 보기</button>
     </div>
-    <p class="sub">이번 주</p>${strip}</section>`;
+  </section>`;
 }
 function myStatusHtml(p) {
   const t = latest(p.id);
@@ -332,7 +330,6 @@ function myStatusHtml(p) {
   const weekLogs = logsOf(p.id).filter(e => mondayOf(e.date) === thisMon());
   const nm = nextMeasure(iso(today()), events());
   const au = weekLogs.reduce((s, e) => s + (Number(e.rpe) || 0) * (Number(e.minutes) || 0), 0);
-  const jumps = weekLogs.reduce((s, e) => s + (Number(e.jumps) || 0), 0);
   const mods = modsFor(p);
   const cr = coreRuns(p.id), core = cr.length ? coreSum(cr.at(-1)) : null, dCore = cr.length > 1 ? core - coreSum(cr[0]) : null;
   const stat = (k, v, sub = "") => `<div class="stat"><div class="k">${k}</div><div class="v">${v}${sub}</div></div>`;
@@ -341,7 +338,7 @@ function myStatusHtml(p) {
       <h3>오늘 기록</h3>
       ${todayLog.length ? `<p class="done">✓ ${todayLog.map(e => `${esc((LOG_TYPES[e.type] || ["기타"])[0])} RPE ${esc(e.rpe)} × ${esc(e.minutes)}분`).join(", ")}</p>`
         : `<button class="btn primary" type="button" data-act="view" data-v="rec">기록하기</button>`}
-      <p class="small muted">이번 주 ${au.toLocaleString("ko-KR")} AU · 착지 ${jumps}회</p>
+      <p class="small muted">이번 주 ${au.toLocaleString("ko-KR")} AU</p>
     </div>
     <div class="panel tile">
       <h3>내 지표</h3>
@@ -423,7 +420,7 @@ function viewPlan() {
   </section>
   <section class="sec">
     <div><h3 class="day-title">${longDate(parseD(date))} · ${esc(plan.title)}</h3>
-      ${plan.landings ? `<p class="small muted">착지 약 ${plan.landings}회</p>` : ""}</div>
+</div>
     ${notes.length ? `<ul class="notes callout">${notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
     ${picksHtml(plan, pid, date)}${scopedBlocks(plan)}
   </section>`;
@@ -481,14 +478,13 @@ function logHtml(p) {
         <label class="fl">종류<select id="lg-type">${Object.entries(LOG_TYPES).map(([k, [l]]) => `<option value="${k}" ${k === defType ? "selected" : ""}>${l}</option>`).join("")}</select></label>
         <label class="fl">시간 (분)<input type="number" id="lg-min" inputmode="numeric" min="1" max="400" value="${tplan.minutes}" required></label>
         <label class="fl">힘든 정도 (RPE)<select id="lg-rpe">${RPE.map((l, i) => `<option value="${i}" ${i === 5 ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-        <label class="fl">점프·착지 수<input type="number" id="lg-jumps" inputmode="numeric" min="0" max="2000" value="${tplan.landings || ""}" placeholder="모르면 비우기"></label>
         <label class="fl">완료율<select id="lg-done"><option value="all">100%</option><option value="part">50%</option><option value="none">0%</option></select></label>
         <label class="fl wide">메모<input type="text" id="lg-note" maxlength="200" placeholder="컨디션, 손목·손가락 통증 등"></label>
       </div>
       <div class="row"><button class="btn primary" type="submit">저장</button></div>
     </form>` : ""}
-    ${entries.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>종류</th><th>RPE×분</th><th>착지</th><th>통증</th>${state.admin ? "<th></th>" : ""}</tr></thead><tbody>
-      ${entries.map(e => `<tr><td class="num">${md(parseD(e.date))}</td><td>${esc((LOG_TYPES[e.type] || ["기타"])[0])}${e.completion && e.completion !== "all" ? ` <span class="chip">${e.completion === "part" ? "50%" : "0%"}</span>` : ""}</td><td class="num">${Number(e.rpe) * Number(e.minutes)}</td><td class="num">${e.jumps ?? "—"}</td><td>${e.painArea ? `<span class="chip ${Number(e.pain) >= 3 ? "crit" : ""}">${esc(AREA_KO[e.painArea] || "")} ${esc(e.pain)}</span>` : "—"}</td>
+    ${entries.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>종류</th><th>RPE×분</th><th>통증</th>${state.admin ? "<th></th>" : ""}</tr></thead><tbody>
+      ${entries.map(e => `<tr><td class="num">${md(parseD(e.date))}</td><td>${esc((LOG_TYPES[e.type] || ["기타"])[0])}${e.completion && e.completion !== "all" ? ` <span class="chip">${e.completion === "part" ? "50%" : "0%"}</span>` : ""}</td><td class="num">${Number(e.rpe) * Number(e.minutes)}</td><td>${e.painArea ? `<span class="chip ${Number(e.pain) >= 3 ? "crit" : ""}">${esc(AREA_KO[e.painArea] || "")} ${esc(e.pain)}</span>` : "—"}</td>
       ${state.admin ? `<td><button class="btn link danger" data-act="dellog" data-id="${esc(e._id)}">삭제</button></td>` : ""}</tr>`).join("")}
     </tbody></table></div>` : emptyLine("아직 기록이 없어요.")}
   </section>`;
@@ -834,12 +830,12 @@ function viewLoad() {
     const cells = mons.map(m => {
       const a = agg[m], prev = agg[dAdd(m, -7)];
       if (!a) return `<td class="muted">—</td>`;
-      const spike = prev && ((prev.s > 0 && a.s >= 2 * prev.s) || (prev.j > 0 && a.j >= 2 * prev.j));
-      return `<td class="num ${spike ? "cell-warn" : ""}">${a.s.toLocaleString("ko-KR")}<br><span class="small">${a.j}회 · ${a.n}건</span>${spike ? ' <span class="chip warn">2배↑</span>' : ""}</td>`;
+      const spike = prev && prev.s > 0 && a.s >= 2 * prev.s;
+      return `<td class="num ${spike ? "cell-warn" : ""}">${a.s.toLocaleString("ko-KR")}<br><span class="small">${a.n}건</span>${spike ? ' <span class="chip warn">2배↑</span>' : ""}</td>`;
     }).join("");
     return `<tr><td>${esc(p.name)} <span class="chip pos">${esc(p.pos)}</span></td>${cells}</tr>`;
   }).join("");
-  return `<section class="sec"><div><h2>훈련 부하</h2><p class="lede">주간 RPE×분 합(AU)과 착지 수. 전주보다 2배 넘게 늘면 표시해요.</p></div>
+  return `<section class="sec"><div><h2>훈련 부하</h2><p class="lede">주간 RPE×분 합(AU). 전주보다 2배 넘게 늘면 표시해요.</p></div>
   ${ps.length ? `<div class="tw"><table><thead><tr><th>선수</th>${mons.map(m => `<th>${md(parseD(m))}주${m === thisMon() ? " <span class=\"muted\">이번 주</span>" : ""}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>` : emptyLine("선수를 먼저 등록해 주세요.")}
   </section>
   ${ps.length ? teamReportHtml(ps) : ""}`;
@@ -1291,7 +1287,7 @@ document.addEventListener("submit", async ev => {
       ok(await sb.from("logs").insert({
         player_id: f.dataset.pid, date: txt("lg-date"), type: document.getElementById("lg-type").value,
         minutes: num("lg-min") || 1, rpe: Number(document.getElementById("lg-rpe").value),
-        jumps: num("lg-jumps"), pain: 0, note: txt("lg-note") || null, completion: document.getElementById("lg-done").value,
+        pain: 0, note: txt("lg-note") || null, completion: document.getElementById("lg-done").value,
       }));
       toast("기록했어요");
     } else if (f.id === "offForm") {

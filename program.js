@@ -55,11 +55,11 @@ const HEAVY = w => w === PH.POWER || w === PH.PEAK;
 const PLYO = [
   { key: "pogo", tier: 1, name: "포고 점프", cue: "발목만 튕기듯, 무릎 거의 고정", sets: [2, 2, 1, 2, 1, 1], reps: [10, 10, 10, 10, 10, 10] },
   { key: "stick", tier: 1, name: "스쿼트 점프 착지 고정", cue: "착지 후 2초 멈춤, 무릎은 발끝 방향", sets: [2, 2, 1, 0, 0, 0], reps: [5, 5, 5, 5, 5, 5] },
-  { key: "snap", tier: 1, name: "스냅다운", cue: "팔을 휘두르며 착지 자세로 떨어지기, 소리 없이", sets: [2, 1, 0, 0, 0, 0], reps: [5, 5, 5, 5, 5, 5] },
+  { key: "snap", tier: 1, name: "스냅다운", cue: "팔을 휘두르며 착지 자세로 떨어지기, 소리 없이", sets: [2, 0, 0, 0, 0, 0], reps: [5, 5, 5, 5, 5, 5] },
   { key: "latstick", tier: 1, name: "옆으로 한 발 바운드 → 착지 고정", cue: "바깥발로 2초 멈춤", sets: [2, 2, 0, 0, 0, 0], reps: [3, 3, 3, 3, 3, 3], sides: 2 },
   { key: "cmj", tier: 2, name: "CMJ 최대 노력", cue: "매 회 최고 높이, 세트 사이 60–90초", sets: [0, 2, 2, 3, 3, 2], reps: [4, 5, 3, 4, 3, 3] },
   { key: "broad", tier: 2, name: "연속 제자리멀리뛰기", cue: "3번 연속, 착지하자마자 다음", sets: [0, 2, 0, 3, 2, 2], reps: [3, 3, 3, 3, 3, 3], fmt: "chain" },
-  { key: "latb", tier: 2, name: "연속 옆 바운드 (좌우 번갈아)", cue: "멀리 · 바깥발로 밀기", sets: [0, 2, 0, 2, 2, 0], reps: [6, 6, 6, 6, 6, 6] },
+  { key: "latb", tier: 2, name: "연속 옆 바운드 (좌우 번갈아)", cue: "멀리 · 바깥발로 밀기", sets: [0, 0, 0, 2, 2, 0], reps: [6, 6, 6, 6, 6, 6] },
   { key: "hurdle", tier: 2, name: "연속 허들 점프", cue: "지면 접촉 짧게, 무릎 끌어올리기", sets: [0, 0, 0, 3, 2, 0], reps: [5, 5, 5, 5, 5, 5] },
   { key: "slhop", tier: 2, name: "한 발 앞으로 홉 → 착지 고정", cue: "무릎 안으로 모이지 않게", sets: [0, 2, 0, 2, 0, 0], reps: [2, 2, 2, 3, 3, 3], sides: 2 },
   { key: "posj", tier: 3, name: "포지션별 점프", cue: "실전 스텝으로, 매번 최대", sets: [0, 0, 0, 3, 3, 2], reps: [3, 3, 3, 3, 3, 2] },
@@ -78,11 +78,11 @@ const MON_STRENGTH = [
   { key: "bss", name: "불가리안 스플릿 스쿼트 (덤벨)", cue: "앞발 뒤꿈치로 밀기 · 세트 간 90초",
     rx: ["2×6 (다리당, 맨몸)", "3×8 (다리당)", "2×6 (다리당)", "3×6 · 무게 ↑", "2×5", "1×6"] },
   { key: "stepup", name: "덤벨 스텝업", cue: "올라간 다리로만 밀기",
-    rx: [null, "3×8 (다리당)", null, "3×6", null, null] },
+    rx: [null, null, null, null, null, null] }, // 불가리안 스플릿 스쿼트와 겹쳐 뺌 (세션 시간)
   { key: "calf", name: "한 발 카프레이즈 (덤벨)", cue: "위에서 1초 멈춤 · 점프 탄성",
     rx: ["2×12 (다리당)", "3×12 (다리당)", "2×10", "3×10 · 무게 ↑", "2×10", "1×12"] },
   { key: "ham", name: "햄스트링 컬 머신", cue: "내릴 때 3초",
-    rx: [null, "3×10", null, "2×8", null, null] },
+    rx: [null, "2×10", null, "2×8", null, null] },
 ];
 /* ---------- 웨이트 B: 상체 파워·근력 + 엉덩이 + 코어 ---------- */
 const THU = [
@@ -446,7 +446,7 @@ function moduleEffects(mods, ankleHistory) {
     knee, ankle, back, wrist: wr, finger: st("finger"), // 부위별 통증 단계 (0 없음 · 1 심함 · 2 중간 · 3 약함 · 4 복귀)
     noGrip: st("finger") === 1 || st("finger") === 2 || wr === 1 || wr === 2, // 손가락·손목: 쥐기 운동 빼기
     kneeJumps: false,
-    tierMax: ankle === 2 ? 1 : knee === 3 ? 2 : 3, // 무릎 3단계: 1–2단계 점프로 진행 (드롭·실전 점프 제외)
+    tierMax: ankle === 2 ? 1 : (knee === 3 || ankle === 3) ? 2 : 3, // 무릎 3단계: 1–2단계 점프로 진행 (드롭·실전 점프 제외)
     noOverhead: sh === 1 || sh === 2,     // 메디신볼·핸드스탠드 제외, 벤치 가볍게
     lightMedball: sh === 3,
     handstandMax: wr === 1 || wr === 2 ? 0 : wr === 3 ? 1 : 5,
@@ -489,6 +489,7 @@ function prepCtx(ctx) {
   if (rehabbing.has("hip")) fx.noCph = true;
   if (rehabbing.has("finger")) fx.noGrip = true;
   const kneeRecentNote = kneeRecent && !rehabbing.has("knee");
+  const kneeRehab = rehabbing.has("knee");
   if (kneeRecent) fx.tierMax = Math.min(fx.tierMax, 2);
   // 측정 기반: 한 발 홉 좌우 차이(LSI) · 무릎 벽 대기(발목 가동성) · 어깨 내·외회전 (공격 팔 d / 반대 팔 n)
   const num = v => v == null || v === "" ? null : Number(v);
@@ -506,7 +507,7 @@ function prepCtx(ctx) {
   if (rtpHold) fx.tierMax = Math.min(fx.tierMax, 2);
   return {
     hopShort, lsi, ktwLow, gird, tromDef, rtpHold,
-    p, t, mods, fx, parts, kneeRecent: kneeRecentNote, team: !p.pos, injuries: inj,
+    p, t, mods, fx, parts, kneeRecent: kneeRecentNote, kneeRehab, team: !p.pos, injuries: inj,
     kneeHx: parts.has("knee"),
     noExt: inj.some(x => x.part === "back" && /분리증/.test(x.type || "")), // 허리 과신전 줄이기
     recentAnkle: inj.some(x => x.part === "ankle" && recent(x) && injStatus(x) !== "rehab"),
@@ -588,7 +589,8 @@ function dedupe(out) {
     b.items = b.items.filter(x => {
       if (/^(통증 체크|세션 RPE 기록)/.test(x.name)) return true;
       const k = baseName(x.name), parts = k.split(" · ");
-      if (seen.has(k) || (parts.length === 1 && [...seen].some(s => s.split(" · ").includes(k)))) return false;
+      const seenParts = new Set([...seen].flatMap(x => x.split(" · ")));
+      if (seen.has(k) || parts.every(p => seenParts.has(p))) return false;
       seen.add(k); return true;
     });
   }
@@ -604,6 +606,7 @@ function slotPlan(ctx, slot, w, o = {}) {
     if (i === 1 && fx.knee === 2) return [{ ...x, cue: "통증 없는 범위로 얕게", mod: "무릎 통증" }];
     if (i === 2 && fx.noJumps) return [{ name: "한 발 서기 (좌우)", rx: fx.ankleBal ? "3분" : "2분", cue: "좌·우 모두", mod: "무릎 통증" }];
     if (i === 2 && fx.ankleBal) return [{ ...x, rx: "3분", mod: "발목 +1분" }];
+    if ((i === 3 || i === 5) && slot === "gymB") return []; // 상체 날은 점프 워밍업 없이
     if (i === 3 && fx.noJumps) return [{ name: "스쿼트 착지 자세 연습 (점프 없이)", rx: "5회", cue: "무릎은 발끝 방향", mod: "통증" }];
     if (i === 4 && fx.noOverhead) return [{ ...x, name: "어깨 밴드 · Y·T (통증 없는 범위)", mod: "어깨 통증" }];
     if (i === 5 && (fx.noJumps || fx.tierMax < 3)) return [];
@@ -618,6 +621,7 @@ function slotPlan(ctx, slot, w, o = {}) {
       if (room <= 0) break;
       items.push(...s.items.filter(x => {
         if (m.area !== "knee" && m.area !== "ankle" && fx.noJumps && isJump(x.name)) return false;
+        if ((slot === "gymB" || slot === "bwU") && isJump(x.name)) return false; // 홉·점프 재활은 하체 날에만
         if (m.area !== "ankle" && m.area !== "knee" && fx.tierMax < 3 && /어프로치|블록 점프|점프 스파이크/.test(x.name)) return false;
         if (fx.noJumps && m.area !== "knee" && isJump(x.name)) return false;
         if (m.area !== "wrist" && fx.handstandMax < 1 && WRIST_RE.test(x.name)) return false;
@@ -699,6 +703,9 @@ const SLOT_FN = {
       plyo = plyo.filter(x => x.tier <= tierMax);
       if (!plyo.some(x => x.key === "stick")) plyo.push({ ...PLYO[1], sets: LIGHT(w) ? 2 : 3, reps: 5, mod: "고강도 대신" });
     }
+    if (c.kneeRehab) plyo = plyo.filter(x => !["latstick", "slhop", "lat"].includes(x.key));
+    // 발목 통증 약함: 재활 블록의 한 발 홉이 발목 쪽을 맡으니 팀 플라이오메트릭의 한 발 종목은 빼기 (겹침 방지)
+    if (c.mods.some(m => m.area === "ankle" && m.stage === 3)) plyo = plyo.filter(x => !["latstick", "slhop", "latb", "lat"].includes(x.key));
     if (fx.noJumps) { plyo = []; out.notes.push("통증 때문에 플라이오메트릭은 쉬어요"); }
     if (o.second) plyo = [];
     plyo.sort((a, b) => PLYO_ORDER.indexOf(a.key) - PLYO_ORDER.indexOf(b.key));
@@ -718,7 +725,8 @@ const SLOT_FN = {
       if (x.key === "jsq" && (o.second || novice || fx.noJumps || tierMax < 2 || fx.knee === 2 || fx.ankle === 2 || (rel != null && rel < 0.8))) return null;
       // 무릎 심함: 무릎 쓰는 근력은 빼고 재활 블록(등척성)으로 · 중간: 통증 5 이하 무게로
       if (fx.knee === 1 && ["squat", "bss", "stepup", "jsq"].includes(x.key)) return null;
-      if (fx.knee === 2 && ["squat", "bss", "stepup"].includes(x.key)) { rx += " · 통증 5 이하 무게로"; mod = "무릎 통증"; }
+      if (fx.knee === 2 && ["bss", "stepup"].includes(x.key)) return null; // 재활 블록의 무겁고 느린 근력이 대신
+      if (fx.knee === 2 && x.key === "squat") { rx = rx.replace(/^(\D*)([34])×/, (_, a, n) => `${a}${n - 1}×`) + " · 통증 5 이하 무게로"; mod = "무릎 통증"; }
       // 발목 심함(걸어도 아픔): 한 발로 서는 근력·카프레이즈 빼기
       if (fx.ankle === 1 && ["bss", "stepup", "calf"].includes(x.key)) return null;
       if (fx.ankle === 2 && x.key === "calf") { rx += " · 통증 5 이하"; mod = "발목 통증"; }
@@ -876,7 +884,7 @@ function bwPlan(c, w, o, out, h, upper) {
     let name = x.name, rx = (HEAVY(w) && x.rx2) ? x.rx2 : x.rx, cue = x.cue, mod = "";
     if (x.key === "hs") return hsItem(c, "8분");
     if (x.key === "walk") return walkItem(c);
-    if (x.key === "hollow" && c.noExt) return { name: "할로우 홀드 · 버드독", rx: "3×20초 · 2×8 (좌우)", cue: "허리 젖히는 동작 대신", mod: "허리" };
+    if (x.key === "hollow" && (c.noExt || (fx.back && fx.back <= 2))) return { name: "할로우 홀드 · 버드독", rx: "3×20초 · 2×8 (좌우)", cue: "허리 젖히는 동작 대신", mod: "허리" };
     if (upper && x.key === "pike" && fx.handstandMax < 1) return { name: "엎드려 Y·T·W · 밴드 외회전", rx: "각 2×10", mod: "손목 통증" };
     if (upper && x.key === "pike" && fx.noOverhead) return { name: "견갑 푸시업 · 엎드려 Y·T·W", rx: "각 2×10", mod: "어깨 통증" };
     if (upper && x.key === "pull" && fx.noOverhead) return { name: "인버티드 로우 (통증 없는 범위)", rx: two ? "2×8" : "3×8", cue: "견갑부터 당기기", mod: "어깨" };
@@ -885,9 +893,10 @@ function bwPlan(c, w, o, out, h, upper) {
     if (!upper && x.key === "side" && fx.noCph) return { name: "사이드 플랭크 (짧게)", rx: "2×20초 (좌우)", mod: "사타구니 재활" };
     if (!upper && ankleLow && ["ybal", "catch", "calf"].includes(x.key)) return null;
     if (!upper && x.key === "nordic" && (novice || o.noNordic || fx.noNordic)) return null;
-    if (two) rx = String(rx).replace(/^3×/, "2×");
+    if (two || (!upper && !o.offSeason)) rx = String(rx).replace(/^3×/, "2×"); // 시즌 중 맨몸 하체는 2세트 (정규 훈련·웨이트 A와 겹침)
     return { name, rx, cue, mod };
   }).filter(Boolean);
+  h.add({ key: "warm", title: "워밍업 5분", items: [{ name: "가볍게 조깅 · 동적 스트레칭", rx: "3분" }, upper ? { name: "어깨 밴드 · Y·T · 오픈북", rx: "2분" } : fx.ankle === 1 ? { name: "발목 알파벳 그리기", rx: "2분", mod: "발목 통증" } : { name: "한 발 서기 (좌우)", rx: "2분" }] });
   h.add({ key: "bw", title: upper ? "맨몸 상체·코어·핸드스탠드" : "맨몸 하체·발목·균형", items });
   if (!upper && w !== PH.TAPER) h.add(posBlock(c, "bwL"));
   if (upper && o.measure === "full") h.add({ key: "test", title: "코어·핸드스탠드 점검", note: "기록 탭에 입력", items: [
