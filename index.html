@@ -240,18 +240,18 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 .chips-t { gap: 4px; }
 .chip-t { padding: 4px 10px; font-size: 13px; }
 .chip-t[aria-pressed="true"] { background: var(--blue-soft); border-color: var(--blue); color: var(--blue); font-weight: 700; }
-.fields.well { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.fields.well { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .well-card details summary { cursor: pointer; margin: 4px 0; }
-.practice { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.practice li { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.practice .seg { display: flex; gap: 4px; flex-wrap: wrap; }
 .proto { margin: 6px 0; }
 .proto summary { cursor: pointer; color: var(--muted); }
 .proto dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; margin: 8px 0 0; font-size: 13px; }
 .proto dt { font-weight: 700; }
 .proto dd { margin: 0; color: var(--muted); }
-.media-edit { margin: 8px 0; flex-wrap: nowrap; }
-.media-edit input { flex: 1; min-width: 0; }
+.setlog { margin: 10px 0; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+.setlog-row { display: grid; grid-template-columns: 1fr 1fr 0.8fr auto; gap: 8px; align-items: end; }
+.setlog-row label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+.setlog-row input, .setlog-row select { width: 100%; min-width: 0; }
+.setlog p { margin: 6px 0 0; }
 .report .stats { margin-bottom: 8px; }
 body.noscroll { overflow: hidden; }
 .pain-rows { display: grid; gap: 4px; }
@@ -314,8 +314,8 @@ td .btn.link { white-space: nowrap; }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=18"></script>
-<script src="guide.js?v=18"></script>
-<script src="app.js?v=18"></script>
+<script src="program.js?v=19"></script>
+<script src="guide.js?v=19"></script>
+<script src="app.js?v=19"></script>
 </body>
 </html>

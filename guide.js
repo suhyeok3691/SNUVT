@@ -174,4 +174,146 @@ function exSeconds(rx) {
   if (min) return Number(min[1]) * 60;
   return 0;
 }
-if (typeof module !== "undefined") module.exports = { EX_GUIDE, exGuide, exSeconds };
+
+/* ---------- 운동 가이드 링크 ----------
+ * 플랜핏 운동 가이드(한국어)를 먼저 쓰고, 플랜핏에 없는 운동(배구 동작·재활·플라이오메트릭 일부)은
+ * 물리치료사 운동 라이브러리(The Prehab Guys), 배구 코칭(The Art of Coaching Volleyball) 등 영상·설명이 있는 페이지로.
+ * 위에서부터 처음 맞는 규칙을 쓴다 (구체적인 이름이 먼저). */
+const PF = s => "https://planfit.ai/ko/exercise/" + s;
+const PG = s => "https://theprehabguys.com/vimeo-video/" + s + "/";
+const AO = s => "https://www.theartofcoachingvolleyball.com/" + s + "/";
+const EX_LINKS = [
+  // 측정
+  [/^스탠딩 리치/, "https://www.topendsports.com/testing/tests/standing-reach.htm"],
+  [/^맥스 버티컬/, "https://jvavolleyball.org/3-methods-to-track-the-vertical-jump/"],
+  [/^버티컬/, "https://www.topendsports.com/testing/tests/vertjump.htm"],
+  [/^CMJ|CMJ 최대 노력/, PG("counter-movement-jump-in-place")],
+  [/^사이드 플랭크(?! · 코펜하겐)/, PF("side-plank")],
+  [/^풀 플랭크/, PF("full-plank")],
+  // 워밍업 · 정리
+  [/^조깅 · 셔플|^가볍게 조깅/, "https://theprehabguys.com/the-best-dynamic-warmup/"],
+  [/^회전 런지/, PF("lunge-twist")],
+  [/^다리 스윙/, PG("leg-swing-sagittal")],
+  [/^한 발 서기 → 한 발 홉/, PG("single-leg-pogos")],
+  [/^한 발 서기 \(좌우\)/, PF("bosu-ball-single-leg-stand")],
+  [/^스쿼트 착지 자세 연습/, PF("squat")],
+  [/^스쿼트 점프 착지 고정/, PF("jump-squat")],
+  [/^어깨 밴드/, PF("band-pull-apart")],
+  [/^가볍게 걷기 · 자전거/, PF("stationary-bike")],
+  [/^가동성 스트레칭/, PF("worlds-greatest-stretch")],
+  [/^벽 종아리 스트레칭/, PG("gastrocnemius-and-soleus-calf-stretching")],
+  [/^크로스바디 스트레치/, PF("cross-body-shoulder-stretch")],
+  // 플라이오메트릭
+  [/^포고 점프/, "https://www.garagestrength.com/blogs/news/pogo-jump"],
+  [/^스냅다운/, PG("snap-down")],
+  [/^옆으로 한 발 바운드/, PG("lateral-bound-2")],
+  [/^연속 옆 바운드/, PG("continuous-lateral-bound")],
+  [/^연속 제자리멀리뛰기/, PG("continuous-broad-jump-2")],
+  [/^연속 허들 점프/, "https://passport.world.rugby/conditioning-for-rugby/introduction-to-conditioning-youth/preparing-for-resistance-training/resistance-training/hurdle-hop/"],
+  [/^한 발 앞으로 홉/, PG("single-leg-hop")],
+  [/^드롭 점프/, PF("depth-jump")],
+  [/^5-10-5/, "https://www.physio-pedia.com/Pro-Agility_(5-10-5)_Test"],
+  [/^양발 → 한 발 홉/, PG("two-to-one-snap-down-hop-in-place")],
+  [/^라인 좌우 홉/, PG("side-hop-test")],
+  [/^한 발 착지 고정/, "https://theprehabguys.com/deceleration-control/"],
+  [/블록 점프|블로킹 풋워크|블록 스텝/, AO("two-step-blocking-footwork")],
+  [/^공격 어프로치|^어프로치 점프|^포지션별 점프/, AO("teaching-spiking-to-beginnersintermediates")],
+  [/^점프 토스|^세터 풋워크|^벽 오버 토스/, AO("setting-teaching-the-fundamentals-to-a-young-player")],
+  [/^리시브 풋워크/, AO("tods-tips-serve-receive-footwork-patterns")],
+  [/^신호 반응 스타트/, AO("simple-read-drill")],
+  [/^셔플 → 앞 다이빙/, AO("defensive-starting-posture-and-hand-positioning")],
+  [/^낮은 자세 사이드 셔플/, PG("lateral-cone-shuffle")],
+  // 하체 근력
+  [/^컨트라스트|^백스쿼트/, PF("barbell-squat")],
+  [/^고블릿 스쿼트/, PF("goblet-squat")],
+  [/^덤벨 루마니안 데드리프트/, PF("dumbbell-romanian-deadlift")],
+  [/^루마니안 데드리프트|^RDL/, PF("romanian-deadlift")],
+  [/^덤벨 한 발 루마니안/, PF("one-leg-dumbbell-deadlift")],
+  [/^불가리안 스플릿 스쿼트/, PF("dumbbell-bulgarian-split-squat")],
+  [/^덤벨 스텝업/, PF("dumbbell-step-up")],
+  [/^덤벨 점프 스쿼트/, PF("jump-dumbbell-squat")],
+  [/^행 파워 클린/, PF("barbell-hang-clean")],
+  [/^한 발 카프레이즈 \(덤벨\)/, PF("dumbbell-single-leg-calf-raise")],
+  [/^한 발 카프레이즈/, PF("single-leg-calf-raise")],
+  [/^양발 카프레이즈/, PF("calf-raise")],
+  [/^수건 대고 카프레이즈/, PG("high-load-plantar-fascia-strength-training")],
+  [/^햄스트링 컬/, PF("leg-curl")],
+  [/^노르딕/, PF("nordic-curl")],
+  [/^스플릿 스쿼트/, PF("split-squat")],
+  [/^옆 런지/, PF("side-lunge")],
+  [/^한 발 스쿼트/, PF("box-pistol-squat")],
+  [/^한 발 힙 브리지/, PF("one-leg-hip-thrust")],
+  [/^롱 레버 한 발 브리지/, PG("single-leg-hamstring-bridge")],
+  [/^글루트 브리지/, PF("hip-bridge")],
+  [/^바벨 힙 쓰러스트/, PF("barbell-hip-thrust")],
+  [/^레그 익스텐션/, PF("leg-extension")],
+  [/^벽 기대 앉기|^수비 자세 월싯/, PF("wall-sit")],
+  [/^스텝다운/, PG("lateral-step-down")],
+  [/^스페인 스쿼트/, PG("spanish-squat-isometrics")],
+  [/^밴드 사이드 스텝/, PF("band-lateral-walk")],
+  [/^옆으로 누워 다리 들기/, PF("hip-abduction")],
+  [/^내전근 공 쥐기/, PG("seated-hip-adduction-isometrics-2")],
+  [/^코펜하겐|^사이드 플랭크 · 코펜하겐/, PG("copenhagen-plank-on-knee")],
+  // 발목 · 발
+  [/^무릎 벽 대기/, PG("dorsiflexion-mobilization")],
+  [/^발목 알파벳/, PG("ankle-alphabet")],
+  [/^밴드 바깥쪽 밀기/, PG("seated-ankle-eversion-band-2")],
+  [/^한 발 균형|^한 발 서기 → 눈 감고/, PF("bosu-ball-single-leg-stand")],
+  [/^한 발 서서 공 받기/, PG("single-leg-balance-ball-toss-forward")],
+  [/^Y 밸런스/, PG("y-balance-exercise")],
+  [/^족저근막 스트레칭/, PG("seated-plantar-fascia-stretch")],
+  // 상체
+  [/^턱걸이/, PF("pull-up")],
+  [/^인버티드 로우/, PF("inverted-row")],
+  [/^덤벨 벤치프레스/, PF("dumbbell-bench-press")],
+  [/^한 팔 덤벨 로우/, PF("one-arm-dumbbell-row")],
+  [/^한 팔 랜드마인 프레스/, PF("one-arm-landmine-press")],
+  [/^파이크 푸시업/, PF("pike-push-up")],
+  [/^견갑 푸시업/, PF("pushup-plus")],
+  [/^플랭크 → 푸시업/, PF("plank-push-up")],
+  [/^박수 푸시업|^무릎 대고 플라이오 푸시업/, PG("plyometric-chest-exercises")],
+  [/^푸시업/, PF("push-up")],
+  [/^엎드려 Y·T·W/, PF("prone-y-raise")],
+  [/^옆으로 누워 덤벨 외회전/, PF("dumbell-external-rotation")],
+  [/^밴드 90\/90 빠른 외회전/, PG("shoulder-external-rotation-90-90-quick-band")],
+  [/^밴드 90\/90 외회전/, PG("shoulder-external-rotation-90-90-band")],
+  [/^밴드 외회전|^핸드스탠드 대신 견갑/, PF("band-shoulder-external-rotation")],
+  [/^벽 밀기 외회전/, PG("shoulder-external-rotation-isometrics")],
+  [/^견갑 모으고 내리기/, PG("scapula-retraction-band")],
+  [/^밴드 로우/, PF("band-row")],
+  [/^메디신볼 가슴 패스/, PG("medball-push-toss")],
+  [/^메디신볼 슬램/, PG("squat-medball-slam-in-front-2")],
+  [/^메디신볼 회전 던지기/, PG("medball-scoop-toss")],
+  [/^오픈북/, PG("open-book-single-knee-raised")],
+  [/^폼롤러 위 흉추/, PF("foam-roll-upper-back")],
+  // 코어 · 핸드스탠드
+  [/^휠배로 워크/, "https://fitbod.me/exercises/partner-wheelbarrow-walk"],
+  [/핸드스탠드/, PF("handstand")],
+  [/^데드버그/, PF("dead-bug")],
+  [/^할로우/, PF("hollow")],
+  [/^버드독/, PF("bird-dog")],
+  [/^맥길 컬업/, PG("curl-up-mcgill")],
+  [/^하프 닐링 엉덩이 굴곡근/, PF("crossover-kneeling-hip-flexor-stretch")],
+  // 손목 · 손가락 · 목
+  [/^덤벨 손목 펴기/, PF("reverse-dumbbell-wrist-curl")],
+  [/손목 굽히기·펴기/, PF("dumbbell-wrist-curl")],
+  [/^리스트 롤러/, PF("wrist-roller")],
+  [/^플레이트 핀치|^원판 꼬집어/, PG("carry-pinch-grip-weight-plate")],
+  [/핸드 그리퍼|테라퍼티/, PF("grip-machine")],
+  [/^손가락 힘줄 글라이딩/, PG("hand-tendon-glide")],
+  [/^손목 원 그리기/, PG("wrist-cars")],
+  [/^네발 자세에서 앞뒤로/, PG("quadruped-forward-weight-shift")],
+  [/^덤벨 돌리기/, PG("pronation-and-supination-elbow-bent-dumbbell")],
+  [/^엄지·새끼 방향 들기/, PG("wrist-radial-deviation-hammer")],
+  [/^목 등척성/, PG("neck-isometrics-anti-flexion")],
+];
+// 링크와 출처 이름
+function exLink(name) {
+  const n = String(name || "");
+  const hit = EX_LINKS.find(([re]) => re.test(n));
+  if (!hit) return null;
+  const url = hit[1];
+  const src = url.includes("planfit.ai") ? "플랜핏" : url.includes("prehabguys") ? "Prehab Guys" : url.includes("coachingvolleyball") ? "AOC Volleyball" : new URL(url).hostname.replace(/^www\./, "");
+  return { url, src };
+}
+if (typeof module !== "undefined") module.exports = { EX_GUIDE, exGuide, exSeconds, EX_LINKS, exLink };

@@ -331,3 +331,9 @@ alter table public.logs add constraint logs_pain_area_check
 --   health.custom jsonb {memo, skip[], swap[{from,to}]}
 --   tests: rsi, ktw_l, ktw_r, ir_d, ir_n, er_d, er_n, hop_l, hop_r
 --   logs.completion all|part|none
+
+-- migration: lift_sets_and_custom_guard (2026-10-23)
+--   lift_sets (player_id, date, name, lift squat|rdl|bench|hip|clean|null, kg, reps 1–20, rir 0–6) — 운동 창에서 세트마다 기록, 본인·관리자만
+--   예전 lifts 행은 lift_sets로 옮김 (lifts·practice·media 테이블은 더 이상 쓰지 않음)
+--   trigger health_custom_guard: health.custom(개인 조정)은 관리자만 바꿀 수 있음
+--   wellness: 4문항(수면·피로·근육통·기분·스트레스). 기분·스트레스 답은 mood와 stress에 같이 저장
