@@ -1044,7 +1044,7 @@ document.addEventListener("click", async ev => {
   const b = ev.target.closest("[data-act]");
   if (!b || b.tagName === "SELECT") return;
   const act = b.dataset.act;
-  if (act === "view") return go(b.dataset.v);
+  if (act === "view") { ev.preventDefault(); return go(b.dataset.v); }
   if (act === "addinj") { document.getElementById(b.dataset.prefix + "-inj").insertAdjacentHTML("beforeend", injRowHtml()); state.dirty = true; return; }
   if (act === "delinj") { b.closest(".inj-row").remove(); state.dirty = true; return; }
   if (act === "ex") return openSheet(b.dataset.n, b.dataset.r, b.dataset.c);

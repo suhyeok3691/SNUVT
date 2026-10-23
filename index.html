@@ -53,7 +53,10 @@ header.top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; b
 .brand h1 b, .auth-hero h2 b { color: var(--blue); font-weight: 400; }
 .brand .today { font-size: 13px; font-weight: 600; color: var(--muted); white-space: nowrap; }
 .right { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.dday { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.dday { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.dday:empty { display: none; }
+.when { display: inline-flex; align-items: center; gap: 8px; flex-wrap: nowrap; }
+.home-link { display: flex; align-items: center; gap: 8px 10px; color: inherit; text-decoration: none; min-width: 0; }
 .dday strong { font-family: var(--f-data); font-size: 14px; background: var(--yellow); color: var(--on-yellow); padding: 1px 8px; border-radius: 6px; font-variant-numeric: tabular-nums; }
 .who { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); min-width: 0; }
 .who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 160px; }
@@ -320,8 +323,8 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scrollbar-gutter:
 <header class="top">
   <div class="wrap">
     <div class="top-row">
-      <div class="brand"><img class="logo logo-light" src="logo.png?v=4" alt="" width="39" height="38"><img class="logo logo-dark" src="logo-white.png?v=4" alt="" width="39" height="38"><h1>SNUVT <b>Physical</b></h1><span class="today" id="today"></span></div>
-      <div class="right"><div class="dday" id="dday"></div><div class="who" id="who"></div></div>
+      <div class="brand"><a class="home-link" href="#home" data-act="view" data-v="home" aria-label="홈으로"><img class="logo logo-light" src="logo.png?v=4" alt="" width="39" height="38"><img class="logo logo-dark" src="logo-white.png?v=4" alt="" width="39" height="38"><h1>SNUVT <b>Physical</b></h1></a><span class="when"><span class="today" id="today"></span><span class="dday" id="dday"></span></span></div>
+      <div class="right"><div class="who" id="who"></div></div>
     </div>
     <nav class="tabs" id="tabs" aria-label="화면"></nav>
   </div>
@@ -331,8 +334,8 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scrollbar-gutter:
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=23"></script>
-<script src="guide.js?v=23"></script>
-<script src="app.js?v=23"></script>
+<script src="program.js?v=25"></script>
+<script src="guide.js?v=25"></script>
+<script src="app.js?v=25"></script>
 </body>
 </html>
