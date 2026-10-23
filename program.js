@@ -536,7 +536,7 @@ function measBlock(c, slot) {
 // 무게 추천: 추정 1RM(Epley + RIR)에서 처방 반복·RIR에 맞는 무게
 const LIFT_OF = { "백스쿼트": "squat", "루마니안 데드리프트 (바벨)": "rdl", "바벨 힙 쓰러스트": "hip", "덤벨 벤치프레스": "bench", "행 파워 클린": "clean" };
 const e1rmOf = (kg, reps, rir) => kg * (1 + (Number(reps) + Number(rir || 0)) / 30);
-// 운동마다 그 선수의 최근 8주 세트 기록(추정 1RM)으로 처방 반복·RIR에 맞는 무게. 주요 종목은 측정 5RM도 씀
+// 운동마다 그 선수의 최근 8주 세트 기록(추정 1RM)으로 처방 반복·RIR에 맞는 무게 (예전에 잰 5RM이 있으면 그것도 씀)
 function loadFor(c, name, rx, w) {
   const lift = LIFT_OF[name];
   const e = (lift && c.e1rm && c.e1rm[lift]) || (c.e1rmName && c.e1rmName[baseName(name)]);
@@ -549,11 +549,16 @@ function loadFor(c, name, rx, w) {
   return kg > 0 ? ` · 약 ${kg}kg` : "";
 }
 // 측정 안내: 통증·제한이 있으면 그 측정은 뺀다 (아픈 채로 잰 값은 비교가 안 되고 위험)
+// 측정은 꼭 필요한 것만: 점프(버티컬·맥스 버티컬) + 전체 측정 주에는 개인 처방에 쓰는 선별 검사(한 발 홉·무릎 벽 대기·어깨 회전)
+// 근력은 따로 재지 않고 훈련 세트 기록(추정 1RM)으로 · 리치는 처음 한 번
 function measureNote(c, type) {
-  const { fx } = c, tests = ["리치"], skip = [];
-  if (fx.noJumps || fx.tierMax < 2) skip.push("점프"); else { tests.push("버티컬", "CMJ"); if (fx.tierMax >= 3) tests.push("맥스 버티컬"); else skip.push("맥스 버티컬"); }
-  if (type === "full") { if ((fx.knee && fx.knee <= 2) || fx.goblet || fx.ankle === 1) skip.push("스쿼트 5RM"); else tests.push("스쿼트 5RM"); }
+  const { fx } = c, tests = [], skip = [];
+  const legPain = (fx.knee && fx.knee <= 2) || fx.ankle === 1;
+  if (!c.t || c.t.reach == null) tests.push("리치");
+  if (fx.noJumps || fx.tierMax < 2) skip.push("점프"); else { tests.push("버티컬"); if (fx.tierMax >= 3) tests.push("맥스 버티컬"); else skip.push("맥스 버티컬"); }
+  if (type === "full") { if (fx.noJumps || fx.tierMax < 2 || legPain) skip.push("한 발 홉"); else tests.push("한 발 홉"); tests.push("무릎 벽 대기", "어깨 회전"); }
   const head = type === "full" ? "측정 주 · 점검 측정" : "피크 주 · 점프 점검";
+  if (!tests.length) return `${head} · 점프 측정은 통증이 줄면, 훈련은 그대로`;
   return `${head} (${tests.join("·")}) → 기록 탭에 입력, 훈련은 그대로${skip.length ? ` · ${skip.join("·")} 측정은 통증이 줄면` : ""}`;
 }
 function hsItem(c, rx) {
@@ -867,7 +872,6 @@ const TRYOUT_TESTS = [
   { name: "스탠딩 리치", rx: "1회", cue: "한 손을 벽에 최대한 뻗어 닿는 높이" },
   { name: "버티컬 (제자리 점프 높이)", rx: "3회 중 최고", cue: "제자리 양손 점프 도달 높이 − 스탠딩 리치" },
   { name: "맥스 버티컬 (도움닫기 점프 높이)", rx: "3회 중 최고", cue: "실전 어프로치 한 손 도달 높이 − 스탠딩 리치" },
-  { name: "CMJ (팔 없이, 점프 앱)", rx: "3회 중 최고" },
   { name: "핸드스탠드 단계 · 버틴 시간 (5단계는 걸은 거리)", rx: "1회" },
   { name: "사이드 플랭크 좌·우 · 풀 플랭크 최대 버티기", rx: "각 1회" },
 ];
@@ -991,11 +995,12 @@ function measureWeeks(mon, evs) {
   if (_measureCache.has(key)) return _measureCache.get(key);
   const out = new Map();
   let last = null;
-  for (let m = weekPhase(mon, evs).reset; m <= mon; m = dAdd(m, 7)) {
+  const y = Number(mon.slice(0, 4)), ys = mondayOf(`${Number(mon.slice(5, 7)) >= 3 ? y : y - 1}-03-01`), rs = weekPhase(mon, evs).reset; // 1년(3월~) 전체에서 간격을 봄
+  for (let m = rs < ys ? rs : ys; m <= mon; m = dAdd(m, 7)) {
     const ph = weekPhase(m, evs);
     if (ph.off || ph.comp || ph.postMajor) continue;
-    if (ph.w === PH.INTRO && (ph.since === 0 || !last)) { out.set(m, "full"); last = m; }
-    else if (ph.w === PH.DELOAD && (!last || dDiff(m, last) >= 42) && ![1, 2, 3, 4].some(j => weekPhase(dAdd(m, 7 * j), evs).since === 0)) { out.set(m, "full"); last = m; } // 곧 시즌이 새로 시작하면 그때 잰다
+    if (ph.w === PH.INTRO && ph.since === 0 && (!last || dDiff(m, last) >= 84)) { out.set(m, "full"); last = m; } // 전체 측정은 12주에 한 번까지
+    else if (ph.w === PH.DELOAD && (!last || dDiff(m, last) >= 84) && ![1, 2, 3, 4].some(j => weekPhase(dAdd(m, 7 * j), evs).since === 0)) { out.set(m, "full"); last = m; } // 곧 시즌이 새로 시작하면 그때 잰다
     else if (ph.w === PH.PEAK) out.set(m, "jump");
   }
   if (_measureCache.size > 500) _measureCache.clear();

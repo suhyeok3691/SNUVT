@@ -83,6 +83,8 @@ const readInjuries = prefix => [...document.querySelectorAll(`#${prefix}-inj .in
   rtp: (() => { try { const v = JSON.parse(r.dataset.rtp || "{}"); return v && typeof v === "object" ? v : {}; } catch (e) { return {}; } })(),
 }));
 const injText = x => `${(INJ_SIDES.find(s => s[0] === x.side) || ["", ""])[1].replace("해당 없음", "")} ${x.part === "finger" && FINGERS[x.finger] ? FINGERS[x.finger] + " " : ""}${x.type} (${[x.year && x.month ? `${x.year}.${x.month}` : x.year, x.surgery ? "수술" : "", x.status && x.status !== "ok" ? (INJ_STATUS.find(v => v[0] === x.status) || ["", ""])[1] : ""].filter(Boolean).join(", ")})`.trim();
+// 학년: 숫자만 적으면 '학년'을 붙여 저장 (3 → 3학년)
+const normYear = v => { const t = String(v || "").trim(); return /^[1-9]$/.test(t) ? t + "학년" : /^[1-9]\s*학년$/.test(t) ? t.replace(/\s+/g, "") : t; };
 const confirmDel = msg => { try { return window.confirm(msg); } catch (e) { return false; } };
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
 const VIEWS = ["home", "plan", "rec", "season", "intake", "load"];
@@ -282,7 +284,7 @@ function viewHome() {
   if (state.admin && !me) parts.push(`<section class="panel row between"><div><h3>내 선수 정보가 아직 없어요</h3></div><button class="btn primary" type="button" data-act="editself">내 정보 입력</button></section>`);
   if (me) parts.push(wellnessHtml(me), todayHtml(me), rtpHtml(me), myStatusHtml(me));
   else if (!state.admin) parts.push(`<div class="panel empty"><strong>계정이 선수와 연결되지 않았어요</strong><span>관리자에게 연결을 요청해 주세요.</span></div>`);
-  parts.push(`<p class="foot">${me ? `<button class="btn link small" type="button" data-act="pushopen">알림</button> · ` : ""}<button class="btn link small" type="button" data-act="pwchange">비밀번호 바꾸기</button></p>`);
+  if (me) parts.push(`<p class="foot"><button class="btn link small" type="button" data-act="pushopen">알림</button></p>`);
   return parts.join("");
 }
 function wellnessHtml(p) {
@@ -605,16 +607,16 @@ function testsHtml(p) {
   const nf = (id, label, step = "0.5", max = 400) => `<label class="fl">${label}<input type="number" id="${id}" inputmode="decimal" step="${step}" min="0" max="${max}"></label>`;
   return `<section class="sec"><h3>측정</h3>
     ${r.length ? `${rel != null ? `<p class="small muted">상대 근력 <b>${rel.toFixed(2)}</b></p>` : ""}
-    <div class="tw"><table><thead><tr><th>날짜</th><th>버티컬</th><th>맥스 버티컬</th><th>스파이크 네트 위</th><th>CMJ</th><th>스쿼트</th><th>기타</th><th></th></tr></thead><tbody>
-    ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${vertOf(t) ?? "—"}</td><td class="num">${maxVertOf(t) ?? "—"}</td><td class="num">${sign(overNet(t, maxVertOf(t)))}</td><td class="num">${t.cmj ?? "—"}</td><td class="num">${t.squat ?? "—"}</td><td class="small">${esc(extraText(t)) || "—"}</td>
+    <div class="tw"><table><thead><tr><th>날짜</th><th>버티컬</th><th>맥스 버티컬</th><th>스파이크 네트 위</th><th>기타</th><th></th></tr></thead><tbody>
+    ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${vertOf(t) ?? "—"}</td><td class="num">${maxVertOf(t) ?? "—"}</td><td class="num">${sign(overNet(t, maxVertOf(t)))}</td><td class="small">${esc(extraText(t)) || "—"}</td>
       <td>${mine(t) ? `<button class="btn link danger" type="button" data-act="deltest" data-id="${esc(t.id)}">삭제</button>` : ""}</td></tr>`).join("")}
     </tbody></table></div>` : emptyLine("아직 측정이 없어요.")}
     ${mode && !state.admin ? `<details class="panel" data-keep="measure-form" open><summary><b>${mode === "jump" ? "점프 측정 입력" : "측정 입력"}</b></summary>
       <form class="f" id="measureForm" data-pid="${esc(p.id)}" data-mode="${mode}">
         <div class="fields">
           <label class="fl">날짜<input type="date" id="ms-date" value="${iso(today())}" required></label>
-          ${nf("ms-reach", "스탠딩 리치 (cm)")}${nf("ms-vert", "버티컬 (cm)", "0.5", 150)}${nf("ms-maxvert", "맥스 버티컬 (cm)", "0.5", 150)}${nf("ms-cmj", "CMJ (cm)", "0.1", 150)}${nf("ms-rsi", "RSI", "0.01", 5)}
-          ${mode === "full" ? `${nf("ms-squat", "스쿼트 5RM (kg)", "2.5")}${nf("ms-rdl", "RDL 5RM (kg)", "2.5")}${nf("ms-pull", "턱걸이 (회)", "1", 50)}${extraFields("ms")}` : ""}
+          ${latest(p.id) && latest(p.id).reach != null ? "" : nf("ms-reach", "스탠딩 리치 (cm)")}${nf("ms-vert", "버티컬 (cm)", "0.5", 150)}${nf("ms-maxvert", "맥스 버티컬 (cm)", "0.5", 150)}
+          ${mode === "full" ? extraFields("ms") : ""}
         </div>
         ${protocolHtml()}
         <div class="row"><button class="btn primary" type="submit">저장</button></div>
@@ -628,16 +630,13 @@ const EXTRA_COL = { rsi: "rsi", hopL: "hop_l", hopR: "hop_r", ktwL: "ktw_l", ktw
 const extraFields = pre => EXTRA_FIELDS.map(([k, l, st, mx]) => `<label class="fl">${l}<input type="number" id="${pre}-${k}" inputmode="decimal" step="${st}" min="0" max="${mx}"></label>`).join("");
 // 측정 방법 (매번 같은 방법으로 재야 비교가 돼요)
 const PROTOCOL = [
-  ["공통", "웨이트 A 전, 같은 시간대·같은 신발. 각 3번 해서 가장 좋은 값"],
-  ["스탠딩 리치", "벽 옆에 서서 발뒤꿈치 붙이고 한 손 끝까지"],
+  ["공통", "웨이트 A 전, 같은 시간대·같은 신발. 각 3번 해서 가장 좋은 값. 근력은 따로 재지 않고 세트 기록으로 계산"],
+  ["스탠딩 리치", "처음 한 번만. 벽 옆에 서서 발뒤꿈치 붙이고 한 손 끝까지"],
   ["버티컬", "제자리, 팔 스윙 허용, 손끝 도달 − 리치"],
   ["맥스 버티컬", "스파이크 도움닫기 3–4걸음, 손끝 도달 − 리치"],
-  ["CMJ", "손 허리, 반동 한 번 (점프 앱이나 매트)"],
-  ["RSI", "30cm 박스 드롭 점프, 체공 시간 ÷ 접지 시간 (앱)"],
   ["한 발 홉", "한 발로 멀리, 같은 발로 2초 착지 고정. 출발선 – 뒤꿈치"],
   ["무릎 벽 대기", "뒤꿈치 붙인 채 무릎이 벽에 닿는 가장 먼 발끝–벽 거리"],
   ["어깨 내·외회전", "누워서 팔 90° 벌리고 팔꿈치 90°, 어깨 앞을 눌러 고정, 각도기 앱"],
-  ["스쿼트·RDL 5RM", "워밍업 후 5회 가능한 최대 무게, 자세가 무너지면 그 전 무게"],
 ];
 const protocolHtml = () => `<details class="proto"><summary class="small">측정 방법</summary><dl>${PROTOCOL.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl></details>`;
 const readExtra = (pre, row) => { for (const [k, col] of Object.entries(EXTRA_COL)) { const el = document.getElementById(`${pre}-${k}`); if (el) row[col] = el.value === "" ? null : Number(el.value); } return row; };
@@ -772,10 +771,10 @@ function viewAuth() {
       <div><h3>${login ? "로그인" : "가입하기"}</h3><p class="small muted">${login ? "가입 → 내 정보 입력 → 관리자 승인 순서예요." : "가입하면 바로 내 정보 입력으로 넘어가요."}</p></div>
       <label class="fl">이메일<input type="email" id="au-email" autocomplete="email" required></label>
       <label class="fl">비밀번호 (6자 이상)<input type="password" id="au-pw" autocomplete="${login ? "current-password" : "new-password"}" minlength="6" required></label>
-      <div class="row"><button class="btn primary" type="submit">${login ? "로그인" : "가입하기"}</button>
-        <button class="btn link" type="button" data-act="authmode">${login ? "처음이면 가입하기" : "계정이 있으면 로그인"}</button></div>
-      ${login ? `<button class="btn link small" type="button" data-act="authmode" data-m="reset">비밀번호를 잊었어요</button>` : ""}
+      <div class="auth-actions"><button class="btn primary" type="submit">${login ? "로그인" : "가입하기"}</button>
+        ${login ? `<button class="btn link small" type="button" data-act="authmode" data-m="reset">비밀번호를 잊었어요</button>` : ""}</div>
       ${state.authMsg ? `<p class="msg ${state.authErr ? "err" : ""}">${esc(state.authMsg)}</p>` : ""}
+      <div class="auth-alt"><button class="btn" type="button" data-act="authmode">${login ? "처음이면 가입하기" : "계정이 있으면 로그인"}</button></div>
     </form>
   </section>`;
 }
@@ -909,23 +908,18 @@ function testFormHtml(pid) {
       <label class="fl">스탠딩 리치 (cm)<input type="number" id="tf-reach" inputmode="decimal" step="0.5"></label>
       <label class="fl">버티컬 (cm)<input type="number" id="tf-vert" inputmode="decimal" step="0.5" min="0" max="150"></label>
       <label class="fl">맥스 버티컬 (cm)<input type="number" id="tf-maxvert" inputmode="decimal" step="0.5" min="0" max="150"></label>
-      <label class="fl">CMJ (cm)<input type="number" id="tf-cmj" inputmode="decimal" step="0.1"></label>
-      <label class="fl">스쿼트 5RM (kg)<input type="number" id="tf-squat" inputmode="decimal" step="2.5"></label>
-      <label class="fl">RDL 5RM (kg)<input type="number" id="tf-rdl" inputmode="decimal" step="2.5"></label>
-      <label class="fl">턱걸이 (회)<input type="number" id="tf-pull" inputmode="numeric" min="0" max="50"></label>
       <label class="fl">사이드 플랭크 왼 (초)<input type="number" id="tf-sl" inputmode="numeric" min="0" max="600"></label>
       <label class="fl">사이드 플랭크 오른 (초)<input type="number" id="tf-sr" inputmode="numeric" min="0" max="600"></label>
       <label class="fl">풀 플랭크 (초)<input type="number" id="tf-pl" inputmode="numeric" min="0" max="900"></label>
       ${hsStageSelect("tf-hsStage")}
       <label class="fl">버틴 시간 (초)<input type="number" id="tf-hsSec" inputmode="numeric" min="0" max="120"></label>
       <label class="fl">워크 (m)<input type="number" id="tf-hsWalk" inputmode="decimal" min="0" max="100" step="0.5"></label>
-      <label class="fl">RSI<input type="number" id="tf-rsi" inputmode="decimal" step="0.01" min="0" max="5"></label>
       ${extraFields("tf")}
     </div>
     ${protocolHtml()}
     <div class="row"><button class="btn primary" type="submit">측정값 저장</button></div>
-    ${r.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>리치</th><th>버티컬</th><th>맥스 버티컬</th><th>CMJ</th><th>핸드스탠드</th><th>스쿼트</th><th>RDL</th><th>턱걸이</th><th>기타</th><th></th></tr></thead><tbody>
-    ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${t.reach ?? "—"}</td><td class="num">${vertOf(t) ?? "—"}</td><td class="num">${maxVertOf(t) ?? "—"}</td><td class="num">${t.cmj ?? "—"}</td><td>${hsText(t)}</td><td class="num">${t.squat ?? "—"}</td><td class="num">${t.rdl ?? "—"}</td><td class="num">${t.pull ?? "—"}</td><td class="small">${esc(extraText(t)) || "—"}</td>
+    ${r.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>리치</th><th>버티컬</th><th>맥스 버티컬</th><th>핸드스탠드</th><th>기타</th><th></th></tr></thead><tbody>
+    ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${t.reach ?? "—"}</td><td class="num">${vertOf(t) ?? "—"}</td><td class="num">${maxVertOf(t) ?? "—"}</td><td>${hsText(t)}</td><td class="small">${esc(extraText(t)) || "—"}</td>
     <td><button class="btn link danger" type="button" data-act="deltest" data-id="${esc(t.id)}">삭제</button></td></tr>`).join("")}
     </tbody></table></div>` : ""}
   </form>`;
@@ -983,7 +977,7 @@ async function exportXlsx(scope) {
     if (pr.error) throw pr.error;
     const name = Object.fromEntries((pr.data || []).map(p => [p.id, p.name])), pos = Object.fromEntries((pr.data || []).map(p => [p.id, p.pos]));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sortedPlayers().map(p => ({ 이름: p.name, 포지션: p.pos, 학번: p.year || "", "키(cm)": p.height ?? "", "체중(kg)": p.weight ?? "", "배구 경력(년)": p.exp ?? "" }))), "선수");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sortedPlayers().map(p => ({ 이름: p.name, 포지션: p.pos, 학년: p.year || "", "키(cm)": p.height ?? "", "체중(kg)": p.weight ?? "", "배구 경력(년)": p.exp ?? "" }))), "선수");
     for (const [tb, label] of XL_SHEETS) {
       const r = await sb.from(tb).select("*").gte("date", from).order("date");
       if (r.error) throw r.error;
@@ -1009,10 +1003,10 @@ async function exportXlsx(scope) {
 function teamReportHtml(ps) {
   const ch = (rows, n) => { const r = rows.find(x => x[0] === n); if (!r) return "—"; const v = Math.round((r[2] - r[1]) * 10) / 10; return `${r[2]} <small class="${v < 0 ? "neg" : ""}">${v > 0 ? "+" : ""}${v}</small>`; };
   return `<section class="sec"><h3>선수별 리포트 <span class="small muted">최근 4주</span></h3>
-    <div class="tw"><table><thead><tr><th>선수</th><th>컨디션</th><th>완료율</th><th>세션</th><th>맥스 버티컬</th><th>스쿼트 5RM</th><th>코어</th></tr></thead><tbody>
+    <div class="tw"><table><thead><tr><th>선수</th><th>컨디션</th><th>완료율</th><th>세션</th><th>맥스 버티컬</th><th>스쿼트 1RM</th><th>코어</th></tr></thead><tbody>
     ${ps.map(p => { const a = adherence(p.id), g = growthRows(p.id, p.weight);
       return `<tr><td>${esc(p.name)} <span class="chip pos">${esc(p.pos)}</span></td><td class="num ${a.well != null && a.well <= WELL_LOW ? "cell-warn" : ""}">${a.well ?? "—"}</td><td class="num">${a.done != null ? a.done + "%" : "—"}</td><td class="num">${a.logs}</td>
-        <td class="num">${ch(g, "맥스 버티컬")}</td><td class="num">${ch(g, "스쿼트 5RM")}</td><td class="num">${ch(g, "코어 합계")}</td></tr>`; }).join("")}
+        <td class="num">${ch(g, "맥스 버티컬")}</td><td class="num">${ch(g, `${LIFT_KO.squat} 추정 1RM`)}</td><td class="num">${ch(g, "코어 합계")}</td></tr>`; }).join("")}
     </tbody></table></div></section>`;
 }
 
@@ -1342,6 +1336,12 @@ document.addEventListener("click", async ev => {
   if (act === "cancelpw") { state.recovery = false; state.dirty = false; return render(); }
   if (act === "logout") { lsDel(snapKey()); await pushOff(true); await sb.auth.signOut(); return; }
   if (act === "pushopen") return openPush();
+  if (act === "theme") {
+    const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    r.dataset.theme = dark ? "light" : "dark";
+    try { localStorage.setItem("snuvt-theme", r.dataset.theme); } catch (e) { /* 저장 못 해도 이번엔 바뀜 */ }
+    return;
+  }
   if (act === "xlsx") return exportXlsx(b.dataset.s);
   if (act === "rtpdone") {
     const pid = b.dataset.pid, i = Number(b.dataset.i), inj = [...((state.health[pid] || {}).injuries || [])], x = inj[i]; if (!x) return;
@@ -1438,7 +1438,7 @@ document.addEventListener("submit", async ev => {
 
   if (f.id === "selfForm") {
     const info = {
-      name: txt("sf-name"), pos: document.getElementById("sf-pos").value, year: txt("sf-year"),
+      name: txt("sf-name"), pos: document.getElementById("sf-pos").value, year: normYear(txt("sf-year")),
       height: txt("sf-height"), weight: txt("sf-weight"), exp: txt("sf-exp"),
       weight_exp: document.getElementById("sf-wexp").value || null,
       ankle_l: txt("sf-al"), ankle_r: txt("sf-ar"), injuries: readInjuries("sf"),
@@ -1515,7 +1515,7 @@ document.addEventListener("submit", async ev => {
       };
       const prevPid = f.dataset.pid || null;
       const row = {
-        name, pos: document.getElementById("pf-pos").value, year: txt("pf-year") || null,
+        name, pos: document.getElementById("pf-pos").value, year: normYear(txt("pf-year")) || null,
         height: num("pf-height"), weight: num("pf-weight"), exp: num("pf-exp"),
         weight_exp: document.getElementById("pf-wexp").value, adjust,
         sort: prevPid ? ((state.players[prevPid] || {}).order ?? 99) : Object.keys(state.players).length + 1,
@@ -1534,9 +1534,8 @@ document.addEventListener("submit", async ev => {
       const st = document.getElementById("tf-hsStage").value;
       const row = {
         player_id: f.dataset.pid, date: txt("tf-date"),
-        reach: num("tf-reach"), cmj: num("tf-cmj"), vert: num("tf-vert"), max_vert: num("tf-maxvert"),
+        reach: num("tf-reach"), vert: num("tf-vert"), max_vert: num("tf-maxvert"),
         hs_stage: st ? Number(st) : null, hs_sec: num("tf-hsSec"), hs_walk: num("tf-hsWalk"),
-        squat: num("tf-squat"), rdl: num("tf-rdl"), pull: num("tf-pull"),
         side_l: num("tf-sl"), side_r: num("tf-sr"), plank: num("tf-pl"),
       };
       readExtra("tf", row);
@@ -1562,7 +1561,7 @@ document.addEventListener("submit", async ev => {
       toast((await dbWrite("tests", "insert", row)).queued ? "연결되면 저장돼요" : "저장했어요");
     } else if (f.id === "measureForm") {
       const g = id => document.getElementById(id) ? num(id) : null;
-      const row = { player_id: f.dataset.pid, date: txt("ms-date"), reach: g("ms-reach"), vert: g("ms-vert"), max_vert: g("ms-maxvert"), cmj: g("ms-cmj"), squat: g("ms-squat"), rdl: g("ms-rdl"), pull: g("ms-pull") };
+      const row = { player_id: f.dataset.pid, date: txt("ms-date"), reach: g("ms-reach"), vert: g("ms-vert"), max_vert: g("ms-maxvert") };
       readExtra("ms", row);
       if (!Object.entries(row).some(([k, v]) => !["player_id", "date"].includes(k) && v != null)) { toast("값을 하나 이상 입력해 주세요."); return; }
       toast((await dbWrite("tests", "insert", row)).queued ? "연결되면 저장돼요" : "측정을 저장했어요");
@@ -1801,7 +1800,7 @@ async function openPush() {
   const on = !!row, ck = (id, v, l) => `<label class="check"><input type="checkbox" id="${id}" ${v ? "checked" : ""}> ${l}</label>`;
   body.innerHTML = `<div class="row between"><h3>알림</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     ${msg ? `<p class="small">${esc(msg)}</p>` : `
-    <div class="fields">${ck("pu-m", on ? row.morning : true, "아침 8시 · 컨디션 (안 넣었을 때만)")}${ck("pu-e", on ? row.evening : true, "밤 10시 · 운동 기록 (운동 있는 날, 기록 없을 때만)")}</div>
+    <div class="checks">${ck("pu-m", on ? row.morning : true, "아침 8시 · 컨디션 (안 넣었을 때만)")}${ck("pu-e", on ? row.evening : true, "밤 10시 · 운동 기록 (안 남겼을 때만)")}</div>
     <div class="row"><button class="btn primary" type="button" data-act="pushon">${on ? "저장" : "알림 켜기"}</button>${on ? `<button class="btn" type="button" data-act="pushoff">끄기</button>` : ""}</div>
     <p class="small muted">${on ? "이 기기에서 알림을 받고 있어요." : "기기마다 따로 켜요."}</p>`}`;
   el.hidden = false; document.body.classList.add("noscroll");
