@@ -61,7 +61,7 @@ function injRowHtml(x = {}) {
   const part = x.part || "shoulder", y = new Date().getFullYear();
   const years = Array.from({ length: 11 }, (_, i) => String(y - i)).concat(["그 전"]);
   const o = (v, cur, l) => `<option value="${esc(v)}" ${String(cur) === String(v) ? "selected" : ""}>${esc(l)}</option>`;
-  return `<div class="inj-row">
+  return `<div class="inj-row" data-rtp="${esc(JSON.stringify(x.rtp || {}))}">
     <select class="inj-side" aria-label="방향">${INJ_SIDES.map(([v, l]) => o(v, x.side || "R", l)).join("")}</select>
     <select class="inj-part" aria-label="부위">${INJ_PARTS.map(([v, l]) => o(v, part, l)).join("")}</select>
     <select class="inj-type" aria-label="부상">${injTypes(part).map(t => o(t, x.type, t)).join("")}</select>
@@ -80,6 +80,7 @@ const readInjuries = prefix => [...document.querySelectorAll(`#${prefix}-inj .in
   year: r.querySelector(".inj-year").value, month: Number(r.querySelector(".inj-month").value) || null, surgery: r.querySelector(".inj-surg").checked,
   status: r.querySelector(".inj-status").value, grade: r.querySelector(".inj-grade").value || null,
   finger: r.querySelector(".inj-part").value === "finger" ? (r.querySelector(".inj-finger").value || null) : null,
+  rtp: (() => { try { const v = JSON.parse(r.dataset.rtp || "{}"); return v && typeof v === "object" ? v : {}; } catch (e) { return {}; } })(),
 }));
 const injText = x => `${(INJ_SIDES.find(s => s[0] === x.side) || ["", ""])[1].replace("해당 없음", "")} ${x.part === "finger" && FINGERS[x.finger] ? FINGERS[x.finger] + " " : ""}${x.type} (${[x.year && x.month ? `${x.year}.${x.month}` : x.year, x.surgery ? "수술" : "", x.status && x.status !== "ok" ? (INJ_STATUS.find(v => v[0] === x.status) || ["", ""])[1] : ""].filter(Boolean).join(", ")})`.trim();
 const confirmDel = msg => { try { return window.confirm(msg); } catch (e) { return false; } };
@@ -279,7 +280,7 @@ function viewHome() {
   const parts = [];
   if (state.admin) parts.push(teamStatusHtml(), weekSummaryHtml());
   if (state.admin && !me) parts.push(`<section class="panel row between"><div><h3>내 선수 정보가 아직 없어요</h3></div><button class="btn primary" type="button" data-act="editself">내 정보 입력</button></section>`);
-  if (me) parts.push(wellnessHtml(me), todayHtml(me), myStatusHtml(me));
+  if (me) parts.push(wellnessHtml(me), todayHtml(me), rtpHtml(me), myStatusHtml(me));
   else if (!state.admin) parts.push(`<div class="panel empty"><strong>계정이 선수와 연결되지 않았어요</strong><span>관리자에게 연결을 요청해 주세요.</span></div>`);
   parts.push(`<p class="foot">${me ? `<button class="btn link small" type="button" data-act="pushopen">알림</button> · ` : ""}<button class="btn link small" type="button" data-act="pwchange">비밀번호 바꾸기</button></p>`);
   return parts.join("");
@@ -327,6 +328,63 @@ function todayHtml(p) {
       <span class="row nowrap">${runBtn(p, t, plan, true)}<button class="btn ${canEditSelf(p) && hasRun(plan) ? "" : "primary"}" type="button" data-act="openday" data-m="${mon}" data-d="${d}">전체 프로그램 보기</button></span>
     </div>
   </section>`;
+}
+/* ---------- 복귀 체크 (다 나음 전) ----------
+ * 자동: 통증 체크(최근 2주 2회 이상, 운동 중·다음 날 아침 2 이하, 쉴 때 통증 없음) · 한 발 홉 좌우 90%↑ (하체)
+ *       · 어깨 외회전 좌우 90%↑ (어깨·팔꿈치) · 무릎 수술·십자인대 9개월↑
+ * 관리자 체크: 의료진 허락 · 배구 동작 · 팀 훈련 부분 참여 → 모두 되면 관리자가 '다 나음'으로 */
+const RTP_AREA = { knee: "knee", shoulder: "shoulder", elbow: "shoulder", ankle: "ankle", calf: "ankle", foot: "ankle", back: "back", wrist: "wrist", finger: "finger" };
+const RTP_LOWER = ["hip", "thigh", "knee", "calf", "ankle", "foot"];
+const RTP_FUNC = { lower: "한 발 스쿼트·착지·방향 전환 통증 없이", upper: "스파이크·서브 단계적으로 통증 없이", back: "점프 착지·스파이크 동작 통증 없이", hand: "토스·블로킹 통증 없이 (테이핑 가능)", head: "단계별 복귀 (가벼운 운동 → 비접촉 → 전체) 증상 없이", other: "배구 동작 통증 없이" };
+function rtpItems(p, x) {
+  const t = iso(today()), from = dAdd(t, -14), items = [];
+  const since = x.year && /^\d+$/.test(String(x.year)) ? `${x.year}-${pad(x.month || 1)}-01` : "0000";
+  items.push({ k: "med", l: "의료진·재활 담당 복귀 허락", ok: !!(x.rtp || {}).med, manual: true });
+  const area = RTP_AREA[x.part];
+  if (x.part !== "head") {
+    if (area) {
+      const cs = checksOf(p.id).filter(c => c.area === area && c.date >= from);
+      const good = cs.length >= 2 && cs.every(c => (Number(c.during) || 0) <= 2 && (Number(c.morning) || 0) <= 2 && !c.rest);
+      items.push({ k: "pain", l: "통증 체크 2주 · 운동 중·아침 2 이하", ok: good, v: cs.length ? `${cs.length}회` : "체크 없음" });
+    } else items.push({ k: "pain", l: "운동 중·다음 날 아침 통증 2 이하", ok: !!(x.rtp || {}).pain, manual: true });
+  }
+  if (RTP_LOWER.includes(x.part)) {
+    const r = runs(p.id).filter(z => z.hopL != null && z.hopR != null && z.date >= since).at(-1);
+    let lsi = null;
+    if (r) { const L = Number(r.hopL), R = Number(r.hopR); lsi = x.side === "L" ? L / R : x.side === "R" ? R / L : Math.min(L, R) / Math.max(L, R); lsi = Math.round(100 * lsi); }
+    items.push({ k: "hop", l: "한 발 홉 거리 좌우 90% 이상", ok: lsi != null && lsi >= 90, v: lsi != null ? `${lsi}%` : "측정 없음" });
+  }
+  if (x.part === "shoulder" || x.part === "elbow") {
+    const r = runs(p.id).filter(z => z.erD != null && z.erN != null && z.date >= since).at(-1);
+    const v = r ? Math.round(100 * Math.min(r.erD, r.erN) / Math.max(r.erD, r.erN)) : null;
+    items.push({ k: "er", l: "어깨 외회전 근력 좌우 90% 이상", ok: v != null && v >= 90, v: v != null ? `${v}%` : "측정 없음" });
+  }
+  if (x.part === "knee" && (x.surgery || /십자인대/.test(x.type || "")) && /^\d+$/.test(String(x.year))) {
+    const m = (today().getFullYear() - Number(x.year)) * 12 + (today().getMonth() + 1) - (x.month || 12);
+    items.push({ k: "time", l: "수술·다친 지 9개월 이상", ok: m >= 9, v: `${Math.max(0, m)}개월` });
+  }
+  const g = RTP_LOWER.includes(x.part) ? "lower" : ["shoulder", "elbow"].includes(x.part) ? "upper" : x.part === "back" ? "back" : ["wrist", "finger"].includes(x.part) ? "hand" : x.part === "head" ? "head" : "other";
+  items.push({ k: "func", l: RTP_FUNC[g], ok: !!(x.rtp || {}).func, manual: true });
+  items.push({ k: "team", l: "팀 훈련 부분 참여 1주 · 통증 없이", ok: !!(x.rtp || {}).team, manual: true });
+  return items;
+}
+function rtpHtml(p) {
+  const inj = ((state.health[p.id] || {}).injuries || []).map((x, i) => [x, i]).filter(([x]) => x.status && x.status !== "ok");
+  if (!inj.length || !(state.admin || isMe(p))) return "";
+  const adm = state.admin;
+  return `<section class="panel rtp"><h3>복귀 체크</h3>${inj.map(([x, i]) => {
+    const it = rtpItems(p, x), n = it.filter(y => y.ok).length;
+    return `<div class="rtp-inj"><div class="row between"><strong>${esc(injText(x))}</strong><span class="chip ${n === it.length ? "ok" : ""}">${n}/${it.length}</span></div>
+      <ul class="rtp-list">${it.map(y => `<li class="${y.ok ? "ok" : ""}">${adm && y.manual
+        ? `<label class="check"><input type="checkbox" data-rtp="${esc(p.id)}|${i}|${y.k}" ${y.ok ? "checked" : ""}> ${esc(y.l)}</label>`
+        : `<span class="mk">${y.ok ? "✓" : "○"}</span> ${esc(y.l)}`}${y.v ? ` <span class="small muted">${esc(y.v)}</span>` : ""}</li>`).join("")}</ul>
+      ${adm ? `<button class="btn ${n === it.length ? "primary" : ""}" type="button" data-act="rtpdone" data-pid="${esc(p.id)}" data-i="${i}">다 나음으로</button>` : ""}</div>`;
+  }).join("")}${adm ? "" : `<p class="small muted">✓는 기록·측정으로 채워지고, 나머지는 관리자가 확인해요.</p>`}</section>`;
+}
+async function rtpSave(pid, injuries, msg) {
+  const r = await sb.from("health").update({ injuries }).eq("player_id", pid);
+  if (r.error) { toast("저장하지 못했어요"); return false; }
+  state.health[pid] = { ...(state.health[pid] || {}), injuries }; toast(msg); render(); return true;
 }
 function myStatusHtml(p) {
   const t = latest(p.id);
@@ -465,7 +523,7 @@ function viewPlan() {
 </div>
     ${notes.length ? `<ul class="notes callout">${notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
     ${picksHtml(plan, pid, date)}${scopedBlocks(plan)}
-  </section>`;
+  </section>${state.admin ? rtpHtml(p) : ""}`;
 }
 // 팀 세션(다 같이) / 개인(포지션 · 재활 · 예방)으로 나눠 보여 주기
 // 비시즌은 '자율', 쉬는 날·대회 날은 나누지 않음
@@ -1237,6 +1295,13 @@ document.addEventListener("click", async ev => {
   if (act === "cancelpw") { state.recovery = false; state.dirty = false; return render(); }
   if (act === "logout") { lsDel(snapKey()); await pushOff(true); await sb.auth.signOut(); return; }
   if (act === "pushopen") return openPush();
+  if (act === "rtpdone") {
+    const pid = b.dataset.pid, i = Number(b.dataset.i), inj = [...((state.health[pid] || {}).injuries || [])], x = inj[i]; if (!x) return;
+    const p = playerOf(pid), all = rtpItems(p, x).every(y => y.ok);
+    if (!all && !confirmDel("아직 안 된 항목이 있어요. 그래도 다 나음으로 바꿀까요?")) return;
+    inj[i] = { ...x, status: "ok", rtp: { ...(x.rtp || {}), done: iso(today()) } };
+    return rtpSave(pid, inj, "다 나음으로 바꿨어요");
+  }
   if (act === "pushon") return pushOn();
   if (act === "pushoff") return pushOff();
   if (act === "mode") return setMode(!state.admin);
@@ -1280,6 +1345,13 @@ document.addEventListener("change", ev => {
     const row = ev.target.closest(".inj-row"), t = row.querySelector(".inj-type");
     t.innerHTML = injTypes(ev.target.value).map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
     row.querySelector(".inj-finger").hidden = ev.target.value !== "finger";
+    return;
+  }
+  if (ev.target.dataset && ev.target.dataset.rtp) {
+    const [pid, i, k] = ev.target.dataset.rtp.split("|"), inj = [...((state.health[pid] || {}).injuries || [])], x = inj[Number(i)];
+    if (!x || !state.admin) return;
+    inj[Number(i)] = { ...x, rtp: { ...(x.rtp || {}), [k]: ev.target.checked } };
+    rtpSave(pid, inj, ev.target.checked ? "확인했어요" : "체크를 풀었어요");
     return;
   }
   if (ev.target.id === "pp-select") { state.pid = ev.target.value; state.dirty = false; render(); return; }

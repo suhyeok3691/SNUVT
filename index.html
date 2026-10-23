@@ -169,6 +169,16 @@ small.neg { color: var(--crit) !important; }
 .team-status { display: grid; gap: 10px; }
 .team-status .btn.link { justify-self: start; }
 .wk-sum { display: grid; gap: 8px; }
+.rtp { display: grid; gap: 12px; }
+.rtp-inj { display: grid; gap: 6px; }
+.rtp-inj + .rtp-inj { border-top: 1px solid var(--line); padding-top: 10px; }
+.rtp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+.rtp-list .mk { display: inline-block; width: 13px; margin: 0 3px; text-align: center; color: var(--muted); }
+.rtp-list .check { gap: 6px; font-size: 14px; }
+.rtp-list .check input { margin: 0 3px; }
+.rtp-list li.ok .mk { color: var(--good); font-weight: 700; }
+.chip.ok { color: var(--good); border-color: var(--good); }
+.rtp .btn { justify-self: start; }
 .wk-sum table td, .wk-sum table th { white-space: nowrap; }
 .wk-sum .btn.link { font-weight: 700; color: var(--ink); padding: 0; }
 .row.wrap { flex-wrap: wrap; gap: 6px; }
@@ -356,8 +366,8 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scrollbar-gutter:
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=31"></script>
-<script src="guide.js?v=31"></script>
-<script src="app.js?v=31"></script>
+<script src="program.js?v=32"></script>
+<script src="guide.js?v=32"></script>
+<script src="app.js?v=32"></script>
 </body>
 </html>
