@@ -135,7 +135,8 @@ tr.past td { opacity: 0.55; }
 .pick b { font-size: 15px; }
 .pick span { font-size: 12.5px; color: var(--muted); }
 .pick em { font-style: normal; font-size: 12px; font-weight: 700; color: var(--blue); }
-.pick.rec { border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
+.pick.rec { border-color: var(--blue); }
+.pick[aria-pressed="true"] { background: var(--blue-soft); border-color: var(--blue); box-shadow: inset 0 0 0 1px var(--blue); }
 .pick:disabled { cursor: default; }
 .eyebrow { font-size: 12.5px; font-weight: 600; color: var(--muted); }
 .today-card .sub { font-size: 12.5px; font-weight: 700; color: var(--muted); margin-top: 4px; }
@@ -330,8 +331,8 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scrollbar-gutter:
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=21"></script>
-<script src="guide.js?v=21"></script>
-<script src="app.js?v=21"></script>
+<script src="program.js?v=22"></script>
+<script src="guide.js?v=22"></script>
+<script src="app.js?v=22"></script>
 </body>
 </html>

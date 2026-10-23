@@ -288,10 +288,10 @@ function wellnessHtml(p) {
 function picksHtml(plan, pid, date) {
   if (!plan.choices) return "";
   const can = pid && canEditSelf(playerOf(pid));
-  return `<div class="picks">${plan.choices.map(c => `<button type="button" class="pick${c.rec ? " rec" : ""}" ${can ? `data-act="pick" data-pid="${esc(pid)}" data-date="${esc(date)}" data-k="${c.key}"` : "disabled"}>
+  return `<div class="picks">${plan.choices.map(c => `<button type="button" class="pick${c.rec ? " rec" : ""}" aria-pressed="${!!c.sel}" ${can ? `data-act="pick" data-pid="${esc(pid)}" data-date="${esc(date)}" data-k="${c.key}"` : "disabled"}>
     <b>${esc(c.label)}</b><span>${esc(c.desc)}</span>${c.rec ? `<em>추천${c.why ? " · " + esc(c.why) : ""}</em>` : ""}</button>`).join("")}</div>`;
 }
-const unpickHtml = (plan, p, date) => plan.picked && canEditSelf(p) ? `<button class="btn link" type="button" data-act="unpick" data-pid="${esc(p.id)}" data-date="${esc(date)}">다른 걸로 바꾸기</button>` : "";
+const unpickHtml = () => "";
 function todayHtml(p) {
   const t = iso(today()), mon = thisMon(), d = dowMon(today());
   const done = new Set(logsOf(p.id).map(e => e.date));
@@ -304,7 +304,7 @@ function todayHtml(p) {
     <p class="eyebrow">오늘 · ${longDate(today())} · ${esc(weekLabel(mon))}</p>
     <h2>${esc(plan.title)}</h2>
     ${picksHtml(plan, p.id, t)}${unpickHtml(plan, p, t)}
-    ${!plan.choices && items.length ? `<ul class="mini">${items.map(x => `<li><span>${esc(x.name)}</span><b>${esc(rxMain(x.rx))}</b></li>`).join("")}</ul>` : ""}
+    ${(!plan.choices || plan.picked) && items.length ? `<ul class="mini">${items.map(x => `<li><span>${esc(x.name)}</span><b>${esc(rxMain(x.rx))}</b></li>`).join("")}</ul>` : ""}
     <div class="row between">
       <span class="small muted">${[plan.landings ? `착지 약 ${plan.landings}회` : "", mine.length ? `개인 ${mine.map(b => b.title.replace(/ \(.*\)$/, "")).join(" · ")}` : ""].filter(Boolean).join(" · ")}</span>
       <button class="btn primary" type="button" data-act="openday" data-m="${mon}" data-d="${d}">전체 프로그램 보기</button>
@@ -415,7 +415,7 @@ function viewPlan() {
     <div><h3 class="day-title">${longDate(parseD(date))} · ${esc(plan.title)}</h3>
       ${plan.landings ? `<p class="small muted">착지 약 ${plan.landings}회</p>` : ""}</div>
     ${notes.length ? `<ul class="notes callout">${notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
-    ${plan.choices ? picksHtml(plan, pid, date) : `${unpickHtml(plan, p, date)}${scopedBlocks(plan)}`}
+    ${plan.choices ? picksHtml(plan, pid, date) : ""}${plan.choices && !plan.picked ? "" : scopedBlocks(plan)}
   </section>`;
 }
 // 팀 세션(다 같이) / 개인(포지션 · 재활 · 예방)으로 나눠 보여 주기
@@ -461,7 +461,7 @@ function viewRec() {
   ${reportHtml(p)}`;
 }
 function logHtml(p) {
-  const canLog = state.admin || (state.role === "player" && p.id === state.myPid);
+  const canLog = canEditSelf(p);
   const tplan = planOn(p, iso(today())), defType = tplan.logType;
   const entries = logsOf(p.id).slice().sort((a, b) => String(b.date).localeCompare(String(a.date))).slice(0, 10);
   return `<section class="sec"><h3>세션 기록</h3>
@@ -485,7 +485,7 @@ function logHtml(p) {
 }
 function measureMode(p) {
   if (state.admin) return "full";
-  if (!(state.role === "player" && p.id === state.myPid)) return null;
+  if (!isMe(p)) return null;
   const info = infoOn(iso(today()));
   if (!runs(p.id).some(isMainTest)) return "full";        // 아직 측정이 없으면 언제든 첫 측정
   if (info.slot === "tryout") return "full";
@@ -587,7 +587,9 @@ function reportHtml(p) {
   </section>`;
 }
 const bal = v => v === true ? "○" : v === false ? "×" : "—";
-function canEditSelf(p) { return state.admin || (state.role === "player" && p.id === state.myPid); }
+// 본인 기록: 선수 계정, 그리고 관리자가 '선수 화면'으로 볼 때의 자기 선수
+const isMe = p => !!p && !!state.myPid && p.id === state.myPid && (state.role === "player" || state.coach);
+function canEditSelf(p) { return state.admin || isMe(p); }
 function painCheckForm(p, where) {
   if (!canEditSelf(p)) return "";
   const key = "pain-" + where, open = where === "rec" || modsFor(p).length > 0;
@@ -862,7 +864,7 @@ function viewSeason() {
   <div class="cols">
     <div class="col"><section class="sec"><h3>대회·일정</h3>
       ${list.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>이름</th><th>종류</th>${state.admin ? "<th></th>" : ""}</tr></thead><tbody>
-      ${list.map(e => `<tr class="${e.end < t ? "past" : ""}"><td class="num">${range(e)}</td><td><b>${esc(e.name)}</b>${e.auto ? ' <span class="small muted">자동</span>' : ""}${e.note ? `<br><span class="small muted">${esc(e.note)}</span>` : ""}</td><td><span class="chip ${e.kind === "major" ? "warn" : ""}">${esc(EVENT_KINDS[e.kind] || e.kind)}</span></td>
+      ${list.map(e => `<tr class="${e.end < t ? "past" : ""}"><td class="num">${range(e)}</td><td><b>${esc(e.name)}</b>${e.note ? `<br><span class="small muted">${esc(e.note)}</span>` : ""}</td><td><span class="chip ${e.kind === "major" ? "warn" : ""}">${esc(EVENT_KINDS[e.kind] || e.kind)}</span></td>
         ${state.admin ? `<td>${e.id ? `<button class="btn link danger" type="button" data-act="delevent" data-id="${esc(e.id)}">삭제</button>` : ""}</td>` : ""}</tr>`).join("")}
       </tbody></table></div>` : emptyLine("등록된 일정이 없어요.")}
       ${state.admin ? `<form class="f panel" id="eventForm">

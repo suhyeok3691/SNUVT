@@ -1108,16 +1108,17 @@ const TRAIN_SLOTS = ["gymA", "gymB", "bwU", "bwL"];
  * 고르기 전엔 선택지와 추천(컨디션·대회 주 → 회복, 상대 근력 1.0 미만 → 하체, 핸드스탠드 2단계 이하·코어 약함 → 코어)을 보여 주고,
  * 앞뒤 날과 같은 종류는 추천하지 않는다 (예: 다음 날 웨이트 B면 상체 근력 추천 안 함). */
 const PICKS = {
-  lower: { label: "하체 근력", desc: "스쿼트·RDL 등, 플라이오메트릭 없이", slot: "gymA" },
-  upper: { label: "상체 근력", desc: "힙 쓰러스트·턱걸이·벤치 등", slot: "gymB" },
-  core: { label: "코어·핸드스탠드", desc: "맨몸 상체·코어", slot: "bwU" },
-  recover: { label: "회복·가동성", desc: "가볍게 유산소 + 스트레칭", slot: "recover" },
+  lower: { label: "하체", desc: "웨이트 A · 플라이오메트릭 + 하체 근력", slot: "gymA" },
+  upper: { label: "상체", desc: "웨이트 B · 상체·엉덩이·코어", slot: "gymB" },
+  core: { label: "맨몸", desc: "맨몸 상체·핸드스탠드 또는 맨몸 하체", slot: "bw" },
+  recover: { label: "회복", desc: "가볍게 유산소 + 스트레칭", slot: "recover" },
 };
-// 어깨·손목이 아프면 '코어·핸드스탠드' 대신 '코어' (그날 맨몸 상체가 핸드스탠드를 빼서 나옴)
-const pickLabel = (c, key) => key === "core" && (c.fx.noOverhead || c.fx.handstandMax < 1) ? { label: "코어", desc: "맨몸 상체·코어 (핸드스탠드 빼고)" } : { label: PICKS[key].label, desc: PICKS[key].desc };
+// 맨몸은 앞뒤 날과 겹치지 않는 쪽 (전날·다음 날이 맨몸 상체면 맨몸 하체)
+const bwSlotFor = info => (info.near || []).includes("bwU") ? "bwL" : "bwU";
+const pickLabel = (c, key) => ({ label: PICKS[key].label, desc: PICKS[key].desc });
 function pickOptions(ctx, info) {
   const c = prepCtx(ctx), near = info.near || [], rel = c.rel;
-  const ok = { lower: !near.includes("gymA") && !(c.fx.knee && c.fx.knee <= 2) && c.fx.ankle !== 1, upper: !near.includes("gymB"), core: !near.includes("bwU"), recover: true };
+  const ok = { lower: !near.includes("gymA") && !(c.fx.knee && c.fx.knee <= 2) && c.fx.ankle !== 1, upper: !near.includes("gymB"), core: !(near.includes("bwU") && near.includes("bwL")), recover: true };
   const low = ctx.ready ? readiness(ctx.ready.well, ctx.ready.lastRpe) : [];
   const t = c.t || {}, core = [t.sideL, t.sideR, t.plank].every(v => v != null) ? Number(t.sideL) + Number(t.sideR) + Number(t.plank) : null;
   const cand = [];
@@ -1128,7 +1129,7 @@ function pickOptions(ctx, info) {
   if (core != null && core < 240) cand.push(["core", `코어 ${core}초`]);
   cand.push(["upper", ""], ["lower", ""], ["core", ""], ["recover", ""]);
   const [rec, why] = c.team ? [null, ""] : cand.find(([k]) => ok[k]);
-  return Object.entries(PICKS).map(([key, v]) => ({ key, ...pickLabel(c, key), rec: key === rec, why: key === rec ? why : "", ok: ok[key] }));
+  return Object.entries(PICKS).map(([key, v]) => ({ key, ...pickLabel(c, key), rec: key === rec, why: key === rec ? why : "", ok: ok[key], sel: ctx.pick === key }));
 }
 function planForDay(ctx, info) {
   let i = info;
@@ -1142,7 +1143,7 @@ function planForDay(ctx, info) {
       out.season = info;
       return out;
     }
-    i = { ...i, slot: pk.slot, second: ctx.pick === "lower", measure: false, picked: ctx.pick };
+    i = { ...i, slot: pk.slot === "bw" ? bwSlotFor(i) : pk.slot, measure: false, picked: ctx.pick };
   }
   const rel = relOf(ctx);
   // 개인 단계: 웨이트 입문이거나 상대 근력 0.8 미만이면 근력·파워 대신 기초 근력, 피크 대신 회복 주 (기초가 먼저)
@@ -1171,7 +1172,7 @@ function planForDay(ctx, info) {
     out.blocks = out.blocks.filter(b => b.items.length);
   }
   if (cu.memo) out.notes.unshift(`관리자 메모 · ${cu.memo}`);
-  if (i.picked) { out.title = `정규 훈련 없음 · ${pickLabel(prepCtx(ctx), i.picked).label}` + (i.lowReady ? " · 회복 버전" : ""); out.picked = i.picked; }
+  if (i.picked) { out.title = `정규 훈련 없음 · ${out.title}`; out.picked = i.picked; out.choices = pickOptions(ctx, info); }
   out.season = info;
   return out;
 }
