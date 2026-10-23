@@ -296,8 +296,8 @@ function painStage(v) {
 const REHAB = {
   shoulder: { label: "어깨", pain: ["쉬거나 밤에도 아프고 팔이 끝까지 안 올라감", "공격·서브할 때나 다음 날 꽤 아픔", "세게 때린 뒤 살짝 불편", "안 아픔 · 공격 복귀 중"], stages: [
     { title: "통증·가동성", items: [
-      { name: "견갑 모으고 내리기 (등척)", rx: "10초 × 10" },
       { name: "벽 밀기 외회전 (등척)", rx: "10초 × 5", cue: "통증 없는 힘으로" },
+      { name: "견갑 모으고 내리기 (등척)", rx: "10초 × 10" },
       { name: "오픈북 흉추 회전", rx: "좌우 8회 × 2" }],
       next: "팔을 머리 위로 들어도 안 아픔" },
     { title: "근력", items: [
@@ -319,13 +319,13 @@ const REHAB = {
   ankle: { label: "발목", pain: ["걸어도 아프고 부어 있음", "뛸 때나 다음 날 아침 꽤 아픔", "점프·방향 전환 뒤 살짝 불편", "안 아픔 · 복귀 중"], stages: [
     { title: "가동성", items: [
       { name: "무릎 벽 대기 (발끝-벽 거리 늘리기)", rx: "2×10" },
-      { name: "발목 알파벳 그리기", rx: "2회" },
-      { name: "양발 카프레이즈", rx: "2×15" }],
+      { name: "양발 카프레이즈", rx: "2×15" },
+      { name: "발목 알파벳 그리기", rx: "2회" }],
       next: "걸어도 안 아프고 한 발 10초 서기" },
     { title: "근력·균형", items: [
       { name: "밴드 바깥쪽 밀기 (외번)", rx: "3×15" },
-      { name: "한 발 카프레이즈", rx: "3×12" },
       { name: "한 발 서기 → 눈 감고 → 쿠션 위", rx: "30초 × 3" },
+      { name: "한 발 카프레이즈", rx: "3×12" },
       { name: "한 발 서서 공 받기", rx: "2×10" }],
       next: "눈 감고 한 발 30초" },
     { title: "착지·홉", items: [
@@ -393,8 +393,8 @@ const REHAB = {
       next: "일상 통증 2 이하" },
     { title: "몸통 버티기", items: [
       { name: "데드버그 · 할로우 홀드", rx: "2×8 · 3×20초" },
-      { name: "글루트 브리지 → 힙 쓰러스트", rx: "3×10" },
-      { name: "버드독", rx: "2×8 (좌우)" }],
+      { name: "버드독", rx: "2×8 (좌우)" },
+      { name: "글루트 브리지 → 힙 쓰러스트", rx: "3×10" }],
       next: "운동 중 통증 3 이하" },
     { title: "하중 복귀", items: [{ name: "RDL 가볍게 → 평소 무게, 고블릿 → 백스쿼트", rx: "주마다 단계적으로" }],
       next: "무게를 올려도 다음 날 괜찮음" },
@@ -545,6 +545,7 @@ function measureNote(c, type) {
 }
 function hsItem(c, rx) {
   const max = c.fx.handstandMax;
+  if (c.fx.noOverhead && c.mods.some(m => m.area === "shoulder")) return null; // 어깨 재활 블록이 대신
   if (c.fx.noOverhead || max < 1) return { name: "핸드스탠드 대신 견갑·외회전 운동", rx, cue: "통증 없는 범위에서", mod: c.fx.noOverhead ? "어깨" : "손목" };
   if (c.team) return { name: "핸드스탠드 단계 연습", rx, cue: "각자 단계대로 (1 파이크 홀드 → 5 핸드스탠드 워크)" };
   const s = Math.min(max, c.hsStage);
@@ -596,11 +597,13 @@ function slotPlan(ctx, slot, w, o = {}) {
     if (i === 5 && (fx.noJumps || fx.tierMax < 3)) return [];
     return [x];
   }) });
-  const rehabBlock = (title, filter) => {
+  const rehabBlock = (title, filter, cap = REHAB_CAP) => {
     const items = [];
-    for (const m of mods) {
+    for (const m of [...mods].sort((a, b) => a.stage - b.stage)) {
       if (filter && !filter(m)) continue;
       const def = REHAB[m.area], s = def.stages[m.stage - 1];
+      const room = Math.min(cap.per, cap.total - items.length);
+      if (room <= 0) break;
       items.push(...s.items.filter(x => {
         if (m.area !== "knee" && m.area !== "ankle" && fx.noJumps && isJump(x.name)) return false;
         if (m.area !== "ankle" && m.area !== "knee" && fx.tierMax < 3 && /어프로치|블록 점프|점프 스파이크/.test(x.name)) return false;
@@ -612,7 +615,7 @@ function slotPlan(ctx, slot, w, o = {}) {
       }).map(x => {
         if (m.area === "back" && fx.knee && fx.knee <= 2 && /백스쿼트/.test(x.name)) return { ...x, name: "RDL 가볍게 → 평소 무게 (스쿼트는 무릎 통증이 줄면)", mod: mods.length > 1 ? def.label : "" };
         return { ...x, mod: mods.length > 1 ? def.label : "" };
-      }));
+      }).slice(0, room));
     }
     return items.length ? { key: "rehab", scope: "me", title, items, note: "진단 전 기본 관리예요. 의료진 지시가 있으면 그게 우선 · 쉴 때도 아프거나 7점 이상이면 진료부터." } : null;
   };
@@ -621,7 +624,64 @@ function slotPlan(ctx, slot, w, o = {}) {
   if (!["rest", "match", "recover", "prep"].includes(slot)) out.notes.push(...injuryNotes(c));
   if (o.optional && out.title && !/^(자율|자유|회복|휴식)/.test(out.title)) out.title = "자율 · " + out.title;
   dedupe(out);
+  if (!c.team && TRIM[slot]) { capAddons(out, slot); trimTeam(out, slot); }
   return out;
+}
+// 재활 블록 크기: 부위마다 꼭 필요한 것만 (단계 항목의 앞쪽부터)
+const REHAB_CAP = { per: 2, total: 4 }, REHAB_CAP_LIGHT = { per: 1, total: 2 };
+/* 개인 운동(재활·부상 예방·측정 보완)이 붙으면 그만큼 그 선수의 팀 세션을 줄인다.
+ * 개인 운동 1개 ≈ 3분, 3개(약 10분)까지는 그대로. 넘는 시간만큼
+ *  1) 보조 운동을 덜 중요한 것부터 빼고 (1개 ≈ 6분, 최대 3개)
+ *  2) 그래도 넘으면 주요 운동이 아닌 3–4세트 운동을 1세트씩 줄인다 (1세트 ≈ 2분).
+ * 플라이오메트릭·주요 근력 운동(스쿼트·RDL·힙 쓰러스트·턱걸이·벤치·클린)은 건드리지 않는다. */
+const TRIM = {
+  gymA: [/^햄스트링 컬/, /^덤벨 스텝업/, /^한 발 카프레이즈 \(덤벨\)/],
+  gymB: [/^덤벨 한 발 루마니안/, /^한 팔 덤벨 로우/, /^엎드려 Y·T·W 들기/],
+  bwU: [/^가동성 스트레칭/, /^할로우/, /^파이크 푸시업/],
+  bwL: [/^옆 런지/, /^한 발 서서 공 받기/, /^Y 밸런스/],
+};
+const MAIN_LIFT = /백스쿼트|고블릿 스쿼트|루마니안 데드리프트|바벨 힙 쓰러스트|^턱걸이|인버티드 로우|덤벨 벤치프레스|행 파워 클린|노르딕|핸드스탠드|푸시업/;
+const TEAM_KEYS = ["str", "thu2", "core", "bw"], ADDON_KEYS = ["rehab", "prev", "meas"];
+// 하루 개인 운동 상한: 재활(지금 아픈 곳)은 그대로 두고, 넘치면 측정 보완의 '1세트 더' →
+// 부상 이력 예방 중 부위마다 첫 번째가 아닌 것 → 측정 보완 두 번째부터 → 나머지 예방 → 나머지 측정 보완 순으로 뺀다
+const ADDON_MAX = { gymA: 6, gymB: 6, bwU: 4, bwL: 4 };
+function capAddons(out, slot) {
+  const blk = k => out.blocks.find(b => b.key === k);
+  const count = () => ADDON_KEYS.reduce((a, k) => a + ((blk(k) || {}).items || []).length, 0);
+  const drop = (k, pick) => { const b = blk(k); if (!b) return false; const i = pick(b.items); if (i < 0) return false; b.items.splice(i, 1); return true; };
+  const lastIdx = (arr, f) => { for (let i = arr.length - 1; i >= 0; i--) if (f(arr[i], i)) return i; return -1; };
+  const steps = [
+    () => drop("meas", it => lastIdx(it, x => /1세트 더/.test(x.name))),
+    () => drop("prev", it => lastIdx(it, (x, i) => it.findIndex(y => y.mod === x.mod) !== i)),
+    () => drop("meas", it => it.length > 1 ? it.length - 1 : -1),
+    () => drop("prev", it => it.length - 1),
+    () => drop("meas", it => it.length - 1),
+  ];
+  for (const step of steps) while (count() > ADDON_MAX[slot] && step()) {}
+  out.blocks = out.blocks.filter(b => b.items.length || b.key === "team");
+}
+function trimTeam(out, slot) {
+  const addOn = out.blocks.filter(b => ADDON_KEYS.includes(b.key)).reduce((a, b) => a + b.items.length, 0);
+  let over = addOn * 3 - 9;
+  if (over <= 0) return;
+  const cut = [], less = [];
+  for (const re of TRIM[slot]) {
+    if (over <= 0 || cut.length >= 3) break;
+    for (const b of out.blocks.filter(b => TEAM_KEYS.includes(b.key))) {
+      const i = b.items.findIndex(x => re.test(x.name));
+      if (i >= 0) { cut.push(baseName(b.items[i].name)); b.items.splice(i, 1); over -= 6; break; }
+    }
+  }
+  for (const b of out.blocks.filter(b => TEAM_KEYS.includes(b.key))) for (const x of b.items) {
+    if (over <= 0) break;
+    const m = String(x.rx).match(/^([34])×/);
+    if (!m || MAIN_LIFT.test(x.name)) continue;
+    x.rx = String(x.rx).replace(/^[34]×/, `${Number(m[1]) - 1}×`);
+    x.mod = x.mod ? x.mod + " · −1세트" : "−1세트";
+    less.push(baseName(x.name)); over -= 2;
+  }
+  out.blocks = out.blocks.filter(b => b.items.length || b.key === "team");
+  if (cut.length || less.length) out.notes.push(`개인 운동 시간만큼 팀 세션 줄임${cut.length ? ` · 빼기: ${cut.join(", ")}` : ""}${less.length ? ` · 1세트 줄이기: ${less.join(", ")}` : ""}`);
 }
 
 const SLOT_FN = {
@@ -751,7 +811,7 @@ const SLOT_FN = {
     items.push({ name: "어깨 밴드 운동", rx: "워밍업 5번 순서" });
     out.landings = land;
     h.add({ key: "act", title: "활성화", items });
-    h.add(h.rehabBlock("재활 운동 (가볍게)"));
+    h.add(h.rehabBlock("재활 운동 (가볍게)", null, REHAB_CAP_LIGHT));
   },
   // ---- 정규 훈련
   team(c, w, o, out, h) {
@@ -775,7 +835,7 @@ const SLOT_FN = {
     items.push({ name: "물·탄수화물 간식", rx: "미리 챙기기" });
     h.add({ key: "prep", title: "오늘", items });
     out.notes.push("일찍 자기.");
-    h.add(h.rehabBlock("재활 운동 (가볍게)", m => m.stage <= 2));
+    h.add(h.rehabBlock("재활 운동 (가볍게)", m => m.stage <= 2, REHAB_CAP_LIGHT));
   },
   // ---- 대회
   match(c, w, o, out, h) {
@@ -798,7 +858,7 @@ const SLOT_FN = {
       { name: "가볍게 걷기 · 자전거 (유산소)", rx: "20분", cue: "대화할 수 있는 강도" },
       { name: "가동성 스트레칭", rx: "10분" },
       { name: "통증 체크", rx: "아픈 곳 있으면" }] });
-    h.add(h.rehabBlock("재활 운동", m => m.stage <= 2));
+    h.add(h.rehabBlock("재활 운동", m => m.stage <= 2, REHAB_CAP_LIGHT));
   },
   // ---- 트라이아웃 (측정)
   tryout(c, w, o, out, h) {
