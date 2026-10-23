@@ -281,6 +281,7 @@ function viewHome() {
   if (state.admin && !me) parts.push(`<section class="panel row between"><div><h3>내 선수 정보가 아직 없어요</h3></div><button class="btn primary" type="button" data-act="editself">내 정보 입력</button></section>`);
   if (me) parts.push(wellnessHtml(me), todayHtml(me), myStatusHtml(me));
   else if (!state.admin) parts.push(`<div class="panel empty"><strong>계정이 선수와 연결되지 않았어요</strong><span>관리자에게 연결을 요청해 주세요.</span></div>`);
+  parts.push(`<p class="foot"><button class="btn link small" type="button" data-act="pwchange">비밀번호 바꾸기</button></p>`);
   return parts.join("");
 }
 function wellnessHtml(p) {
@@ -302,6 +303,14 @@ function picksHtml(plan, pid, date) {
   const can = pid && canEditSelf(playerOf(pid));
   return `<div class="picks" role="group" aria-label="오늘 할 것">${plan.choices.map(c => `<button type="button" class="pick${c.rec ? " rec" : ""}" aria-pressed="${!!c.sel}" ${can ? `data-act="pick" data-pid="${esc(pid)}" data-date="${esc(date)}" data-k="${c.key}" data-rec="${c.rec ? 1 : 0}"` : "disabled"}>${esc(c.label)}${c.rec ? "<em>권고</em>" : ""}</button>`).join("")}</div>`;
 }
+const hasRun = plan => ["gymA", "gymB", "bwU", "bwL", "act", "recover"].includes(plan.slot);
+function runBtn(p, date, plan, inline) {
+  if (!p || !canEditSelf(p) || !hasRun(plan)) return "";
+  const saved = state.run || lsGet(RUN_KEY());
+  const resume = saved && saved.pid === p.id && saved.date === date;
+  const btn = `<button class="btn primary" type="button" data-act="${resume ? "runresume" : "runstart"}" data-pid="${esc(p.id)}" data-date="${esc(date)}">${resume ? "이어서 하기" : "운동 시작"}</button>`;
+  return inline ? btn : `<div class="row runrow">${btn}</div>`;
+}
 function todayHtml(p) {
   const t = iso(today()), mon = thisMon(), d = dowMon(today());
   const plan = planOn(p, t);
@@ -315,7 +324,7 @@ function todayHtml(p) {
     ${items.length ? `<ul class="mini">${items.map(x => `<li><span>${esc(x.name)}</span><b>${esc(rxMain(x.rx))}</b></li>`).join("")}</ul>` : ""}
     <div class="row between">
       <span class="small muted">${mine.length ? `개인 ${mine.map(b => b.title.replace(/ \(.*\)$/, "")).join(" · ")}` : ""}</span>
-      <button class="btn primary" type="button" data-act="openday" data-m="${mon}" data-d="${d}">전체 프로그램 보기</button>
+      <span class="row nowrap">${runBtn(p, t, plan, true)}<button class="btn ${canEditSelf(p) && hasRun(plan) ? "" : "primary"}" type="button" data-act="openday" data-m="${mon}" data-d="${d}">전체 프로그램 보기</button></span>
     </div>
   </section>`;
 }
@@ -419,6 +428,7 @@ function viewPlan() {
     ${daysHtml(mon, d, x => planOn(p, x))}
   </section>
   <section class="sec">
+    ${runBtn(p, date, plan)}
     <div><h3 class="day-title">${longDate(parseD(date))} · ${esc(plan.title)}</h3>
 </div>
     ${notes.length ? `<ul class="notes callout">${notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
@@ -653,6 +663,14 @@ const hsStageSelect = id => `<label class="fl">핸드스탠드 단계<select id=
 /* ---------- 로그인 · 승인 대기 · 가입 정보 ---------- */
 function viewAuth() {
   const login = state.authMode === "login";
+  if (state.authMode === "reset") return `<section class="auth">
+    <form class="f panel" id="resetForm">
+      <div><h3>비밀번호 찾기</h3><p class="small muted">가입한 이메일로 새 비밀번호를 정하는 링크를 보내요.</p></div>
+      <label class="fl">이메일<input type="email" id="rs-email" autocomplete="email" required></label>
+      <div class="row"><button class="btn primary" type="submit">링크 보내기</button>
+        <button class="btn link" type="button" data-act="authmode" data-m="login">로그인으로</button></div>
+      ${state.authMsg ? `<p class="msg ${state.authErr ? "err" : ""}">${esc(state.authMsg)}</p>` : ""}
+    </form></section>`;
   return `<section class="auth">
     <div class="auth-hero">
       <img class="logo logo-light" src="logo.png?v=4" alt="서울대학교 배구부 엠블럼" width="130" height="128">
@@ -666,9 +684,19 @@ function viewAuth() {
       <label class="fl">비밀번호 (6자 이상)<input type="password" id="au-pw" autocomplete="${login ? "current-password" : "new-password"}" minlength="6" required></label>
       <div class="row"><button class="btn primary" type="submit">${login ? "로그인" : "가입하기"}</button>
         <button class="btn link" type="button" data-act="authmode">${login ? "처음이면 가입하기" : "계정이 있으면 로그인"}</button></div>
+      ${login ? `<button class="btn link small" type="button" data-act="authmode" data-m="reset">비밀번호를 잊었어요</button>` : ""}
       ${state.authMsg ? `<p class="msg ${state.authErr ? "err" : ""}">${esc(state.authMsg)}</p>` : ""}
     </form>
   </section>`;
+}
+// 새 비밀번호 (메일 링크로 들어왔을 때 · 로그인한 채 바꿀 때)
+function viewNewPw() {
+  return `<section class="auth"><form class="f panel" id="newPwForm">
+    <div><h3>새 비밀번호</h3></div>
+    <label class="fl">새 비밀번호 (6자 이상)<input type="password" id="np-1" autocomplete="new-password" minlength="6" required></label>
+    <label class="fl">한 번 더<input type="password" id="np-2" autocomplete="new-password" minlength="6" required></label>
+    <div class="row"><button class="btn primary" type="submit">바꾸기</button><button class="btn link" type="button" data-act="cancelpw">취소</button></div>
+  </form></section>`;
 }
 function viewPending() {
   if (!state.myPid || state.editingSelf) return viewSelfReg();
@@ -984,6 +1012,74 @@ function openSheet(name, rx, cue) {
   timer.def = sec;
   timerSet(sec);
 }
+async function saveSetFrom(f) {
+  const btn = f.querySelector('button[type="submit"]'); btn.disabled = true;
+  const row = { player_id: f.dataset.pid, date: f.dataset.date, name: f.dataset.name, lift: liftKey(f.dataset.name), kg: num("ls-kg"), reps: num("ls-reps"), rir: Number(document.getElementById("ls-rir").value) };
+  try {
+    const w = await dbWrite("lift_sets", "insert", row);
+    (state.lifts[row.player_id] = state.lifts[row.player_id] || []).push({ ...row, id: w.queued ? "q" : undefined, author: state.session.user.id });
+    const todays = liftsOf(row.player_id).filter(l => l.name === row.name && l.date === row.date);
+    document.getElementById("ls-done").textContent = `${dayWord(row.date)} ${todays.map(l => `${l.kg}×${l.reps}`).join(", ")}`;
+    toast(`${row.kg}kg × ${row.reps} 저장`);
+  } catch (e) { toast(failMsg(e)); }
+  finally { btn.disabled = false; }
+}
+/* ---------- 운동 따라가기 ----------
+ * 그날 프로그램을 운동 하나씩: 세트를 누르면 다음 세트까지 휴식 타이머가 자동으로 돌고, 무게도 그 자리에서 기록.
+ * 끝나면 RPE와 완료율(한 세트 수 ÷ 처방 세트 수)·시간을 채워 세션 기록으로 저장. 중간에 닫아도 이어서 할 수 있음 (이 기기). */
+const setsOf = rx => {
+  const r = String(rx || "");
+  const t = r.match(/(\d+)\s*(?:초|분)\s*×\s*(\d+)/); if (t) return Math.min(6, +t[2]);
+  const a = r.match(/(\d+)\s*×/); if (a) return Math.min(6, +a[1]);
+  const b = r.match(/(\d+)\s*세트/); if (b) return Math.min(6, +b[1]);
+  return 1;
+};
+const restOf = (x, blk) => { const m = String(x.cue || "").match(/세트 간\s*(\d+)\s*(분|초)/); return m ? +m[1] * (m[2] === "분" ? 60 : 1) : ["str", "thu2"].includes(blk) ? 90 : 60; };
+const RUN_KEY = () => "snuvt-run-" + uid();
+function startRun(pid, date) {
+  const plan = planOn(playerOf(pid), date);
+  const steps = plan.blocks.flatMap(b => b.items.filter(x => !/^(통증 체크|세션 RPE 기록|정규 훈련|휴식)/.test(x.name)).map(x => ({ name: x.name, rx: x.rx ?? "", cue: x.cue || "", mod: x.mod || "", blk: b.key, title: b.title, sets: setsOf(x.rx) })));
+  if (!steps.length) { toast("오늘은 따라갈 운동이 없어요"); return; }
+  state.run = { pid, date, steps, i: 0, done: {}, start: Date.now(), logType: plan.logType, minutes: plan.minutes, title: plan.title };
+  lsSet(RUN_KEY(), state.run);
+  openRun();
+}
+function openRun() {
+  const r = state.run; if (!r) return;
+  state.planCtx = { pid: r.pid, date: r.date };
+  const el = document.getElementById("sheet"), body = el.querySelector(".sheet-body");
+  if (r.i >= r.steps.length) { body.innerHTML = runFinishHtml(); el.hidden = false; document.body.classList.add("noscroll"); return; }
+  const x = r.steps[r.i], done = r.done[r.i] || 0, steps = exGuide(x.name) || [], link = exLink(x.name), work = exSeconds(x.rx);
+  body.innerHTML = `<div class="run">
+    <div class="row between"><span class="small muted">${esc(x.title)} · ${r.i + 1}/${r.steps.length}</span><button class="btn link" type="button" data-act="runclose">닫기</button></div>
+    <div class="runbar"><span style="width:${Math.round(100 * r.i / r.steps.length)}%"></span></div>
+    <h3>${esc(x.name)}${x.mod ? ` <span class="mod">${esc(x.mod)}</span>` : ""}</h3>
+    ${x.rx ? `<p class="sheet-rx">${esc(fmtRx(x.rx))}</p>` : ""}
+    ${steps.length ? `<details class="run-how"><summary class="small">하는 법</summary><ol class="sheet-steps">${steps.map(t => `<li>${esc(t)}</li>`).join("")}</ol>${x.cue ? `<p class="small muted">${esc(x.cue)}</p>` : ""}</details>` : x.cue ? `<p class="small muted">${esc(x.cue)}</p>` : ""}
+    ${link ? `<p><a class="exlink" href="${esc(link.url)}" target="_blank" rel="noopener noreferrer">운동 가이드 · ${esc(link.src)} ↗</a></p>` : ""}
+    <div class="setdots">${Array.from({ length: x.sets }, (_, k) => `<span class="${k < done ? "on" : ""}">${k + 1}</span>`).join("")}</div>
+    <div class="row center"><button class="btn primary big" type="button" data-act="runset" ${done >= x.sets ? "disabled" : ""}>${done >= x.sets ? "다 했어요" : `${done + 1}세트 완료`}</button></div>
+    ${setLogHtml(x.name, x.rx)}
+    <div class="timer"><div class="t-time" id="t-time">0:00</div><div class="small muted" id="t-mode"></div>
+      <div class="row center"><button class="btn" type="button" id="t-go" data-act="tgo">시작</button><button class="btn" type="button" data-act="treset">다시</button></div>
+      <div class="row center chips-t">${[-30, -15, 15, 30].map(v => `<button class="btn chip-t" type="button" data-act="tadd" data-s="${v}">${v > 0 ? "+" : "−"}${Math.abs(v)}초</button>`).join("")}</div></div>
+    <div class="row between runnav"><button class="btn" type="button" data-act="runprev" ${r.i ? "" : "disabled"}>이전</button><button class="btn primary" type="button" data-act="runnext">${r.i + 1 < r.steps.length ? "다음 운동" : "마치기"}</button></div></div>`;
+  el.hidden = false; document.body.classList.add("noscroll");
+  const sec = work || restOf(x, x.blk);
+  timer.label = work ? "운동 시간" : "세트 사이 휴식"; timer.def = sec; timerSet(sec);
+}
+function runFinishHtml() {
+  const r = state.run, total = r.steps.reduce((a, x) => a + x.sets, 0), did = r.steps.reduce((a, x, i) => a + Math.min(x.sets, r.done[i] || 0), 0);
+  const pct = total ? did / total : 0, comp = pct >= 0.9 ? "all" : pct >= 0.3 ? "part" : "none";
+  const mins = Math.max(1, Math.min(400, Math.round((Date.now() - r.start) / 60000)));
+  return `<div class="row between"><h3>${esc(r.title)} 끝</h3><button class="btn link" type="button" data-act="runclose">닫기</button></div>
+    <p class="small muted">${did}/${total}세트 · ${mins}분</p>
+    <form class="f" id="runForm"><div class="fields">
+      <label class="fl">힘든 정도 (RPE)<select id="rn-rpe">${RPE.map((l, i) => `<option value="${i}" ${i === 6 ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label class="fl">완료율<select id="rn-done">${[["all", "100%"], ["part", "50%"], ["none", "0%"]].map(([v, l]) => `<option value="${v}" ${v === comp ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label class="fl">시간 (분)<input type="number" id="rn-min" inputmode="numeric" min="1" max="400" value="${mins < 10 ? r.minutes : mins}"></label>
+    </div><div class="row"><button class="btn primary" type="submit">세션 기록 저장</button><button class="btn link" type="button" data-act="runback">운동으로 돌아가기</button></div></form>`;
+}
 function closeSheet() { clearInterval(timer.h); timer.running = false; document.getElementById("sheet").hidden = true; document.body.classList.remove("noscroll"); }
 document.addEventListener("keydown", ev => {
   if (ev.key === "Escape") closeSheet();
@@ -1010,13 +1106,16 @@ function render() {
   if (state.booting) html = `<div class="panel empty"><strong>불러오는 중</strong></div>`;
   else if (state.offline) html = offlineHtml();
   else if (!state.session) html = viewAuth();
+  else if (state.recovery) html = viewNewPw();
   else if (!state.role || state.role === "pending") html = viewPending();
   else if (needsSelfReg() || (state.coach && state.editingSelf)) html = viewSelfReg();
   else {
     const v = state.view;
     html = v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : v === "load" ? viewLoad() : viewHome();
   }
-  document.getElementById("main").innerHTML = html;
+  const q = state.session ? queue().length : 0;
+  const bar = state.loaded && (state.net === false || q) ? `<div class="netbar">${state.net === false ? "오프라인 · 마지막으로 불러온 내용" : "기록 올리는 중"}${q ? ` · 올라갈 기록 ${q}건` : ""}</div>` : "";
+  document.getElementById("main").innerHTML = bar + html;
 }
 function go(view) {
   state.view = view; state.dirty = false; state.armed = null;
@@ -1074,6 +1173,25 @@ document.addEventListener("click", async ev => {
     state.dirty = false; return render();
   }
   if (act === "sheetclose") return closeSheet();
+  if (act === "runstart") return startRun(b.dataset.pid, b.dataset.date);
+  if (act === "runresume") { state.run = state.run || lsGet(RUN_KEY()); return openRun(); }
+  if (act === "runclose") { closeSheet(); state.dirty = false; return render(); }
+  if (state.run && ["runset", "runprev", "runnext", "runback"].includes(act)) {
+    const r = state.run;
+    if (act === "runset") {
+      const sf = document.getElementById("setForm"), kg = document.getElementById("ls-kg");
+      if (sf && kg && kg.value) await saveSetFrom(sf); // 무게를 적었으면 세트와 함께 저장
+      const x = r.steps[r.i]; r.done[r.i] = Math.min(x.sets, (r.done[r.i] || 0) + 1); lsSet(RUN_KEY(), r);
+      const more = r.done[r.i] < x.sets, work = exSeconds(x.rx);
+      openRun();
+      if (more) { const rest = work ? restOf(x, x.blk) : timer.def; timer.label = "세트 사이 휴식"; timerSet(rest); timerToggle(); }
+      return;
+    }
+    if (act === "runprev") r.i = Math.max(0, r.i - 1);
+    if (act === "runnext") r.i = Math.min(r.steps.length, r.i + 1);
+    if (act === "runback") r.i = r.steps.length - 1;
+    lsSet(RUN_KEY(), r); return openRun();
+  }
   if (act === "tgo") return timerToggle();
   if (act === "treset") return timerSet(timer.def || timer.total);
   if (act === "tset") return timerSet(Number(b.dataset.s));
@@ -1082,8 +1200,10 @@ document.addEventListener("click", async ev => {
   if (act === "openday") { state.week = b.dataset.m; state.day = Number(b.dataset.d); state.pid = state.myPid; return go("plan"); }
   if (act === "open") { state.pid = b.dataset.pid; state.week = null; state.day = null; return go("plan"); }
   if (act === "edit") { state.editPid = b.dataset.pid; state.dirty = false; state.armed = null; return render(); }
-  if (act === "authmode") { state.authMode = state.authMode === "login" ? "signup" : "login"; state.authMsg = ""; state.dirty = false; return render(); }
-  if (act === "logout") { await sb.auth.signOut(); return; }
+  if (act === "authmode") { state.authMode = b.dataset.m || (state.authMode === "login" ? "signup" : "login"); state.authMsg = ""; state.dirty = false; return render(); }
+  if (act === "pwchange") { state.recovery = true; state.dirty = false; return render(); }
+  if (act === "cancelpw") { state.recovery = false; state.dirty = false; return render(); }
+  if (act === "logout") { lsDel(snapKey()); await sb.auth.signOut(); return; }
   if (act === "mode") return setMode(!state.admin);
   if (act === "refresh") { await loadProfile(); if (state.role === "pending") toast("아직 승인 전이에요."); return; }
   if (act === "editself") { state.editingSelf = true; state.dirty = false; return render(); }
@@ -1149,19 +1269,16 @@ document.addEventListener("submit", async ev => {
   ev.preventDefault();
   const f = ev.target;
   if (!sb) return toast("서버에 연결되어 있지 않아요.");
-  if (f.id === "setForm") {
-    const btn = f.querySelector('button[type="submit"]'); btn.disabled = true;
-    const row = { player_id: f.dataset.pid, date: f.dataset.date, name: f.dataset.name, lift: liftKey(f.dataset.name), kg: num("ls-kg"), reps: num("ls-reps"), rir: Number(document.getElementById("ls-rir").value) };
+  if (f.id === "runForm") {
+    const r = state.run, btn = f.querySelector('button[type="submit"]'); btn.disabled = true;
     try {
-      const r = ok(await sb.from("lift_sets").insert(row).select("id").single());
-      (state.lifts[row.player_id] = state.lifts[row.player_id] || []).push({ ...row, id: r && r.id, author: state.session.user.id });
-      const todays = liftsOf(row.player_id).filter(l => l.name === row.name && l.date === row.date);
-      document.getElementById("ls-done").textContent = `${dayWord(row.date)} ${todays.map(l => `${l.kg}×${l.reps}`).join(", ")}`;
-      toast(`${row.kg}kg × ${row.reps} 저장`);
-    } catch (e) { toast(failMsg(e)); }
-    finally { btn.disabled = false; }
+      const w = await dbWrite("logs", "insert", { player_id: r.pid, date: r.date, type: r.logType || "other", minutes: num("rn-min") || r.minutes || 1, rpe: Number(document.getElementById("rn-rpe").value), pain: 0, note: null, completion: document.getElementById("rn-done").value });
+      toast(w.queued ? "연결되면 저장돼요" : "세션을 기록했어요");
+      state.run = null; lsDel(RUN_KEY()); closeSheet(); state.dirty = false; await loadAll();
+    } catch (e) { toast(failMsg(e)); } finally { btn.disabled = false; }
     return;
   }
+  if (f.id === "setForm") { await saveSetFrom(f); return; }
   const btn = f.querySelector('button[type="submit"]'); if (btn) btn.disabled = true;
 
   if (f.id === "selfForm") {
@@ -1185,6 +1302,24 @@ document.addEventListener("submit", async ev => {
     return;
   }
 
+  if (f.id === "resetForm") {
+    try {
+      const r = await sb.auth.resetPasswordForEmail(txt("rs-email"), { redirectTo: location.origin + location.pathname });
+      state.authErr = !!r.error;
+      state.authMsg = r.error ? (/rate|seconds/i.test(r.error.message) ? "잠시 뒤에 다시 보내 주세요." : "보내지 못했어요: " + r.error.message) : "메일을 보냈어요. 메일의 링크를 누르면 새 비밀번호를 정할 수 있어요.";
+    } finally { if (btn) btn.disabled = false; }
+    state.dirty = false; render(); return;
+  }
+  if (f.id === "newPwForm") {
+    const a = document.getElementById("np-1").value, b2 = document.getElementById("np-2").value;
+    try {
+      if (a !== b2) { toast("두 비밀번호가 달라요."); return; }
+      const r = await sb.auth.updateUser({ password: a });
+      if (r.error) { toast(/different|same/i.test(r.error.message) ? "지금 비밀번호와 다르게 정해 주세요." : "바꾸지 못했어요: " + r.error.message); return; }
+      state.recovery = false; state.dirty = false; toast("비밀번호를 바꿨어요"); render();
+    } finally { if (btn) btn.disabled = false; }
+    return;
+  }
   if (f.id === "authForm") {
     const email = txt("au-email"), password = document.getElementById("au-pw").value;
     try {
@@ -1256,12 +1391,12 @@ document.addEventListener("submit", async ev => {
       toast("측정값을 저장했어요");
     } else if (f.id === "painForm") {
       const w = f.dataset.where;
-      ok(await sb.from("pain_checks").insert({
+      const pw = await dbWrite("pain_checks", "insert", {
         player_id: f.dataset.pid, date: txt("pc-date-" + w), area: document.getElementById("pc-area-" + w).value,
         during: Number(document.getElementById("pc-d-" + w).value), morning: Number(document.getElementById("pc-m-" + w).value),
         rest: document.getElementById("pc-r-" + w).checked,
-      }));
-      toast("통증을 기록했어요");
+      });
+      toast(pw.queued ? "연결되면 저장돼요" : "통증을 기록했어요");
     } else if (f.id === "coreForm") {
       const hs = document.getElementById("ct-hs").value;
       const row = { player_id: f.dataset.pid, date: txt("ct-date"), side_l: num("ct-sl"), side_r: num("ct-sr"), plank: num("ct-pl"), hs_stage: hs ? Number(hs) : null, hs_sec: num("ct-hsec"), hs_walk: num("ct-walk") };
@@ -1269,27 +1404,25 @@ document.addEventListener("submit", async ev => {
       if (core && core < 3) { toast("코어는 세 가지를 모두 입력해 주세요."); return; }
       if (!core && row.hs_stage == null && row.hs_walk == null && row.hs_sec == null) { toast("값을 하나 이상 입력해 주세요."); return; }
       if ((row.hs_sec != null || row.hs_walk != null) && row.hs_stage == null) { toast("핸드스탠드 단계를 골라 주세요."); return; }
-      ok(await sb.from("tests").insert(row));
-      toast("저장했어요");
+      toast((await dbWrite("tests", "insert", row)).queued ? "연결되면 저장돼요" : "저장했어요");
     } else if (f.id === "measureForm") {
       const g = id => document.getElementById(id) ? num(id) : null;
       const row = { player_id: f.dataset.pid, date: txt("ms-date"), reach: g("ms-reach"), vert: g("ms-vert"), max_vert: g("ms-maxvert"), cmj: g("ms-cmj"), squat: g("ms-squat"), rdl: g("ms-rdl"), pull: g("ms-pull") };
       readExtra("ms", row);
       if (!Object.entries(row).some(([k, v]) => !["player_id", "date"].includes(k) && v != null)) { toast("값을 하나 이상 입력해 주세요."); return; }
-      ok(await sb.from("tests").insert(row));
-      toast("측정을 저장했어요");
+      toast((await dbWrite("tests", "insert", row)).queued ? "연결되면 저장돼요" : "측정을 저장했어요");
     } else if (f.id === "eventForm") {
       const start = txt("ev-start"), end = txt("ev-end") || start;
       if (end < start) { toast("끝 날짜가 시작보다 앞이에요."); return; }
       ok(await sb.from("events").insert({ name: txt("ev-name"), kind: document.getElementById("ev-kind").value, start_date: start, end_date: end, note: txt("ev-note") || null }));
       toast("일정을 추가했어요. 프로그램이 맞춰졌어요.");
     } else if (f.id === "logForm") {
-      ok(await sb.from("logs").insert({
+      const lw = await dbWrite("logs", "insert", {
         player_id: f.dataset.pid, date: txt("lg-date"), type: document.getElementById("lg-type").value,
         minutes: num("lg-min") || 1, rpe: Number(document.getElementById("lg-rpe").value),
         pain: 0, note: txt("lg-note") || null, completion: document.getElementById("lg-done").value,
-      }));
-      toast("기록했어요");
+      });
+      toast(lw.queued ? "연결되면 저장돼요" : "기록했어요");
     } else if (f.id === "offForm") {
       const date = txt("off-date");
       if (seasonDay(date, events()).slot !== "team") { toast("그날은 정규 훈련 날이 아니에요."); return; }
@@ -1300,7 +1433,7 @@ document.addEventListener("submit", async ev => {
       for (const [k] of WELL_KEYS) row[k] = Number(document.getElementById("wl-" + k).value);
       row.stress = row.mood; // 기분·스트레스를 한 문항으로
       state.openKeys["well-form"] = false;
-      ok(await sb.from("wellness").upsert(row, { onConflict: "player_id,date" }));
+      await dbWrite("wellness", "upsert", row, { onConflict: "player_id,date" });
       toast(readiness(row, lastRpeBefore(f.dataset.pid, row.date)).length ? "저장했어요 · 오늘은 회복 버전" : "저장했어요");
     }
     state.dirty = false;
@@ -1319,8 +1452,14 @@ async function loadProfile() {
     Object.assign(state, { role: null, admin: false, myPid: null, players: {}, tests: {}, health: {}, logs: {}, inbody: {}, profiles: [], loaded: false, booting: false, dirty: false, selfPlayer: null, selfHealth: null, editingSelf: false });
     render(); return;
   }
-  const r = await sb.from("profiles").select("*").eq("id", session.user.id).maybeSingle();
-  if (r.error) { state.offline = true; state.booting = false; render(); return; }
+  let r;
+  try { r = await sb.from("profiles").select("*").eq("id", session.user.id).maybeSingle(); } catch (e) { r = { error: e }; }
+  if (r.error) {
+    // 연결이 없으면 이 기기에 저장해 둔 것으로
+    const snap = isNetErr(r.error) ? lsGet(snapKey()) : null;
+    if (!snap || !snap.me) { state.offline = true; state.booting = false; render(); return; }
+    r = { data: { role: snap.me.role, player_id: snap.me.player_id } };
+  }
   state.role = r.data ? r.data.role : "pending";
   state.myPid = r.data ? r.data.player_id : null;
   state.coach = state.role === "coach";
@@ -1341,7 +1480,62 @@ async function loadSelf() {
   state.selfHealth = h ? { ankleL: h.ankle_l, ankleR: h.ankle_r, injuries: h.injuries || [], pain: h.pain || {}, note: h.note, consent: h.consent } : null;
 }
 const numOrNull = v => v == null ? null : Number(v);
+/* ---------- 오프라인 ----------
+ * 마지막으로 불러온 데이터를 이 기기에 저장해 두고(로그아웃하면 지움), 연결이 없으면 그걸로 화면을 보여 준다.
+ * 연결이 없을 때 저장한 기록(세션·통증·컨디션·세트·코어·측정)은 이 기기에 모아 뒀다가 연결되면 올린다. */
+const uid = () => (state.session && state.session.user && state.session.user.id) || "anon";
+const lsGet = k => { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch (e) { return null; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+const lsDel = k => { try { localStorage.removeItem(k); } catch (e) {} };
+const snapKey = () => "snuvt-snap-" + uid(), queueKey = () => "snuvt-queue-" + uid();
+const queue = () => lsGet(queueKey()) || [];
+const isNetErr = e => !navigator.onLine || /fetch|network|load failed|timed? ?out|aborted/i.test(String((e && (e.message || e.details)) || e || ""));
+// 저장: 연결이 없으면 모아 둠 → { queued: true }
+async function dbWrite(table, op, row, opts) {
+  try {
+    const q = sb.from(table), r = op === "upsert" ? await q.upsert(row, opts) : await q.insert(row);
+    if (r.error) throw r.error;
+    return { ok: true };
+  } catch (e) {
+    if (!isNetErr(e)) throw e;
+    const list = queue(); list.push({ table, op, row, opts: opts || null, at: Date.now() }); lsSet(queueKey(), list);
+    state.net = false;
+    return { queued: true };
+  }
+}
+let flushing = false;
+async function flushQueue() {
+  if (flushing || !sb || !state.session) return;
+  let list = queue(); if (!list.length) return;
+  flushing = true; let sent = 0;
+  try {
+    while (list.length) {
+      const it = list[0];
+      try {
+        const q = sb.from(it.table), r = it.op === "upsert" ? await q.upsert(it.row, it.opts || undefined) : await q.insert(it.row);
+        if (r.error && isNetErr(r.error)) break;
+        if (r.error) toast("저장하지 못한 기록이 있어요 (" + it.table + ")");
+        else sent++;
+      } catch (e) { if (isNetErr(e)) break; }
+      list.shift(); lsSet(queueKey(), list);
+    }
+  } finally { flushing = false; }
+  if (sent) { toast(`모아 둔 기록 ${sent}건을 올렸어요`); await loadAll(); }
+}
+// 모아 둔 기록을 화면 데이터에 더하기 (올라가기 전에도 보이게)
+function withQueued(raw) {
+  const out = { ...raw };
+  queue().forEach((it, i) => {
+    if (!Array.isArray(out[it.table])) return;
+    const row = { id: "q" + i, created_at: new Date(it.at).toISOString(), author: uid(), ...it.row };
+    let arr = out[it.table];
+    if (it.table === "wellness") arr = arr.filter(r => !(r.player_id === row.player_id && r.date === row.date));
+    out[it.table] = [...arr, row];
+  });
+  return out;
+}
 async function loadAll() {
+  let raw = null;
   try {
     const q = [
       sb.from("settings").select("*").maybeSingle(),
@@ -1359,56 +1553,67 @@ async function loadAll() {
     if (state.coach) q.push(sb.from("profiles").select("*").order("created_at"));
     const res = await Promise.all(q);
     const [st, pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq] = res, pr = state.coach ? res[11] : null;
-    const rows = r => r && !r.error && Array.isArray(r.data) ? r.data : [];
-    const n = v => v == null ? null : Number(v);
-    const wel = {};
-    for (const r of rows(wq)) (wel[r.player_id] = wel[r.player_id] || []).push({ id: r.id, date: r.date, sleep: r.sleep, fatigue: r.fatigue, soreness: r.soreness, stress: r.stress, mood: r.mood });
-    state.wellness = wel;
-    const lif = {};
-    for (const r of rows(lq)) (lif[r.player_id] = lif[r.player_id] || []).push({ id: r.id, date: r.date, name: r.name, lift: r.lift, kg: Number(r.kg), reps: r.reps, rir: r.rir, author: r.author, created: r.created_at });
-    state.lifts = lif;
-    state.teamOff = Object.fromEntries(rows(toq).map(r => [r.date, { note: r.note }]));
-    const pk = {};
-    for (const r of rows(dpq)) (pk[r.player_id] = pk[r.player_id] || {})[r.date] = r.pick;
-    state.picks = pk;
     for (const r of [pl, ts, hl, lg]) if (r.error) throw r.error;
-    state.events = evq && !evq.error ? evq.data.map(r => ({ id: r.id, name: r.name, kind: r.kind, start: r.start_date, end: r.end_date, note: r.note })) : null;
-    state.players = Object.fromEntries(pl.data.map(r => [r.id, {
-      name: r.name, pos: r.pos, year: r.year, height: r.height, weight: r.weight, exp: r.exp,
-      weightExp: wexpNorm(r.weight_exp), adjust: r.adjust || {}, order: r.sort,
-    }]));
-    const tests = {};
-    for (const r of ts.data) {
-      (tests[r.player_id] = tests[r.player_id] || { runs: [] }).runs.push({
-        id: r.id, date: r.date, reach: r.reach, cmj: r.cmj, block: r.block, approach: r.approach,
-        vert: r.vert == null ? null : Number(r.vert), maxVert: r.max_vert == null ? null : Number(r.max_vert), hsStage: r.hs_stage, hsSec: r.hs_sec, hsWalk: r.hs_walk == null ? null : Number(r.hs_walk), squat: r.squat, rdl: r.rdl, pull: r.pull,
-        sideL: r.side_l, sideR: r.side_r, plank: r.plank, author: r.author,
-        rsi: n(r.rsi), ktwL: n(r.ktw_l), ktwR: n(r.ktw_r), irD: n(r.ir_d), irN: n(r.ir_n), erD: n(r.er_d), erN: n(r.er_n), hopL: n(r.hop_l), hopR: n(r.hop_r),
-      });
-    }
-    state.tests = tests;
-    state.health = Object.fromEntries(hl.data.map(r => [r.player_id, {
-      ankleL: r.ankle_l, ankleR: r.ankle_r, injuries: Array.isArray(r.injuries) ? r.injuries : [],
-      pain: r.pain || {}, note: r.note, consent: r.consent, rehab: Array.isArray(r.rehab) ? r.rehab : [],
-      custom: r.custom && typeof r.custom === "object" ? r.custom : {},
-    }]));
-    const logs = {};
-    for (const r of lg.data) {
-      (logs[r.player_id] = logs[r.player_id] || []).push({
-        _id: r.id, date: r.date, type: r.type, minutes: r.minutes, rpe: r.rpe, jumps: r.jumps,
-        painArea: r.pain_area, pain: r.pain, note: r.note, completion: r.completion,
-      });
-    }
-    state.logs = logs;
-    const checks = {};
-    for (const r of (pcs && !pcs.error ? pcs.data : [])) {
-      (checks[r.player_id] = checks[r.player_id] || []).push({ id: r.id, date: r.date, area: r.area, during: r.during, morning: r.morning, rest: r.rest, created: r.created_at });
-    }
-    state.painChecks = checks;
-    state.profiles = pr && !pr.error ? pr.data : [];
-    state.loaded = true; state.offline = false;
-  } catch (e) { state.offline = true; }
+    const rows = r => r && !r.error && Array.isArray(r.data) ? r.data : [];
+    raw = { players: pl.data, tests: ts.data, health: hl.data, logs: lg.data, pain_checks: rows(pcs), events: evq && !evq.error ? evq.data : null,
+      wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), profiles: pr && !pr.error ? pr.data : [],
+      me: { role: state.role, player_id: state.myPid } };
+    lsSet(snapKey(), raw); state.net = true;
+  } catch (e) {
+    raw = lsGet(snapKey());
+    if (!raw) { state.offline = true; render(); return; }
+    state.net = false;
+  }
+  buildState(withQueued(raw));
+  state.loaded = true; state.offline = false;
   render();
+  if (state.net && queue().length) flushQueue();
+}
+function buildState(raw) {
+  const n = v => v == null ? null : Number(v);
+  const wel = {};
+  for (const r of raw.wellness || []) (wel[r.player_id] = wel[r.player_id] || []).push({ id: r.id, date: r.date, sleep: r.sleep, fatigue: r.fatigue, soreness: r.soreness, stress: r.stress, mood: r.mood });
+  state.wellness = wel;
+  const lif = {};
+  for (const r of raw.lift_sets || []) (lif[r.player_id] = lif[r.player_id] || []).push({ id: r.id, date: r.date, name: r.name, lift: r.lift, kg: Number(r.kg), reps: r.reps, rir: r.rir, author: r.author, created: r.created_at });
+  state.lifts = lif;
+  state.teamOff = Object.fromEntries((raw.team_off || []).map(r => [r.date, { note: r.note }]));
+  const pk = {};
+  for (const r of raw.day_picks || []) (pk[r.player_id] = pk[r.player_id] || {})[r.date] = r.pick;
+  state.picks = pk;
+  state.events = raw.events ? raw.events.map(r => ({ id: r.id, name: r.name, kind: r.kind, start: r.start_date, end: r.end_date, note: r.note })) : null;
+  state.players = Object.fromEntries((raw.players || []).map(r => [r.id, {
+    name: r.name, pos: r.pos, year: r.year, height: r.height, weight: r.weight, exp: r.exp,
+    weightExp: wexpNorm(r.weight_exp), adjust: r.adjust || {}, order: r.sort,
+  }]));
+  const tests = {};
+  for (const r of raw.tests || []) {
+    (tests[r.player_id] = tests[r.player_id] || { runs: [] }).runs.push({
+      id: r.id, date: r.date, reach: r.reach, cmj: r.cmj, block: r.block, approach: r.approach,
+      vert: n(r.vert), maxVert: n(r.max_vert), hsStage: r.hs_stage, hsSec: r.hs_sec, hsWalk: n(r.hs_walk), squat: r.squat, rdl: r.rdl, pull: r.pull,
+      sideL: r.side_l, sideR: r.side_r, plank: r.plank, author: r.author,
+      rsi: n(r.rsi), ktwL: n(r.ktw_l), ktwR: n(r.ktw_r), irD: n(r.ir_d), irN: n(r.ir_n), erD: n(r.er_d), erN: n(r.er_n), hopL: n(r.hop_l), hopR: n(r.hop_r),
+    });
+  }
+  for (const t of Object.values(tests)) t.runs.sort((a, b) => String(a.date).localeCompare(String(b.date)));
+  state.tests = tests;
+  state.health = Object.fromEntries((raw.health || []).map(r => [r.player_id, {
+    ankleL: r.ankle_l, ankleR: r.ankle_r, injuries: Array.isArray(r.injuries) ? r.injuries : [],
+    pain: r.pain || {}, note: r.note, consent: r.consent, rehab: Array.isArray(r.rehab) ? r.rehab : [],
+    custom: r.custom && typeof r.custom === "object" ? r.custom : {},
+  }]));
+  const logs = {};
+  for (const r of raw.logs || []) {
+    (logs[r.player_id] = logs[r.player_id] || []).push({
+      _id: r.id, date: r.date, type: r.type, minutes: r.minutes, rpe: r.rpe, jumps: r.jumps,
+      painArea: r.pain_area, pain: r.pain, note: r.note, completion: r.completion,
+    });
+  }
+  state.logs = logs;
+  const checks = {};
+  for (const r of raw.pain_checks || []) (checks[r.player_id] = checks[r.player_id] || []).push({ id: r.id, date: r.date, area: r.area, during: r.during, morning: r.morning, rest: r.rest, created: r.created_at });
+  state.painChecks = checks;
+  state.profiles = raw.profiles || [];
 }
 function boot() {
   const h = (location.hash || "").replace("#", "");
@@ -1419,8 +1624,12 @@ function boot() {
     state.offline = true; state.booting = false; render(); return;
   }
   sb = window.supabase.createClient(cfg.url, cfg.anonKey);
+  // 앱 설치·오프라인 (서비스 워커) · 연결되면 모아 둔 기록 올리기
+  if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+  window.addEventListener("online", () => { if (state.canWrite) { flushQueue(); loadAll(); } });
   // 콜백 안에서 바로 Supabase 를 부르면 멈출 수 있어 다음 틱으로 넘긴다
   sb.auth.onAuthStateChange(event => {
+    if (event === "PASSWORD_RECOVERY") { state.recovery = true; state.dirty = false; }
     if (["INITIAL_SESSION", "SIGNED_IN", "SIGNED_OUT", "USER_UPDATED"].includes(event)) setTimeout(loadProfile, 0);
   });
   document.addEventListener("visibilitychange", () => {
