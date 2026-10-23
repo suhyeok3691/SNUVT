@@ -312,5 +312,8 @@ alter table public.logs add constraint logs_pain_area_check
 
 -- ---------- 웨이트 경험 4단계 (2026-10-23, 이미 적용됨: 마이그레이션 weight_exp_four_levels) ----------
 -- players.weight_exp: none 아기 · machine 유아 · free 청소년 · oly 성인(파워 클린 등 역도 동작)
--- submit_my_info 도 oly 허용. 방학(비시즌)은 앱이 자동으로 넣음 (여름: 7월 주요 대회 다음 날~8/31, 겨울: 12/21~2월 말)
+-- submit_my_info 도 oly 허용.
 -- inbody 테이블은 남겨 두지만 화면에서는 더 쓰지 않음
+
+-- ---------- 2학기 종강 (2026-10-23, 이미 적용됨: 마이그레이션 events_term_end) ----------
+-- events.kind 에 termend(2학기 종강) 추가. 겨울 방학(비시즌)은 앱이 자동으로 종강일 ~ 2월 말로 넣음. 여름 방학은 비시즌 아님.

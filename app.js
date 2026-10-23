@@ -28,10 +28,10 @@ const painMax = v => { const p = normPain(v); return !p ? 0 : p.r ? 10 : Math.ma
 const coreSum = t => t && [t.sideL, t.sideR, t.plank].every(v => v != null) ? Number(t.sideL) + Number(t.sideR) + Number(t.plank) : null;
 // 웨이트 경험 4단계 (예전 값 lt6·gte6 도 읽음)
 const WEXP = [
-  ["none", "아기 · 웨이트를 한 번도 안 해 봤어요"],
-  ["machine", "유아 · 기구(머신)는 써 봤어요"],
-  ["free", "청소년 · 웬만한 기구와 프리웨이트(스쿼트·데드리프트)를 할 수 있어요"],
-  ["oly", "성인 · 파워 클린·행 클린·푸시 저크 같은 역도 동작을 할 수 있어요"],
+  ["none", "입문 · 웨이트를 한 번도 안 해 봤어요"],
+  ["machine", "초급 · 기구(머신)는 써 봤어요"],
+  ["free", "중급 · 웬만한 기구와 프리웨이트(스쿼트·데드리프트)를 할 수 있어요"],
+  ["oly", "상급 · 파워 클린·행 클린·푸시 저크 같은 역도 동작을 할 수 있어요"],
 ];
 const wexpNorm = v => v === "lt6" ? "machine" : v === "gte6" ? "free" : v;
 const wexpSelect = (id, cur, required) => `<label class="fl wide">웨이트 경험<select id="${id}" ${required ? "required" : ""}><option value="">고르기</option>${WEXP.map(([v, l]) => `<option value="${v}" ${wexpNorm(cur) === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>`;
@@ -124,7 +124,7 @@ function latest(pid) {
   for (const t of r) for (const k of TEST_KEYS) if (t[k] != null) out[k] = t[k];
   return out;
 }
-const isMainTest = t => ["reach", "cmj", "block", "approach", "balL", "balR", "squat", "rdl", "pull"].some(k => t[k] != null);
+const isMainTest = t => ["reach", "cmj", "block", "approach", "squat", "rdl", "pull"].some(k => t[k] != null);
 const isCoreHs = t => coreSum(t) != null || t.hsStage != null || t.hsWalk != null || t.hsSec != null;
 const logsOf = pid => state.logs[pid] || [];
 const checksOf = pid => [...(state.painChecks[pid] || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.created).localeCompare(String(b.created)));
@@ -412,8 +412,8 @@ function testsHtml(p) {
   const above = v => v == null || v === "" ? "—" : ((Number(v) - NET >= 0 ? "+" : "") + (Number(v) - NET));
   return `<section class="sec"><h3>측정</h3>
     ${r.length ? `${rel != null ? `<p class="small muted">상대 근력 <b>${rel.toFixed(2)}</b></p>` : ""}
-    <div class="tw"><table><thead><tr><th>날짜</th><th>맥스 버티컬</th><th>버티컬 점프</th><th>스파이크 네트 위</th><th>블로킹 네트 위</th><th>CMJ</th><th>한 발 서기</th><th>스쿼트</th></tr></thead><tbody>
-    ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${maxVertOf(t) ?? "—"}</td><td class="num">${vertOf(t) ?? "—"}</td><td class="num">${above(t.approach)}</td><td class="num">${above(t.block)}</td><td class="num">${t.cmj ?? "—"}</td><td>${bal(t.balL)}/${bal(t.balR)}</td><td class="num">${t.squat ?? "—"}</td></tr>`).join("")}
+    <div class="tw"><table><thead><tr><th>날짜</th><th>맥스 버티컬</th><th>버티컬 점프</th><th>스파이크 네트 위</th><th>블로킹 네트 위</th><th>CMJ</th><th>스쿼트</th></tr></thead><tbody>
+    ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${maxVertOf(t) ?? "—"}</td><td class="num">${vertOf(t) ?? "—"}</td><td class="num">${above(t.approach)}</td><td class="num">${above(t.block)}</td><td class="num">${t.cmj ?? "—"}</td><td class="num">${t.squat ?? "—"}</td></tr>`).join("")}
     </tbody></table></div>
     <p class="small muted">버티컬 점프 = 블로킹 높이 − 스탠딩 리치 · 맥스 버티컬 = 스파이크 높이 − 스탠딩 리치 (cm)</p>` : emptyLine(state.admin ? "측정값은 ‘등록·측정’에서 넣어요." : "측정 후 나와요.")}
   </section>`;
@@ -612,8 +612,6 @@ function testFormHtml(pid) {
       <label class="fl">블로킹 높이 (cm) · 제자리 점프<input type="number" id="tf-block" inputmode="decimal" step="0.5"></label>
       <label class="fl">스파이크 높이 (cm) · 도움닫기<input type="number" id="tf-approach" inputmode="decimal" step="0.5"></label>
       <label class="fl">CMJ (cm) · 팔 없이, 앱<input type="number" id="tf-cmj" inputmode="decimal" step="0.1"></label>
-      <label class="fl">한 발 서기 왼<select id="tf-balL"><option value="">—</option><option value="1">30초 통과</option><option value="0">미통과</option></select></label>
-      <label class="fl">한 발 서기 오른<select id="tf-balR"><option value="">—</option><option value="1">30초 통과</option><option value="0">미통과</option></select></label>
       ${hsStageSelect("tf-hsStage")}
       <label class="fl">핸드스탠드 버틴 시간 (초)<input type="number" id="tf-hsSec" inputmode="numeric" min="0" max="120"></label>
       <label class="fl">핸드스탠드 워크 (m)<input type="number" id="tf-hsWalk" inputmode="decimal" min="0" max="100" step="0.5"></label>
@@ -625,8 +623,8 @@ function testFormHtml(pid) {
       <label class="fl">풀 플랭크 (초)<input type="number" id="tf-pl" inputmode="numeric" min="0" max="900"></label>
     </div>
     <div class="row"><button class="btn primary" type="submit">측정값 저장</button></div>
-    ${r.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>리치</th><th>블로킹</th><th>스파이크</th><th>맥스 버티컬</th><th>CMJ</th><th>균형</th><th>핸드스탠드</th><th>스쿼트</th><th>RDL</th><th>턱걸이</th><th></th></tr></thead><tbody>
-    ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${t.reach ?? "—"}</td><td class="num">${t.block ?? "—"}</td><td class="num">${t.approach ?? "—"}</td><td class="num">${maxVertOf(t) ?? "—"}</td><td class="num">${t.cmj ?? "—"}</td><td>${bal(t.balL)}/${bal(t.balR)}</td><td>${hsText(t)}</td><td class="num">${t.squat ?? "—"}</td><td class="num">${t.rdl ?? "—"}</td><td class="num">${t.pull ?? "—"}</td>
+    ${r.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>리치</th><th>블로킹</th><th>스파이크</th><th>맥스 버티컬</th><th>CMJ</th><th>핸드스탠드</th><th>스쿼트</th><th>RDL</th><th>턱걸이</th><th></th></tr></thead><tbody>
+    ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td><td class="num">${t.reach ?? "—"}</td><td class="num">${t.block ?? "—"}</td><td class="num">${t.approach ?? "—"}</td><td class="num">${maxVertOf(t) ?? "—"}</td><td class="num">${t.cmj ?? "—"}</td><td>${hsText(t)}</td><td class="num">${t.squat ?? "—"}</td><td class="num">${t.rdl ?? "—"}</td><td class="num">${t.pull ?? "—"}</td>
     <td><button class="btn link danger" type="button" data-act="deltest" data-id="${esc(t.id)}">삭제</button></td></tr>`).join("")}
     </tbody></table></div>` : ""}
   </form>`;
@@ -674,7 +672,7 @@ function viewSeason() {
     return `<li class="${tag}"><span class="num">${md(parseD(mon))}</span><span>${esc(weekLabel(mon).replace(/^[12]학기 · 정규 훈련 [^ ]+ · /, ""))}${note ? ` <span class="chip">${note}</span>` : ""}</span></li>`;
   }).join("");
   return `<section class="sec"><div><h2>일정 <span class="small muted">${sy}.3 – ${sy + 1}.2</span></h2>
-    <p class="lede">정규 훈련 1학기 월·목 · 2학기 수·금 · 방학은 자동. 대회를 넣으면 그날에 맞춰 피크를 잡아요.</p></div></section>
+    <p class="lede">정규 훈련 1학기 월·목 · 2학기 수·금. 대회를 넣으면 그날에 맞춰 피크를 잡고, '2학기 종강'을 넣으면 그날부터 2월 말까지 겨울 방학이에요.</p></div></section>
   <div class="cols">
     <div class="col"><section class="sec"><h3>대회·일정</h3>
       ${list.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>이름</th><th>종류</th>${state.admin ? "<th></th>" : ""}</tr></thead><tbody>
@@ -949,12 +947,11 @@ document.addEventListener("submit", async ev => {
       state.editPid = id;
       toast(prevPid ? "저장했어요" : `${name} 선수를 추가했어요`);
     } else if (f.id === "testForm") {
-      const balv = id => { const v = document.getElementById(id).value; return v === "" ? null : v === "1"; };
       const st = document.getElementById("tf-hsStage").value;
       const row = {
         player_id: f.dataset.pid, date: txt("tf-date"),
         reach: num("tf-reach"), cmj: num("tf-cmj"), block: num("tf-block"), approach: num("tf-approach"),
-        bal_l: balv("tf-balL"), bal_r: balv("tf-balR"), hs_stage: st ? Number(st) : null, hs_sec: num("tf-hsSec"), hs_walk: num("tf-hsWalk"),
+        hs_stage: st ? Number(st) : null, hs_sec: num("tf-hsSec"), hs_walk: num("tf-hsWalk"),
         squat: num("tf-squat"), rdl: num("tf-rdl"), pull: num("tf-pull"),
         side_l: num("tf-sl"), side_r: num("tf-sr"), plank: num("tf-pl"),
       };
