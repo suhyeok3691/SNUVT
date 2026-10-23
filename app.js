@@ -281,7 +281,7 @@ function viewHome() {
   if (state.admin && !me) parts.push(`<section class="panel row between"><div><h3>내 선수 정보가 아직 없어요</h3></div><button class="btn primary" type="button" data-act="editself">내 정보 입력</button></section>`);
   if (me) parts.push(wellnessHtml(me), todayHtml(me), myStatusHtml(me));
   else if (!state.admin) parts.push(`<div class="panel empty"><strong>계정이 선수와 연결되지 않았어요</strong><span>관리자에게 연결을 요청해 주세요.</span></div>`);
-  parts.push(`<p class="foot"><button class="btn link small" type="button" data-act="pwchange">비밀번호 바꾸기</button></p>`);
+  parts.push(`<p class="foot">${me ? `<button class="btn link small" type="button" data-act="pushopen">알림</button> · ` : ""}<button class="btn link small" type="button" data-act="pwchange">비밀번호 바꾸기</button></p>`);
   return parts.join("");
 }
 function wellnessHtml(p) {
@@ -1203,7 +1203,10 @@ document.addEventListener("click", async ev => {
   if (act === "authmode") { state.authMode = b.dataset.m || (state.authMode === "login" ? "signup" : "login"); state.authMsg = ""; state.dirty = false; return render(); }
   if (act === "pwchange") { state.recovery = true; state.dirty = false; return render(); }
   if (act === "cancelpw") { state.recovery = false; state.dirty = false; return render(); }
-  if (act === "logout") { lsDel(snapKey()); await sb.auth.signOut(); return; }
+  if (act === "logout") { lsDel(snapKey()); await pushOff(true); await sb.auth.signOut(); return; }
+  if (act === "pushopen") return openPush();
+  if (act === "pushon") return pushOn();
+  if (act === "pushoff") return pushOff();
   if (act === "mode") return setMode(!state.admin);
   if (act === "refresh") { await loadProfile(); if (state.role === "pending") toast("아직 승인 전이에요."); return; }
   if (act === "editself") { state.editingSelf = true; state.dirty = false; return render(); }
@@ -1614,7 +1617,81 @@ function buildState(raw) {
   for (const r of raw.pain_checks || []) (checks[r.player_id] = checks[r.player_id] || []).push({ id: r.id, date: r.date, area: r.area, during: r.during, morning: r.morning, rest: r.rest, created: r.created_at });
   state.painChecks = checks;
   state.profiles = raw.profiles || [];
+  pushRefresh();
 }
+/* ---------- 알림 (휴대폰 웹 푸시) ----------
+ * 아침 8시: 컨디션을 아직 안 넣었으면 · 밤 10시: 운동 있는 날 기록이 없으면 (서버 예약 작업이 보냄)
+ * 운동 있는 날은 앱이 앞으로 4주치를 계산해 하루 한 번 올려 둠 */
+const pushOk = () => typeof navigator !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window && location.protocol === "https:";
+const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const standalone = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+const b64u = s => Uint8Array.from(atob((s + "=".repeat((4 - s.length % 4) % 4)).replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+function trainDays(pid) {
+  const p = playerOf(pid), t = iso(today()), out = [];
+  if (!p) return out;
+  for (let i = 0; i < 28; i++) { const d = dAdd(t, i); try { if (planOn(p, d).slot !== "rest") out.push(d); } catch (e) { /* 계산 실패한 날은 건너뜀 */ } }
+  return out;
+}
+async function pushSub() {
+  if (!pushOk()) return null;
+  const reg = await navigator.serviceWorker.ready;
+  return reg.pushManager.getSubscription();
+}
+async function openPush() {
+  const el = document.getElementById("sheet"), body = el.querySelector(".sheet-body");
+  let msg = "", row = null;
+  if (!pushOk()) msg = isIOS() && !standalone() ? "아이폰은 Safari 공유 버튼 → '홈 화면에 추가'로 설치한 뒤, 설치한 앱에서 켤 수 있어요." : "이 브라우저는 알림을 지원하지 않아요.";
+  else if (Notification.permission === "denied") msg = "알림이 차단돼 있어요. 휴대폰 설정에서 이 앱(사이트) 알림을 허용해 주세요.";
+  else {
+    const sub = await pushSub().catch(() => null);
+    if (sub) { const r = await sb.from("push_subs").select("morning,evening").eq("endpoint", sub.endpoint).maybeSingle(); row = r.data || null; }
+  }
+  const on = !!row, ck = (id, v, l) => `<label class="check"><input type="checkbox" id="${id}" ${v ? "checked" : ""}> ${l}</label>`;
+  body.innerHTML = `<div class="row between"><h3>알림</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    ${msg ? `<p class="small">${esc(msg)}</p>` : `
+    <div class="fields">${ck("pu-m", on ? row.morning : true, "아침 8시 · 컨디션 (안 넣었을 때만)")}${ck("pu-e", on ? row.evening : true, "밤 10시 · 운동 기록 (운동 있는 날, 기록 없을 때만)")}</div>
+    <div class="row"><button class="btn primary" type="button" data-act="pushon">${on ? "저장" : "알림 켜기"}</button>${on ? `<button class="btn" type="button" data-act="pushoff">끄기</button>` : ""}</div>
+    <p class="small muted">${on ? "이 기기에서 알림을 받고 있어요." : "기기마다 따로 켜요."}</p>`}`;
+  el.hidden = false; document.body.classList.add("noscroll");
+}
+async function pushOn() {
+  const m = document.getElementById("pu-m").checked, e = document.getElementById("pu-e").checked;
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") { toast("알림이 허용되지 않았어요"); return openPush(); }
+  try {
+    let sub = await pushSub();
+    if (!sub) {
+      const k = await sb.rpc("push_pubkey");
+      if (k.error || !k.data) throw new Error("key");
+      const reg = await navigator.serviceWorker.ready;
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(k.data) });
+    }
+    const j = sub.toJSON();
+    const r = await sb.from("push_subs").upsert({ endpoint: sub.endpoint, user_id: uid(), player_id: state.myPid, p256dh: j.keys.p256dh, auth: j.keys.auth, morning: m, evening: e, train_days: trainDays(state.myPid), updated_at: new Date().toISOString() }, { onConflict: "endpoint" });
+    if (r.error) throw r.error;
+    lsSet(PUSH_DAY(), iso(today()));
+    toast(m || e ? "알림을 켰어요" : "알림을 모두 껐어요");
+    closeSheet();
+  } catch (err) { toast("알림을 켜지 못했어요. 잠시 뒤 다시 해 주세요"); }
+}
+async function pushOff(quiet) {
+  try {
+    const sub = await pushSub();
+    if (sub) { await sb.from("push_subs").delete().eq("endpoint", sub.endpoint); await sub.unsubscribe(); }
+    if (!quiet) { toast("이 기기 알림을 껐어요"); closeSheet(); }
+  } catch (err) { if (!quiet) toast("끄지 못했어요"); }
+}
+const PUSH_DAY = () => "snuvt-pushday-" + uid();
+// 하루 한 번: 앞으로 4주 운동 있는 날 갱신
+async function pushRefresh() {
+  if (!pushOk() || !state.myPid || !navigator.onLine || Notification.permission !== "granted" || lsGet(PUSH_DAY()) === iso(today())) return;
+  try {
+    const sub = await pushSub(); if (!sub) return;
+    const r = await sb.from("push_subs").update({ train_days: trainDays(state.myPid), updated_at: new Date().toISOString() }).eq("endpoint", sub.endpoint).select("endpoint");
+    if (!r.error) lsSet(PUSH_DAY(), iso(today()));
+  } catch (e) { /* 다음에 다시 */ }
+}
+
 function boot() {
   const h = (location.hash || "").replace("#", "");
   state.view = VIEWS.includes(h) ? h : h === "player" ? "plan" : "home";

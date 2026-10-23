@@ -341,3 +341,11 @@ alter table public.logs add constraint logs_pain_area_check
 -- migration: team_off_and_day_picks (2026-10-23)
 --   team_off (date PK, note) — 정규 훈련 없는 날 (체육관 통제 등), 관리자 쓰기·팀원 읽기
 --   day_picks (player_id, date unique, pick lower|upper|core|recover) — 그날 선수가 고른 세션, 본인·관리자
+
+-- ===== push_notifications (적용됨) =====
+-- push_subs: 기기별 알림 구독 (본인만 RLS). train_days = 앱이 하루 한 번 올리는 앞으로 4주 운동 있는 날
+-- vault: vapid_public / vapid_private / push_cron — 서버 안에서만 생성·보관 (파일·클라이언트에 없음)
+-- push_targets(kind) · push_keys() · push_gone(ep) · push_set_vapid() : service_role 전용
+-- push_pubkey(): 로그인한 사용자용 공개 키
+-- edge function 'push' (x-cron 비밀값 확인) ← private.push_call(kind) ← pg_cron
+--   push-morning '0 23 * * *' (KST 08:00, 컨디션 안 넣은 사람) · push-evening '0 13 * * *' (KST 22:00, 운동 있는 날 기록 없는 사람)
