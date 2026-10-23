@@ -953,12 +953,59 @@ function viewLoad() {
     }).join("");
     return `<tr><td>${esc(p.name)} <span class="chip pos">${esc(p.pos)}</span></td>${cells}</tr>`;
   }).join("");
-  return `<section class="sec"><div><h2>훈련 부하</h2><p class="lede">주간 RPE×분 합(AU). 전주보다 2배 넘게 늘면 표시해요.</p></div>
+  return `<section class="sec"><div class="row between wrap"><h2>훈련 부하</h2><div class="row"><button class="btn" type="button" data-act="xlsx" data-s="season">엑셀 (이번 시즌)</button><button class="btn link small" type="button" data-act="xlsx" data-s="all">전체</button></div></div><div><p class="lede">주간 RPE×분 합(AU). 전주보다 2배 넘게 늘면 표시해요.</p></div>
   ${ps.length ? `<div class="tw"><table><thead><tr><th>선수</th>${mons.map(m => `<th>${md(parseD(m))}주${m === thisMon() ? " <span class=\"muted\">이번 주</span>" : ""}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>` : emptyLine("선수를 먼저 등록해 주세요.")}
   </section>
   ${ps.length ? teamReportHtml(ps) : ""}`;
 }
 
+/* ---------- 엑셀 내보내기 (관리자) ---------- */
+const XL_COLS = {
+  tests: { date: "날짜", reach: "스탠딩 리치", vert: "버티컬", max_vert: "맥스 버티컬", cmj: "CMJ", block: "블로킹 점프", approach: "어프로치 점프", rsi: "RSI",
+    squat: "스쿼트 5RM", rdl: "RDL 5RM", pull: "턱걸이", plank: "플랭크(초)", side_l: "사이드 플랭크 왼", side_r: "사이드 플랭크 오른", sorensen: "소렌슨(초)", flexor: "굴곡근(초)",
+    bal_l: "한 발 서기 왼", bal_r: "한 발 서기 오른", hop_l: "한 발 홉 왼", hop_r: "한 발 홉 오른", ktw_l: "무릎 벽 왼", ktw_r: "무릎 벽 오른",
+    ir_d: "내회전 주손", ir_n: "내회전 반대손", er_d: "외회전 주손", er_n: "외회전 반대손", hs_stage: "핸드스탠드 단계", hs_sec: "핸드스탠드(초)", hs_walk: "핸드스탠드 걷기" },
+  logs: { date: "날짜", type: "종류", minutes: "분", rpe: "RPE", completion: "완료율", jumps: "점프 수", pain_area: "통증 부위", pain: "통증", note: "메모" },
+  wellness: { date: "날짜", sleep: "수면", fatigue: "피로", soreness: "근육통", mood: "기분·스트레스" },
+  lift_sets: { date: "날짜", name: "운동", kg: "kg", reps: "반복", rir: "RIR" },
+  pain_checks: { date: "날짜", area: "부위", during: "운동 중", morning: "다음 날 아침", rest: "쉴 때도", note: "메모" },
+};
+const XL_SHEETS = [["tests", "측정"], ["logs", "세션 기록"], ["wellness", "컨디션"], ["lift_sets", "무게"], ["pain_checks", "통증"]];
+function loadScript(src) {
+  return new Promise((ok, no) => { const el = document.createElement("script"); el.src = src; el.onload = ok; el.onerror = no; document.head.appendChild(el); });
+}
+async function exportXlsx(scope) {
+  toast("엑셀 만드는 중…");
+  try {
+    if (!window.XLSX) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");
+    const t = iso(today()), y = Number(t.slice(0, 4)), m = Number(t.slice(5, 7)), from = scope === "all" ? "0000-01-01" : `${m >= 3 ? y : y - 1}-03-01`;
+    const pr = await sb.from("players").select("id,name,pos,year,height,weight,exp");
+    if (pr.error) throw pr.error;
+    const name = Object.fromEntries((pr.data || []).map(p => [p.id, p.name])), pos = Object.fromEntries((pr.data || []).map(p => [p.id, p.pos]));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sortedPlayers().map(p => ({ 이름: p.name, 포지션: p.pos, 학번: p.year || "", "키(cm)": p.height ?? "", "체중(kg)": p.weight ?? "", "배구 경력(년)": p.exp ?? "" }))), "선수");
+    for (const [tb, label] of XL_SHEETS) {
+      const r = await sb.from(tb).select("*").gte("date", from).order("date");
+      if (r.error) throw r.error;
+      const cols = XL_COLS[tb];
+      const rows = (r.data || []).filter(x => name[x.player_id]).sort((a, b) => a.date.localeCompare(b.date) || name[a.player_id].localeCompare(name[b.player_id], "ko")).map(x => {
+        const o = { 선수: name[x.player_id], 포지션: pos[x.player_id] };
+        for (const [k, l] of Object.entries(cols)) {
+          let v = x[k];
+          if (tb === "logs" && k === "type") v = (LOG_TYPES[v] || [v])[0];
+          if (tb === "logs" && k === "completion") v = { all: "100%", part: "50%", none: "0%" }[v] || "";
+          if ((tb === "pain_checks" && k === "area") || (tb === "logs" && k === "pain_area")) v = AREA_KO[v] || v || "";
+          if (k === "rest") v = v ? "예" : "";
+          o[l] = v ?? "";
+        }
+        return o;
+      });
+      const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 선수: "기록 없음" }]);
+      XLSX.utils.book_append_sheet(wb, ws, label);
+    }
+    XLSX.writeFile(wb, `SNUVT_${scope === "all" ? "전체" : `${m >= 3 ? y : y - 1}시즌`}_${t}.xlsx`);
+  } catch (e) { console.warn(e); toast("내보내지 못했어요. 연결을 확인해 주세요"); }
+}
 function teamReportHtml(ps) {
   const ch = (rows, n) => { const r = rows.find(x => x[0] === n); if (!r) return "—"; const v = Math.round((r[2] - r[1]) * 10) / 10; return `${r[2]} <small class="${v < 0 ? "neg" : ""}">${v > 0 ? "+" : ""}${v}</small>`; };
   return `<section class="sec"><h3>선수별 리포트 <span class="small muted">최근 4주</span></h3>
@@ -1295,6 +1342,7 @@ document.addEventListener("click", async ev => {
   if (act === "cancelpw") { state.recovery = false; state.dirty = false; return render(); }
   if (act === "logout") { lsDel(snapKey()); await pushOff(true); await sb.auth.signOut(); return; }
   if (act === "pushopen") return openPush();
+  if (act === "xlsx") return exportXlsx(b.dataset.s);
   if (act === "rtpdone") {
     const pid = b.dataset.pid, i = Number(b.dataset.i), inj = [...((state.health[pid] || {}).injuries || [])], x = inj[i]; if (!x) return;
     const p = playerOf(pid), all = rtpItems(p, x).every(y => y.ok);
