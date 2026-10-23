@@ -277,7 +277,7 @@ function viewHome() {
   if (!state.loaded) return `<div class="panel empty"><strong>불러오는 중</strong></div>`;
   const me = playerOf(state.myPid);
   const parts = [];
-  if (state.admin) parts.push(teamStatusHtml());
+  if (state.admin) parts.push(teamStatusHtml(), weekSummaryHtml());
   if (state.admin && !me) parts.push(`<section class="panel row between"><div><h3>내 선수 정보가 아직 없어요</h3></div><button class="btn primary" type="button" data-act="editself">내 정보 입력</button></section>`);
   if (me) parts.push(wellnessHtml(me), todayHtml(me), myStatusHtml(me));
   else if (!state.admin) parts.push(`<div class="panel empty"><strong>계정이 선수와 연결되지 않았어요</strong><span>관리자에게 연결을 요청해 주세요.</span></div>`);
@@ -397,6 +397,38 @@ function teamStatusHtml() {
     </div>
     ${pending.length ? `<button class="btn link" type="button" data-act="view" data-v="intake">승인하러 가기 →</button>` : ""}
     ${watch.length ? `<ul class="watch">${watch.map(({ p, why }) => `<li><button type="button" class="btn link" data-act="open" data-pid="${esc(p.id)}">${esc(p.name)}</button>${chipsHtml(why)}</li>`).join("")}</ul>` : ""}
+  </section>`;
+}
+// 지난주 요약 (관리자 홈): 기록 · 완료율 · 컨디션 · 통증 변화
+function weekSummaryHtml() {
+  const ps = sortedPlayers(), mon = dAdd(thisMon(), -7), end = dAdd(mon, 6), pm = dAdd(mon, -7);
+  const inW = (d, a, b) => d >= a && d <= b;
+  const rows = ps.map(p => {
+    let plan = 0;
+    for (let i = 0; i < 7; i++) { try { const x = planOn(p, dAdd(mon, i)); if (x.slot !== "rest" && !x.optional) plan++; } catch (e) { /* 건너뜀 */ } }
+    const lg = logsOf(p.id).filter(e => inW(e.date, mon, end)), days = new Set(lg.map(e => e.date)).size;
+    const cl = lg.filter(e => e.completion), done = cl.length ? Math.round(100 * cl.reduce((a, e) => a + (e.completion === "all" ? 1 : e.completion === "part" ? 0.5 : 0), 0) / cl.length) : null;
+    const ws = wellOf(p.id).filter(w => inW(w.date, mon, end)).map(wellSum), low = ws.filter(v => v <= WELL_LOW).length;
+    const avg = ws.length ? Math.round(10 * ws.reduce((a, b) => a + b, 0) / ws.length) / 10 : null;
+    const peak = (a, b) => { const m = {}; for (const c of checksOf(p.id)) if (inW(c.date, a, b)) m[c.area] = Math.max(m[c.area] ?? 0, Number(c.during) || 0, Number(c.morning) || 0, c.rest ? 7 : 0); return m; };
+    const now = peak(mon, end), before = peak(pm, dAdd(mon, -1));
+    const up = Object.entries(now).filter(([a, v]) => v >= 3 && v - (before[a] ?? 0) >= 2).map(([a, v]) => `${AREA_KO[a] || a} ${before[a] ?? 0}→${v}`);
+    const flag = { log: plan > 0 && days < plan - 1, done: done != null && done < 70, well: low >= 2 || (avg != null && avg <= WELL_LOW), pain: up.length > 0 };
+    return { p, plan, days, done, ws: ws.length, low, avg, up, flag, n: Object.values(flag).filter(Boolean).length };
+  }).sort((a, b) => b.n - a.n);
+  const c = (f, t) => `<td class="num ${f ? "cell-warn" : ""}">${t}</td>`;
+  const tr = r => `<tr><td><button type="button" class="btn link" data-act="open" data-pid="${esc(r.p.id)}">${esc(r.p.name)}</button></td>
+    ${c(r.flag.log, `${r.days}/${r.plan}`)}${c(r.flag.done, r.done != null ? r.done + "%" : "—")}
+    ${c(r.flag.well, r.ws ? `${r.avg}${r.low ? ` <span class="small">낮음 ${r.low}</span>` : ""}` : `<span class="small">없음</span>`)}
+    ${c(r.flag.pain, r.up.length ? `<span class="small">${esc(r.up.join(", "))}</span>` : "—")}</tr>`;
+  const head = `<thead><tr><th>선수</th><th>기록</th><th>완료율</th><th>컨디션</th><th>통증↑</th></tr></thead>`;
+  const hot = rows.filter(r => r.n), rest = rows.filter(r => !r.n);
+  return `<section class="panel wk-sum">
+    <div class="row between"><h3>지난주 요약</h3><span class="small muted">${md(parseD(mon))} – ${md(parseD(end))}</span></div>
+    <div class="row wrap small"><span class="chip ${rows.some(r => r.flag.log) ? "warn" : ""}">기록 부족 ${rows.filter(r => r.flag.log).length}</span><span class="chip ${rows.some(r => r.flag.well) ? "warn" : ""}">컨디션 낮음 ${rows.filter(r => r.flag.well).length}</span><span class="chip ${rows.some(r => r.flag.pain) ? "crit" : ""}">통증 늘어남 ${rows.filter(r => r.flag.pain).length}</span></div>
+    ${hot.length ? `<div class="tw"><table>${head}<tbody>${hot.map(tr).join("")}</tbody></table></div>` : `<p class="small muted">걸리는 선수 없어요</p>`}
+    ${rest.length ? `<details><summary class="small muted">나머지 ${rest.length}명</summary><div class="tw"><table>${head}<tbody>${rest.map(tr).join("")}</tbody></table></div></details>` : ""}
+    <p class="small muted">기록 = 기록한 날/운동 있는 날 · 컨디션 = 평균(/20) · 통증 = 전주보다 2↑</p>
   </section>`;
 }
 /* ---------- 프로그램 ---------- */
