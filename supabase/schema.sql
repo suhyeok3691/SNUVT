@@ -337,3 +337,7 @@ alter table public.logs add constraint logs_pain_area_check
 --   예전 lifts 행은 lift_sets로 옮김 (lifts·practice·media 테이블은 더 이상 쓰지 않음)
 --   trigger health_custom_guard: health.custom(개인 조정)은 관리자만 바꿀 수 있음
 --   wellness: 4문항(수면·피로·근육통·기분·스트레스). 기분·스트레스 답은 mood와 stress에 같이 저장
+
+-- migration: team_off_and_day_picks (2026-10-23)
+--   team_off (date PK, note) — 정규 훈련 없는 날 (체육관 통제 등), 관리자 쓰기·팀원 읽기
+--   day_picks (player_id, date unique, pick lower|upper|core|recover) — 그날 선수가 고른 세션, 본인·관리자

@@ -104,7 +104,7 @@ const state = {
   players: {}, tests: {}, health: {}, logs: {}, inbody: {}, events: null,
   loaded: false, offline: false, admin: false, coach: false, canWrite: null, dirty: false, armed: null,
   session: null, role: null, myPid: null, email: "", profiles: [], authMode: "login", authMsg: "", authErr: false, booting: true,
-  selfPlayer: null, selfHealth: null, editingSelf: false, painChecks: {}, openKeys: {}, wellness: {}, lifts: {}, planCtx: null,
+  selfPlayer: null, selfHealth: null, editingSelf: false, painChecks: {}, openKeys: {}, wellness: {}, lifts: {}, planCtx: null, teamOff: {}, picks: {},
 };
 let sb = null;
 
@@ -144,7 +144,12 @@ const keepOpen = (key, dflt) => (state.openKeys[key] ?? dflt) ? "open" : "";
 const thisMon = () => mondayOf(iso(today()));
 const selMon = () => state.week ?? thisMon();
 const selDay = () => state.day ?? (selMon() === thisMon() ? dowMon(today()) : 0);
-const infoOn = date => seasonDay(date, events());
+// 정규 훈련 없는 날(관리자 지정)은 선수가 골라서 하는 날로
+const infoOn = date => {
+  const i = seasonDay(date, events()), off = state.teamOff[date];
+  if (!off || i.slot !== "team") return i;
+  return { ...i, teamOff: true, teamOffNote: off.note || "", near: [seasonDay(dAdd(date, -1), events()).slot, seasonDay(dAdd(date, 1), events()).slot] };
+};
 function weekLabel(mon) {
   const infos = DAYS.map((_, d) => infoOn(dAdd(mon, d)));
   const ev = infos.find(i => /^(대회 주|컨디셔닝|트라이아웃|대회 뒤)/.test(i.label));
@@ -183,12 +188,19 @@ function e1rmMap(pid, date) {
   if (t && !out.rdl && t.rdl) out.rdl = e1rmOf(t.rdl, 5, 0);
   return out;
 }
+// 운동 이름별 최근 8주 최고 추정 1RM (세트 기록) → 모든 웨이트 운동의 추천 무게
+function e1rmNameMap(pid, date) {
+  const from = dAdd(date, -56), out = {};
+  for (const l of liftsOf(pid)) if (l.name && l.date >= from && l.date <= date) { const v = e1rmOf(l.kg, l.reps, l.rir); if (!out[l.name] || v > out[l.name]) out[l.name] = v; }
+  return out;
+}
 function ctxFor(p, date) {
   const h = state.health[p.id] || {};
   const d = date || iso(today());
   return {
     ready: { well: wellOn(p.id, d), lastRpe: lastRpeBefore(p.id, d) },
-    e1rm: e1rmMap(p.id, d), custom: h.custom || {},
+    e1rm: e1rmMap(p.id, d), e1rmName: e1rmNameMap(p.id, d), custom: h.custom || {},
+    pick: (state.picks[p.id] || {})[d] || null,
     player: p, test: latest(p.id),
     weight: p.weight,
     rehab: [], pain: state.health[p.id] ? (h.pain || {}) : null, checks: recentChecks(p.id),
@@ -206,7 +218,7 @@ const playerOf = pid => pid && state.players[pid] ? { id: pid, ...state.players[
 /* ---------- 공통 조각 ---------- */
 const chipsHtml = list => list.length ? `<div class="chips">${list.map(([c, t]) => `<span class="chip ${c}">${esc(t)}</span>`).join("")}</div>` : "";
 const emptyLine = t => `<p class="empty-line">${t}</p>`;
-const SHORT = { "플라이오메트릭 + 하체 근력": "하체", "상체·엉덩이·코어": "상체", "활성화 30분": "활성화", "정규 훈련": "훈련", "맨몸 상체·코어": "맨몸", "맨몸 하체·균형": "맨몸", "완전 휴식": "휴식", "대회": "대회", "대회 전날": "전날", "회복": "회복", "트라이아웃": "트라이", };
+const SHORT = { "플라이오메트릭 + 하체 근력": "하체", "상체·엉덩이·코어": "상체", "활성화 30분": "활성화", "정규 훈련": "훈련", "맨몸 상체·코어": "맨몸", "맨몸 하체·균형": "맨몸", "완전 휴식": "휴식", "대회": "대회", "대회 전날": "전날", "회복": "회복", "트라이아웃": "트라이", "고르기": "선택", };
 function weeksHtml(mon) {
   const now = thisMon();
   return `<div class="wnav" role="group" aria-label="주">
@@ -273,6 +285,13 @@ function wellnessHtml(p) {
     </form></details>
   </section>`;
 }
+function picksHtml(plan, pid, date) {
+  if (!plan.choices) return "";
+  const can = pid && canEditSelf(playerOf(pid));
+  return `<div class="picks">${plan.choices.map(c => `<button type="button" class="pick${c.rec ? " rec" : ""}" ${can ? `data-act="pick" data-pid="${esc(pid)}" data-date="${esc(date)}" data-k="${c.key}"` : "disabled"}>
+    <b>${esc(c.label)}</b><span>${esc(c.desc)}</span>${c.rec ? `<em>추천${c.why ? " · " + esc(c.why) : ""}</em>` : ""}</button>`).join("")}</div>`;
+}
+const unpickHtml = (plan, p, date) => plan.picked && canEditSelf(p) ? `<button class="btn link" type="button" data-act="unpick" data-pid="${esc(p.id)}" data-date="${esc(date)}">다른 걸로 바꾸기</button>` : "";
 function todayHtml(p) {
   const t = iso(today()), mon = thisMon(), d = dowMon(today());
   const done = new Set(logsOf(p.id).map(e => e.date));
@@ -284,7 +303,8 @@ function todayHtml(p) {
   return `<section class="panel today-card">
     <p class="eyebrow">오늘 · ${longDate(today())} · ${esc(weekLabel(mon))}</p>
     <h2>${esc(plan.title)}</h2>
-    ${items.length ? `<ul class="mini">${items.map(x => `<li><span>${esc(x.name)}</span><b>${esc(fmtRx(x.rx))}</b></li>`).join("")}</ul>` : ""}
+    ${picksHtml(plan, p.id, t)}${unpickHtml(plan, p, t)}
+    ${!plan.choices && items.length ? `<ul class="mini">${items.map(x => `<li><span>${esc(x.name)}</span><b>${esc(rxMain(x.rx))}</b></li>`).join("")}</ul>` : ""}
     <div class="row between">
       <span class="small muted">${[plan.landings ? `착지 약 ${plan.landings}회` : "", mine.length ? `개인 ${mine.map(b => b.title.replace(/ \(.*\)$/, "")).join(" · ")}` : ""].filter(Boolean).join(" · ")}</span>
       <button class="btn primary" type="button" data-act="openday" data-m="${mon}" data-d="${d}">전체 프로그램 보기</button>
@@ -293,7 +313,7 @@ function todayHtml(p) {
 }
 function myStatusHtml(p) {
   const t = latest(p.id);
-  const rel = relStrength(t, p.weight);
+  const rel = relOf(ctxFor(p));
   const mv = maxVertOf(t), v = vertOf(t);
   const mvRuns = runs(p.id).filter(x => maxVertOf(x) != null);
   const dMv = mv != null && mvRuns.length > 1 ? mv - maxVertOf(mvRuns[0]) : null;
@@ -322,7 +342,7 @@ function myStatusHtml(p) {
         ${stat("상대 근력", rel != null ? rel.toFixed(2) : "—")}
         ${stat("코어 합계 (초)", core != null ? core : "—", dCore != null ? ` <small class="${dCore < 0 ? "neg" : ""}">${dCore > 0 ? "+" : ""}${dCore}</small>` : "")}
         ${stat("핸드스탠드", hsText(t))}</div>` : emptyLine("측정 후 나와요.")}
-      ${!t ? `<p class="small muted">아직 측정 기록이 없어요 · 다음 웨이트 A 전에 측정</p>` : nm ? `<p class="small muted">다음 측정 ${md(parseD(nm.mon))} 주${nm.mon === thisMon() ? " (이번 주)" : ""} · ${nm.type === "jump" ? "점프만" : "전체"}</p>` : ""}
+      ${!t ? `<p class="small muted">측정 기록 없음 · 측정 주에 점검</p>` : nm ? `<p class="small muted">다음 측정 ${md(parseD(nm.mon))} 주${nm.mon === thisMon() ? " (이번 주)" : ""} · ${nm.type === "jump" ? "점프만" : "전체"}</p>` : ""}
       <button class="btn link" type="button" data-act="view" data-v="rec">코어·핸드스탠드 기록하기 →</button>
     </div>
     <div class="panel tile">
@@ -364,13 +384,15 @@ function teamStatusHtml() {
   </section>`;
 }
 /* ---------- 프로그램 ---------- */
+const rxMain = rx => fmtRx(rx).split(" · ")[0];
+const rxRest = rx => fmtRx(rx).split(" · ").slice(1).map(t => /^약 [\d.]+kg$/.test(t) ? `<b>${esc(t)}</b>` : esc(t)).join(" · ");
 function blockHtml(b) {
   return `<section class="blk b-${esc(b.key)}"><h4>${esc(b.title)}</h4><ul class="rows">${b.items.map(x => {
     const rec = x.name === "통증 체크" ? "pain" : x.name === "세션 RPE 기록" ? "log" : "";
     if (rec) return `<li class="tap" data-act="gorec" data-focus="${rec}" role="button" tabindex="0"><div class="nm">${esc(x.name)} <span class="mod">기록 →</span></div><div class="rx">${esc(fmtRx(x.rx))}</div></li>`;
     const tap = exGuide(x.name) || exSeconds(x.rx) || exLink(x.name);
     return `<li${tap ? ` class="tap" data-act="ex" data-n="${esc(x.name)}" data-r="${esc(x.rx ?? "")}" data-c="${esc(x.cue || "")}" role="button" tabindex="0"` : ""}>
-    <div class="nm">${esc(x.name)}${x.mod ? ` <span class="mod">${esc(x.mod)}</span>` : ""}</div><div class="rx">${esc(fmtRx(x.rx))}</div></li>`; }).join("")}</ul>
+    <div class="nm">${esc(x.name)}${x.mod ? ` <span class="mod">${esc(x.mod)}</span>` : ""}</div><div class="rx">${esc(rxMain(x.rx))}</div>${rxRest(x.rx) ? `<div class="sub">${rxRest(x.rx)}</div>` : ""}</li>`; }).join("")}</ul>
     ${b.note ? `<p class="bnote">${esc(b.note).replace(/\n/g, "<br>")}</p>` : ""}</section>`;
 }
 function viewPlan() {
@@ -393,7 +415,7 @@ function viewPlan() {
     <div><h3 class="day-title">${longDate(parseD(date))} · ${esc(plan.title)}</h3>
       ${plan.landings ? `<p class="small muted">착지 약 ${plan.landings}회</p>` : ""}</div>
     ${notes.length ? `<ul class="notes callout">${notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
-    ${scopedBlocks(plan)}
+    ${plan.choices ? picksHtml(plan, pid, date) : `${unpickHtml(plan, p, date)}${scopedBlocks(plan)}`}
   </section>`;
 }
 // 팀 세션(다 같이) / 개인(포지션 · 재활 · 예방)으로 나눠 보여 주기
@@ -420,8 +442,9 @@ function viewTeamPlan() {
     ${daysHtml(mon, d, teamPlanOn)}
   </section>
   <section class="sec">
-    <div><h3 class="day-title">${longDate(parseD(date))} · ${esc(plan.title)}</h3></div>
-    ${scopedBlocks(plan, true)}
+    <div class="row between"><h3 class="day-title">${longDate(parseD(date))} · ${esc(plan.title)}</h3>
+      ${seasonDay(date, events()).slot === "team" ? `<button class="btn" type="button" data-act="teamoff" data-date="${esc(date)}">${state.teamOff[date] ? "정규 훈련 다시 있음" : "정규 훈련 없음으로"}</button>` : ""}</div>
+    ${plan.choices ? picksHtml(plan, null, date) : scopedBlocks(plan, true)}
     ${extra.length ? `<h3 class="scope-h me">개인 블록이 있는 선수</h3><ul class="watch">${extra.map(({ p, b }) => `<li><button type="button" class="btn link" data-act="open" data-pid="${esc(p.id)}">${esc(p.name)}</button>${chipsHtml(b.map(x => ["", x.title.replace(/ \(.*\)$/, "")]))}</li>`).join("")}</ul>` : ""}
   </section>`;
 }
@@ -853,9 +876,20 @@ function viewSeason() {
         </div>
         <div class="row"><button class="btn primary" type="submit">추가</button></div>
       </form>` : ""}
-    </section></div>
+    </section>${state.admin ? teamOffHtml() : ""}</div>
     <div class="col"><section class="sec"><h3>앞으로 16주</h3><ul class="season-weeks">${weeks}</ul></section></div>
   </div>`;
+}
+
+function teamOffHtml() {
+  const t = iso(today()), list = Object.entries(state.teamOff).filter(([d]) => d >= dAdd(t, -14)).sort();
+  return `<section class="sec"><h3>정규 훈련 없는 날</h3>
+    ${list.length ? `<ul class="watch">${list.map(([d, o]) => `<li><span class="num">${longDate(parseD(d))}</span>${o.note ? `<span class="small muted">${esc(o.note)}</span>` : ""}<button class="btn link danger" type="button" data-act="teamoff" data-date="${esc(d)}">취소</button></li>`).join("")}</ul>` : ""}
+    <form class="f panel" id="offForm"><div class="fields">
+      <label class="fl">날짜<input type="date" id="off-date" required></label>
+      <label class="fl">메모<input id="off-note" maxlength="60" placeholder="예: 체육관 통제"></label>
+    </div><div class="row"><button class="btn primary" type="submit">추가</button></div></form>
+  </section>`;
 }
 
 /* ---------- 운동 설명 · 타이머 ---------- */
@@ -902,7 +936,7 @@ function defaultSeconds(rx, cue) {
   return [60, "세트 사이 휴식"];
 }
 // 운동 창의 세트 기록: 처방(추천 무게·반복·RIR) → 지난번 기록 순으로 채워 둠
-const liftName = n => String(n || "").replace(/\s*\([^)]*\)\s*$/, "").trim().slice(0, 80);
+const liftName = n => baseName(n).slice(0, 80);
 const dayWord = d => d === iso(today()) ? "오늘" : md(parseD(d));
 function setLogHtml(name, rx) {
   const ctx = state.planCtx;
@@ -920,6 +954,7 @@ function setLogHtml(name, rx) {
       <label>RIR<select id="ls-rir">${[0, 1, 2, 3, 4, 5].map(v => `<option value="${v}" ${v === ri ? "selected" : ""}>${v}</option>`).join("")}</select></label>
       <button class="btn primary" type="submit">세트 저장</button>
     </div>
+    ${!kg ? `<p class="small muted">처음이면 가볍게 시작해 세트마다 올려서, 목표 반복을 하고도 2–3회 더 할 수 있는 무게를 찾아 저장 → 다음부터 무게가 자동으로 나와요</p>` : ""}
     <p class="small muted" id="ls-done">${todays.length ? `${dayWord(ctx.date)} ${todays.map(l => `${l.kg}×${l.reps}`).join(", ")}` : ""}${last ? `${todays.length ? " · " : ""}지난번 ${last.kg}kg × ${last.reps}` : ""}</p>
   </form>`;
 }
@@ -1010,6 +1045,24 @@ document.addEventListener("click", async ev => {
     return;
   }
   if (act === "tadd") return timerAdd(Number(b.dataset.s));
+  if (act === "pick" || act === "unpick") {
+    const pid = b.dataset.pid, date = b.dataset.date;
+    try {
+      if (act === "pick") ok(await sb.from("day_picks").upsert({ player_id: pid, date, pick: b.dataset.k }, { onConflict: "player_id,date" }));
+      else ok(await sb.from("day_picks").delete().eq("player_id", pid).eq("date", date));
+      const m = state.picks[pid] = state.picks[pid] || {};
+      if (act === "pick") m[date] = b.dataset.k; else delete m[date];
+    } catch (e) { toast(failMsg(e)); }
+    state.dirty = false; return render();
+  }
+  if (act === "teamoff") {
+    const date = b.dataset.date;
+    try {
+      if (state.teamOff[date]) { ok(await sb.from("team_off").delete().eq("date", date)); delete state.teamOff[date]; toast("정규 훈련 있음으로 돌렸어요"); }
+      else { ok(await sb.from("team_off").insert({ date })); state.teamOff[date] = { note: "" }; toast("정규 훈련 없음 · 선수들이 골라서 해요"); }
+    } catch (e) { toast(failMsg(e)); }
+    state.dirty = false; return render();
+  }
   if (act === "sheetclose") return closeSheet();
   if (act === "tgo") return timerToggle();
   if (act === "treset") return timerSet(timer.def || timer.total);
@@ -1227,6 +1280,11 @@ document.addEventListener("submit", async ev => {
         jumps: num("lg-jumps"), pain: 0, note: txt("lg-note") || null, completion: document.getElementById("lg-done").value,
       }));
       toast("기록했어요");
+    } else if (f.id === "offForm") {
+      const date = txt("off-date");
+      if (seasonDay(date, events()).slot !== "team") { toast("그날은 정규 훈련 날이 아니에요."); return; }
+      ok(await sb.from("team_off").upsert({ date, note: txt("off-note") || null }));
+      toast("정규 훈련 없음 · 선수들이 골라서 해요");
     } else if (f.id === "wellForm") {
       const row = { player_id: f.dataset.pid, date: iso(today()) };
       for (const [k] of WELL_KEYS) row[k] = Number(document.getElementById("wl-" + k).value);
@@ -1285,10 +1343,12 @@ async function loadAll() {
       sb.from("events").select("*").order("start_date"),
       sb.from("wellness").select("*").order("date"),
       sb.from("lift_sets").select("*").order("date"),
+      sb.from("team_off").select("*"),
+      sb.from("day_picks").select("*"),
     ];
     if (state.coach) q.push(sb.from("profiles").select("*").order("created_at"));
     const res = await Promise.all(q);
-    const [st, pl, ts, hl, lg, pcs, evq, wq, lq] = res, pr = state.coach ? res[9] : null;
+    const [st, pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq] = res, pr = state.coach ? res[11] : null;
     const rows = r => r && !r.error && Array.isArray(r.data) ? r.data : [];
     const n = v => v == null ? null : Number(v);
     const wel = {};
@@ -1297,6 +1357,10 @@ async function loadAll() {
     const lif = {};
     for (const r of rows(lq)) (lif[r.player_id] = lif[r.player_id] || []).push({ id: r.id, date: r.date, name: r.name, lift: r.lift, kg: Number(r.kg), reps: r.reps, rir: r.rir, author: r.author, created: r.created_at });
     state.lifts = lif;
+    state.teamOff = Object.fromEntries(rows(toq).map(r => [r.date, { note: r.note }]));
+    const pk = {};
+    for (const r of rows(dpq)) (pk[r.player_id] = pk[r.player_id] || {})[r.date] = r.pick;
+    state.picks = pk;
     for (const r of [pl, ts, hl, lg]) if (r.error) throw r.error;
     state.events = evq && !evq.error ? evq.data.map(r => ({ id: r.id, name: r.name, kind: r.kind, start: r.start_date, end: r.end_date, note: r.note })) : null;
     state.players = Object.fromEntries(pl.data.map(r => [r.id, {
