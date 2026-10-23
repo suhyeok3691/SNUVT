@@ -68,7 +68,8 @@ function injRowHtml(x = {}) {
     <select class="inj-finger" aria-label="손가락" ${part === "finger" ? "" : "hidden"}>${FINGER_OPTS.map(([v, l]) => o(v, x.finger || "", l)).join("")}</select>
     <select class="inj-grade" aria-label="진단">${INJ_GRADE.map(([v, l]) => o(v, x.grade || "", l)).join("")}</select>
     <select class="inj-status" aria-label="지금 상태">${INJ_STATUS.map(([v, l]) => o(v, x.status || "ok", l)).join("")}</select>
-    <select class="inj-year" aria-label="연도">${years.map(v => o(v, x.year || y, v)).join("")}</select>
+    <select class="inj-year" aria-label="연도">${years.map(v => o(v, x.year || y, v === "그 전" ? v : v + "년")).join("")}</select>
+    <select class="inj-month" aria-label="월"><option value="">월 모름</option>${Array.from({ length: 12 }, (_, i) => o(i + 1, x.month || "", `${i + 1}월`)).join("")}</select>
     <div class="inj-end"><label class="check"><input type="checkbox" class="inj-surg" ${x.surgery ? "checked" : ""}> 수술</label>
     <button class="btn link danger" type="button" data-act="delinj" aria-label="이 부상 지우기">✕ 지우기</button></div></div>`;
 }
@@ -76,11 +77,11 @@ const injuryEditor = (prefix, list) => `<div class="inj" id="${prefix}-inj">${(l
   <button class="btn" type="button" data-act="addinj" data-prefix="${prefix}">+ 부상 추가</button>`;
 const readInjuries = prefix => [...document.querySelectorAll(`#${prefix}-inj .inj-row`)].map(r => ({
   side: r.querySelector(".inj-side").value, part: r.querySelector(".inj-part").value, type: r.querySelector(".inj-type").value,
-  year: r.querySelector(".inj-year").value, surgery: r.querySelector(".inj-surg").checked,
+  year: r.querySelector(".inj-year").value, month: Number(r.querySelector(".inj-month").value) || null, surgery: r.querySelector(".inj-surg").checked,
   status: r.querySelector(".inj-status").value, grade: r.querySelector(".inj-grade").value || null,
   finger: r.querySelector(".inj-part").value === "finger" ? (r.querySelector(".inj-finger").value || null) : null,
 }));
-const injText = x => `${(INJ_SIDES.find(s => s[0] === x.side) || ["", ""])[1].replace("해당 없음", "")} ${x.part === "finger" && FINGERS[x.finger] ? FINGERS[x.finger] + " " : ""}${x.type} (${[x.year, x.surgery ? "수술" : "", x.status && x.status !== "ok" ? (INJ_STATUS.find(v => v[0] === x.status) || ["", ""])[1] : ""].filter(Boolean).join(", ")})`.trim();
+const injText = x => `${(INJ_SIDES.find(s => s[0] === x.side) || ["", ""])[1].replace("해당 없음", "")} ${x.part === "finger" && FINGERS[x.finger] ? FINGERS[x.finger] + " " : ""}${x.type} (${[x.year && x.month ? `${x.year}.${x.month}` : x.year, x.surgery ? "수술" : "", x.status && x.status !== "ok" ? (INJ_STATUS.find(v => v[0] === x.status) || ["", ""])[1] : ""].filter(Boolean).join(", ")})`.trim();
 const confirmDel = msg => { try { return window.confirm(msg); } catch (e) { return false; } };
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
 const VIEWS = ["home", "plan", "rec", "season", "intake", "load"];
@@ -204,7 +205,7 @@ function ctxFor(p, date) {
     player: p, test: latest(p.id),
     weight: p.weight,
     rehab: [], pain: state.health[p.id] ? (h.pain || {}) : null, checks: recentChecks(p.id),
-    injuries: h.injuries || [], year: today().getFullYear(),
+    injuries: h.injuries || [], year: today().getFullYear(), month: today().getMonth() + 1,
     ankleHistory: !!(p.adjust && p.adjust.ankleBal) || (Number(h.ankleL) || 0) + (Number(h.ankleR) || 0) > 0,
   };
 }
@@ -861,8 +862,8 @@ function viewSeason() {
   const evs = normEvents(events());
   const list = evs.filter(e => e.end >= from && e.start <= to);
   const range = e => e.start === e.end ? longDate(parseD(e.start)) : `${md(parseD(e.start))} – ${md(parseD(e.end))}`;
-  // 앞으로 16주 흐름
-  const weeks = Array.from({ length: 16 }, (_, k) => dAdd(thisMon(), 7 * k)).map(mon => {
+  // 앞으로 8주 흐름
+  const weeks = Array.from({ length: 8 }, (_, k) => dAdd(thisMon(), 7 * k)).map(mon => {
     const infos = DAYS.map((_, d) => infoOn(dAdd(mon, d)));
     const i = infos[3], tag = infos.some(x => x.slot === "match") ? "cup" : infos.every(x => x.optional) ? "opt" : i.measure ? "test" : "";
     const note = i.measure === "jump" ? "점프 측정" : i.measure ? "측정" : "";
@@ -888,7 +889,7 @@ function viewSeason() {
         <div class="row"><button class="btn primary" type="submit">추가</button></div>
       </form>` : ""}
     </section>${state.admin ? teamOffHtml() : ""}</div>
-    <div class="col"><section class="sec"><h3>앞으로 16주</h3><ul class="season-weeks">${weeks}</ul></section></div>
+    <div class="col"><section class="sec"><h3>앞으로 8주</h3><ul class="season-weeks">${weeks}</ul></section></div>
   </div>`;
 }
 

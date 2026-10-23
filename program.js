@@ -469,13 +469,15 @@ function prepCtx(ctx) {
   const mods = effectiveModules(p.adjust, ctx.rehab, ctx.pain, ctx.checks);
   const inj = (Array.isArray(ctx.injuries) ? ctx.injuries : []).filter(x => x && x.part);
   if (ctx.ankleHistory && !inj.some(x => x.part === "ankle")) inj.push({ part: "ankle", type: "발목 염좌", status: "ok" });
-  const thisYear = Number(ctx.year) || new Date().getFullYear();
-  const recent = x => Number(x.year) >= thisYear - 1; // 올해·작년
+  const thisYear = Number(ctx.year) || new Date().getFullYear(), thisMonth = Number(ctx.month) || 12;
+  // 1년 안: 다친 달을 알면 12개월 안, 연도만 알면 올해·작년
+  const recent = x => { const y = Number(x.year), m = Number(x.month); if (!y) return false; return m ? (thisYear - y) * 12 + (thisMonth - m) <= 12 : y >= thisYear - 1; };
   const parts = new Set(inj.map(x => x.part));
   const fx = moduleEffects(mods, parts.has("ankle"));
   const severe = x => x.surgery || x.grade === "complete" || x.grade === "fracture";
   // 무릎 수술·십자인대·완전 파열 1년 안: 드롭 점프·실전 점프(3단계) 빼기
-  const kneeRecent = inj.some(x => x.part === "knee" && recent(x) && (severe(x) || /십자인대/.test(x.type || "")));
+  // 다 나았으면 제한 없음 (홉 좌우 차이가 크면 아래 복귀 기준이 따로 잡음)
+  const kneeRecent = inj.some(x => x.part === "knee" && injStatus(x) !== "ok" && recent(x) && (severe(x) || /십자인대/.test(x.type || "")));
   // 재활 중인 부위: 그 부위 부하만 줄임 (처방은 담당자)
   const rehabbing = new Set(inj.filter(x => injStatus(x) === "rehab").map(x => x.part));
   if (rehabbing.has("knee") || rehabbing.has("ankle")) fx.tierMax = Math.min(fx.tierMax, 1);
@@ -638,12 +640,12 @@ function slotPlan(ctx, slot, w, o = {}) {
   return out;
 }
 // 재활 블록 크기: 부위마다 꼭 필요한 것만 (단계 항목의 앞쪽부터)
-// 재활은 최소한만: 부위마다 그 단계의 가장 중요한 1개, 하루 2개까지 (대회 앞뒤는 1개)
-const REHAB_CAP = { per: 1, total: 2 }, REHAB_CAP_LIGHT = { per: 1, total: 1 };
-const ADDON_KEYS = ["rehab", "prev", "meas"];
+// 재활: 부위마다 그 단계의 중요한 것부터 3개까지 (대회 앞뒤는 1개)
+const REHAB_CAP = { per: 3, total: 6 }, REHAB_CAP_LIGHT = { per: 1, total: 2 };
+const ADDON_KEYS = ["prev", "meas"]; // 재활은 따로 (부위마다 3개), 예방·측정 보완만 상한
 // 하루 개인 운동 상한: 재활(지금 아픈 곳)은 그대로 두고, 넘치면 측정 보완의 '1세트 더' →
 // 부상 이력 예방 중 부위마다 첫 번째가 아닌 것 → 측정 보완 두 번째부터 → 나머지 예방 → 나머지 측정 보완 순으로 뺀다
-const ADDON_MAX = { gymA: 3, gymB: 3, bwU: 2, bwL: 2 }; // 팀 세션은 줄이지 않고 개인 보강을 최소한으로
+const ADDON_MAX = { gymA: 3, gymB: 3, bwU: 2, bwL: 2 }; // 팀 세션은 줄이지 않고 예방·측정 보완은 최소한으로
 function capAddons(out, slot) {
   const blk = k => out.blocks.find(b => b.key === k);
   const count = () => ADDON_KEYS.reduce((a, k) => a + ((blk(k) || {}).items || []).length, 0);
@@ -696,7 +698,6 @@ const SLOT_FN = {
     if (tierMax < 3) {
       plyo = plyo.filter(x => x.tier <= tierMax);
       if (!plyo.some(x => x.key === "stick")) plyo.push({ ...PLYO[1], sets: LIGHT(w) ? 2 : 3, reps: 5, mod: "고강도 대신" });
-      if (c.kneeRecent) out.notes.push("무릎 수술·십자인대 1년 안 · 드롭·실전 점프 빼고, 재활 담당 지시가 우선");
     }
     if (fx.noJumps) { plyo = []; out.notes.push("통증 때문에 플라이오메트릭은 쉬어요"); }
     if (o.second) plyo = [];
@@ -896,7 +897,7 @@ function bwPlan(c, w, o, out, h, upper) {
   ] });
   h.add(prevBlock(c, upper ? "bwU" : "bwL"));
   h.add(measBlock(c, upper ? "bwU" : "bwL"));
-  h.add(h.rehabBlock("재활 운동", m => m.stage === 1)); // 맨몸 날은 통증이 심할 때만
+  h.add(h.rehabBlock("재활 운동", m => (m.area === "knee" && m.stage === 1) || (m.area === "finger" && m.stage <= 2) || (m.area === "ankle" && m.stage <= 2) || (m.area === "shoulder" && m.stage === 1) || (m.area === "back" && m.stage <= 2)));
 }
 
 /* ---------- 1년 주기 (3월 → 다음 해 2월) ----------
