@@ -99,12 +99,24 @@ const SECTIONS = {
   video: { label: "영상", views: [["video", "영상"]] },
 };
 const SECTION_OF = { practice: "practice", notes: "practice", video: "video", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
-// 직책: 관리자·주장 = 전체 / 부주장·훈련부장·총무·트레이닝 담당 = 맡은 일만 (서버 규칙 private.can 과 같게)
-const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", ops: "훈련부장", treasurer: "총무", trainer: "트레이닝 담당" };
-const TITLE_JOB = { admin: "모든 기능 · 직책 지정", captain: "모든 기능 · 직책 지정", vice: "일정 · 공지 · 명단 · 영상", ops: "훈련 설계 · 일정 · 훈련 시간 · 교류전 · 엔트리 · 불참 · 공지", treasurer: "공지 · 명단(연락처)", trainer: "프로그램 편집 · 측정 수정 · 부상·복귀 · 부하" };
+// 직책: 관리자·주장 = 전체 / 부주장·훈련부장·총무·피지컬 코치 = 맡은 일만 (서버 규칙 private.can 과 같게)
+const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", ops: "훈련부장", treasurer: "총무", trainer: "피지컬 코치" };
+const TITLE_JOB = { admin: "모든 기능 · 직책 지정", captain: "모든 기능 · 직책 지정 · 훈련 설계", vice: "일정 · 공지 · 명단 · 영상", ops: "훈련 설계 · 일정 · 훈련 시간 · 교류전 · 엔트리 · 불참 · 공지", treasurer: "공지 · 명단(연락처)", trainer: "Physical 프로그램 편집 · 측정 수정 · 리포트" };
 const STAFF_PERMS = { vice: ["schedule", "notice", "roster", "video"], ops: ["schedule", "notice", "practice"], treasurer: ["notice", "roster"], trainer: ["training"] };
-// 관리 화면일 때만: full(관리자·주장) · schedule · notice · roster · training
-const can = perm => !!state.admin && (state.coach || (perm !== "full" && ((STAFF_PERMS[state.title] || []).includes(perm) || (perm === "video" && state.media))));
+// 화면 보기(viewAs): 관리자·주장은 모든 직책 화면으로 바꿔 볼 수 있고, 직책이 있으면 '내 직책 ↔ 선수'
+const VIEW_LABEL = k => k === "player" ? "선수" : k === "media" ? "영상 담당" : TITLES[k] || k;
+function viewOptions() {
+  const o = state.coach ? ["admin", "captain", "vice", "ops", "treasurer", "trainer", "media"] : [...(STAFF_PERMS[state.title] ? [state.title] : []), ...(state.media ? ["media"] : [])];
+  return [...o, "player"];
+}
+const can = perm => {
+  if (!state.admin) return false;
+  const v = state.viewAs;
+  if (v === "admin" || v === "captain") return !!state.coach;
+  if (perm === "full") return false;
+  if (v === "media") return perm === "video";
+  return (STAFF_PERMS[v] || []).includes(perm);
+};
 const secViews = sec => sec.views.filter(v => !v[2] || can(v[2]));
 const ICON = {
   physical: '<path d="M6.5 7v10M17.5 7v10M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/>',
@@ -316,7 +328,7 @@ function header() {
   document.getElementById("dday").innerHTML = !nm ? "" : d > 0 ? `${esc(nm.name)} <strong>D-${d}</strong>` : `${esc(nm.name)} <strong>${d === 0 ? "D-DAY" : "대회 중"}</strong>`;
   const who = document.getElementById("who");
   const roleKo = state.title ? TITLES[state.title] : state.coach ? "관리자" : state.role === "player" ? "선수" : "";
-  const modeBtn = state.staff && state.loaded ? `<button class="btn mode ${state.admin ? "" : "on"}" type="button" data-act="mode" title="관리자 화면과 선수 화면을 바꿔요">${state.admin ? "선수 화면으로" : "관리자 화면으로"}</button>` : "";
+  const modeBtn = state.staff && state.loaded ? `<button class="btn mode ${state.admin ? "" : "on"}" type="button" data-act="rolepick" title="어느 화면으로 볼지 골라요">${VIEW_LABEL(state.viewAs)} 화면 ▾</button>` : "";
   who.innerHTML = state.session ? `<span>${esc(myName())}${roleKo ? " " + roleKo : ""}</span>${modeBtn}<button class="btn link" type="button" data-act="logout">로그아웃</button>` : "";
   const ready = state.session && state.role && state.role !== "pending" && !state.offline && !needsSelfReg();
   document.getElementById("menuBtn").hidden = !ready; document.getElementById("setBtn").hidden = !ready;
@@ -444,11 +456,43 @@ const vidCard = (v, open) => `<article class="panel vid ${open ? "open" : ""}">
     ${open ? `<div class="vid-frame"><iframe src="${ytEmbed(v)}" title="${esc(v.title)}" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>` : ""}
     <div class="row vid-foot"><a class="btn link small" href="${ytLink(v)}" target="_blank" rel="noopener noreferrer">유튜브에서 열기 ↗</a>${can("video") ? `<button class="btn link small" type="button" data-act="videdit" data-id="${esc(v.id)}">수정</button><button class="btn link small danger" type="button" data-act="viddel" data-id="${esc(v.id)}">삭제</button>` : ""}</div>
   </article>`;
+// 가장 최근 영상: 유튜브 플레이어가 재생목록을 읽은 뒤 맨 끝(최근 추가)으로 맞춤 · 목록이 최신순이면 '맨 앞'으로 바꿈
+let ytApi = null;
+function loadYtApi() {
+  if (ytApi) return ytApi;
+  ytApi = new Promise(res => {
+    if (window.YT && window.YT.Player) return res(window.YT);
+    const t = setTimeout(() => res(null), 8000);
+    window.onYouTubeIframeAPIReady = () => { clearTimeout(t); res(window.YT); };
+    const sc = document.createElement("script"); sc.src = "https://www.youtube.com/iframe_api"; sc.onerror = () => { clearTimeout(t); res(null); };
+    document.head.appendChild(sc);
+  });
+  return ytApi;
+}
+const latestSrc = () => { const pls = state.videos.filter(v => v.kind === "playlist"); return pls.find(v => v.id === state.latestId) || pls.find(v => v.cat === "practice") || pls[0] || null; };
+const latestEnd = id => { try { return localStorage.getItem("snuvt-yt-" + id) !== "front"; } catch (e) { return true; } };
+async function initLatest() {
+  const v = latestSrc(), box = document.getElementById("ytLatest"); if (!v || !box || box.dataset.ready) return;
+  box.dataset.ready = "1";
+  const info = t => { const el = document.getElementById("ytInfo"); if (el) el.textContent = t; };
+  const YT = await loadYtApi();
+  if (!YT || !document.getElementById("ytLatest")) { info("유튜브를 불러오지 못했어요. 아래 '재생'이나 '유튜브에서 열기'로 봐 주세요."); return; }
+  new YT.Player("ytLatest", { host: "https://www.youtube-nocookie.com", width: "100%", height: "100%", playerVars: { listType: "playlist", list: v.yt, playsinline: 1, rel: 0 },
+    events: { onReady: e => {
+      const pl = e.target.getPlaylist && e.target.getPlaylist();
+      if (pl && pl.length > 1 && latestEnd(v.yt)) { e.target.cuePlaylist({ listType: "playlist", list: v.yt, index: pl.length - 1 }); info(`${v.title} · ${pl.length}개 중 가장 최근(목록 맨 끝)`); }
+      else info(pl && pl.length ? `${v.title} · ${pl.length}개 중 목록 맨 앞` : v.title);
+    }, onError: () => info("이 재생목록은 열 수 없어요. 링크나 공개 범위(일부 공개)를 확인해 주세요.") } });
+}
 function viewVideo() {
   const cat = state.vidCat || "all", list = state.videos.filter(v => cat === "all" || v.cat === cat);
+  const pls = state.videos.filter(v => v.kind === "playlist"), src = latestSrc();
   const cats = ["all", ...Object.keys(VID_CATS).filter(k => state.videos.some(v => v.cat === k))];
   return `<section class="sec"><div class="sec-head"><h2>영상</h2>${can("video") ? `<button class="btn add" type="button" data-act="videdit" data-id="">＋ 영상 추가</button>` : ""}</div>
     <div class="lib-cats">${cats.map(k => `<button type="button" class="chip ${k === cat ? "on" : ""}" data-act="vidcat" data-c="${k}">${k === "all" ? "전체" : VID_CATS[k]}</button>`).join("")}</div>
+    ${src ? `<section class="panel latest"><div class="row between"><h3>가장 최근 영상</h3><button class="btn link small" type="button" data-act="ytorder" data-id="${esc(src.yt)}">${latestEnd(src.yt) ? "목록 맨 앞부터" : "목록 맨 끝부터"}</button></div>
+      ${pls.length > 1 ? `<div class="lib-cats">${pls.map(v => `<button type="button" class="chip ${v.id === src.id ? "on" : ""}" data-act="ytlatest" data-id="${esc(v.id)}">${esc(v.title)}</button>`).join("")}</div>` : ""}
+      <div class="vid-frame"><div id="ytLatest"></div></div><p class="small muted" id="ytInfo">불러오는 중</p></section>` : ""}
     <p class="small muted">부원만 볼 수 있어요. 링크를 밖으로 공유하지 말아 주세요.</p>
     <div class="vid-list">${list.length ? list.map(v => vidCard(v, state.vidOpen === v.id)).join("") : emptyLine("아직 올라온 영상이 없어요.")}</div></section>`;
 }
@@ -494,11 +538,11 @@ function openDrawer() {
   const el = document.getElementById("drawer"); if (!el) return;
   const link = (v, l) => `<button type="button" class="dr-link ${state.view === v ? "on" : ""}" data-act="view" data-v="${v}">${l}</button>`;
   const group = (k, ic) => { const sec = SECTIONS[k]; return `<div class="dr-group"><div class="dr-h">${svg(ic)}<span>${sec.label}</span></div>${secViews(sec).map(([v, l]) => link(v, l)).join("")}</div>`; };
-  el.querySelector(".drawer-body").innerHTML = `<div class="dr-top"><b>SNUVT</b><button class="btn link" type="button" data-act="drawerclose" aria-label="닫기">닫기</button></div>
+  el.querySelector(".drawer-body").innerHTML = `<div class="dr-top"><button type="button" class="dr-brand" data-act="view" data-v="home" aria-label="홈으로"><img class="logo logo-light" src="logo.png?v=4" alt="" width="32" height="31"><img class="logo logo-dark" src="logo-white.png?v=4" alt="" width="32" height="31"><b>SNUVT</b></button><button class="btn link" type="button" data-act="drawerclose" aria-label="닫기">닫기</button></div>
     <div class="dr-group">${link("home", "홈")}</div>
     ${group("practice", "ball")}${group("physical", "physical")}${group("schedule", "schedule")}${group("video", "video")}${secViews(SECTIONS.admin).length ? group("admin", "admin") : ""}
     <div class="dr-group"><button type="button" class="dr-link" data-act="settings">설정</button></div>
-    ${state.staff ? `<div class="dr-group"><button type="button" class="dr-link" data-act="mode">${state.admin ? "선수 화면으로" : "관리자 화면으로"}</button></div>` : ""}`;
+    ${state.staff ? `<div class="dr-group"><div class="dr-h"><span>화면 보기</span></div><div class="dr-roles">${viewOptions().map(k => `<button type="button" class="chip ${state.viewAs === k ? "on" : ""}" data-act="viewas" data-k="${k}">${VIEW_LABEL(k)}</button>`).join("")}</div></div>` : ""}`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
 function closeDrawer() { const el = document.getElementById("drawer"); if (el && !el.hidden) { el.hidden = true; document.body.classList.remove("noscroll"); } }
@@ -527,7 +571,7 @@ function viewSettings() {
     </section>
     <section class="panel set-sec"><h3>계정</h3>
       ${email ? `<div class="kv"><span>이메일</span><b>${esc(email)}</b></div>` : ""}
-      ${state.staff ? `<button type="button" class="menu-item" data-act="mode"><span>${state.admin ? "선수 화면으로 보기" : "관리자 화면으로 보기"}</span><span></span><span class="go">›</span></button>` : ""}
+      ${state.staff ? `<button type="button" class="menu-item" data-act="rolepick"><span>화면 보기</span><span class="small muted">${VIEW_LABEL(state.viewAs)}</span><span class="go">›</span></button>` : ""}
       <button type="button" class="menu-item" data-act="pwchange"><span>비밀번호 바꾸기</span><span></span><span class="go">›</span></button>
       <button type="button" class="menu-item danger" data-act="logout"><span>로그아웃</span><span></span><span class="go">›</span></button>
     </section>`;
@@ -823,7 +867,7 @@ function blockHtml(b, edit) {
     <div class="nm">${esc(x.name)}${x.mod ? ` <span class="mod">${esc(x.mod)}</span>` : ""}</div><div class="rx">${esc(rxMain(x.rx))}</div>${rxRest(x.rx) ? `<div class="sub">${rxRest(x.rx)}</div>` : ""}</li>`; }).join("")}</ul>
     ${b.note ? `<p class="bnote">${esc(b.note).replace(/\n/g, "<br>")}</p>` : ""}</section>`;
 }
-/* ---------- 프로그램 박스 편집 (트레이닝 담당) ---------- */
+/* ---------- 프로그램 박스 편집 (피지컬 코치) ---------- */
 const SLOT_KO = { gymA: "하체 웨이트 날", gymB: "상체 웨이트 날", bwU: "맨몸 상체 날", bwL: "맨몸 하체 날", act: "활성화 날", team: "정규 훈련 날", recover: "회복 날", prep: "대회 전날" };
 const editCtx = { slot: null, pid: null };
 function editBar(plan, p) {
@@ -1183,7 +1227,7 @@ function viewIntake() {
   const list = `<div class="plist">${ps.map(x => `<button type="button" data-act="edit" data-pid="${esc(x.id)}" aria-pressed="${x.id === pid}"><span>${esc(x.name)}</span><span class="chip pos">${esc(x.pos)}</span></button>`).join("")}
     <button type="button" data-act="edit" data-pid="__new" aria-pressed="${isNew}"><span>+ 새 선수</span></button></div>`;
   const opt = (v, cur) => `value="${v}" ${String(cur ?? "") === String(v) ? "selected" : ""}`;
-  return `<section class="sec"><h2>부원 관리</h2><p class="small muted">직책: 관리자·주장 = 모든 기능 · 부주장 = 일정·공지·명단 · 훈련부장 = 일정·교류전·엔트리·불참·공지 · 총무 = 공지·명단 · 트레이닝 담당 = 프로그램 편집·측정·부상</p></section>
+  return `<section class="sec"><h2>부원 관리</h2><p class="small muted">직책: 관리자·주장 = 모든 기능 · 부주장 = 일정·공지·명단 · 훈련부장 = 일정·교류전·엔트리·불참·공지 · 총무 = 공지·명단 · 피지컬 코치 = 프로그램 편집·측정·부상</p></section>
   ${membersHtml()}
   <section class="side">
     <div class="panel">${list}</div>
@@ -1637,11 +1681,31 @@ function offlineHtml() {
   return `<div class="panel empty"><strong>팀 데이터에 연결하지 못했어요</strong><span>인터넷 연결을 확인하고 새로고침해 주세요.</span></div>`;
 }
 const savedMode = () => { try { return localStorage.getItem("snuvt-mode"); } catch (e) { return null; } };
-function setMode(admin) {
-  state.admin = admin; state.pid = null; state.editPid = null; state.dirty = false;
-  try { localStorage.setItem("snuvt-mode", admin ? "admin" : "player"); } catch (e) {}
-  if (!admin && ["intake", "report", "roster", "sched"].includes(state.view)) state.view = "home";
-  render(); window.scrollTo(0, 0);
+function setMode(admin) { return setView(admin ? (state.coach ? (state.title === "captain" ? "captain" : "admin") : viewOptions()[0]) : "player"); }
+function setView(k) {
+  if (!viewOptions().includes(k)) return;
+  state.viewAs = k; state.admin = k !== "player"; state.pid = null; state.editPid = null; state.dirty = false; state.boxEdit = false; state.prEdit = false;
+  try { localStorage.setItem("snuvt-mode", k); } catch (e) {}
+  // 지금 화면을 그 직책이 못 보면 홈으로
+  const sec = SECTIONS[SECTION_OF[state.view]], ok = !sec || secViews(sec).some(v => v[0] === state.view);
+  if (!ok) state.view = "home";
+  closeDrawer(); closeSheet(); render(); window.scrollTo(0, 0);
+  toast(`${VIEW_LABEL(k)} 화면`);
+}
+// 저장된 보기 → 지금 가능한 것 중에서 (예전 값 admin/player 도 읽음)
+function pickView() {
+  const o = viewOptions(), saved = savedMode();
+  if (saved && o.includes(saved)) return saved;
+  if (saved === "admin" && o.length > 1) return state.coach ? (state.title === "captain" ? "captain" : "admin") : o[0];
+  if (saved === "player") return "player";
+  return state.coach ? (state.title === "captain" ? "captain" : "admin") : "player";
+}
+function openRolePick() {
+  const el = document.getElementById("sheet");
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>화면 보기</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <p class="small muted">${state.coach ? "각 직책이 보는 화면으로 바꿔서 확인해요. 데이터는 그대로예요." : "내 직책 화면과 선수 화면을 바꿔요."}</p>
+    <div class="role-list">${viewOptions().map(k => `<button type="button" class="role-opt ${state.viewAs === k ? "on" : ""}" data-act="viewas" data-k="${k}"><b>${VIEW_LABEL(k)}</b><span class="small muted">${k === "player" ? "내 운동 · 기록 · 일정" : k === "media" ? "영상 추가 · 수정" : esc(TITLE_JOB[k] || "")}</span></button>`).join("")}</div>`;
+  el.hidden = false; document.body.classList.add("noscroll");
 }
 const needsSelfReg = () => state.session && state.role === "player" && !state.myPid && state.loaded;
 function render() {
@@ -1663,6 +1727,7 @@ function render() {
   const bar = state.loaded && (state.net === false || q) ? `<div class="netbar">${state.net === false ? "오프라인 · 마지막으로 불러온 내용" : "기록 올리는 중"}${q ? ` · 올라갈 기록 ${q}건` : ""}</div>` : "";
   document.getElementById("main").innerHTML = bar + html;
   refreshSettings();
+  if (state.view === "video") initLatest();
 }
 // 화면 넘어갈 때 부드럽게: 섹션이 바뀌면 살짝 올라오며, 같은 섹션 안 탭은 옆으로 미끄러지며
 function go(view) {
@@ -1773,6 +1838,8 @@ document.addEventListener("click", async ev => {
   if (act === "entry") return openEntry(b.dataset.kind, b.dataset.id);
   if (act === "addform") return openForm(b.dataset.f);
   if (act === "edtest") return openTestEdit(b.dataset.id);
+  if (act === "ytlatest") { state.latestId = b.dataset.id; state.dirty = false; return render(); }
+  if (act === "ytorder") { const id = b.dataset.id; try { localStorage.setItem("snuvt-yt-" + id, latestEnd(id) ? "front" : "end"); } catch (e) {} state.dirty = false; return render(); }
   if (act === "vidcat") { state.vidCat = b.dataset.c; state.dirty = false; return render(); }
   if (act === "vidopen") { state.vidOpen = state.vidOpen === b.dataset.id ? null : b.dataset.id; state.dirty = false; return render(); }
   if (act === "videdit") return openVidForm(b.dataset.id);
@@ -1843,6 +1910,8 @@ document.addEventListener("click", async ev => {
   if (act === "pushon") return pushOn();
   if (act === "pushoff") return pushOff();
   if (act === "mode") { closeDrawer(); return setMode(!state.admin); }
+  if (act === "rolepick") { closeDrawer(); closeSettings(); return openRolePick(); }
+  if (act === "viewas") return setView(b.dataset.k);
   if (act === "refresh") { await loadProfile(); if (state.role === "pending") toast("아직 승인 전이에요."); return; }
   if (act === "editself") { state.editingSelf = true; state.dirty = false; return render(); }
   if (act === "canceledit") { state.editingSelf = false; state.dirty = false; return render(); }
@@ -2183,8 +2252,8 @@ async function loadProfile() {
   state.role = r.data ? r.data.role : "pending";
   state.myPid = r.data ? r.data.player_id : null;
   state.coach = state.role === "coach";
-  state.staff = state.coach || !!STAFF_PERMS[state.title];
-  state.admin = state.staff && (state.coach ? savedMode() !== "player" : savedMode() === "admin"); // 관리 화면 ↔ 선수 화면 전환
+  state.staff = state.coach || !!STAFF_PERMS[state.title] || !!state.media;
+  state.viewAs = pickView(); state.admin = state.viewAs !== "player";
   state.canWrite = state.role === "coach" || state.role === "player";
   if (state.canWrite) await loadAll();
   else if (state.role === "pending" && state.myPid) await loadSelf();
@@ -2335,10 +2404,9 @@ function buildState(raw) {
   if (myTitle !== state.title || myMedia !== !!state.media) {
     state.media = myMedia;
     state.title = myTitle;
-    const wasStaff = state.staff;
     state.staff = state.coach || !!STAFF_PERMS[myTitle] || state.media;
-    if (!state.coach && state.staff !== wasStaff) state.admin = state.staff && savedMode() === "admin";
-    if (!state.staff) state.admin = false;
+    state.viewAs = pickView();
+    state.admin = state.viewAs !== "player";
   }
   state.contacts = Object.fromEntries((raw.player_contacts || []).map(r => [r.player_id, r.phone || ""]));
   for (const r of raw.player_private || []) if (state.players[r.player_id]) Object.assign(state.players[r.player_id], { height: r.height == null ? null : Number(r.height), weight: r.weight == null ? null : Number(r.weight) });

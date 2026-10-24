@@ -469,6 +469,17 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 .pr-drills li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 12px; font-size: 14.5px; }
 .pr-drills .rx { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .pr-link { margin-top: 4px; justify-self: start; }
+.dr-brand { display: inline-flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--ink); font: inherit; font-family: var(--f-display); font-size: 22px; padding: 2px 4px; border-radius: 10px; cursor: pointer; }
+.dr-brand .logo { height: 32px; }
+.dr-brand b { font-weight: 400; }
+.dr-roles { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 6px 4px; }
+.dr-roles .chip, .role-opt { cursor: pointer; font: inherit; }
+.dr-roles .chip { font-size: 13px; padding: 4px 10px; }
+.dr-roles .chip.on { background: var(--blue); color: #fff; border-color: var(--blue); }
+.role-list { display: grid; gap: 6px; }
+.role-opt { display: grid; gap: 2px; text-align: left; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); transition: border-color .15s, background-color .15s, transform .12s; }
+.role-opt.on { border-color: var(--blue); background: var(--blue-soft); }
+.role-opt:active { transform: scale(.98); }
 /* 설정 창 (오른쪽에서) */
 .setpanel-bg { position: fixed; inset: 0; z-index: 40; background: rgba(10, 16, 30, .45); }
 .setpanel { position: absolute; top: 0; bottom: 0; right: 0; width: min(480px, 100vw); background: var(--bg); overflow-y: auto; padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px)); box-shadow: -4px 0 24px rgba(0, 0, 0, .18); }
@@ -493,7 +504,8 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 .vid-ic svg { width: 22px; height: 22px; }
 .vid-t { display: grid; min-width: 0; flex: 1; }
 .vid-frame { position: relative; width: 100%; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #000; }
-.vid-frame iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.vid-frame iframe, .vid-frame #ytLatest { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.latest { display: grid; gap: 8px; border-color: var(--crit); }
 .vid-foot { gap: 6px; }
 /* 훈련 노트 */
 .note-form textarea { resize: vertical; }
@@ -626,9 +638,9 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scrollbar-gutter:
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=45"></script>
-<script src="guide.js?v=45"></script>
-<script src="library.js?v=45"></script>
-<script src="app.js?v=45"></script>
+<script src="program.js?v=46"></script>
+<script src="guide.js?v=46"></script>
+<script src="library.js?v=46"></script>
+<script src="app.js?v=46"></script>
 </body>
 </html>
