@@ -388,3 +388,9 @@ alter table public.logs add constraint logs_pain_area_check
 -- private.wipe_personal(pid): 연락처·키/몸무게·부상·노트·컨디션·통증·불참·인바디·개인 편집·선택·알림 삭제
 -- public.retire_member(target, wipe_all): 관리자·주장만. 졸업 = 개인정보·계정 삭제 + 이름/기록만 남김, wipe_all = 선수 행까지 삭제
 -- public.leave_team(): 본인 탈퇴(계정·기록 모두 삭제), 마지막 관리자는 불가
+
+-- ===== 훈련부장 = 훈련 파트만 · 자율 훈련 (ops_training_only_open_sessions) =====
+-- private.can: schedule = vice / notice = vice·treasurer / practice = ops / attend(정규 훈련 시간·없는 날·자율 훈련·불참 확인) = ops·vice
+-- practice_times · team_off 쓰기, absences 읽기 → can('attend')
+-- open_sessions(date, start_time, end_time, place, note): 읽기 = 부원, 쓰기 = can('attend')
+-- open_votes(session_id, player_id, going): 읽기 = 부원, 쓰기 = 본인

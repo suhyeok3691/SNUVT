@@ -93,18 +93,17 @@ const VIEWS = ["home", "practice", "notes", "video", "train", "plan", "rec", "se
 // 섹션: 홈 → Physical(트레이닝) · 일정 · 관리 · 설정. 공지는 홈 맨 위
 const SECTIONS = {
   physical: { label: "Physical", views: [["train", "오늘"], ["plan", "프로그램"], ["rec", "기록"]] },
-  schedule: { label: "일정", views: [["season", "다가오는"], ["comps", "대회·교류전"], ["sched", "훈련 관리", "schedule"]] },
+  schedule: { label: "일정", views: [["season", "다가오는"], ["comps", "대회·교류전"], ["sched", "훈련 관리", "attend"]] },
   admin: { label: "관리", views: [["roster", "명단", "roster"], ["intake", "부원", "full"], ["report", "리포트", "training"]] },
-  practice: { label: "훈련", views: [["practice", "훈련 계획"], ["notes", "훈련 노트"]] },
-  video: { label: "영상", views: [["video", "영상"]] },
+  practice: { label: "훈련", views: [["practice", "훈련 계획"], ["video", "영상"], ["notes", "훈련 노트"]] },
 };
-const SECTION_OF = { practice: "practice", notes: "practice", video: "video", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
+const SECTION_OF = { practice: "practice", notes: "practice", video: "practice", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
 // 직책: 관리자·주장 = 전체 / 부주장·훈련부장·총무·피지컬 코치 = 맡은 일만 (서버 규칙 private.can 과 같게)
 const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", ops: "훈련부장", treasurer: "총무", trainer: "피지컬 코치" };
-const TITLE_JOB = { admin: "모든 기능 · 직책 지정", captain: "모든 기능 · 직책 지정 · 훈련 설계", vice: "일정 · 공지 · 명단 · 영상", ops: "훈련 설계 · 일정 · 훈련 시간 · 교류전 · 엔트리 · 불참 · 공지", treasurer: "공지 · 명단(연락처)", trainer: "Physical 프로그램 편집 · 측정 수정 · 리포트" };
-const STAFF_PERMS = { vice: ["schedule", "notice", "roster", "video"], ops: ["schedule", "notice", "practice"], treasurer: ["notice", "roster"], trainer: ["training"] };
+// attend = 정규 훈련 시간·없는 날 · 자율 훈련 · 불참 확인
+const STAFF_PERMS = { vice: ["schedule", "notice", "roster", "video", "attend"], ops: ["practice", "attend"], treasurer: ["notice", "roster"], trainer: ["training"] };
 // 화면 보기(viewAs): 관리자·주장은 모든 직책 화면으로 바꿔 볼 수 있고, 직책이 있으면 '내 직책 ↔ 선수'
-const VIEW_LABEL = k => k === "player" ? "선수" : k === "media" ? "영상 담당" : TITLES[k] || k;
+const VIEW_LABEL = k => k === "player" ? "부원" : k === "media" ? "영상 담당" : TITLES[k] || k;
 function viewOptions() {
   const o = state.coach ? ["admin", "captain", "vice", "ops", "treasurer", "trainer", "media"] : [...(STAFF_PERMS[state.title] ? [state.title] : []), ...(state.media ? ["media"] : [])];
   return [...o, "player"];
@@ -124,7 +123,8 @@ const ICON = {
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   video: '<rect x="3" y="5.5" width="13" height="13" rx="2.5"/><path d="M16 10.5l5-3v9l-5-3z"/>',
-  ball: '<circle cx="12" cy="12" r="9"/><path d="M12 3c-2 3-2 6 0 9s2 6 0 9M3.5 9c3 1 6 1 8.5-1s5.5-2 8.5-1M4 16c3-1.5 6-1.5 8.5 0s5.5 1.5 7.5 0"/>',
+  // 배구공 (lucide volleyball, ISC)
+  ball: '<g transform="translate(1.2 1.2) scale(.9)"><circle cx="12" cy="12" r="10"/><path d="M11.1 7.1a16.55 16.55 0 0 1 10.9 4M12 12a12.6 12.6 0 0 1-8.7 5M16.8 13.6a16.55 16.55 0 0 1-9 7.5M20.7 17a12.8 12.8 0 0 0-8.7-5 13.3 13.3 0 0 1 0-10M6.3 3.8a16.55 16.55 0 0 0 1.9 11.5"/></g>',
   trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 21h8M9 17h6"/>',
   record: '<path d="M8 4h8l1 2h2a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h2z"/><path d="M8.5 13l2.5 2.5 4.5-5"/>',
   schedule: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
@@ -153,7 +153,7 @@ const state = {
   players: {}, tests: {}, health: {}, logs: {}, inbody: {}, events: null,
   loaded: false, offline: false, admin: false, coach: false, canWrite: null, dirty: false, armed: null,
   session: null, role: null, myPid: null, email: "", profiles: [], authMode: "login", authMsg: "", authErr: false, booting: true,
-  selfPlayer: null, selfHealth: null, editingSelf: false, painChecks: {}, openKeys: {}, wellness: {}, lifts: {}, planCtx: null, teamOff: {}, picks: {}, friendlies: {}, absences: {}, notices: [], entries: {}, ptimes: {}, contacts: {}, edits: [], title: null, staff: false, practice: {}, videos: [], notes: [],
+  selfPlayer: null, selfHealth: null, editingSelf: false, painChecks: {}, openKeys: {}, wellness: {}, lifts: {}, planCtx: null, teamOff: {}, picks: {}, friendlies: {}, absences: {}, notices: [], entries: {}, ptimes: {}, contacts: {}, edits: [], title: null, staff: false, practice: {}, videos: [], notes: [], opens: {},
 };
 let sb = null;
 
@@ -340,8 +340,11 @@ function header() {
   const bt = (v, k, label, cls = "") => `<button type="button" class="bt ${cls} ${onOf(v) ? "on" : ""}" data-act="view" data-v="${v}" ${onOf(v) ? 'aria-current="page"' : ""}><span class="bi">${svg(k)}</span><span>${label}</span></button>`;
   // 아래 탭: 홈이 가운데 (왼쪽 트레이닝 · 오른쪽 팀)
   // 아래 탭 바: 훈련 · Physical · 홈(가운데) · 일정 · 관리(관리 화면) / 영상
+  // 영상은 훈련 안에 있고, 관리 화면이 없는 부원만 다섯 번째 칸이 영상 바로가기
   const adminV = secViews(SECTIONS.admin)[0];
-  bar.innerHTML = bt("practice", "ball", "훈련") + bt("train", "physical", "Physical") + bt("home", "home", "홈", "center") + bt("season", "schedule", "일정") + (adminV ? bt(adminV[0], "admin", "관리") : bt("video", "video", "영상"));
+  const vidTab = !adminV, onVid = state.view === "video";
+  const btx = (v, k, label, on, cls = "") => `<button type="button" class="bt ${cls} ${on ? "on" : ""}" data-act="view" data-v="${v}" ${on ? 'aria-current="page"' : ""}><span class="bi">${svg(k)}</span><span>${label}</span></button>`;
+  bar.innerHTML = btx("practice", "ball", "훈련", onOf("practice") && !(vidTab && onVid)) + bt("train", "physical", "Physical") + bt("home", "home", "홈", "center") + bt("season", "schedule", "일정") + (adminV ? bt(adminV[0], "admin", "관리") : btx("video", "video", "영상", onVid));
   bar.hidden = false; document.body.classList.add("has-bar");
   const vs = sec ? secViews(sec) : [];
   if (!sec || vs.length < 2) { nav.innerHTML = sec ? `<span class="tab-title">${sec.label}</span>` : ""; nav.hidden = !nav.innerHTML; return; }
@@ -378,7 +381,7 @@ function viewPractice() {
     ${canEd && plan ? `<div class="row">${edit ? `<label class="check"><input type="checkbox" data-act="prpub" ${plan.published ? "checked" : ""}> 선수에게 공개</label>` : ""}<button class="btn ${edit ? "primary" : ""} small" type="button" data-act="predit">${edit ? "완료" : "편집"}</button></div>` : ""}</div>`;
   if (!plan) return `${chips}<section class="sec">${head}
     ${canEd ? `<div class="panel pr-empty"><p>아직 이날 훈련 계획이 없어요.</p><div class="row"><button class="btn primary" type="button" data-act="prnew" data-k="tpl">기본 틀로 시작</button>${Object.keys(state.practice).some(d => d < date) ? `<button class="btn" type="button" data-act="prnew" data-k="copy">지난 훈련 복사</button>` : ""}<button class="btn" type="button" data-act="prnew" data-k="blank">빈 계획</button></div>
-      <p class="small muted">기본 틀: 볼 체조 → 기본기(대인) → 포지션별 → 서브·리시브 → 연계(3단 공격) → 게임형 → 미팅</p></div>` : emptyLine("아직 훈련 계획이 올라오지 않았어요.")}</section>`;
+      </div>` : emptyLine("아직 훈련 계획이 올라오지 않았어요.")}</section>`;
   const total = plan.blocks.reduce((a, b) => a + (Number(b.minutes) || prMin(b)), 0);
   const blocks = plan.blocks.map((b, bi) => {
     const groups = b.groups || [];
@@ -423,7 +426,7 @@ function openPrBlock(bi) {
       <label class="fl">시간 (분)<input id="pb-min" type="number" inputmode="numeric" min="0" max="180" value="${esc(b ? b.minutes ?? "" : "")}"></label>
       <label class="fl">누가<select id="pb-split"><option value="all" ${split ? "" : "selected"}>공통 (다 같이)</option><option value="pos" ${split ? "selected" : ""}>포지션별 (나눠서 동시에)</option></select></label>
     </div><div class="row"><button class="btn primary" type="submit">${b ? "저장" : "추가"}</button></div>
-    <p class="small muted">포지션별: ${PRACTICE_GROUPS.map(g => g[0]).join(" · ")} 그룹으로 나뉘어요.</p></form>`;
+    </form>`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
 function openPrDrill(bi, gi) {
@@ -438,7 +441,7 @@ function openPrDrill(bi, gi) {
     <div class="lib" id="dlib">${drillList(cats[0], "")}</div>`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
-const drillList = (cat, q) => DRILL_LIB.filter(x => q ? x.n.includes(q) : x.c === cat).map(x => `<button type="button" class="box lib-box" data-act="drpick" data-n="${esc(x.n)}" data-m="${x.m}"><span class="bn">${esc(x.n)}</span><span class="br">${x.m}분</span></button>`).join("") || `<p class="small muted">없어요. 위에 직접 써서 넣어도 돼요.</p>`;
+const drillList = (cat, q) => DRILL_LIB.filter(x => q ? x.n.includes(q) : x.c === cat).map(x => `<button type="button" class="box lib-box" data-act="drpick" data-n="${esc(x.n)}" data-m="${x.m}"><span class="bn">${esc(x.n)}</span><span class="br">${x.m}분</span></button>`).join("") || `<p class="small muted">없어요</p>`;
 /* ---------- 영상 (유튜브 재생목록·영상, 부원만) ---------- */
 const VID_CATS = { practice: "훈련", friendly: "교류전", camp: "전지훈련", match: "대회", etc: "기타" };
 const ytEmbed = v => v.kind === "playlist" ? `https://www.youtube-nocookie.com/embed/videoseries?list=${encodeURIComponent(v.yt)}` : `https://www.youtube-nocookie.com/embed/${encodeURIComponent(v.yt)}`;
@@ -494,7 +497,7 @@ function viewVideo() {
     ${src ? `<section class="panel latest"><div class="row between"><h3>가장 최근 영상</h3><button class="btn link small" type="button" data-act="ytorder" data-id="${esc(src.yt)}">${latestEnd(src.yt) ? "맨 앞 영상 보기" : "맨 끝 영상 보기"}</button></div>
       ${pls.length > 1 ? `<div class="lib-cats">${pls.map(v => `<button type="button" class="chip ${v.id === src.id ? "on" : ""}" data-act="ytlatest" data-id="${esc(v.id)}">${esc(v.title)}</button>`).join("")}</div>` : ""}
       <div class="vid-frame"><div id="ytLatest"></div></div><p class="small muted" id="ytInfo">불러오는 중</p></section>` : ""}
-    <p class="small muted">부원만 볼 수 있어요. 링크를 밖으로 공유하지 말아 주세요.</p>
+    
     <div class="vid-list">${list.length ? list.map(v => vidCard(v, state.vidOpen === v.id)).join("") : emptyLine("아직 올라온 영상이 없어요.")}</div></section>`;
 }
 function openVidForm(id) {
@@ -507,7 +510,7 @@ function openVidForm(id) {
       <label class="fl">날짜<input id="vd-date" type="date" value="${esc(v.date || "")}"></label>
       <label class="fl wide">메모<input id="vd-note" maxlength="200" value="${esc(v.note || "")}"></label>
     </div><div class="row"><button class="btn primary" type="submit">${id ? "저장" : "추가"}</button></div>
-    <p class="small muted">재생목록을 한 번 넣어 두면 유튜브에서 그 목록에 올리는 영상이 여기에도 자동으로 보여요. 날짜를 넣은 영상은 그날 훈련 계획에도 나와요.</p></form>`;
+    </form>`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
 /* ---------- 훈련 노트 (쓰고 싶은 사람만, 기본은 나만 봄) ---------- */
@@ -520,7 +523,7 @@ function viewNotes() {
   const noteCard = n => `<article class="panel note"><div class="row between"><b>${longDate(parseD(n.date))}${n.pid !== state.myPid ? ` · ${esc((playerOf(n.pid) || {}).name || "")}` : ""}</b>${n.pid === state.myPid ? `<span class="row">${n.shared ? `<span class="chip">공유</span>` : ""}<button class="btn link small" type="button" data-act="noteedit" data-d="${n.date}">수정</button></span>` : ""}</div>
     ${n.good ? `<p><span class="nk">잘된 것</span>${esc(n.good)}</p>` : ""}${n.fix ? `<p><span class="nk">고칠 것</span>${esc(n.fix)}</p>` : ""}${n.next ? `<p><span class="nk">다음 목표</span>${esc(n.next)}</p>` : ""}${n.body ? `<p class="nbody">${esc(n.body)}</p>` : ""}</article>`;
   return `<section class="sec"><div class="sec-head"><h2>훈련 노트</h2>${me ? `<span class="small muted">이번 달 ${month}개</span>` : ""}</div>
-    <p class="small muted">꼭 안 써도 돼요. 짧게라도 남기면 내가 뭘 고치고 있는지 보여요. 기본은 나만 보고, 공유하면 주장·훈련부장이 봐요.</p>
+    
     ${me ? `<form class="f panel note-form" id="noteForm">
       <div class="fields"><label class="fl">날짜<input type="date" id="nt-date" value="${d}" max="${t}" required></label></div>
       ${ta("nt-good", "오늘 잘된 것", cur.good, "예: 리시브 때 발이 먼저 갔다")}
@@ -541,7 +544,7 @@ function openDrawer() {
   const group = (k, ic) => { const sec = SECTIONS[k]; return `<div class="dr-group"><div class="dr-h">${svg(ic)}<span>${sec.label}</span></div>${secViews(sec).map(([v, l]) => link(v, l)).join("")}</div>`; };
   el.querySelector(".drawer-body").innerHTML = `<div class="dr-top"><button type="button" class="dr-brand" data-act="view" data-v="home" aria-label="홈으로"><img class="logo logo-light" src="logo.png?v=4" alt="" width="32" height="31"><img class="logo logo-dark" src="logo-white.png?v=4" alt="" width="32" height="31"><b>SNUVT</b></button><button class="btn link" type="button" data-act="drawerclose" aria-label="닫기">닫기</button></div>
     <div class="dr-group">${link("home", "홈")}</div>
-    ${group("practice", "ball")}${group("physical", "physical")}${group("schedule", "schedule")}${group("video", "video")}${secViews(SECTIONS.admin).length ? group("admin", "admin") : ""}
+    ${group("practice", "ball")}${group("physical", "physical")}${group("schedule", "schedule")}${secViews(SECTIONS.admin).length ? group("admin", "admin") : ""}
     <div class="dr-group"><button type="button" class="dr-link" data-act="settings">설정</button></div>
     ${state.staff ? `<div class="dr-group"><div class="dr-h"><span>화면 보기</span></div><div class="dr-roles">${viewOptions().map(k => `<button type="button" class="chip ${state.viewAs === k ? "on" : ""}" data-act="viewas" data-k="${k}">${VIEW_LABEL(k)}</button>`).join("")}</div></div>` : ""}`;
   el.hidden = false; document.body.classList.add("noscroll");
@@ -564,7 +567,7 @@ function viewSettings() {
         <label class="fl">배구 경력 (년)<input id="pr-exp" type="number" inputmode="decimal" min="0" max="20" step="0.5" value="${esc(me.exp ?? "")}"></label>
         ${wexpSelect("pr-wexp", me.weightExp, false, "—")}
       </div><div class="row"><button class="btn primary" type="submit">저장</button></div></form>
-      <p class="small muted">이름·포지션·등번호·부상 이력은 관리자에게 말해 주세요. 전화번호는 본인과 관리자·명단 담당만 봐요.</p>
+      
     </section>` : ""}
     <section class="panel set-sec"><h3>알림</h3><div id="pushBox"><p class="small muted">불러오는 중</p></div></section>
     <section class="panel set-sec"><h3>화면</h3>
@@ -594,26 +597,27 @@ function refreshSettings() {
 function viewHome() {
   if (!state.loaded) return `<div class="panel empty"><strong>불러오는 중</strong></div>`;
   const me = playerOf(state.myPid), t = iso(today()), team = infoOn(t);
-  const nextT = teamDays(dAdd(t, 1), 21)[0];
-  const teamLine = isTeamDay(team) ? tdLabel(team) : team.slot === "match" ? (team.event ? team.event.name : "대회") : team.teamOff ? `정규 훈련 없음${team.teamOffNote ? " · " + team.teamOffNote : ""}` : "오늘은 없음";
+  const nextT = upcoming(dAdd(t, 1), 21)[0], todayO = opensOn(t)[0];
+  const itemLabel = x => x.open ? openLabel(x.open) : tdLabel(x.i);
+  const teamLine = isTeamDay(team) ? tdLabel(team) : team.slot === "match" ? (team.event ? team.event.name : "대회") : todayO ? openLabel(todayO) : team.teamOff ? `정규 훈련 없음${team.teamOffNote ? " · " + team.teamOffNote : ""}` : "없음";
   const ab = me && absOf(me.id, t);
   const plan = me ? planOn(me, t) : null;
   // 다가오는 교류전 (3주 안)
   const fr = Object.entries(state.friendlies).filter(([d]) => d >= t && d <= dAdd(t, 21)).sort().flatMap(([d, fs]) => fs.map(f => ({ d, f })))[0];
   const rows = [
-    `<div class="hub-row tap" data-act="view" data-v="season" role="button" tabindex="0"><span class="k">팀 일정</span><span class="v">${esc(teamLine)}${ab ? ` <span class="chip warn">불참</span>` : ""}${!isTeamDay(team) && nextT ? `<span class="small muted">다음 · ${md(parseD(nextT.date))} (${DOW_KO[parseD(nextT.date).getDay()]}) ${esc(tdLabel(nextT.i))}</span>` : ""}</span><span class="go">›</span></div>`,
+    `<div class="hub-row tap" data-act="view" data-v="season" role="button" tabindex="0"><span class="k">팀 일정</span><span class="v">${esc(teamLine)}${ab ? ` <span class="chip warn">불참</span>` : ""}${!isTeamDay(team) && !todayO && nextT ? `<span class="small muted">다음 · ${md(parseD(nextT.date))} (${DOW_KO[parseD(nextT.date).getDay()]}) ${esc(itemLabel(nextT))}</span>` : ""}</span><span class="go">›</span></div>`,
     state.practice[t] && isTeamDay(team) ? `<div class="hub-row tap" data-act="prgo" data-d="${t}" role="button" tabindex="0"><span class="k">훈련 계획</span><span class="v">${esc(state.practice[t].title || "오늘 훈련")}<span class="small muted">${state.practice[t].blocks.length}개 블록 · ${state.practice[t].blocks.reduce((a, b) => a + (Number(b.minutes) || 0), 0)}분</span></span><span class="go">›</span></div>` : "",
     plan ? `<div class="hub-row tap" data-act="view" data-v="train" role="button" tabindex="0"><span class="k">개인 훈련</span><span class="v">${esc(plan.title)}${!wellOn(me.id, t) ? `<span class="small muted">아침 컨디션 아직</span>` : ""}</span><span class="go">›</span></div>` : "",
-    fr ? `<div class="hub-row tap" data-act="view" data-v="comps" role="button" tabindex="0"><span class="k">교류전</span><span class="v"><span class="line">${md(parseD(fr.d))} (${DOW_KO[parseD(fr.d).getDay()]}) vs ${esc(fr.f.opponent)}${me && entryOf("friendly", fr.f.id).has(me.id) ? ` <span class="tag-in">엔트리</span>` : ""}</span><span class="small muted">${fmtKo(fr.f)}${fr.f.start ? ` · ${fr.f.start}${fr.f.end ? "–" + fr.f.end : ""}` : ""}${fr.f.place ? ` · ${esc(fr.f.place)}` : ""}</span></span><span class="go">›</span></div>` : "",
+    fr ? `<div class="hub-row tap" data-act="view" data-v="comps" role="button" tabindex="0"><span class="k">교류전</span><span class="v"><span class="line">${md(parseD(fr.d))} (${DOW_KO[parseD(fr.d).getDay()]}) ${esc(frName(fr.f.opponent))}${me && entryOf("friendly", fr.f.id).has(me.id) ? ` <span class="tag-in">엔트리</span>` : ""}</span><span class="small muted">${fmtKo(fr.f)}${fr.f.start ? ` · ${fr.f.start}${fr.f.end ? "–" + fr.f.end : ""}` : ""}${fr.f.place ? ` · ${esc(fr.f.place)}` : ""}</span></span><span class="go">›</span></div>` : "",
   ].filter(Boolean).join("");
   const pending = can("full") ? state.profiles.filter(m => m.role === "pending" && m.id !== state.session.user.id).length : 0;
-  const tile = (act, v, k, label, sub, badge) => `<button type="button" class="tile-btn" data-act="${act}" ${v ? `data-v="${v}"` : ""}><span class="ic">${svg(k)}${badge ? `<span class="badge">${badge}</span>` : ""}</span><span class="tl">${label}</span><span class="ts">${sub}</span></button>`;
+  const tile = (act, v, k, label, sub, badge) => `<button type="button" class="tile-btn" data-act="${act}" ${v ? `data-v="${v}"` : ""}><span class="ic">${svg(k)}${badge ? `<span class="badge">${badge}</span>` : ""}</span><span class="tl">${label}</span>${sub ? `<span class="ts">${sub}</span>` : ""}</button>`;
   const adm = secViews(SECTIONS.admin);
   const tiles = [
-    tile("view", "practice", "ball", "훈련", "훈련 계획 · 훈련 노트"),
-    tile("view", "train", "physical", "Physical", "오늘 운동 · 프로그램 · 기록"),
-    tile("view", "season", "schedule", "일정", "훈련 · 불참 · 대회 · 교류전"),
-    adm.length ? tile("view", adm[0][0], "admin", "관리", adm.map(v => v[1]).join(" · "), pending) : tile("view", "video", "video", "영상", "훈련 · 교류전 영상"),
+    tile("view", "practice", "ball", "훈련"),
+    tile("view", "train", "physical", "Physical"),
+    tile("view", "season", "schedule", "일정"),
+    adm.length ? tile("view", adm[0][0], "admin", "관리", "", pending) : tile("view", "video", "video", "영상"),
   ].join("");
   return `${noticesHtml()}${can("full") || can("training") ? teamStatusHtml() : ""}<section class="panel hub"><h3>오늘</h3>${rows}</section>
     <nav class="tiles-grid" aria-label="기능">${tiles}</nav>`;
@@ -662,7 +666,7 @@ function todayHtml(p) {
   const items = main.flatMap(b => b.items).slice(0, 5);
   const mine = plan.blocks.filter(b => b.scope === "me");
   return `<section class="panel today-card">
-    <p class="eyebrow">오늘 · ${longDate(today())} · ${esc(weekLabel(mon))}</p>
+    <p class="eyebrow">${longDate(today())}</p>
     <h2>${esc(plan.title)}</h2>
     ${picksHtml(plan, p.id, t)}
     ${items.length ? `<ul class="mini">${items.map(x => `<li><span>${esc(x.name)}</span><b>${esc(rxMain(x.rx))}</b></li>`).join("")}</ul>` : ""}
@@ -724,7 +728,7 @@ function rtpHtml(p) {
         ? `<label class="check"><input type="checkbox" data-rtp="${esc(p.id)}|${i}|${y.k}" ${y.ok ? "checked" : ""}> ${esc(y.l)}</label>`
         : `<span class="mk">${y.ok ? "✓" : "○"}</span> ${esc(y.l)}`}${y.v ? ` <span class="small muted">${esc(y.v)}</span>` : ""}</li>`).join("")}</ul>
       ${adm ? `<button class="btn ${n === it.length ? "primary" : ""}" type="button" data-act="rtpdone" data-pid="${esc(p.id)}" data-i="${i}">다 나음으로</button>` : ""}</div>`;
-  }).join("")}${adm ? "" : `<p class="small muted">✓는 기록·측정으로 채워지고, 나머지는 관리자가 확인해요.</p>`}</section>`;
+  }).join("")}${adm ? "" : ``}</section>`;
 }
 async function rtpSave(pid, injuries, msg) {
   const r = await sb.from("health").update({ injuries }).eq("player_id", pid);
@@ -809,13 +813,21 @@ function viewRoster() {
     <div class="tw"><table class="roster"><thead><tr><th>번호</th><th>이름</th><th>포지션</th><th>학년</th><th>직책</th><th>전화</th></tr></thead><tbody>
     ${ps.map(p => `<tr><td class="num">${p.number ?? "—"}</td><td><b>${esc(p.name)}</b></td><td><span class="chip pos">${esc(p.pos)}</span></td><td>${esc(p.year || "")}</td><td>${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}</td><td>${state.contacts[p.id] ? `<a href="tel:${esc(state.contacts[p.id].replace(/[^0-9+]/g, ""))}">${esc(state.contacts[p.id])}</a>` : "—"}</td></tr>`).join("")}
     </tbody></table></div></section>
-    <section class="sec"><h3>운영진</h3>${staff.length ? `<ul class="watch">${staff.map(p => `<li><b>${esc(p.name)}</b>${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span><span class="small muted">${esc(TITLE_JOB[p.title])}</span>` : ""}${p.media ? `<span class="chip">영상 담당</span>` : ""}</li>`).join("")}</ul>` : emptyLine("아직 정해진 직책이 없어요.")}</section>`;
+    <section class="sec"><h3>운영진</h3>${staff.length ? `<ul class="watch">${staff.map(p => `<li><b>${esc(p.name)}</b>${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}${p.media ? `<span class="chip">영상 담당</span>` : ""}</li>`).join("")}</ul>` : emptyLine("아직 정해진 직책이 없어요.")}</section>`;
 }
 // 리포트: 지난주 요약 + 선수별 리포트(최근 4주) + 엑셀
+// 시즌 = 3월 → 다음 해 2월. 기록이 있는 첫 시즌부터 이번 시즌까지
+const syOf = d => { const y = Number(d.slice(0, 4)), m = Number(d.slice(5, 7)); return m >= 3 ? y : y - 1; };
+function seasonSelect() {
+  const cur = seasonRange().sy, dates = [...Object.values(state.tests).flatMap(x => (x.runs || []).map(r => r.date)), ...Object.keys(state.friendlies)].filter(Boolean);
+  const first = Math.min(cur, ...dates.map(syOf)), sel = state.repSy || cur, opts = [];
+  for (let y = cur; y >= first; y--) opts.push(`<option value="${y}" ${y === sel ? "selected" : ""}>${y} 시즌</option>`);
+  return `<select id="repSy" class="sm-select" aria-label="시즌">${opts.join("")}</select>`;
+}
 function viewReport() {
   if (!can("training")) return `<div class="panel empty"><strong>관리자 전용이에요</strong></div>`;
   const ps = sortedPlayers();
-  return `<section class="sec"><div class="row between wrap"><h2>리포트</h2><div class="row"><button class="btn" type="button" data-act="xlsx" data-s="season">엑셀 (이번 시즌)</button><button class="btn link small" type="button" data-act="xlsx" data-s="all">전체</button></div></div></section>
+  return `<section class="sec"><div class="row between"><div class="row"><h2>리포트</h2>${seasonSelect()}</div><button class="btn" type="button" data-act="xlsx">엑셀 내보내기</button></div></section>
     ${weekSummaryHtml()}${ps.length ? teamReportHtml(ps) : ""}`;
 }
 // 지난주 요약 (관리 → 주간 요약): 기록 · 완료율 · 컨디션 · 통증 변화
@@ -844,10 +856,10 @@ function weekSummaryHtml() {
   const hot = rows.filter(r => r.n), rest = rows.filter(r => !r.n);
   return `<section class="panel wk-sum">
     <div class="row between"><h3>지난주 요약</h3><span class="small muted">${md(parseD(mon))} – ${md(parseD(end))}</span></div>
-    <div class="row wrap small"><span class="chip ${rows.some(r => r.flag.log) ? "warn" : ""}">기록 부족 ${rows.filter(r => r.flag.log).length}</span><span class="chip ${rows.some(r => r.flag.well) ? "warn" : ""}">컨디션 낮음 ${rows.filter(r => r.flag.well).length}</span><span class="chip ${rows.some(r => r.flag.pain) ? "crit" : ""}">통증 늘어남 ${rows.filter(r => r.flag.pain).length}</span></div>
+    <div class="row small"><span class="chip ${rows.some(r => r.flag.log) ? "warn" : ""}">기록 부족 ${rows.filter(r => r.flag.log).length}</span><span class="chip ${rows.some(r => r.flag.well) ? "warn" : ""}">컨디션 낮음 ${rows.filter(r => r.flag.well).length}</span><span class="chip ${rows.some(r => r.flag.pain) ? "crit" : ""}">통증 늘어남 ${rows.filter(r => r.flag.pain).length}</span></div>
     ${hot.length ? `<div class="tw"><table>${head}<tbody>${hot.map(tr).join("")}</tbody></table></div>` : `<p class="small muted">걸리는 선수 없어요</p>`}
     ${rest.length ? `<details><summary class="small muted">나머지 ${rest.length}명</summary><div class="tw"><table>${head}<tbody>${rest.map(tr).join("")}</tbody></table></div></details>` : ""}
-    <p class="small muted">기록 = 기록한 날/운동 있는 날 · 컨디션 = 평균(/20) · 통증 = 전주보다 2↑</p>
+    
   </section>`;
 }
 /* ---------- 프로그램 ---------- */
@@ -902,7 +914,7 @@ function openBoxLib(block) {
     <div class="lib" id="lib">${libList(cats[0], "")}</div>`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
-const libList = (cat, q) => BOX_LIB.filter(x => q ? x.n.includes(q) : x.c === cat).slice(0, 80).map(x => `<button type="button" class="box lib-box" data-act="libpick" data-n="${esc(x.n)}" data-r="${esc(x.r)}"><span class="bn">${esc(x.n)}</span><span class="br">${esc(rxMain(x.r))}</span></button>`).join("") || `<p class="small muted">없어요. 위에 직접 써서 넣어도 돼요.</p>`;
+const libList = (cat, q) => BOX_LIB.filter(x => q ? x.n.includes(q) : x.c === cat).slice(0, 80).map(x => `<button type="button" class="box lib-box" data-act="libpick" data-n="${esc(x.n)}" data-r="${esc(x.r)}"><span class="bn">${esc(x.n)}</span><span class="br">${esc(rxMain(x.r))}</span></button>`).join("") || `<p class="small muted">없어요</p>`;
 function viewPlan() {
   if (can("training") && state.pid === "__team") return viewTeamPlan();
   const pid = viewPid();
@@ -1049,7 +1061,7 @@ function liftHtml(p) {
     ${list.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>운동</th><th>무게×회</th><th>RIR</th><th>추정 1RM</th><th></th></tr></thead><tbody>
       ${list.slice(0, 12).map(l => `<tr><td class="num">${md(parseD(l.date))}</td><td>${esc(l.name || LIFT_KO[l.lift] || "")}</td><td class="num">${l.kg}×${l.reps}</td><td class="num">${l.rir}</td><td class="num">${Math.round(e1rmOf(l.kg, l.reps, l.rir))}</td>
         <td>${mine(l) ? `<button class="btn link danger" type="button" data-act="dellift" data-id="${esc(l.id)}">삭제</button>` : ""}</td></tr>`).join("")}
-    </tbody></table></div>` : emptyLine("프로그램에서 운동을 누르면 세트마다 무게를 적을 수 있어요.")}
+    </tbody></table></div>` : emptyLine("기록이 없어요.")}
   </section>`;
 }
 
@@ -1086,7 +1098,7 @@ function reportHtml(p) {
     </div>
     ${rows.length ? `<div class="tw"><table><thead><tr><th>항목</th><th>처음</th><th>지금</th><th>변화</th></tr></thead><tbody>
       ${rows.map(([n, x, y, u]) => `<tr><td>${esc(n)}</td><td class="num">${x}${u}</td><td class="num">${y}${u}</td><td class="num">${d(x, y, n)}</td></tr>`).join("")}
-    </tbody></table></div>` : emptyLine("측정이 두 번 이상 쌓이면 나와요.")}
+    </tbody></table></div>` : emptyLine("측정 2회부터 나와요.")}
   </section>`;
 }
 const bal = v => v === true ? "○" : v === false ? "×" : "—";
@@ -1169,7 +1181,7 @@ function viewSelfReg() {
   const p = state.selfPlayer || {}, h = state.selfHealth || {}, pain = h.pain || {};
   const opt = (v, cur, l) => `<option value="${v}" ${String(cur ?? "") === String(v) ? "selected" : ""}>${l}</option>`;
   return `<section class="sec narrow">
-    <div><h2>내 정보</h2><p class="lede">${state.role === "pending" ? "프로그램을 내 몸에 맞추는 데 써요. 제출하면 관리자가 승인해요." : state.admin ? "관리자 계정에 연결할 내 선수 정보예요." : "승인은 됐어요. 내 정보를 입력하면 프로그램이 열려요."}</p></div>
+    <div><h2>내 정보</h2><p class="lede">${state.role === "pending" ? "제출하면 관리자가 승인해요." : state.admin ? "" : "내 정보를 입력하면 프로그램이 열려요."}</p></div>
     <form class="f panel" id="selfForm">
       <fieldset><legend>기본 정보</legend>
         <div class="fields">
@@ -1235,7 +1247,7 @@ function viewIntake() {
   const list = `<div class="plist">${ps.map(x => `<button type="button" data-act="edit" data-pid="${esc(x.id)}" aria-pressed="${x.id === pid}"><span>${esc(x.name)}</span><span class="chip pos">${esc(x.pos)}</span></button>`).join("")}
     <button type="button" data-act="edit" data-pid="__new" aria-pressed="${isNew}"><span>+ 새 선수</span></button></div>`;
   const opt = (v, cur) => `value="${v}" ${String(cur ?? "") === String(v) ? "selected" : ""}`;
-  return `<section class="sec"><h2>부원</h2><p class="small muted">직책: 관리자·주장 = 모든 기능 · 부주장 = 일정·공지·명단 · 훈련부장 = 일정·교류전·엔트리·불참·공지 · 총무 = 공지·명단 · 피지컬 코치 = 프로그램 편집·측정·리포트</p></section>
+  return `<section class="sec"><h2>부원</h2></section>
   ${membersHtml()}
   ${alumniHtml()}
   <section class="side">
@@ -1247,7 +1259,7 @@ function viewIntake() {
             <label class="fl">이름<input id="pf-name" required maxlength="20" value="${esc(p.name || "")}"></label>
             <label class="fl">포지션<select id="pf-pos" required>${POS_ORDER.map(k => `<option ${opt(k, p.pos)}>${k}</option>`).join("")}</select></label>
             <label class="fl">등번호<input id="pf-num" type="number" inputmode="numeric" min="0" max="99" value="${esc(p.number ?? "")}"></label>
-            <label class="fl">직책<select id="pf-title"><option value="">일반 부원</option>${Object.entries(TITLES).map(([k, l]) => `<option value="${k}" ${p.title === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+            <label class="fl">직책<select id="pf-title"><option value="">부원</option>${Object.entries(TITLES).map(([k, l]) => `<option value="${k}" ${p.title === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
             <label class="check"><input type="checkbox" id="pf-media" ${p.media ? "checked" : ""}> 영상 담당</label>
             <label class="fl">전화번호<input id="pf-phone" type="tel" inputmode="tel" maxlength="20" placeholder="010-0000-0000" value="${esc((state.contacts || {})[pid] || "")}"></label>
             <label class="fl">학년<input id="pf-year" maxlength="10" placeholder="예: 3학년" value="${esc(p.year || "")}"></label>
@@ -1278,7 +1290,7 @@ function viewIntake() {
 }
 function testFormHtml(pid) {
   const r = runs(pid).filter(isMeas);
-  return `<section class="panel"><h3>측정 기록</h3><p class="small muted">측정은 선수가 직접 입력해요. 잘못 넣은 값은 여기서 고쳐요.</p>
+  return `<section class="panel"><h3>측정 기록</h3>
     ${r.length ? measTable(r, { reach: true }) : emptyLine("아직 측정이 없어요.")}</section>`;
 }
 function openTestEdit(id) {
@@ -1313,20 +1325,20 @@ const XL_SHEETS = [["absences", "불참"], ["tests", "측정"], ["logs", "세션
 function loadScript(src) {
   return new Promise((ok, no) => { const el = document.createElement("script"); el.src = src; el.onload = ok; el.onerror = no; document.head.appendChild(el); });
 }
-async function exportXlsx(scope) {
+async function exportXlsx(sy) {
   toast("엑셀 만드는 중…");
   try {
     if (!window.XLSX) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");
-    const t = iso(today()), y = Number(t.slice(0, 4)), m = Number(t.slice(5, 7)), from = scope === "all" ? "0000-01-01" : `${m >= 3 ? y : y - 1}-03-01`;
+    const t = iso(today()), from = `${sy}-03-01`, to = `${sy + 1}-03-01`;
     const pr = await sb.from("players").select("id,name,pos,year,height,weight,exp");
     if (pr.error) throw pr.error;
     const name = Object.fromEntries((pr.data || []).map(p => [p.id, p.name])), pos = Object.fromEntries((pr.data || []).map(p => [p.id, p.pos]));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sortedPlayers().map(p => ({ 이름: p.name, 포지션: p.pos, 학년: p.year || "", "키(cm)": p.height ?? "", "체중(kg)": p.weight ?? "", "배구 경력(년)": p.exp ?? "" }))), "선수");
-    const fq = await sb.from("friendlies").select("*").gte("date", from).order("date");
+    const fq = await sb.from("friendlies").select("*").gte("date", from).lt("date", to).order("date");
     if (!fq.error) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((fq.data || []).length ? fq.data.map(f => ({ 날짜: f.date, 상대: f.opponent, 방식: f.format === "9" ? "9인제" : "6인제", 시작: (f.start_time || "").slice(0, 5), 끝: (f.end_time || "").slice(0, 5), 장소: f.place || "", 메모: f.note || "" })) : [{ 날짜: "기록 없음" }]), "교류전");
     for (const [tb, label] of XL_SHEETS) {
-      const r = await sb.from(tb).select("*").gte("date", from).order("date");
+      const r = await sb.from(tb).select("*").gte("date", from).lt("date", to).order("date");
       if (r.error) throw r.error;
       const cols = XL_COLS[tb];
       const rows = (r.data || []).filter(x => name[x.player_id]).sort((a, b) => a.date.localeCompare(b.date) || name[a.player_id].localeCompare(name[b.player_id], "ko")).map(x => {
@@ -1345,7 +1357,7 @@ async function exportXlsx(scope) {
       const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 선수: "기록 없음" }]);
       XLSX.utils.book_append_sheet(wb, ws, label);
     }
-    XLSX.writeFile(wb, `SNUVT_${scope === "all" ? "전체" : `${m >= 3 ? y : y - 1}시즌`}_${t}.xlsx`);
+    XLSX.writeFile(wb, `SNUVT_${sy}시즌_${t}.xlsx`);
   } catch (e) { console.warn(e); toast("내보내지 못했어요. 연결을 확인해 주세요"); }
 }
 function teamReportHtml(ps) {
@@ -1363,13 +1375,13 @@ function teamReportHtml(ps) {
 const seasonRange = () => { const t = iso(today()), y = Number(t.slice(0, 4)), m = Number(t.slice(5, 7)), sy = m >= 3 ? y : y - 1; return { t, sy, from: `${sy}-03-01`, to: `${sy + 1}-02-28` }; };
 const addBtn = (form, label) => `<button class="btn add" type="button" data-act="addform" data-f="${form}">+ ${label}</button>`;
 function viewSeason() {
-  const { t } = seasonRange(), me = playerOf(state.myPid), l = teamDays(t, 14);
-  return `<div class="sched-cols"><section class="sec sched-list"><h3>훈련·교류전 <span class="small muted">2주</span></h3>${l.length && (can("schedule") || me) ? attendRows(l, me) : emptyLine("2주 안에 팀 일정이 없어요.")}</section>
+  const { t } = seasonRange(), me = playerOf(state.myPid), l = upcoming(t, 14);
+  return `<div class="sched-cols"><section class="sec sched-list"><h3>다가오는 훈련 <span class="small muted">2주</span></h3>${l.length ? attendRows(l, me) : emptyLine("2주 안에 팀 일정이 없어요.")}</section>
     <section class="sec sched-cal">${calHtml(me)}</section></div>`;
 }
-// 달력: 정규 훈련 · 교류전 · 대회 색을 나눠서 한 달을 한눈에
-const CAL_KIND = i => i.slot === "match" ? "match" : i.slot === "friendly" ? "fr" : i.slot === "tryout" ? "try" : i.slot === "team" ? (i.teamOff ? "off" : "team") : "";
-const CAL_LABEL = { team: "정규 훈련", fr: "교류전", match: "대회", try: "트라이아웃", off: "훈련 없음" };
+// 달력: 정규 훈련 · 자율 훈련 · 교류전 · 대회 색을 나눠서 한 달을 한눈에
+const CAL_KIND = (i, d) => i.slot === "match" ? "match" : i.slot === "friendly" ? "fr" : i.slot === "tryout" ? "try" : i.slot === "team" && !i.teamOff ? "team" : opensOn(d).length ? "open" : i.slot === "team" ? "off" : "";
+const CAL_LABEL = { team: "정규 훈련", open: "자율 훈련", fr: "교류전", match: "대회", try: "트라이아웃", off: "훈련 없음" };
 function calHtml(me) {
   const t = iso(today()), ym = state.calMonth || t.slice(0, 7), [y, m] = ym.split("-").map(Number);
   const first = new Date(y, m - 1, 1), days = new Date(y, m, 0).getDate(), lead = first.getDay();
@@ -1377,22 +1389,20 @@ function calHtml(me) {
   const cells = [];
   for (let k = 0; k < lead; k++) cells.push(`<span class="cd blank"></span>`);
   for (let d = 1; d <= days; d++) {
-    const ds = `${ym}-${String(d).padStart(2, "0")}`, i = infoOn(ds), k = CAL_KIND(i), a = me && absOf(me.id, ds);
-    cells.push(`<button type="button" class="cd ${k ? "k-" + k : ""} ${ds === t ? "today" : ""} ${ds === sel ? "sel" : ""} ${ds < t ? "past" : ""}" data-act="calday" data-d="${ds}" aria-pressed="${ds === sel}" aria-label="${longDate(parseD(ds))}${k ? " " + CAL_LABEL[k] : ""}${a ? " 불참" : ""}"><span class="n">${d}</span>${a ? `<i class="abs" aria-hidden="true"></i>` : ""}</button>`);
+    const ds = `${ym}-${String(d).padStart(2, "0")}`, i = infoOn(ds), k = CAL_KIND(i, ds), a = me && absOf(me.id, ds), op = k !== "open" && opensOn(ds).length;
+    cells.push(`<button type="button" class="cd ${k ? "k-" + k : ""} ${ds === t ? "today" : ""} ${ds === sel ? "sel" : ""} ${ds < t ? "past" : ""}" data-act="calday" data-d="${ds}" aria-pressed="${ds === sel}" aria-label="${longDate(parseD(ds))}${k ? " " + CAL_LABEL[k] : ""}${op ? " 자율 훈련" : ""}${a ? " 불참" : ""}"><span class="n">${d}</span>${a ? `<i class="abs" aria-hidden="true"></i>` : ""}${op ? `<i class="opn" aria-hidden="true"></i>` : ""}</button>`);
   }
   let detail = "";
   if (sel) {
-    const i = infoOn(sel), k = CAL_KIND(i), a = me && absOf(me.id, sel);
-    const line = k === "team" || k === "fr" ? esc(tdLabel(i)) : k === "match" ? esc((i.event && i.event.name) || "대회") + (i.days > 1 ? ` · ${i.dayNo}/${i.days}일째` : "") : k === "try" ? "트라이아웃" : k === "off" ? `훈련 없음${i.teamOffNote ? " · " + esc(i.teamOffNote) : ""}` : "팀 일정 없음";
-    detail = `<div class="cal-detail"><b>${longDate(parseD(sel))}</b><span class="small">${k ? `<i class="dot k-${k}"></i>` : ""}${line}</span>
-      ${a ? `<span class="chip warn">내 불참 · ${esc(ABS_REASONS[a.reason] || "")}</span>` : ""}
-      ${state.practice[sel] ? `<button type="button" class="btn link small" data-act="prgo" data-d="${sel}">훈련 계획 보기</button>` : ""}
-      ${me && isTeamDay(i) && sel >= t && !can("schedule") ? `<button class="btn small" type="button" data-act="absopen" data-date="${sel}">${a ? "불참 수정" : "불참"}</button>` : ""}</div>`;
+    const i = infoOn(sel), k = CAL_KIND(i, sel), items = upcoming(sel, 1);
+    const line = k === "match" ? esc((i.event && i.event.name) || "대회") + (i.days > 1 ? ` · ${i.dayNo}/${i.days}일째` : "") : k === "try" ? "트라이아웃" : k === "off" ? `훈련 없음${i.teamOffNote ? " · " + esc(i.teamOffNote) : ""}` : "";
+    detail = `<div class="cal-detail"><b>${longDate(parseD(sel))}</b>${line ? `<span class="small"><i class="dot k-${k}"></i>${line}</span>` : ""}
+      ${items.length ? attendRows(items, me) : line ? "" : `<span class="small muted">일정 없음</span>`}</div>`;
   }
   const prev = new Date(y, m - 2, 1), next = new Date(y, m, 1), ymOf = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   return `<div class="cal-head"><button class="btn link" type="button" data-act="calmonth" data-m="${ymOf(prev)}" aria-label="이전 달">‹</button><h3>${y}년 ${m}월</h3><button class="btn link" type="button" data-act="calmonth" data-m="${ymOf(next)}" aria-label="다음 달">›</button>${ym !== t.slice(0, 7) ? `<button class="btn link small" type="button" data-act="calmonth" data-m="${t.slice(0, 7)}">오늘</button>` : ""}</div>
     <div class="cal">${DOW_KO.map((w, k) => `<span class="cw ${k === 0 ? "sun" : k === 6 ? "sat" : ""}">${w}</span>`).join("")}${cells.join("")}</div>
-    <div class="cal-legend">${["team", "fr", "match", "off"].map(k => `<span><i class="dot k-${k}"></i>${CAL_LABEL[k]}</span>`).join("")}${me ? `<span><i class="abs-l"></i>내 불참</span>` : ""}</div>${detail}`;
+    <div class="cal-legend">${["team", "open", "fr", "match"].map(k => `<span><i class="dot k-${k}"></i>${CAL_LABEL[k]}</span>`).join("")}${me ? `<span><i class="abs-l"></i>불참</span>` : ""}</div>${detail}`;
 }
 function viewComps() {
   const { t, sy, from, to } = seasonRange();
@@ -1404,12 +1414,12 @@ function viewComps() {
       ${list.length ? `<ul class="ev-list">${list.map(e => `<li class="${e.end < t ? "past" : ""}"><span class="num">${range(e)}</span><span class="ev-main"><b>${esc(e.name)}</b> <span class="chip ${e.kind === "major" ? "warn" : ""}">${esc(EVENT_KINDS[e.kind] || e.kind)}</span>${e.note ? `<span class="small muted">${esc(e.note)}</span>` : ""}${e.id && (e.kind === "major" || e.kind === "minor") && e.end >= t ? entryChip("event", e.id) : ""}</span>${can("schedule") && e.id ? `<button class="btn link danger small" type="button" data-act="delevent" data-id="${esc(e.id)}">삭제</button>` : ""}</li>`).join("")}</ul>` : emptyLine("등록된 일정이 없어요.")}
     </section></div>
     <div class="col"><section class="sec"><div class="sec-head"><h3>교류전</h3>${can("schedule") ? addBtn("friendly", "교류전") : ""}</div>
-      ${frs.length ? `<ul class="ev-list">${frs.map(([d, f]) => `<li class="${d < t ? "past" : ""}"><span class="num">${md(parseD(d))} (${DOW_KO[parseD(d).getDay()]})</span><span class="ev-main"><b>vs ${esc(f.opponent)}</b> <span class="chip">${fmtKo(f)}</span><span class="small muted">${esc([f.start && f.start + (f.end ? "–" + f.end : ""), f.place, f.note].filter(Boolean).join(" · "))}</span>${d >= t ? entryChip("friendly", f.id) : ""}</span>${can("schedule") ? `<button class="btn link danger small" type="button" data-act="delfriendly" data-id="${esc(f.id)}">삭제</button>` : ""}</li>`).join("")}</ul>` : emptyLine("잡힌 교류전이 없어요.")}
+      ${frs.length ? `<ul class="ev-list">${frs.map(([d, f]) => `<li class="${d < t ? "past" : ""}"><span class="num">${md(parseD(d))} (${DOW_KO[parseD(d).getDay()]})</span><span class="ev-main"><b>${esc(frName(f.opponent))}</b> <span class="chip">${fmtKo(f)}</span><span class="small muted">${esc([f.start && f.start + (f.end ? "–" + f.end : ""), f.place, f.note].filter(Boolean).join(" · "))}</span>${d >= t ? entryChip("friendly", f.id) : ""}</span>${can("schedule") ? `<button class="btn link danger small" type="button" data-act="delfriendly" data-id="${esc(f.id)}">삭제</button>` : ""}</li>`).join("")}</ul>` : emptyLine("잡힌 교류전이 없어요.")}
     </section></div>
   </div>`;
 }
 function viewSched() {
-  if (!can("schedule")) return `<div class="panel empty"><strong>관리자 전용이에요</strong></div>`;
+  if (!can("attend")) return `<div class="panel empty"><strong>관리자 전용이에요</strong></div>`;
   const t = iso(today()), off = Object.entries(state.teamOff).filter(([d]) => d >= dAdd(t, -14)).sort();
   const pt = k => state.ptimes[k] || { start: "18:00", end: "21:00" };
   const days = Object.entries(state.ptimes).filter(([k]) => /^\d{4}/.test(k) && k >= dAdd(t, -14)).sort();
@@ -1422,9 +1432,12 @@ function viewSched() {
     <section class="sec"><div class="sec-head"><h3>그날만 시간 바꾸기</h3>${addBtn("ptday", "추가")}</div>
       ${days.length ? `<ul class="watch">${days.map(([d, o]) => `<li><span class="num">${longDate(parseD(d))}</span><span>${esc(timeTxt(o))}</span>${o.note ? `<span class="small muted">${esc(o.note)}</span>` : ""}<button class="btn link danger" type="button" data-act="ptdel" data-key="${esc(d)}">취소</button></li>`).join("")}</ul>` : emptyLine("바꾼 날이 없어요.")}
     </section></div>
-    <div class="col"><section class="sec"><div class="sec-head"><h3>정규 훈련 없는 날</h3>${addBtn("off", "추가")}</div>
+    <div class="col"><section class="sec"><div class="sec-head"><h3>자율 훈련</h3>${addBtn("open", "자율 훈련")}</div>
+      ${(() => { const l = Object.values(state.opens).flat().filter(o => o.date >= t).sort((a, b) => a.date.localeCompare(b.date)); return l.length ? `<ul class="watch">${l.map(o => `<li><span class="num">${longDate(parseD(o.date))}</span><span>${esc(openLabel(o).replace(/^자율 훈련 · ?/, ""))}</span><span class="chip ok">참석 ${Object.values(o.votes).filter(Boolean).length}</span><button class="btn link danger" type="button" data-act="delopen" data-id="${esc(o.id)}">취소</button></li>`).join("")}</ul>` : emptyLine("없어요."); })()}
+    </section>
+    <section class="sec"><div class="sec-head"><h3>정규 훈련 없는 날</h3>${addBtn("off", "추가")}</div>
       ${off.length ? `<ul class="watch">${off.map(([d, o]) => `<li><span class="num">${longDate(parseD(d))}</span>${o.note ? `<span class="small muted">${esc(o.note)}</span>` : ""}<button class="btn link danger" type="button" data-act="teamoff" data-date="${esc(d)}">취소</button></li>`).join("")}</ul>` : emptyLine("없는 날이 없어요.")}
-      <p class="small muted">훈련 없는 날은 선수들이 그날 운동을 골라서 해요.</p>
+      
     </section></div>
   </div>`;
 }
@@ -1444,17 +1457,23 @@ const FORMS = {
       <label class="fl">장소<input id="fr-place" maxlength="60" placeholder="예: 상대 학교 체육관"></label>
       <label class="fl wide">메모<input id="fr-note" maxlength="200"></label>
     </div><div class="row"><button class="btn primary" type="submit">추가</button></div>
-    <p class="small muted">그날은 교류전이 훈련이 되고, 앞뒤 날 하체 웨이트는 다른 날로 옮겨져요.</p></form>`],
+    </form>`],
   notice: ["공지 올리기", `<form class="f" id="noticeForm" data-close="1">
       <label class="fl">제목<input id="nt-title" required maxlength="80"></label>
       <label class="fl">내용<textarea id="nt-body" rows="5" maxlength="2000"></textarea></label>
       <div class="checks"><label class="check"><input type="checkbox" id="nt-pin"> 위에 고정</label><label class="check"><input type="checkbox" id="nt-push" checked> 휴대폰 알림 보내기</label></div>
       <div class="row"><button class="btn primary" type="submit">올리기</button></div>
-      <p class="small muted">홈 맨 위에 바로 떠요.</p></form>`],
+      </form>`],
   ptday: ["그날만 시간 바꾸기", `<form class="f" id="ptDayForm" data-close="1"><div class="fields">
       <label class="fl">날짜<input type="date" id="ptd-date" required></label>
       <div class="pair"><label class="fl">시작<input type="time" id="ptd-s" required></label><label class="fl">끝<input type="time" id="ptd-e"></label></div>
       <label class="fl">메모<input id="ptd-note" maxlength="60" placeholder="예: 체육관 사정"></label>
+    </div><div class="row"><button class="btn primary" type="submit">추가</button></div></form>`],
+  open: ["자율 훈련", `<form class="f" id="openForm" data-close="1"><div class="fields">
+      <label class="fl">날짜<input type="date" id="op-date" required></label>
+      <div class="pair"><label class="fl">시작<input type="time" id="op-s"></label><label class="fl">끝<input type="time" id="op-e"></label></div>
+      <label class="fl">장소<input id="op-place" maxlength="60"></label>
+      <label class="fl wide">메모<input id="op-note" maxlength="100"></label>
     </div><div class="row"><button class="btn primary" type="submit">추가</button></div></form>`],
   off: ["정규 훈련 없는 날", `<form class="f" id="offForm" data-close="1"><div class="fields">
       <label class="fl">날짜<input type="date" id="off-date" required></label>
@@ -1471,24 +1490,40 @@ function openForm(k) {
 
 /* ---------- 훈련·교류전 참석 (불참은 본인·관리자만) ---------- */
 function teamDays(from, n) { const out = []; for (let k = 0; k < n; k++) { const d = dAdd(from, k), i = infoOn(d); if (isTeamDay(i)) out.push({ date: d, i }); } return out; }
+// 정규 훈련·교류전 + 자율 훈련, 날짜순
+const opensOn = d => state.opens[d] || [];
+function upcoming(from, n) {
+  const out = teamDays(from, n);
+  for (let k = 0; k < n; k++) { const d = dAdd(from, k); for (const o of opensOn(d)) out.push({ date: d, open: o }); }
+  return out.sort((a, b) => a.date.localeCompare(b.date) || (a.open ? 1 : 0) - (b.open ? 1 : 0));
+}
 const fmtKo = f => f.format === "9" ? "9인제" : "6인제";
-const tdLabel = i => i.slot === "friendly" ? `교류전 vs ${i.friendly.opponent} · ${fmtKo(i.friendly)}${i.friendly.start ? ` · ${i.friendly.start}${i.friendly.end ? "–" + i.friendly.end : ""}` : ""}${i.friendly.place ? ` · ${i.friendly.place}` : ""}` : `정규 훈련 · ${i.teamTime || "18:00–21:00"}${i.teamTimeNote && i.teamTimeNote !== "시간 바뀜" ? " · " + i.teamTimeNote : ""}`;
+const frTime = f => f.start ? `${f.start}${f.end ? "–" + f.end : ""}` : "";
+const tdLabel = i => i.slot === "friendly" ? [frName(i.friendly.opponent), frTime(i.friendly)].filter(Boolean).join(" · ") : `정규 훈련 · ${i.teamTime || "18:00–21:00"}`;
+const openLabel = o => ["자율 훈련", o.start ? `${o.start}${o.end ? "–" + o.end : ""}` : "", o.place].filter(Boolean).join(" · ");
 function attendRows(list, me) {
-  return `<ul class="attend">${list.map(({ date, i }) => {
-    const head = `<div class="at-when"><b>${longDate(parseD(date))}</b><span class="small muted">${esc(tdLabel(i))}</span>${state.practice[date] ? `<button type="button" class="btn link small pr-link" data-act="prgo" data-d="${date}">훈련 계획 보기</button>` : ""}</div>`;
-    if (can("schedule")) {
+  const t = iso(today());
+  return `<ul class="attend">${list.map(({ date, i, open }) => {
+    const when = `<div class="at-when"><b>${longDate(parseD(date))}</b><span class="small muted">${esc(open ? openLabel(open) : tdLabel(i))}</span>${!open && state.practice[date] ? `<button type="button" class="btn link small pr-link" data-act="prgo" data-d="${date}">훈련 계획</button>` : ""}</div>`;
+    if (open) {
+      const going = sortedPlayers().filter(p => open.votes[p.id] === true), mine = me ? open.votes[me.id] : undefined;
+      const btns = me && date >= t ? `<span class="vote"><button type="button" class="btn small ${mine === true ? "on" : ""}" aria-pressed="${mine === true}" data-act="vote" data-id="${esc(open.id)}" data-go="1">참석</button><button type="button" class="btn small ${mine === false ? "on" : ""}" aria-pressed="${mine === false}" data-act="vote" data-id="${esc(open.id)}" data-go="0">불참</button></span>` : "";
+      return `<li class="open">${when}<div class="at-side"><span class="chip ok">참석 ${going.length}</span>${btns}</div>${going.length ? `<p class="at-names small muted">${going.map(p => esc(p.name)).join(" · ")}</p>` : ""}</li>`;
+    }
+    if (can("attend")) {
       const abs = sortedPlayers().map(p => [p, absOf(p.id, date)]).filter(([, a]) => a);
-      return `<li>${head}<div class="at-who">${abs.length ? `<span class="chip warn">불참 ${abs.length}</span>` : `<span class="small muted">불참 없음</span>`}</div>
+      return `<li>${when}<div class="at-side">${abs.length ? `<span class="chip warn">불참 ${abs.length}</span>` : ""}</div>
         ${abs.length ? `<ul class="at-list">${abs.map(([p, a]) => `<li><b>${esc(p.name)}</b> <span class="small">${esc(ABS_REASONS[a.reason] || a.reason)}${a.note ? ` · ${esc(a.note)}` : ""}</span></li>`).join("")}</ul>` : ""}</li>`;
     }
-    const a = me && absOf(me.id, date);
-    return `<li>${head}<div class="at-me">${a ? `<span class="chip warn">불참 · ${esc(ABS_REASONS[a.reason] || "")}</span><button class="btn link small" type="button" data-act="absopen" data-date="${date}">수정</button><button class="btn link small" type="button" data-act="absdel" data-date="${date}">취소</button>`
-      : `<span class="small muted">참석</span><button class="btn small" type="button" data-act="absopen" data-date="${date}">불참</button>`}</div></li>`;
+    if (!me) return `<li>${when}</li>`;
+    const a = absOf(me.id, date);
+    return `<li>${when}<div class="at-side">${a ? `<span class="chip warn">불참</span><button class="btn link small" type="button" data-act="absopen" data-date="${date}">수정</button><button class="btn link small" type="button" data-act="absdel" data-date="${date}">취소</button>`
+      : date >= t ? `<button class="btn small" type="button" data-act="absopen" data-date="${date}">불참</button>` : ""}</div></li>`;
   }).join("")}</ul>`;
 }
 function attendPanel(me, n = 3) {
-  const list = teamDays(iso(today()), 14).slice(0, n);
-  if (!list.length || (!can("schedule") && !me)) return "";
+  const list = upcoming(iso(today()), 14).slice(0, n);
+  if (!list.length) return "";
   return `<section class="panel attend-panel"><div class="row between"><h3>다가오는 훈련</h3><button class="btn link small" type="button" data-act="view" data-v="season">전체 →</button></div>${attendRows(list, me)}</section>`;
 }
 /* ---------- 공지 ---------- */
@@ -1518,14 +1553,14 @@ function myEntries(me) {
   if (!me) return [];
   const t = iso(today()), to = dAdd(t, 21), out = [];
   for (const e of normEvents(events())) if (e.id && e.end >= t && e.start <= to && entryOf("event", e.id).has(me.id)) out.push({ name: e.name, date: e.start });
-  for (const [d, fs] of Object.entries(state.friendlies)) if (d >= t && d <= to) for (const f of fs) if (entryOf("friendly", f.id).has(me.id)) out.push({ name: `교류전 vs ${f.opponent}`, date: d });
+  for (const [d, fs] of Object.entries(state.friendlies)) if (d >= t && d <= to) for (const f of fs) if (entryOf("friendly", f.id).has(me.id)) out.push({ name: frName(f.opponent), date: d });
   return out.sort((a, b) => a.date.localeCompare(b.date));
 }
 const entryChip = (kind, id) => { const n = entryOf(kind, id).size, mine = state.myPid && entryOf(kind, id).has(state.myPid); return (n || can("schedule")) ? `<button type="button" class="chip entry ${mine ? "me" : ""}" data-act="entry" data-kind="${kind}" data-id="${esc(id)}">엔트리 ${n}${mine ? " · 나" : ""}</button>` : ""; };
 function openEntry(kind, id) {
   let title = "", date = "";
   if (kind === "event") { const e = (state.events || []).find(x => x.id === id); if (e) { title = e.name; date = e.start; } }
-  else for (const [d, fs] of Object.entries(state.friendlies)) { const f = fs.find(x => x.id === id); if (f) { title = `교류전 vs ${f.opponent} · ${fmtKo(f)}`; date = d; } }
+  else for (const [d, fs] of Object.entries(state.friendlies)) { const f = fs.find(x => x.id === id); if (f) { title = `${frName(f.opponent)} · ${fmtKo(f)}`; date = d; } }
   const set = entryOf(kind, id), ps = sortedPlayers(), el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>엔트리</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <p class="small">${esc(title)}${date ? ` · ${longDate(parseD(date))}` : ""}</p>
@@ -1541,7 +1576,7 @@ function openAbsent(date) {
     <form class="f" id="absForm" data-date="${esc(date)}">
       <div class="reasons" role="radiogroup" aria-label="사유">${Object.entries(ABS_REASONS).map(([k, l], n) => `<label class="rsn"><input type="radio" name="abs-r" value="${k}" ${(a ? a.reason === k : n === 0) ? "checked" : ""}><span>${l}</span></label>`).join("")}</div>
       <label class="fl">메모 (선택)<input id="abs-note" maxlength="100" value="${esc(a ? a.note : "")}"></label>
-      <p class="small muted">관리자만 봐요 · 아픔·부상이면 그날은 회복, 나머지는 그날 운동을 골라서 해요</p>
+      <p class="small muted">관리자만 봐요</p>
       <div class="row"><button class="btn primary" type="submit">${a ? "저장" : "불참 내기"}</button></div>
     </form>`;
   el.hidden = false; document.body.classList.add("noscroll");
@@ -1609,7 +1644,7 @@ function setLogHtml(name, rx) {
       <label>RIR<select id="ls-rir">${[0, 1, 2, 3, 4, 5].map(v => `<option value="${v}" ${v === ri ? "selected" : ""}>${v}</option>`).join("")}</select></label>
       <button class="btn primary" type="submit">세트 저장</button>
     </div>
-    ${!kg ? `<p class="small muted">처음이면 가볍게 시작해 세트마다 올려서, 목표 반복을 하고도 2–3회 더 할 수 있는 무게를 찾아 저장 → 다음부터 무게가 자동으로 나와요</p>` : ""}
+    ${!kg ? `<p class="small muted">2–3회 더 할 수 있는 무게</p>` : ""}
     <p class="small muted" id="ls-done">${todays.length ? `${dayWord(ctx.date)} ${todays.map(l => `${l.kg}×${l.reps}`).join(", ")}` : ""}${last ? `${todays.length ? " · " : ""}지난번 ${last.kg}kg × ${last.reps}` : ""}</p>
   </form>`;
 }
@@ -1619,7 +1654,7 @@ function hsStageHtml(name) {
   if (!c || !/핸드스탠드|휠배로|파이크 홀드/.test(name) || /대신/.test(name)) return "";
   const cur = (latest(c.pid) || {}).hsStage || 1;
   return `<form class="f hs-form" id="hsForm" data-pid="${esc(c.pid)}"><div class="row"><label class="fl">내 핸드스탠드 단계<select id="hs-st">${HS_STAGES.slice(1).map((l, i) => `<option value="${i + 1}" ${i + 1 === cur ? "selected" : ""}>${i + 1}단계 · ${esc(l)}</option>`).join("")}</select></label><button class="btn" type="submit">바꾸기</button></div>
-    <p class="small muted">지금 단계를 3세트 다 깔끔하게 되면 다음 단계로</p></form>`;
+    <p class="small muted">3세트 깔끔하면 다음 단계</p></form>`;
 }
 function openSheet(name, rx, cue) {
   const steps = exGuide(name) || [], [sec, label] = defaultSeconds(rx, cue), link = exLink(name);
@@ -1864,6 +1899,20 @@ document.addEventListener("click", async ev => {
     if (r.error) { toast(r.error.code === "42501" ? r.error.message : failMsg(r.error)); return; }
     closeSettings(); lsDel(snapKey()); try { await sb.auth.signOut({ scope: "local" }); } catch (e) {} toast("탈퇴했어요. 그동안 고마웠어요"); return;
   }
+  if (act === "vote") {
+    const o = Object.values(state.opens).flat().find(x => x.id === b.dataset.id); if (!o || !state.myPid) return;
+    const go = b.dataset.go === "1", cur = o.votes[state.myPid];
+    try {
+      if (cur === go) { ok(await sb.from("open_votes").delete().eq("session_id", o.id).eq("player_id", state.myPid)); delete o.votes[state.myPid]; }
+      else { ok(await sb.from("open_votes").upsert({ session_id: o.id, player_id: state.myPid, going: go, updated_at: new Date().toISOString() }, { onConflict: "session_id,player_id" })); o.votes[state.myPid] = go; }
+    } catch (e) { toast(failMsg(e)); }
+    state.dirty = false; return render();
+  }
+  if (act === "delopen") {
+    if (!confirmDel("이 자율 훈련을 취소할까요?")) return;
+    try { ok(await sb.from("open_sessions").delete().eq("id", b.dataset.id)); toast("취소했어요"); } catch (e) { toast(failMsg(e)); }
+    state.dirty = false; return loadAll();
+  }
   if (act === "calmonth") { state.calMonth = b.dataset.m; state.calDay = null; state.dirty = false; return render(); }
   if (act === "calday") { state.calDay = b.dataset.d; state.dirty = false; return render(); }
   if (act === "alumdel") {
@@ -1959,7 +2008,7 @@ document.addEventListener("click", async ev => {
     try { localStorage.setItem("snuvt-theme", r.dataset.theme); } catch (e) { /* 저장 못 해도 이번엔 바뀜 */ }
     return;
   }
-  if (act === "xlsx") return exportXlsx(b.dataset.s);
+  if (act === "xlsx") return exportXlsx(state.repSy || seasonRange().sy);
   if (act === "rtpdone") {
     const pid = b.dataset.pid, i = Number(b.dataset.i), inj = [...((state.health[pid] || {}).injuries || [])], x = inj[i]; if (!x) return;
     const p = playerOf(pid), all = rtpItems(p, x).every(y => y.ok);
@@ -2008,6 +2057,7 @@ document.addEventListener("click", async ev => {
   }
 });
 document.addEventListener("change", ev => {
+  if (ev.target.id === "repSy") { state.repSy = Number(ev.target.value); return; }
   if (ev.target.classList.contains("inj-part")) {
     const row = ev.target.closest(".inj-row"), t = row.querySelector(".inj-type");
     t.innerHTML = injTypes(ev.target.value).map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
@@ -2267,10 +2317,15 @@ document.addEventListener("submit", async ev => {
       if (st && en && en <= st) { toast("끝 시간이 시작보다 앞이에요."); return; }
       ok(await sb.from("friendlies").insert({ date: txt("fr-date"), opponent: txt("fr-opp"), format: document.getElementById("fr-fmt").value, start_time: st, end_time: en, place: txt("fr-place") || null, note: txt("fr-note") || null }));
       toast("교류전을 넣었어요 · 그 주 프로그램이 맞춰졌어요");
+    } else if (f.id === "openForm") {
+      const st = txt("op-s") || null, en = txt("op-e") || null;
+      if (st && en && en <= st) { toast("끝 시간이 시작보다 앞이에요."); return; }
+      ok(await sb.from("open_sessions").insert({ date: txt("op-date"), start_time: st, end_time: en, place: txt("op-place") || null, note: txt("op-note") || null }));
+      toast("자율 훈련을 넣었어요");
     } else if (f.id === "absForm") {
       const r = f.querySelector('input[name="abs-r"]:checked');
       ok(await sb.from("absences").upsert({ player_id: state.myPid, date: f.dataset.date, reason: r ? r.value : "etc", note: txt("abs-note") || null, author: uid() }, { onConflict: "player_id,date" }));
-      closeSheet(); toast("불참을 냈어요 · 관리자만 봐요");
+      closeSheet(); toast("불참을 냈어요");
     } else if (f.id === "offForm") {
       const date = txt("off-date");
       if (seasonDay(date, events()).slot !== "team") { toast("그날은 정규 훈련 날이 아니에요."); return; }
@@ -2410,14 +2465,16 @@ async function loadAll() {
       sb.from("practice_plans").select("*"),
       sb.from("videos").select("*").order("sort").order("created_at", { ascending: false }),
       sb.from("training_notes").select("*").order("date", { ascending: false }).limit(200),
+      sb.from("open_sessions").select("*").gte("date", iso(addDays(today(), -60))).order("date"),
+      sb.from("open_votes").select("*"),
     ];
     if (state.coach) q.push(sb.from("profiles").select("*").order("created_at"));
     const res = await Promise.all(q);
-    const [st, pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq, frq, abq, nq, enq, ptq, ctq, peq, pvq, ppq, vdq, tnq] = res, pr = state.coach ? res[22] : null;
+    const [st, pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq, frq, abq, nq, enq, ptq, ctq, peq, pvq, ppq, vdq, tnq, osq, ovq] = res, pr = state.coach ? res[24] : null;
     for (const r of [pl, ts, hl, lg]) if (r.error) throw r.error;
     const rows = r => r && !r.error && Array.isArray(r.data) ? r.data : [];
     raw = { players: pl.data, tests: ts.data, health: hl.data, logs: lg.data, pain_checks: rows(pcs), events: evq && !evq.error ? evq.data : null,
-      wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), notices: rows(nq), entries: rows(enq), practice_times: rows(ptq), player_contacts: rows(ctq), program_edits: rows(peq), player_private: rows(pvq), practice_plans: rows(ppq), videos: rows(vdq), training_notes: rows(tnq), profiles: pr && !pr.error ? pr.data : [],
+      wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), notices: rows(nq), entries: rows(enq), practice_times: rows(ptq), player_contacts: rows(ctq), program_edits: rows(peq), player_private: rows(pvq), practice_plans: rows(ppq), videos: rows(vdq), training_notes: rows(tnq), open_sessions: rows(osq), open_votes: rows(ovq), profiles: pr && !pr.error ? pr.data : [],
       me: { role: state.role, player_id: state.myPid } };
     // 기기에 남기는 사본에는 연락처와 다른 사람 키·몸무게를 넣지 않음
     lsSet(snapKey(), { ...raw, training_notes: (raw.training_notes || []).filter(r => r.player_id === state.myPid), player_contacts: (raw.player_contacts || []).filter(r => r.player_id === state.myPid), player_private: (raw.player_private || []).filter(r => r.player_id === state.myPid) }); state.net = true;
@@ -2443,6 +2500,10 @@ function buildState(raw) {
   const fr = {};
   for (const r of raw.friendlies || []) (fr[r.date] = fr[r.date] || []).push({ id: r.id, opponent: r.opponent, format: r.format, start: r.start_time ? String(r.start_time).slice(0, 5) : "", end: r.end_time ? String(r.end_time).slice(0, 5) : "", place: r.place || "", note: r.note || "" });
   state.friendlies = fr;
+  const op = {}, vt = {};
+  for (const r of raw.open_votes || []) (vt[r.session_id] = vt[r.session_id] || {})[r.player_id] = !!r.going;
+  for (const r of raw.open_sessions || []) (op[r.date] = op[r.date] || []).push({ id: r.id, date: r.date, start: r.start_time || "", end: r.end_time || "", place: r.place || "", note: r.note || "", votes: vt[r.id] || {} });
+  state.opens = op;
   const ab = {};
   for (const r of raw.absences || []) (ab[r.player_id] = ab[r.player_id] || {})[r.date] = { id: r.id, reason: r.reason, note: r.note || "" };
   state.absences = ab;
