@@ -549,17 +549,17 @@ function loadFor(c, name, rx, w) {
   return kg > 0 ? ` · 약 ${kg}kg` : "";
 }
 // 측정 안내: 통증·제한이 있으면 그 측정은 뺀다 (아픈 채로 잰 값은 비교가 안 되고 위험)
-// 측정은 꼭 필요한 것만: 점프(버티컬·맥스 버티컬) + 전체 측정 주에는 개인 처방에 쓰는 선별 검사(한 발 홉·무릎 벽 대기·어깨 회전)
-// 근력은 따로 재지 않고 훈련 세트 기록(추정 1RM)으로 · 리치는 처음 한 번
+// 한 달에 한 번 측정 (트라이아웃식). 아프거나 제한이 있으면 그 측정은 뺀다 (아픈 채로 잰 값은 비교가 안 되고 위험)
 function measureNote(c, type) {
   const { fx } = c, tests = [], skip = [];
-  const legPain = (fx.knee && fx.knee <= 2) || fx.ankle === 1;
+  const legPain = (fx.knee && fx.knee <= 2) || fx.ankle === 1 || fx.tierMax < 2;
   if (!c.t || c.t.reach == null) tests.push("리치");
-  if (fx.noJumps || fx.tierMax < 2) skip.push("점프"); else { tests.push("버티컬"); if (fx.tierMax >= 3) tests.push("맥스 버티컬"); else skip.push("맥스 버티컬"); }
-  if (type === "full") { if (fx.noJumps || fx.tierMax < 2 || legPain) skip.push("한 발 홉"); else tests.push("한 발 홉"); tests.push("무릎 벽 대기", "어깨 회전"); }
-  const head = type === "full" ? "측정 주 · 점검 측정" : "피크 주 · 점프 점검";
-  if (!tests.length) return `${head} · 점프 측정은 통증이 줄면, 훈련은 그대로`;
-  return `${head} (${tests.join("·")}) → 기록 탭에 입력, 훈련은 그대로${skip.length ? ` · ${skip.join("·")} 측정은 통증이 줄면` : ""}`;
+  if (fx.noJumps || fx.tierMax < 2) skip.push("점프"); else { tests.push("버티컬", "블로킹 점프"); if (fx.tierMax >= 3) tests.push("맥스 버티컬"); else skip.push("맥스 버티컬"); }
+  if (legPain) skip.push("옆뛰기·5-10-5"); else tests.push("반복 옆뛰기", "5-10-5");
+  if (type === "full") { if (fx.noJumps || legPain) skip.push("한 발 홉"); else tests.push("한 발 홉"); tests.push("무릎 벽 대기", "어깨 회전"); }
+  const head = "이번 달 측정";
+  if (!tests.length) return `${head} · 통증이 줄면 재기, 훈련은 그대로`;
+  return `${head} (${tests.join("·")}) → 기록 탭에 입력, 훈련은 그대로${skip.length ? ` · ${skip.join("·")}은 통증이 줄면` : ""}`;
 }
 function hsItem(c, rx) {
   const max = c.fx.handstandMax;
@@ -875,9 +875,9 @@ const SLOT_FN = {
     h.add(h.warm());
     const { fx } = c, skip = [];
     const tests = TRYOUT_TESTS.filter(x => {
-      if ((fx.noJumps || fx.tierMax < 2) && /버티컬|CMJ/.test(x.name)) { skip.push(x.name.replace(/ \(.*$/, "")); return false; }
+      if ((fx.noJumps || fx.tierMax < 2) && /버티컬|블로킹 점프/.test(x.name)) { skip.push(x.name.replace(/ \(.*$/, "")); return false; }
+      if (((fx.knee && fx.knee <= 2) || fx.ankle === 1 || fx.tierMax < 2) && /옆뛰기|5-10-5/.test(x.name)) { skip.push(x.name.replace(/ \(.*$/, "")); return false; }
       if (fx.tierMax < 3 && /맥스 버티컬/.test(x.name)) { skip.push("맥스 버티컬"); return false; }
-      if ((fx.noOverhead || fx.handstandMax < 1) && /핸드스탠드/.test(x.name)) { skip.push("핸드스탠드"); return false; }
       return true;
     });
     h.add({ key: "test", title: "측정", items: tests });
@@ -889,12 +889,13 @@ const SLOT_FN = {
   },
 };
 const TRYOUT_TESTS = [
-  { name: "스탠딩 리치", rx: "1회", cue: "한 손을 벽에 최대한 뻗어 닿는 높이" },
-  { name: "버티컬 (제자리 점프 높이)", rx: "3회 중 최고", cue: "제자리 양손 점프 도달 높이 − 스탠딩 리치" },
-  { name: "맥스 버티컬 (도움닫기 점프 높이)", rx: "3회 중 최고", cue: "실전 어프로치 한 손 도달 높이 − 스탠딩 리치" },
-  { name: "핸드스탠드 단계 · 버틴 시간 (5단계는 걸은 거리)", rx: "1회" },
-  { name: "사이드 플랭크 좌·우 · 풀 플랭크 최대 버티기", rx: "각 1회" },
-];
+  { name: "스탠딩 리치", rx: "1회", cue: "벽 옆에 서서 한 손을 최대한 뻗어 닿는 높이" },
+  { name: "버티컬 (제자리 점프 높이)", rx: "3회 중 최고", cue: "팔 스윙 허용, 손끝 도달 높이 − 리치" },
+  { name: "블로킹 점프", rx: "3회 중 최고", cue: "팔 스윙 없이 두 손 동시에, 도달 높이 − 리치" },
+  { name: "맥스 버티컬 (도움닫기 점프 높이)", rx: "3회 중 최고", cue: "실전 어프로치 한 손 도달 높이 − 리치" },
+  { name: "반복 옆뛰기 (사이드스텝)", rx: "20초 × 2회", cue: "선 간격 1m, 가운데 선을 넘고 좌우 선을 밟거나 넘을 때마다 1점" },
+  { name: "5-10-5 (프로 에질리티)", rx: "좌우 각 2회", cue: "가운데에서 3m 옆 선 터치 → 반대쪽 3m 선 터치 → 가운데 통과, 짧은 기록" },
+]
 // ---- 맨몸 (팀 필수, 점프 없음): 상체·코어·핸드스탠드 / 하체·발목·균형
 function bwPlan(c, w, o, out, h, upper) {
   const { fx, mods, novice } = c;
@@ -923,11 +924,6 @@ function bwPlan(c, w, o, out, h, upper) {
   h.add({ key: "warm", title: "워밍업 5분", items: [{ name: "가볍게 조깅 · 동적 스트레칭", rx: "3분" }, upper ? { name: "어깨 밴드 · Y·T · 오픈북", rx: "2분" } : fx.ankle === 1 ? { name: "발목 알파벳 그리기", rx: "2분", mod: "발목 통증" } : { name: "한 발 서기 (좌우)", rx: "2분" }] });
   h.add({ key: "bw", title: upper ? "맨몸 상체·코어·핸드스탠드" : "맨몸 하체·발목·균형", items });
   if (!upper && w !== PH.TAPER) h.add(posBlock(c, "bwL"));
-  if (upper && o.measure === "full") h.add({ key: "test", title: "코어·핸드스탠드 점검", note: "기록 탭에 입력", items: [
-    { name: "사이드 플랭크 좌·우 최대 버티기", rx: "각 1회" },
-    { name: "풀 플랭크 최대 버티기", rx: "1회" },
-    ...(fx.noOverhead || fx.handstandMax < 1 ? [] : [{ name: "핸드스탠드 단계 · 버틴 시간 (5단계는 걸은 거리)", rx: "1회" }]),
-  ] });
   h.add(prevBlock(c, upper ? "bwU" : "bwL"));
   h.add(measBlock(c, upper ? "bwU" : "bwL"));
   h.add(h.rehabBlock("재활 운동", m => (m.area === "knee" && m.stage === 1) || (m.area === "finger" && m.stage <= 2) || (m.area === "ankle" && m.stage <= 2) || (m.area === "shoulder" && m.stage === 1) || (m.area === "back" && m.stage <= 2)));
@@ -1005,23 +1001,32 @@ function weekPhase(mon, evs) {
   if (w === PH.DELOAD && !postMajor && minorNear) w = PH.BASE;
   return { reset, since, k, nm, offBetween, off, comp, w, postMajor };
 }
-/* 측정 주 — 성장을 보는 것이라 자주 재지 않는다 (근력·점프 변화는 6–8주는 지나야 의미 있게 보임)
- *  full (전체): 시즌·학기 시작 주(적응) · 회복 주 중 마지막 측정에서 6주 넘게 지난 주 — 피로가 적을 때
- *  jump (점프만): 피크 주 — 대회 직전 최고치 확인 (근력 최대치 측정은 피로 때문에 안 함)
- *  방학·대회 주·대회 뒤 회복 주에는 재지 않는다. */
+/* 측정 주 — 한 달에 한 번 (트라이아웃식 신체 능력 측정, 20–25분)
+ *  basic: 버티컬 · 블로킹 점프 · 맥스 버티컬 · 반복 옆뛰기 20초 · 5-10-5 (리치는 처음 한 번)
+ *  full : basic + 선별 검사(한 발 홉 · 무릎 벽 대기 · 어깨 회전) — 10주에 한 번쯤 (개인 처방에 씀)
+ *  그 달에서 회복 주·적응 주를 먼저 고르고, 없으면 첫 주. 대회 주·피크 주·대회 뒤 회복 주·방학 첫 주는 피한다. */
 const _measureCache = new Map();
 function measureWeeks(mon, evs) {
   const key = mon + "|" + evs.map(e => e.kind + e.start + e.end).join(",");
   if (_measureCache.has(key)) return _measureCache.get(key);
   const out = new Map();
-  let last = null;
-  const y = Number(mon.slice(0, 4)), ys = mondayOf(`${Number(mon.slice(5, 7)) >= 3 ? y : y - 1}-03-01`), rs = weekPhase(mon, evs).reset; // 1년(3월~) 전체에서 간격을 봄
-  for (let m = rs < ys ? rs : ys; m <= mon; m = dAdd(m, 7)) {
-    const ph = weekPhase(m, evs);
-    if (ph.off || ph.comp || ph.postMajor) continue;
-    if (ph.w === PH.INTRO && ph.since === 0 && (!last || dDiff(m, last) >= 84)) { out.set(m, "full"); last = m; } // 전체 측정은 12주에 한 번까지
-    else if (ph.w === PH.DELOAD && (!last || dDiff(m, last) >= 84) && ![1, 2, 3, 4].some(j => weekPhase(dAdd(m, 7 * j), evs).since === 0)) { out.set(m, "full"); last = m; } // 곧 시즌이 새로 시작하면 그때 잰다
-    else if (ph.w === PH.PEAK) out.set(m, "jump");
+  const y = Number(mon.slice(0, 4)), ys = mondayOf(`${Number(mon.slice(5, 7)) >= 3 ? y : y - 1}-03-01`);
+  const monthOf = m => dAdd(m, 3).slice(0, 7), lastOfMonth = monthOf(mon);
+  const months = new Map(), start = monthOf(ys) < ys.slice(0, 5) + "03" ? dAdd(ys, 7) : ys;
+  for (let m = start; monthOf(m) <= lastOfMonth; m = dAdd(m, 7)) { const k = monthOf(m); if (!months.has(k)) months.set(k, []); months.get(k).push(m); }
+  let lastFull = null, last = null;
+  for (const ws of months.values()) {
+    const ok = ws.filter(m => {
+      const ph = weekPhase(m, evs);
+      if (ph.comp || ph.postMajor || ph.w === PH.TAPER || ph.w === PH.PEAK) return false;
+      if (evs.some(e => e.kind === "tryout" && e.start <= dAdd(m, 6) && e.end >= m)) return false;
+      const off = evs.find(e => e.kind === "off" && e.start <= dAdd(m, 3) && dAdd(m, 3) <= e.end);
+      return !(off && dDiff(m, mondayOf(off.start)) < 7) && (!last || dDiff(m, last) >= 21); // 방학 첫 주는 자유 · 측정 사이 3주 이상
+    });
+    if (!ok.length) continue;
+    const pick = ok.find(m => [PH.DELOAD, PH.INTRO].includes(weekPhase(m, evs).w)) || ok[0];
+    const full = !lastFull || dDiff(pick, lastFull) >= 70;
+    out.set(pick, full ? "full" : "basic"); last = pick; if (full) lastFull = pick;
   }
   if (_measureCache.size > 500) _measureCache.clear();
   _measureCache.set(key, out);

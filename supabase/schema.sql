@@ -360,3 +360,7 @@ alter table public.logs add constraint logs_pain_area_check
 -- notices: 공지 (title, body, pinned, notify) · 부원 읽기, 관리자 쓰기 · insert 트리거 → 알림(push_subs.notice)
 -- entries: 대회(kind 'event')·교류전('friendly')별 엔트리 명단 · 부원 읽기, 관리자 쓰기
 -- practice_times: 정규 훈련 시간 key 'S1'|'S2'(학기 기본) 또는 날짜(그날만)
+
+-- ===== tests_tryout_battery (적용됨) =====
+-- tests.side_step (반복 옆뛰기 20초, 회) · tests.pro_agility (5-10-5, 초) · 블로킹 점프는 tests.block
+-- update_my_profile(info): 승인된 부원이 학년·키·몸무게·배구 경력·웨이트 경험을 직접 수정
