@@ -444,3 +444,9 @@ alter table public.logs add constraint logs_pain_area_check
 -- lineups(team_id, kind event|friendly, ref_id, set_no 1~5, data jsonb {team, court, coachHead, coach1, coach2, captain, rows[15]{pid, chk}}): 9인제 서브 타순표. 읽기 부원, 쓰기 can('schedule')
 -- jp_sources 추가: mintonette · tmsports · vbharuka · volleyball dreams (경기). 학교 사전 22곳 추가 (간토·도호쿠 등)
 -- jp-sync 태그: 중학·대표팀·리그 영상은 other, 옛 '春の高校バレー 第N回'(N<45)은 1969+N 년
+
+-- ===== 일본 고교 대회 성적 (jp_results) =====
+-- jp_results(tourn haruko|ih, gender m|w, year, place 1 우승·2 준우승·3 4강, school_id, name_ja): 2010~2026 역대 결과
+--   출처: 일본어 위키백과 「全日本バレーボール高等学校選手権大会」「全国高等学校総合体育大会バレーボール競技大会」(2026-10-24 확인)
+--   강팀 ★·지역 순서·학교 '대회 성적'은 이 표만 씀 (영상 제목으로 짐작하지 않음). 새 대회 끝나면 여기에 한 줄씩 추가
+-- 학교 사전 16곳 추가(여자부 강호 등), 남녀부 표시 수정

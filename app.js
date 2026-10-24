@@ -555,7 +555,8 @@ const jpSchool = id => jp().schools.find(s => s.id === id);
 async function jpLoad() {
   const J = jp(); if (J.loading) return; J.loading = true;
   try {
-    const [s, src] = await Promise.all([sb.from("jp_schools").select("*"), sb.from("jp_sources").select("id,kind,ref,label,role,full_done,synced_at")]);
+    const [s, src, res] = await Promise.all([sb.from("jp_schools").select("*"), sb.from("jp_sources").select("id,kind,ref,label,role,full_done,synced_at"), sb.from("jp_results").select("tourn,gender,year,place,school_id,name_ja")]);
+    J.results = (res && res.data) || [];
     const vids = [];
     for (let from = 0; ; from += 1000) { const r = await sb.from("jp_videos").select("id,source,title,published,year,tourn,gender,rnd,schools").order("added_at", { ascending: false }).range(from, from + 999); if (r.error) throw r.error; vids.push(...(r.data || [])); if ((r.data || []).length < 1000) break; }
     J.schools = s.data || []; J.sources = src.data || []; J.videos = vids;
@@ -604,25 +605,23 @@ function jpRow(g) {
   return `<li class="jp-v ${cur ? "open" : ""}"><button type="button" class="jp-vh" data-act="jpplay" data-id="${esc((cur || v0).id)}"><span class="jp-ic">${svg("video")}</span><span class="jp-vt"><b>${esc(jpKo(title))}</b><span class="small muted">${esc(jpMeta(v0))}${multi ? ` · 영상 ${g.length}개` : v0.len ? " · " + esc(v0.len) : ""}</span><span class="jp-ja">${esc(title)}</span></span></button>${parts}${frame}</li>`;
 }
 const jpList = l => l.length ? `<ul class="jp-list">${jpGroups(l).map(jpRow).join("")}</ul>` : emptyLine("영상이 없어요.");
-// 강팀 점수: 하루코·인터하이·국스포 결승·준결승·준준결승에 나온 학교 (최근 2년은 더 크게)
-const JP_NAT = ["haruko", "ih", "kokutai"];
-function jpStrength() {
-  const J = jp(); if (J._str && J._strN === J.videos.length) return J._str;
-  const score = {}, honors = {}, cy = new Date().getFullYear(), seen = new Set();
-  for (const v of J.videos) {
-    if (!JP_NAT.includes(v.tourn) || !v.rnd || v.rnd.includes("yosen")) continue;
-    const r = v.rnd.includes("F") && !v.rnd.includes("SF") && !v.rnd.includes("QF") ? "F" : v.rnd.includes("SF") ? "SF" : v.rnd.includes("QF") ? "QF" : null; if (!r) continue;
-    const recent = v.year && v.year >= cy - 2, pts = { F: 6, SF: 3, QF: 1 }[r] * (recent ? 1 : v.year && v.year >= cy - 5 ? 0.4 : 0.15);
-    for (const id of v.schools || []) {
-      const k = `${id}|${v.tourn}|${v.year}|${r}`; if (seen.has(k)) continue; seen.add(k);
-      score[id] = (score[id] || 0) + pts;
-      if (recent && r !== "QF") (honors[id] = honors[id] || []).push({ t: v.tourn, y: v.year, r });
-    }
+// 대회 성적: 위키백과(일본어) 역대 결과표로 만든 jp_results (영상 제목으로 짐작하지 않음)
+const JP_PLACE = { 1: "우승", 2: "준우승", 3: "4강" };
+const JP_RECENT = 2019; // 이 해부터는 연도별로, 그 전은 '그 외'
+function jpStrength(g) {
+  const J = jp(), key = g + (J.results || []).length; if (J._str && J._strK === key) return J._str;
+  const score = {}, star = {}, cy = new Date().getFullYear();
+  for (const r of J.results || []) {
+    if (r.gender !== g || !r.school_id) continue;
+    const w = { 1: 6, 2: 4, 3: 2 }[r.place] * (r.year >= cy - 2 ? 1 : r.year >= cy - 6 ? 0.5 : 0.15);
+    score[r.school_id] = (score[r.school_id] || 0) + w;
+    if (r.year >= cy - 2) star[r.school_id] = true;
   }
-  for (const [id, h] of Object.entries(honors)) honors[id] = h.filter(x => x.r === "F" || !h.some(y => y.r === "F" && y.t === x.t && y.y === x.y)).sort((a, b) => b.y - a.y || (a.r === "F" ? -1 : 1));
-  J._str = { score, honors }; J._strN = J.videos.length; return J._str;
+  J._str = { score, star }; J._strK = key; return J._str;
 }
-const jpHonor = h => `${JP_TOURN[h.t]} ${h.y} ${h.r === "F" ? "결승 진출" : "4강"}`;
+const jpResultsOf = id => (jp().results || []).filter(r => r.school_id === id).sort((a, b) => b.year - a.year || a.place - b.place);
+const jpResTxt = r => `${JP_TOURN[r.tourn]} ${r.year} ${JP_PLACE[r.place]}`;
+const jpGoogle = q => `https://www.google.com/search?q=${encodeURIComponent(q)}`;
 const jpGenderOk = (g, x) => x === "mw" || x === g;
 // 제목에 女子가 없어도 나온 학교가 모두 여자부면 여자 경기로
 const jpG = v => v.gender || ((v.schools || []).length && v.schools.every(id => (jpSchool(id) || {}).gender === "w") ? "w" : "m");
@@ -636,30 +635,35 @@ function viewJp() {
   let body = "";
   if (J.tab === "school") {
     const cnt = {}; for (const g of jpGroups(J.videos)) for (const sid of new Set(g.flatMap(v => v.schools || []))) cnt[sid] = (cnt[sid] || 0) + 1;
-    const { score, honors } = jpStrength();
+    const { score, star } = jpStrength(J.g);
     const sc = id => (score[id] || 0) + Math.min(cnt[id] || 0, 60) * 0.02;
-    const list = J.schools.filter(s => jpGenderOk(J.g, s.gender) && (J.all || cnt[s.id]));
+    const list = J.schools.filter(s => jpGenderOk(J.g, s.gender) && (J.all || cnt[s.id] || score[s.id]));
     const regs = JP_REGIONS.map((name, i) => { const prefs = {}; for (const s of list) { const p = JP_PREF[s.pref]; if (p && p[1] === i) (prefs[s.pref] = prefs[s.pref] || []).push(s); }
       const ps = Object.entries(prefs).map(([pf, l]) => ({ pf, l: l.sort((a, b) => sc(b.id) - sc(a.id) || a.name_ko.localeCompare(b.name_ko, "ko")), s: l.reduce((t, x) => t + sc(x.id), 0) })).sort((a, b) => b.s - a.s);
       return { i, name, ps, s: ps.reduce((t, x) => t + x.s, 0), n: ps.reduce((t, x) => t + x.l.length, 0) }; }).filter(r => r.n).sort((a, b) => b.s - a.s);
     const rsel = J.reg != null && regs.some(r => r.i === J.reg) ? J.reg : null;
-    const chip = s => `<button type="button" class="chip jp-chip ${cnt[s.id] ? "" : "zero"} ${honors[s.id] ? "star" : ""}" data-act="jpschool" data-id="${esc(s.id)}">${honors[s.id] ? "★ " : ""}${esc(s.name_ko)}${cnt[s.id] ? ` <span class="small">${cnt[s.id]}</span>` : ""}</button>`;
+    const chip = s => `<button type="button" class="chip jp-chip ${cnt[s.id] ? "" : "zero"} ${star[s.id] ? "star" : ""}" data-act="jpschool" data-id="${esc(s.id)}">${star[s.id] ? "★ " : ""}${esc(s.name_ko)}${cnt[s.id] ? ` <span class="small">${cnt[s.id]}</span>` : ""}</button>`;
     body = `<div class="row between">${gsel}<button type="button" class="chip sc-chip ${J.all ? "on" : ""}" data-act="jpall">모든 학교</button></div>
       <div class="sc-row jp-regs">${[`<button type="button" class="chip sc-chip ${rsel == null ? "on" : ""}" data-act="jpreg" data-v="">전체</button>`, ...regs.map(r => `<button type="button" class="chip sc-chip ${rsel === r.i ? "on" : ""}" data-act="jpreg" data-v="${r.i}">${r.name}</button>`)].join("")}</div>
       <div class="boxes">${regs.filter(r => rsel == null || r.i === rsel).map(r => `<section class="panel jp-reg"><div class="sec-head"><h3>${r.name}</h3><span class="small muted">${r.n}개교</span></div>
         ${r.ps.map(({ pf, l }) => `<div class="jp-pref"><span class="jp-pn">${JP_PREF[pf][0]}<span class="jp-ja">${pf}</span></span><div class="jp-sch">${l.map(chip).join("")}</div></div>`).join("")}</section>`).join("")}</div>
-      <p class="small muted">★ 최근 2년 하루코·인터하이·국스포 4강 이상 · 강한 지역부터</p>`;
+      <p class="small muted">★ 최근 2년 하루코·인터하이 4강 이상 · 강한 지역부터</p>`;
   } else if (J.tab === "tourn") {
     const T = ["haruko", "ih", "kokutai", "block", "senbatsu", "shinjin"];
     const inT = J.videos.filter(v => v.tourn === J.tourn && jpG(v) === J.g && !jpIsVisit(v));
-    const years = [...new Set(inT.map(v => v.year).filter(Boolean))].sort((a, b) => b - a);
-    const yr = years.includes(J.year) ? J.year : years[0] || 0;
-    const l = inT.filter(v => !yr || v.year === yr);
+    const resY = (J.results || []).filter(r => r.tourn === J.tourn && r.gender === J.g).map(r => r.year);
+    const years = [...new Set([...inT.map(v => v.year), ...resY].filter(y => y && y >= JP_RECENT))].sort((a, b) => b - a);
+    const hasOld = inT.some(v => !v.year || v.year < JP_RECENT);
+    const yr = J.year === -1 && hasOld ? -1 : years.includes(J.year) ? J.year : years[0] || (hasOld ? -1 : 0);
+    const l = inT.filter(v => yr === -1 ? !v.year || v.year < JP_RECENT : !yr || v.year === yr);
+    const res = yr > 0 ? (J.results || []).filter(r => r.tourn === J.tourn && r.gender === J.g && r.year === yr).sort((a, b) => a.place - b.place) : [];
+    const resCard = res.length ? `<div class="panel jp-honor"><b>${JP_TOURN[J.tourn]} ${yr} 결과</b><div class="jp-chips">${[1, 2, 3].map(pl => res.filter(r => r.place === pl).map(r => { const s = jpSchool(r.school_id); return `<button type="button" class="chip ${pl === 1 ? "warn" : ""}" data-act="jpschool" data-id="${esc(r.school_id)}">${JP_PLACE[pl]} ${esc(s ? s.name_ko : r.name_ja)}</button>`; }).join("")).join("")}</div></div>` : "";
     const groups = JP_RND.map(([k, lab]) => [lab, l.filter(v => { const r = (v.rnd || "").split(":"); return k === "" ? !JP_RND.slice(0, -1).some(([kk]) => r.includes(kk)) : k === "yosen" ? r.includes("yosen") : r.includes(k) && !r.includes("yosen"); })]).filter(([, x]) => x.length);
     body = `<div class="sc-row">${T.map(k => `<button type="button" class="chip sc-chip ${J.tourn === k ? "on" : ""}" data-act="jptourn" data-v="${k}">${JP_TOURN[k]}</button>`).join("")}</div>${gsel}
-      ${years.length ? `<div class="sc-row"><span class="sc-k">연도</span>${years.map(y => `<button type="button" class="chip sc-chip ${yr === y ? "on" : ""}" data-act="jpyear" data-v="${y}">${y}</button>`).join("")}</div>` : ""}
+      ${years.length || hasOld ? `<div class="sc-row"><span class="sc-k">연도</span>${years.map(y => `<button type="button" class="chip sc-chip ${yr === y ? "on" : ""}" data-act="jpyear" data-v="${y}">${y}</button>`).join("")}${hasOld ? `<button type="button" class="chip sc-chip ${yr === -1 ? "on" : ""}" data-act="jpyear" data-v="-1">그 외</button>` : ""}</div>` : ""}
+      ${resCard}
       ${groups.length ? groups.map(([lab, x]) => `<section class="sec"><h3>${lab} <span class="small muted">${jpGroups(x).length}</span></h3>${jpList(x)}</section>`).join("") : emptyLine("모아 둔 영상이 없어요.")}
-      ${jpSearchBox(`${JP_TOURN_Q[J.tourn] || ""} ${yr || ""} ${J.g === "w" ? "女子" : "男子"}`)}`;
+      ${jpSearchBox(`${JP_TOURN_Q[J.tourn] || ""} ${yr > 0 ? yr : ""} ${J.g === "w" ? "女子" : "男子"}`)}`;
   } else {
     const l = J.videos.filter(v => (J.sources.find(s => s.id === v.source) || {}).role === "visit");
     const by = {}; for (const v of l) for (const s of (v.schools.length ? v.schools : ["?"])) (by[s] = by[s] || []).push(v);
@@ -673,13 +677,19 @@ function jpSchoolPage(s) {
   const l = J.videos.filter(v => (v.schools || []).includes(s.id));
   const visit = l.filter(v => (J.sources.find(x => x.id === v.source) || {}).role === "visit"), games = l.filter(v => !visit.includes(v));
   const order = ["haruko", "ih", "kokutai", "block", "senbatsu", "shinjin", "practice", "univ", "other", null];
-  const groups = order.map(k => [k, games.filter(v => (v.tourn || null) === k).sort((a, b) => (b.year || 0) - (a.year || 0))]).filter(([, x]) => x.length);
+  const isOld = v => v.year && v.year < JP_RECENT;
+  const groups = order.map(k => [k, games.filter(v => (v.tourn || null) === k && !isOld(v)).sort((a, b) => (b.year || 0) - (a.year || 0))]).filter(([, x]) => x.length);
+  const olds = games.filter(isOld).sort((a, b) => b.year - a.year);
+  if (olds.length) groups.push(["old", olds]);
   const q = s.name_ja.replace(/高校$/, "");
   return `<section class="sec"><div class="row"><button class="btn link small" type="button" data-act="jpback">‹ 목록</button></div>
-    <div class="jp-head"><h2>${esc(s.name_ko)}</h2><span class="small muted">${esc(s.name_ja)} · ${JP_PREF[s.pref] ? JP_PREF[s.pref][0] : esc(s.pref)}${s.gender === "w" ? " · 여자부" : s.gender === "mw" ? " · 남녀" : ""}</span></div>
-    ${(jpStrength().honors[s.id] || []).length ? `<div class="panel jp-honor"><b>최근 성적</b> ${[...new Set(jpStrength().honors[s.id].map(jpHonor))].map(x => `<span class="chip warn">${esc(x)}</span>`).join("")}</div>` : ""}
+    <div class="jp-head"><h2 class="dyn">${esc(s.name_ko)}</h2><span class="small muted">${esc(s.name_ja)} · ${JP_PREF[s.pref] ? JP_PREF[s.pref][0] : esc(s.pref)}${s.gender === "w" ? " · 여자부" : s.gender === "mw" ? " · 남녀" : ""}</span></div>
+    ${(() => { const rs = jpResultsOf(s.id), now = rs.filter(r => r.year >= JP_RECENT), old = rs.filter(r => r.year < JP_RECENT);
+      return `<div class="panel jp-honor"><div class="row between"><b>대회 성적</b><a class="btn link small" href="${jpGoogle(`${q} バレー 春高 インターハイ 結果`)}" target="_blank" rel="noopener noreferrer">일본어로 찾기 ↗</a></div>
+        ${now.length ? `<div class="jp-chips">${now.map(r => `<span class="chip ${r.place === 1 ? "warn" : ""}">${esc(jpResTxt(r))}</span>`).join("")}</div>` : `<span class="small muted">${JP_RECENT}년 이후 하루코·인터하이 4강 기록 없음</span>`}
+        ${old.length ? `<details><summary class="small muted">그 외 (${JP_RECENT - 1}년 이전) ${old.length}</summary><div class="jp-chips">${old.map(r => `<span class="chip">${esc(jpResTxt(r))}</span>`).join("")}</div></details>` : ""}</div>`; })()}
     ${visit.length ? `<section class="sec"><h3>학교 탐방 <span class="small muted">${visit.length}</span></h3>${jpList(visit)}</section>` : ""}
-    ${groups.map(([k, x]) => `<section class="sec"><h3>${k ? JP_TOURN[k] : "기타"} <span class="small muted">${jpGroups(x).length}</span></h3>${jpList(x)}</section>`).join("")}
+    ${groups.map(([k, x]) => `<section class="sec"><h3>${k === "old" ? `그 외 (${JP_RECENT - 1}년 이전)` : k ? JP_TOURN[k] : "기타"} <span class="small muted">${jpGroups(x).length}</span></h3>${jpList(x)}</section>`).join("")}
     ${!l.length ? emptyLine("모아 둔 영상이 없어요. 아래에서 유튜브를 찾아보세요.") : ""}
     ${jpSearchBox(`${q} バレー`, [["", "전체"], ["春高", "하루코"], ["インターハイ", "인터하이"], ["練習", "연습"]])}</section>`;
 }
@@ -865,7 +875,7 @@ function todayHtml(p) {
   const mine = plan.blocks.filter(b => b.scope === "me");
   return `<section class="panel today-card">
     <p class="eyebrow">${longDate(today())}</p>
-    <h2>${esc(plan.title)}</h2>
+    <h2 class="dyn">${esc(plan.title)}</h2>
     ${picksHtml(plan, p.id, t)}
     ${items.length ? `<ul class="mini">${items.map(x => `<li><span>${esc(x.name)}</span><b>${esc(rxMain(x.rx))}</b></li>`).join("")}</ul>` : ""}
     <div class="row between">
@@ -1066,7 +1076,7 @@ function viewPlan() {
   editCtx.slot = plan.slot; editCtx.pid = state.editScope === "team" ? null : pid;
   return `
   <section class="sec">
-    <div class="sec-head"><h2>${esc(p.name)} <span class="chip pos">${esc(p.pos)}</span></h2>${playerPicker(pid)}</div>
+    <div class="sec-head"><h2 class="dyn">${esc(p.name)} <span class="chip pos">${esc(p.pos)}</span></h2>${playerPicker(pid)}</div>
     ${weeksHtml(mon)}
     ${daysHtml(mon, d, x => planOn(p, x))}
   </section>
@@ -1118,7 +1128,7 @@ function viewRec() {
   const pid = viewPid();
   if (!pid) return viewPlan();
   const p = playerOf(pid);
-  return `<section class="sec"><div class="sec-head"><h2>${esc(p.name)} <span class="chip pos">${esc(p.pos)}</span></h2>${playerPicker(pid)}</div></section>
+  return `<section class="sec"><div class="sec-head"><h2 class="dyn">${esc(p.name)} <span class="chip pos">${esc(p.pos)}</span></h2>${playerPicker(pid)}</div></section>
   <div class="cols">
     <div class="col">${logHtml(p)}<section class="sec"><h3>통증 기록 <span class="private">본인·관리자만</span></h3>${painCheckForm(p, "rec")}${painCheckList(p)}</section></div>
     <div class="col">${liftHtml(p)}${testsHtml(p)}</div>
@@ -2101,7 +2111,7 @@ function cupPage(x) {
     else serve = `<div class="sc-row">${[1, 2, 3].map(n => `<button type="button" class="chip sc-chip ${C.set === n ? "on" : ""}" data-act="cupset" data-v="${n}">${n}세트</button>`).join("")}<button type="button" class="btn small" data-act="cupprint">인쇄</button></div>${serveSheet(x, L[C.set] || {}, can("schedule"))}`;
   }
   return `<section class="sec"><div class="row"><button class="btn link small" type="button" data-act="cupback">‹ 목록</button></div>
-    <div class="jp-head"><h2>${esc(x.name)}</h2><span class="small muted">${esc(x.when)} · ${x.fmt === "9" ? "9인제" : "6인제"}</span></div>
+    <div class="jp-head"><h2 class="dyn">${esc(x.name)}</h2><span class="small muted">${esc(x.when)} · ${x.fmt === "9" ? "9인제" : "6인제"}</span></div>
     ${x.kind === "event" && can("schedule") ? `<div class="sc-row"><span class="sc-k">방식</span>${[["6", "6인제"], ["9", "9인제"]].map(([k, l]) => `<button type="button" class="chip sc-chip ${x.fmt === k ? "on" : ""}" data-act="cupfmt" data-v="${k}">${l}</button>`).join("")}</div>` : ""}
     <div class="panel">${voteBox(x.kind, x.id)}</div>
     <section class="panel sec"><div class="sec-head"><h3>엔트리</h3>${can("schedule") && !C.edit ? `<button class="btn small" type="button" data-act="cupedit">선정</button>` : ""}</div>${entry}</section>

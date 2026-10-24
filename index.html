@@ -133,6 +133,8 @@ main > *, .sec > *, details > * { min-width: 0; }
 details.members { min-width: 0; display: block; }
 .members > p, .members > .tw { margin-top: 6px; }
 h2 { font-family: var(--f-display); font-weight: 400; font-size: 22px; margin: 0; line-height: 1.2; text-wrap: balance; }
+/* Do Hyeon 은 한글 2,437자만 있어서 이름처럼 바뀌는 글자는 본문 글꼴(전체 11,172자)로 */
+h2.dyn { font-family: var(--f-body); font-weight: 700; font-size: 20px; letter-spacing: -0.01em; }
 h3 { font-size: 15px; margin: 0; font-weight: 700; }
 h4 { margin: 0; }
 p { margin: 0; }
@@ -844,7 +846,9 @@ td.num.good { color: var(--good); font-weight: 700; } td.num.crit { color: var(-
 .jp-chip.star { border-color: var(--yellow); background: color-mix(in srgb, var(--yellow) 18%, var(--surface)); }
 .jp-regs { margin: 2px 0 4px; }
 .jp-reg .jp-pref:first-of-type { border-top: 0; }
-.jp-honor { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 12px; }
+.jp-honor { display: grid; gap: 8px; padding: 10px 12px; }
+.jp-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.jp-honor .chip { font-size: 13px; }
 
 /* 대회: 엔트리 · 서브 타순 */
 .cup-card .chip { font-size: 11.5px; padding: 1px 7px; vertical-align: 1px; }
@@ -894,9 +898,9 @@ ul.ev-list.boxes { gap: 8px; }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=72"></script>
-<script src="guide.js?v=72"></script>
-<script src="library.js?v=72"></script>
-<script src="app.js?v=72"></script>
+<script src="program.js?v=73"></script>
+<script src="guide.js?v=73"></script>
+<script src="library.js?v=73"></script>
+<script src="app.js?v=73"></script>
 </body>
 </html>
