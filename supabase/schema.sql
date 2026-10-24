@@ -418,3 +418,8 @@ alter table public.logs add constraint logs_pain_area_check
 -- scout_matches(team_id, title, date, opponent, yt, note): 전력분석 경기, can('analysis') = 전력분석부장·관리자
 -- scout_events(match_id, set_no, side us|opp, player_id, opp_no, skill, kind, len, zone, grade #+!-/=, t): 부원 누구나 입력, 본인 것만 지움
 -- wipe_personal 에 event_votes 삭제 추가 (졸업·탈퇴 때 참가 투표도 지움)
+
+-- ===== 전력분석 토스 위치 · 랠리 결과 (scout_src_points) =====
+-- scout_events.src: 공격 토스 위치 L 레프트 · M 속공 · R 라이트 · P 파이프 · B 백라이트 (세터 분배 분석)
+-- scout_points(match_id, set_no, rot 1~6, serve us|opp, won, t, author): 랠리 결과 → 로테이션별 사이드아웃·브레이크
+--   읽기·입력은 팀 부원, 지우기는 본인 또는 can('analysis'). restrictive "team scope" = private.scout_team(match_id)
