@@ -3,7 +3,7 @@ import webpush from "npm:web-push@3.6.7";
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
-const SITE = "https://snuvt-physical.vercel.app";
+const SITE = "https://snuvt.vercel.app";
 const MSG: Record<string, { title: string; body: string; tag: string; url: string }> = {
   morning: { title: "아침 컨디션", body: "수면·피로·근육통·기분 체크하고 오늘 운동 확인하세요", tag: "morning", url: "./#train" },
   evening: { title: "오늘 운동 기록", body: "RPE·완료율, 아픈 곳 있으면 통증도 남겨 주세요", tag: "evening", url: "./#train" },

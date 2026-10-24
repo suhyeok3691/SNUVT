@@ -687,6 +687,7 @@ CREATE INDEX friendlies_date ON public.friendlies USING btree (date);
 CREATE INDEX friendlies_team ON public.friendlies USING btree (team_id);
 CREATE INDEX jp_matches_key ON public.jp_matches USING btree (tourn, year);
 CREATE INDEX jp_results_school ON public.jp_results USING btree (school_id);
+CREATE INDEX jp_videos_source ON public.jp_videos USING btree (source);
 CREATE INDEX jp_videos_schools ON public.jp_videos USING gin (schools);
 CREATE INDEX jp_videos_tourn ON public.jp_videos USING btree (tourn, year);
 CREATE INDEX lift_sets_player_date ON public.lift_sets USING btree (player_id, date);
@@ -1267,7 +1268,8 @@ CREATE TRIGGER players_body_private BEFORE INSERT OR UPDATE OF height, weight ON
 CREATE TRIGGER jp_skip_old BEFORE INSERT ON public.jp_videos FOR EACH ROW EXECUTE FUNCTION private.jp_skip_old();
 
 -- ========== 6. 행 단위 보안 (RLS) ==========
--- 팀 표는 restrictive "team scope" 로 내 팀 행만. private.can(x) 은 관리자(coach)에게 항상 true
+-- 팀 표는 restrictive "team scope" 로 내 팀 행만. private.can(x) 은 관리자(coach)에게 항상 true, is_member() 는 관리자 포함
+-- 개인 기록 읽기 = 본인 + 맡은 직책(can), 쓰기 = 본인 + 관리자. 2026-10-25 에 같은 뜻의 정책을 합쳐 133 → 118개 (직책별 읽기·쓰기 결과는 그대로)
 alter table public.absences enable row level security;
 alter table public.day_picks enable row level security;
 alter table public.entries enable row level security;
@@ -1311,11 +1313,9 @@ create policy "team scope" on public.absences as restrictive
 create policy "coach or self deletes absences" on public.absences for delete to authenticated
   using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))));
 create policy "coach or self inserts absences" on public.absences for insert to authenticated
-  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid()))));
-create policy "coach or self reads absences" on public.absences for select to authenticated
-  using ((private.is_coach() OR (private.is_member() AND (player_id = private.my_player_id()))));
-create policy "schedule reads absences" on public.absences for select to authenticated
-  using (private.can('attend'::text));
+  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = ( SELECT auth.uid() AS uid)))));
+create policy "self or attend reads absences" on public.absences for select to authenticated
+  using (((private.is_member() AND (player_id = private.my_player_id())) OR private.can('attend'::text)));
 create policy "coach or self updates absences" on public.absences for update to authenticated
   using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))))
   with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))));
@@ -1331,9 +1331,6 @@ create policy "coach or self reads day_picks" on public.day_picks for select
 create policy "coach or self updates day_picks" on public.day_picks for update
   using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))))
   with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))));
-create policy "coach writes entries" on public.entries to authenticated
-  using (private.is_coach())
-  with check (private.is_coach());
 create policy "schedule writes entries" on public.entries to authenticated
   using (private.can('schedule'::text))
   with check (private.can('schedule'::text));
@@ -1341,7 +1338,7 @@ create policy "team scope" on public.entries as restrictive
   using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
   with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
 create policy "members read entries" on public.entries for select to authenticated
-  using ((private.is_member() OR private.is_coach()));
+  using (private.is_member());
 create policy "team scope" on public.event_votes as restrictive
   using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
   with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
@@ -1349,10 +1346,7 @@ create policy "votes mine" on public.event_votes to authenticated
   using ((player_id = private.my_player_id()))
   with check ((player_id = private.my_player_id()));
 create policy "votes read" on public.event_votes for select to authenticated
-  using ((private.is_member() OR private.is_coach()));
-create policy "coach writes events" on public.events
-  using (private.is_coach())
-  with check (private.is_coach());
+  using (private.is_member());
 create policy "schedule writes events" on public.events to authenticated
   using (private.can('schedule'::text))
   with check (private.can('schedule'::text));
@@ -1361,9 +1355,6 @@ create policy "team scope" on public.events as restrictive
   with check ((team_id = ( SELECT private.my_team() AS my_team)));
 create policy "members read events" on public.events for select
   using (private.is_member());
-create policy "coach writes friendlies" on public.friendlies to authenticated
-  using (private.is_coach())
-  with check (private.is_coach());
 create policy "schedule writes friendlies" on public.friendlies to authenticated
   using (private.can('schedule'::text))
   with check (private.can('schedule'::text));
@@ -1371,26 +1362,22 @@ create policy "team scope" on public.friendlies as restrictive
   using ((team_id = ( SELECT private.my_team() AS my_team)))
   with check ((team_id = ( SELECT private.my_team() AS my_team)));
 create policy "members read friendlies" on public.friendlies for select to authenticated
-  using ((private.is_member() OR private.is_coach()));
+  using (private.is_member());
 create policy "coach writes health" on public.health
   using (private.is_coach())
   with check (private.is_coach());
 create policy "team scope" on public.health as restrictive
   using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
   with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
-create policy "coach or self reads health" on public.health for select
-  using ((private.is_coach() OR (private.is_member() AND (player_id = private.my_player_id()))));
-create policy "pending self reads own health" on public.health for select
-  using ((player_id = private.my_player_id()));
-create policy "training reads health" on public.health for select to authenticated
-  using (private.can('training'::text));
+create policy "self or training reads health" on public.health for select to authenticated
+  using (((player_id = private.my_player_id()) OR private.can('training'::text)));
 create policy "training writes health" on public.health for update to authenticated
   using (private.can('training'::text))
   with check (private.can('training'::text));
 create policy "members read" on public.jp_matches for select to authenticated
-  using ((private.is_member() OR private.is_coach()));
+  using (private.is_member());
 create policy "members read" on public.jp_results for select to authenticated
-  using ((private.is_member() OR private.is_coach()));
+  using (private.is_member());
 create policy "members read" on public.jp_schools for select to authenticated
   using (private.is_member());
 create policy "coach del" on public.jp_sources for delete to authenticated
@@ -1405,13 +1392,11 @@ create policy "team scope" on public.lift_sets as restrictive
   using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
   with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
 create policy "coach or self deletes lift_sets" on public.lift_sets for delete
-  using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid()))));
+  using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = ( SELECT auth.uid() AS uid)))));
 create policy "coach or self inserts lift_sets" on public.lift_sets for insert
-  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid()))));
-create policy "coach or self reads lift_sets" on public.lift_sets for select
-  using ((private.is_coach() OR (private.is_member() AND (player_id = private.my_player_id()))));
-create policy "training reads lift_sets" on public.lift_sets for select to authenticated
-  using (private.can('training'::text));
+  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = ( SELECT auth.uid() AS uid)))));
+create policy "self or training reads lift_sets" on public.lift_sets for select to authenticated
+  using (((private.is_member() AND (player_id = private.my_player_id())) OR private.can('training'::text)));
 create policy "schedule writes lineups" on public.lineups to authenticated
   using (private.can('schedule'::text))
   with check (private.can('schedule'::text));
@@ -1419,21 +1404,16 @@ create policy "team scope" on public.lineups as restrictive to authenticated
   using ((team_id = ( SELECT private.my_team() AS my_team)))
   with check ((team_id = ( SELECT private.my_team() AS my_team)));
 create policy "members read lineups" on public.lineups for select to authenticated
-  using ((private.is_member() OR private.is_coach()));
+  using (private.is_member());
 create policy "team scope" on public.logs as restrictive
   using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
   with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
 create policy "coach deletes logs" on public.logs for delete
   using (private.is_coach());
 create policy "coach or self inserts logs" on public.logs for insert
-  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid()))));
-create policy "coach or self reads logs" on public.logs for select
-  using ((private.is_coach() OR (private.is_member() AND (player_id = private.my_player_id()))));
-create policy "training reads logs" on public.logs for select to authenticated
-  using (private.can('training'::text));
-create policy "coach writes notices" on public.notices to authenticated
-  using (private.is_coach())
-  with check (private.is_coach());
+  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = ( SELECT auth.uid() AS uid)))));
+create policy "self or training reads logs" on public.logs for select to authenticated
+  using (((private.is_member() AND (player_id = private.my_player_id())) OR private.can('training'::text)));
 create policy "notice writes notices" on public.notices to authenticated
   using (private.can('notice'::text))
   with check (private.can('notice'::text));
@@ -1441,7 +1421,7 @@ create policy "team scope" on public.notices as restrictive
   using ((team_id = ( SELECT private.my_team() AS my_team)))
   with check ((team_id = ( SELECT private.my_team() AS my_team)));
 create policy "members read notices" on public.notices for select to authenticated
-  using ((private.is_member() OR private.is_coach()));
+  using (private.is_member());
 create policy "open write" on public.open_sessions to authenticated
   using (private.can('attend'::text))
   with check (private.can('attend'::text));
@@ -1449,7 +1429,7 @@ create policy "team scope" on public.open_sessions as restrictive
   using ((team_id = ( SELECT private.my_team() AS my_team)))
   with check ((team_id = ( SELECT private.my_team() AS my_team)));
 create policy "open read" on public.open_sessions for select to authenticated
-  using ((private.is_member() OR private.is_coach()));
+  using (private.is_member());
 create policy "team scope" on public.open_votes as restrictive
   using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
   with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
@@ -1457,18 +1437,16 @@ create policy "votes mine" on public.open_votes to authenticated
   using ((player_id = private.my_player_id()))
   with check ((player_id = private.my_player_id()));
 create policy "votes read" on public.open_votes for select to authenticated
-  using ((private.is_member() OR private.is_coach()));
+  using (private.is_member());
 create policy "team scope" on public.pain_checks as restrictive
   using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
   with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
 create policy "coach or self removes pain checks" on public.pain_checks for delete
-  using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid()))));
+  using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = ( SELECT auth.uid() AS uid)))));
 create policy "coach or self inserts pain checks" on public.pain_checks for insert
-  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid()))));
-create policy "coach or self reads pain checks" on public.pain_checks for select
-  using ((private.is_coach() OR (private.is_member() AND (player_id = private.my_player_id()))));
-create policy "training reads pain_checks" on public.pain_checks for select to authenticated
-  using (private.can('training'::text));
+  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = ( SELECT auth.uid() AS uid)))));
+create policy "self or training reads pain_checks" on public.pain_checks for select to authenticated
+  using (((private.is_member() AND (player_id = private.my_player_id())) OR private.can('training'::text)));
 create policy "team scope" on public.player_contacts as restrictive
   using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
   with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
@@ -1493,10 +1471,8 @@ create policy "coach writes players" on public.players
 create policy "team scope" on public.players as restrictive
   using ((team_id = ( SELECT private.my_team() AS my_team)))
   with check ((team_id = ( SELECT private.my_team() AS my_team)));
-create policy "members read players" on public.players for select
-  using (private.is_member());
-create policy "self reads own player" on public.players for select
-  using ((id = private.my_player_id()));
+create policy "members or self read players" on public.players for select to authenticated
+  using ((private.is_member() OR (id = private.my_player_id())));
 create policy "practice write" on public.practice_plans to authenticated
   using (private.can('practice'::text))
   with check (private.can('practice'::text));
@@ -1504,10 +1480,7 @@ create policy "team scope" on public.practice_plans as restrictive
   using ((team_id = ( SELECT private.my_team() AS my_team)))
   with check ((team_id = ( SELECT private.my_team() AS my_team)));
 create policy "practice read" on public.practice_plans for select to authenticated
-  using (((published AND (private.is_member() OR private.is_coach())) OR private.can('practice'::text)));
-create policy "coach writes practice_times" on public.practice_times to authenticated
-  using (private.is_coach())
-  with check (private.is_coach());
+  using (((published AND private.is_member()) OR private.can('practice'::text)));
 create policy "schedule writes practice_times" on public.practice_times to authenticated
   using (private.can('attend'::text))
   with check (private.can('attend'::text));
@@ -1515,12 +1488,12 @@ create policy "team scope" on public.practice_times as restrictive
   using ((team_id = ( SELECT private.my_team() AS my_team)))
   with check ((team_id = ( SELECT private.my_team() AS my_team)));
 create policy "members read practice_times" on public.practice_times for select to authenticated
-  using ((private.is_member() OR private.is_coach()));
+  using (private.is_member());
 create policy "team scope" on public.profiles as restrictive
   using ((team_id = ( SELECT private.my_team() AS my_team)))
   with check ((team_id = ( SELECT private.my_team() AS my_team)));
 create policy "self or coach reads profile" on public.profiles for select
-  using (((id = auth.uid()) OR private.is_coach()));
+  using (((id = ( SELECT auth.uid() AS uid)) OR private.is_coach()));
 create policy "coach updates profiles" on public.profiles for update
   using (private.is_coach())
   with check (private.is_coach());
@@ -1531,7 +1504,7 @@ create policy "team scope" on public.program_edits as restrictive
   using ((team_id = ( SELECT private.my_team() AS my_team)))
   with check ((team_id = ( SELECT private.my_team() AS my_team)));
 create policy "program_edits read" on public.program_edits for select to authenticated
-  using ((((player_id IS NULL) AND (private.is_member() OR private.is_coach())) OR (player_id = private.my_player_id()) OR private.can('training'::text)));
+  using ((((player_id IS NULL) AND private.is_member()) OR (player_id = private.my_player_id()) OR private.can('training'::text)));
 create policy "push_subs_del" on public.push_subs for delete to authenticated
   using ((user_id = ( SELECT auth.uid() AS uid)));
 create policy "push_subs_ins" on public.push_subs for insert to authenticated
@@ -1547,9 +1520,9 @@ create policy "team scope" on public.scout_events as restrictive
 create policy "scout events del" on public.scout_events for delete to authenticated
   using (((author = ( SELECT auth.uid() AS uid)) OR private.can('analysis'::text)));
 create policy "scout events add" on public.scout_events for insert to authenticated
-  with check (((private.is_member() OR private.is_coach()) AND (author = ( SELECT auth.uid() AS uid))));
+  with check ((private.is_member() AND (author = ( SELECT auth.uid() AS uid))));
 create policy "scout events read" on public.scout_events for select to authenticated
-  using ((private.is_member() OR private.is_coach()));
+  using (private.is_member());
 create policy "scout events fix" on public.scout_events for update to authenticated
   using (((author = ( SELECT auth.uid() AS uid)) OR private.can('analysis'::text)))
   with check (((author = ( SELECT auth.uid() AS uid)) OR private.can('analysis'::text)));
@@ -1560,22 +1533,19 @@ create policy "team scope" on public.scout_matches as restrictive
   using ((team_id = ( SELECT private.my_team() AS my_team)))
   with check ((team_id = ( SELECT private.my_team() AS my_team)));
 create policy "scout read" on public.scout_matches for select to authenticated
-  using ((private.is_member() OR private.is_coach()));
+  using (private.is_member());
 create policy "team scope" on public.scout_points as restrictive
   using ((private.scout_team(match_id) = ( SELECT private.my_team() AS my_team)))
   with check ((private.scout_team(match_id) = ( SELECT private.my_team() AS my_team)));
 create policy "points del" on public.scout_points for delete to authenticated
   using (((author = ( SELECT auth.uid() AS uid)) OR private.can('analysis'::text)));
 create policy "points add" on public.scout_points for insert to authenticated
-  with check (((private.is_member() OR private.is_coach()) AND (author = ( SELECT auth.uid() AS uid))));
+  with check ((private.is_member() AND (author = ( SELECT auth.uid() AS uid))));
 create policy "points read" on public.scout_points for select to authenticated
-  using ((private.is_member() OR private.is_coach()));
+  using (private.is_member());
 create policy "points fix" on public.scout_points for update to authenticated
   using (((author = ( SELECT auth.uid() AS uid)) OR private.can('analysis'::text)))
   with check (((author = ( SELECT auth.uid() AS uid)) OR private.can('analysis'::text)));
-create policy "coach writes team_off" on public.team_off
-  using (private.is_coach())
-  with check (private.is_coach());
 create policy "schedule writes team_off" on public.team_off to authenticated
   using (private.can('attend'::text))
   with check (private.can('attend'::text));
@@ -1583,7 +1553,7 @@ create policy "team scope" on public.team_off as restrictive
   using ((team_id = ( SELECT private.my_team() AS my_team)))
   with check ((team_id = ( SELECT private.my_team() AS my_team)));
 create policy "members read team_off" on public.team_off for select
-  using ((private.is_member() OR private.is_coach()));
+  using (private.is_member());
 create policy "teams read" on public.teams for select to anon,authenticated
   using (true);
 create policy "coach writes tests" on public.tests
@@ -1593,13 +1563,11 @@ create policy "team scope" on public.tests as restrictive
   using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
   with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
 create policy "player deletes own core tests" on public.tests for delete
-  using (((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid())));
+  using (((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = ( SELECT auth.uid() AS uid))));
 create policy "training deletes tests" on public.tests for delete to authenticated
   using (private.can('training'::text));
-create policy "player inserts own core tests" on public.tests for insert
-  with check (((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid()) AND (reach IS NULL) AND (cmj IS NULL) AND (block IS NULL) AND (approach IS NULL) AND (squat IS NULL) AND (rdl IS NULL) AND (pull IS NULL) AND (bal_l IS NULL) AND (bal_r IS NULL)));
 create policy "player inserts own tests" on public.tests for insert to authenticated
-  with check (((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid())));
+  with check (((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = ( SELECT auth.uid() AS uid))));
 create policy "members read tests" on public.tests for select
   using (private.is_member());
 create policy "training edits tests" on public.tests for update to authenticated
@@ -1620,18 +1588,16 @@ create policy "videos write" on public.videos to authenticated
   using (private.can('video'::text))
   with check (private.can('video'::text));
 create policy "videos read" on public.videos for select to authenticated
-  using ((private.is_member() OR private.is_coach()));
+  using (private.is_member());
 create policy "team scope" on public.wellness as restrictive
   using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
   with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
 create policy "coach or self deletes wellness" on public.wellness for delete to authenticated
   using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))));
 create policy "coach or self inserts wellness" on public.wellness for insert to authenticated
-  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid()))));
-create policy "coach or self reads wellness" on public.wellness for select to authenticated
-  using ((private.is_coach() OR (private.is_member() AND (player_id = private.my_player_id()))));
-create policy "training reads wellness" on public.wellness for select to authenticated
-  using (private.can('training'::text));
+  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = ( SELECT auth.uid() AS uid)))));
+create policy "self or training reads wellness" on public.wellness for select to authenticated
+  using (((private.is_member() AND (player_id = private.my_player_id())) OR private.can('training'::text)));
 create policy "coach or self updates wellness" on public.wellness for update to authenticated
   using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))))
   with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))));

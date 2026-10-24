@@ -1,4 +1,4 @@
-/* SNUVT — 서울대 배구부 관리 (Physical 트레이닝 규칙은 program.js) */
+/* SNUVT — 서울대 배구부 관리 (피지컬 프로그램 규칙은 program.js) */
 
 /* ---------- 기준값 ---------- */
 // 일정표를 못 불러올 때만 쓰는 기본값
@@ -835,7 +835,7 @@ function viewHome() {
   return `${pendingHtml()}${voteCardsHtml()}${todayAbsHtml()}${noticesHtml()}${can("full") || can("training") ? teamStatusHtml() : ""}<section class="panel hub"><h3>오늘</h3>${rows}</section>
     <nav class="tiles-grid" aria-label="기능">${tiles}</nav>`;
 }
-// Physical · 오늘 (예전 홈)
+// 피지컬 · 오늘
 function viewTrain() {
   if (!state.loaded) return loaderHtml();
   const me = playerOf(state.myPid);
