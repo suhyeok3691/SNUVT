@@ -547,9 +547,10 @@ const JP_RND = [["F", "결승"], ["SF", "준결승 (4강)"], ["3rd", "3위 결�
 const jpRndKey = v => { const r = (v.rnd || "").split(":"); if (r.includes("yosen")) return "yosen"; const k = JP_RND.find(([kk]) => kk && kk !== "yosen" && r.includes(kk)); return k ? k[0] : ""; };
 // 현 예선 안에서는 결승·준결승 순
 const jpYosenOrder = v => { const r = (v.rnd || "").split(":"); const i = JP_RND.findIndex(([kk]) => kk && kk !== "yosen" && r.includes(kk)); return i < 0 ? 99 : i; };
-function jpRoundSections(l, national) {
-  // national=false 면(국스포·지역 대회 등) 라운드만으로
-  return JP_RND.map(([k, lab]) => [k === "yosen" ? "현 예선" : k === "" ? (national ? "본선 (라운드 모름)" : "기타") : lab, l.filter(v => jpRndKey(v) === k).sort((a, b) => k === "yosen" ? jpYosenOrder(a) - jpYosenOrder(b) : 0)]).filter(([, x]) => x.length);
+const jpYosenLab = tourn => tourn === "kokutai" ? "블록 예선" : "현 예선";
+function jpRoundSections(l, national, tourn) {
+  // national=false 면(사쿠라·지역 대회 등) 라운드만으로. 국민스포츠대회 예선은 블록 예선
+  return JP_RND.map(([k, lab]) => [k === "yosen" ? jpYosenLab(tourn) : k === "" ? (national ? "본선 (라운드 모름)" : "기타") : lab, l.filter(v => jpRndKey(v) === k).sort((a, b) => k === "yosen" ? jpYosenOrder(a) - jpYosenOrder(b) : 0)]).filter(([, x]) => x.length);
 }
 const JP_GLOSS = [["春の高校バレー", "하루코"], ["春高バレー", "하루코"], ["春高", "하루코"], ["インターハイ", "인터하이"], ["インハイ", "인터하이"], ["国民スポーツ大会", "국민스포츠대회"], ["国スポ", "국민스포츠대회"], ["国民体育大会", "국민체육대회"], ["国体", "국민체육대회"], ["さくらバレー", "사쿠라 발리"], ["全国私立高等学校", "전국 사립고"],
   ["準々決勝", "준준결승"], ["準決勝", "준결승"], ["決勝戦", "결승"], ["決勝", "결승"], ["代表決定戦", "대표 결정전"], ["位決定戦", "위 결정전"], ["回戦", "회전"], ["予選", "예선"], ["グループ", "그룹"], ["トーナメント", "토너먼트"],
@@ -587,8 +588,8 @@ function jpKo(title) {
   t = t.replace(/(?<=[\p{Script=Hangul}\s\]!！?？])[のにがをはでとへも](?=[\p{Script=Hangul}\s\[!！A-Za-z0-9])/gu, " ");
   return t.replace(/【\s*/g, "[").replace(/\s*】/g, "] ").replace(/\s+([!！?？,、。)\]])/g, "$1").replace(/\(\s+/g, "(").replace(/\s+/g, " ").trim();
 }
-const jpRnd = r => { if (!r) return ""; return r.split(":").map(x => x === "yosen" ? "현 예선" : (JP_RND.find(y => y[0] === x) || ["", ""])[1]).filter(Boolean).join(" · "); };
-const jpMeta = v => [v.tourn && JP_TOURN[v.tourn] ? JP_TOURN[v.tourn] + (v.year ? " " + v.year : "") : (v.year || ""), jpRnd(v.rnd), v.schools && jpG(v) === "w" ? "여자" : "", (jp().sources.find(s => s.id === v.source) || {}).label || v.ch || ""].filter(Boolean).join(" · ");
+const jpRnd = (r, tourn) => { if (!r) return ""; return r.split(":").map(x => x === "yosen" ? jpYosenLab(tourn) : (JP_RND.find(y => y[0] === x) || ["", ""])[1]).filter(Boolean).join(" · "); };
+const jpMeta = v => [v.tourn && JP_TOURN[v.tourn] ? JP_TOURN[v.tourn] + (v.year ? " " + v.year : "") : (v.year || ""), jpRnd(v.rnd, v.tourn), v.schools && jpG(v) === "w" ? "여자" : "", (jp().sources.find(s => s.id === v.source) || {}).label || v.ch || ""].filter(Boolean).join(" · ");
 // 같은 경기(같은 채널 · 같은 제목)가 세트·전후편으로 나뉜 영상은 하나로 묶음
 const JP_PART = [/[\(（]?\s*第?\s*[0-9一二三四五]+(?:\s*[・,，.･•~～\-－と&]\s*[0-9一二三四五]+)*\s*セット(?:目)?(?:のみ|まで)?\s*[\)）]?/g, /(?:最終|ファイナル|ゴールデン)セット/g, /【?\s*(?:前編|中編|後編)\s*】?/g, /(?:その|Part\.?|part\.?|PART)\s*[0-9]+/g, /途中から~?|【?ノーカット版?】?|フル(?:バージョン)?/g];
 function jpPartOf(title) {
@@ -666,7 +667,7 @@ function viewJp() {
     const l = inT.filter(v => yr === -1 ? !v.year || v.year < JP_RECENT : !yr || v.year === yr);
     const res = yr > 0 ? (J.results || []).filter(r => r.tourn === J.tourn && r.gender === J.g && r.year === yr).sort((a, b) => a.place - b.place) : [];
     const resCard = res.length ? `<div class="panel jp-honor"><b>${JP_TOURN[J.tourn]} ${yr} 결과</b><div class="jp-chips">${[1, 2, 3].map(pl => res.filter(r => r.place === pl).map(r => { const s = jpSchool(r.school_id); return `<button type="button" class="chip ${pl === 1 ? "warn" : ""}" data-act="jpschool" data-id="${esc(r.school_id)}">${JP_PLACE[pl]} ${esc(s ? s.name_ko : r.name_ja)}</button>`; }).join("")).join("")}</div></div>` : "";
-    const groups = jpRoundSections(l, J.tourn === "haruko" || J.tourn === "ih");
+    const groups = jpRoundSections(l, ["haruko", "ih", "kokutai"].includes(J.tourn), J.tourn);
     body = `<div class="sc-row">${T.map(k => `<button type="button" class="chip sc-chip ${J.tourn === k ? "on" : ""}" data-act="jptourn" data-v="${k}">${JP_TOURN[k]}</button>`).join("")}</div>${gsel}
       ${years.length || hasOld ? `<div class="sc-row"><span class="sc-k">연도</span>${years.map(y => `<button type="button" class="chip sc-chip ${yr === y ? "on" : ""}" data-act="jpyear" data-v="${y}">${y}</button>`).join("")}${hasOld ? `<button type="button" class="chip sc-chip ${yr === -1 ? "on" : ""}" data-act="jpyear" data-v="-1">그 외</button>` : ""}</div>` : ""}
       ${resCard}
@@ -692,8 +693,8 @@ function jpSchoolPage(s) {
   // 대회를 하나 골라서: 전국 본선(결승 → 1회전) → 현 예선 순
   const sel = groups.some(([k]) => k === J.stourn) ? J.stourn : (groups[0] || [])[0];
   const cur = groups.find(([k]) => k === sel), curL = cur ? cur[1] : [];
-  const nat = sel === "haruko" || sel === "ih";
-  const secs = sel === "old" || !nat && !["kokutai", "sakura", "block"].includes(sel) ? [["", curL]] : jpRoundSections(curL, nat);
+  const nat = ["haruko", "ih", "kokutai"].includes(sel);
+  const secs = sel === "old" || !nat && !["kokutai", "sakura", "block"].includes(sel) ? [["", curL]] : jpRoundSections(curL, nat, sel);
   const q = s.name_ja.replace(/高校$/, "");
   return `<section class="sec"><div class="row"><button class="btn link small" type="button" data-act="jpback">‹ 목록</button></div>
     <div class="jp-head"><h2 class="dyn">${esc(s.name_ko)}</h2><span class="small muted">${esc(s.name_ja)} · ${JP_PREF[s.pref] ? JP_PREF[s.pref][0] : esc(s.pref)}${s.gender === "w" ? " · 여자부" : s.gender === "mw" ? " · 남녀" : ""}</span></div>

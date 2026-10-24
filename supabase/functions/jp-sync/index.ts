@@ -94,6 +94,13 @@ function tag(title: string) {
   else if (t.match(/令和(元|\d{1,2})年/)) { const n = t.match(/令和(元|\d{1,2})年/)!; year = 2018 + (n[1] === "元" ? 1 : Number(n[1])); }
   else if (t.match(/平成(\d{1,2})年/)) year = 1988 + Number(t.match(/平成(\d{1,2})年/)![1]);
   else { const n = t.match(/第(\d{1,2})回/); if (n && tourn === "haruko") year = Number(n[1]) + (Number(n[1]) < 45 ? 1969 : 1948); else if (n && tourn === "ih") year = Number(n[1]) + 1953; }
+  // 국민스포츠대회는 개최지로 연도를 앎 (「とちぎ国体」「青森国スポ」「第77回国体」)
+  if (!year && tourn === "kokutai") {
+    const v = t.match(/(和歌山|岩手|愛媛|福井|茨城|とちぎ|栃木|かごしま|鹿児島|さが|佐賀|SAGA|わたSHIGA|滋賀|SHIGA|青森)[^\s]{0,2}?(国体|国スポ)/i);
+    const Y: Record<string, number> = { 和歌山: 2015, 岩手: 2016, 愛媛: 2017, 福井: 2018, 茨城: 2019, とちぎ: 2022, 栃木: 2022, かごしま: 2023, 鹿児島: 2023, さが: 2024, 佐賀: 2024, saga: 2024, わたshiga: 2025, 滋賀: 2025, shiga: 2025, 青森: 2026 };
+    const n = t.match(/第(\d{2})回(国体|国民体育大会|国民スポーツ大会|国スポ)/);
+    if (v) year = Y[v[1].toLowerCase()] || null; else if (n) year = Number(n[1]) + 1945;
+  }
   let gender: string | null = /女子|女バレ|ガールズ/.test(t) ? "w" : /男子|男バレ/.test(t) ? "m" : null;
   const hits: { id: string; a: number; b: number }[] = [];
   for (const s of schools) for (const re of s.res) { re.lastIndex = 0; let m; while ((m = re.exec(body))) { hits.push({ id: s.id, a: m.index, b: m.index + m[0].length }); if (!m[0].length) break; } }
@@ -104,7 +111,9 @@ function tag(title: string) {
   let rest = body; for (const h of [...keep].sort((x, y) => y.a - x.a)) rest = rest.slice(0, h.a) + " " + rest.slice(h.b);
   const prefLocal = /[県都府](男子|女子|高等学校|高校総体|総体|大会|予選|代表|決勝|準決勝|準々決勝|バレー|新人)/.test(rest);
   if ((tourn === "haruko" || tourn === "ih") && !year && prefLocal) rnd = ["yosen", (rnd || "").split(":").filter((x) => x && x !== "yosen").join(":")].filter(Boolean).join(":");
-  if (tourn === "kokutai" && year) {
+  // 국스포 블록 예선(「国スポ2025九州ブロック」·ミニ国体)은 본선 대진에 넣지 않음
+  if (tourn === "kokutai" && /ブロック|予選|ミニ国体/.test(body)) rnd = ["yosen", (rnd || "").split(":").filter((x) => x && x !== "yosen").join(":")].filter(Boolean).join(":");
+  else if (tourn === "kokutai" && year) {
     // 국민스포츠대회는 현 대표끼리: 제목의 현 이름(熊本·京都…)이나 학교로 대진을 찾음
     const ms = MATCH.get(`kokutai|${year}`) || [], set = new Set(ids);
     const hit = (sd: Side) => sd.ids.some((i) => set.has(i)) || (sd.raw.length >= 2 && body.includes(sd.raw));
@@ -232,6 +241,11 @@ async function fill(deadline: number) {
       const items = await ytSearch(q); searched++;
       ok = items.filter((x) => {
         const t = norm(x.title), ys = [...t.matchAll(/20[0-3]\d/g)].map((y) => Number(y[0])), sec = secs(x.len);
+        // 같은 대회·같은 해로 읽히는 배구 영상만 (국체·인터하이는 다른 종목도 있음)
+        const tg = tag(x.title);
+        if (tg.tourn !== m.tourn || tg.year !== m.year) return false;
+        if (m.tourn !== "haruko" && !/バレー|volley/i.test(t) && !tg.schools.length) return false;
+        if (/成年|剣道|テニス|バスケ|サッカー|ハンド|ソフトボール|ビーチ/.test(t)) return false;
         return !known.has(x.id) && pair(x.title) && KW[m.tourn].test(t) && !/予選|代表決定|ブロック/.test(t) && !NOT_FULL.test(t) && (sec === null || sec >= 480)
           && (!ys.length || ys.includes(m.year)) && !(m.gender === "m" && /女子/.test(t)) && !(m.gender === "w" && /男子/.test(t));
       }).slice(0, 6);
