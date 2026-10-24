@@ -640,7 +640,7 @@ function slotPlan(ctx, slot, w, o = {}) {
         return { ...x, mod: mods.length > 1 ? def.label : "" };
       }).slice(0, room));
     }
-    return items.length ? { key: "rehab", scope: "me", title, items, note: "진단 전 기본 관리예요. 의료진 지시가 있으면 그게 우선 · 쉴 때도 아프거나 7점 이상이면 진료부터." } : null;
+    return items.length ? { key: "rehab", scope: "me", title, items, note: "의료진 지시가 우선" } : null;
   };
   const h = { add, warm, rehabBlock };
   (SLOT_FN[slot] || SLOT_FN.rest)(c, w, o, out, h);

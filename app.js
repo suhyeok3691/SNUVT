@@ -144,6 +144,7 @@ const today = () => parseD(iso(new Date()));
 const daysBetween = (a, b) => Math.round((parseD(iso(a)) - parseD(iso(b))) / 86400000);
 const events = () => state.events || DEFAULT_EVENTS;
 const dowMon = date => (date.getDay() + 6) % 7; // 월요일 = 0
+const shortDate = d => `${d.getMonth() + 1}/${d.getDate()} (${DOW_KO[d.getDay()]})`;
 const longDate = d => `${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW_KO[d.getDay()]})`;
 
 /* ---------- 상태 ---------- */
@@ -543,10 +544,10 @@ function openDrawer() {
   const link = (v, l) => `<button type="button" class="dr-link ${state.view === v ? "on" : ""}" data-act="view" data-v="${v}">${l}</button>`;
   const group = (k, ic) => { const sec = SECTIONS[k]; return `<div class="dr-group"><div class="dr-h">${svg(ic)}<span>${sec.label}</span></div>${secViews(sec).map(([v, l]) => link(v, l)).join("")}</div>`; };
   el.querySelector(".drawer-body").innerHTML = `<div class="dr-top"><button type="button" class="dr-brand" data-act="view" data-v="home" aria-label="홈으로"><img class="logo logo-light" src="logo.png?v=4" alt="" width="32" height="31"><img class="logo logo-dark" src="logo-white.png?v=4" alt="" width="32" height="31"><b>SNUVT</b></button><button class="btn link" type="button" data-act="drawerclose" aria-label="닫기">닫기</button></div>
+    ${state.staff ? `<div class="dr-group dr-view"><div class="dr-h"><span>화면 보기</span></div><div class="dr-roles"><select id="drViewAs" aria-label="화면 보기">${viewOptions().map(k => `<option value="${k}" ${state.viewAs === k ? "selected" : ""}>${VIEW_LABEL(k)}</option>`).join("")}</select></div></div>` : ""}
     <div class="dr-group">${link("home", "홈")}</div>
     ${group("practice", "ball")}${group("physical", "physical")}${group("schedule", "schedule")}${secViews(SECTIONS.admin).length ? group("admin", "admin") : ""}
-    <div class="dr-group"><button type="button" class="dr-link" data-act="settings">설정</button></div>
-    ${state.staff ? `<div class="dr-group"><div class="dr-h"><span>화면 보기</span></div><div class="dr-roles">${viewOptions().map(k => `<button type="button" class="chip ${state.viewAs === k ? "on" : ""}" data-act="viewas" data-k="${k}">${VIEW_LABEL(k)}</button>`).join("")}</div></div>` : ""}`;
+    <div class="dr-group"><button type="button" class="dr-link" data-act="settings">설정</button></div>`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
 function closeDrawer() { const el = document.getElementById("drawer"); if (el && !el.hidden) { el.hidden = true; document.body.classList.remove("noscroll"); } }
@@ -634,14 +635,13 @@ function viewTrain() {
 }
 function wellnessHtml(p) {
   const t = iso(today()), w = wellOn(p.id, t), why = readiness(w, lastRpeBefore(p.id, t));
-  const sel = (k, l) => `<label class="fl">${l}<select id="wl-${k}">${[5, 4, 3, 2, 1].map(v => `<option value="${v}" ${(w ? Number(w[k]) : 3) === v ? "selected" : ""}>${WELL_OPTS[k][v - 1]}</option>`).join("")}</select></label>`;
+  // 한 줄에 한 항목: 이름 · 1–5 · 고른 말
+  const row = (k, l0) => { const l = l0.split("·")[0]; const cur = w ? Number(w[k]) : 3; return `<div class="wl-row"><span class="wl-k">${l}</span><span class="wl-seg" role="radiogroup" aria-label="${l}">${[1, 2, 3, 4, 5].map(v => `<label><input type="radio" name="wl-${k}" value="${v}" ${cur === v ? "checked" : ""}><span>${v}</span></label>`).join("")}</span><span class="wl-v small muted">${WELL_OPTS[k][cur - 1]}</span></div>`; };
   const key = "well-form";
-  return `<section class="panel well-card">
-    <div class="row between"><h3>아침 컨디션</h3>${w ? `<span class="chip ${why.length ? "warn" : ""}">${wellSum(w)}/20${why.length ? " · 회복 버전" : ""}</span>` : why.length ? `<span class="chip warn">회복 버전</span>` : ""}</div>
-    <details data-keep="${key}" ${keepOpen(key, !w)}><summary class="small muted">${w ? "수정" : "입력"}</summary>
-    <form class="f" id="wellForm" data-pid="${esc(p.id)}">
-      <div class="fields well">${WELL_KEYS.map(([k, l]) => sel(k, l)).join("")}</div>
-      <div class="row"><button class="btn primary" type="submit">저장</button></div>
+  return `<section class="panel well-card"><details data-keep="${key}" ${keepOpen(key, !w)}>
+    <summary class="well-head"><h3>아침 컨디션</h3>${w ? `<span class="chip ${why.length ? "warn" : ""}">${wellSum(w)}/20</span>` : why.length ? `<span class="chip warn">가볍게</span>` : `<span class="chip warn">입력</span>`}${w ? `<span class="small muted">수정</span>` : ""}</summary>
+    <form class="f" id="wellForm" data-pid="${esc(p.id)}">${WELL_KEYS.map(([k, l]) => row(k, l)).join("")}
+      <div class="row"><button class="btn primary small" type="submit">저장</button></div>
     </form></details>
   </section>`;
 }
@@ -810,9 +810,7 @@ function viewRoster() {
   const ps = sortedPlayers().slice().sort((a, b) => (a.number ?? 999) - (b.number ?? 999) || a.name.localeCompare(b.name, "ko"));
   const staff = ps.filter(p => p.title || p.media);
   return `<section class="sec"><div class="sec-head"><h3>명단 <span class="small muted">${ps.length}명</span></h3>${can("full") ? `<button class="btn link small" type="button" data-act="view" data-v="intake">직책·정보 바꾸기 →</button>` : ""}</div>
-    <div class="tw"><table class="roster"><thead><tr><th>번호</th><th>이름</th><th>포지션</th><th>학년</th><th>직책</th><th>전화</th></tr></thead><tbody>
-    ${ps.map(p => `<tr><td class="num">${p.number ?? "—"}</td><td><b>${esc(p.name)}</b></td><td><span class="chip pos">${esc(p.pos)}</span></td><td>${esc(p.year || "")}</td><td>${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}</td><td>${state.contacts[p.id] ? `<a href="tel:${esc(state.contacts[p.id].replace(/[^0-9+]/g, ""))}">${esc(state.contacts[p.id])}</a>` : "—"}</td></tr>`).join("")}
-    </tbody></table></div></section>
+    <ul class="roster-list">${ps.map(p => `<li><span class="r-no num">${p.number ?? ""}</span><span class="r-who"><b>${esc(p.name)}</b><span class="chip pos">${esc(p.pos)}</span>${p.year ? `<span class="small muted">${esc(p.year)}</span>` : ""}${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}</span>${state.contacts[p.id] ? `<a class="r-tel num" href="tel:${esc(state.contacts[p.id].replace(/[^0-9+]/g, ""))}">${esc(state.contacts[p.id])}</a>` : `<span class="r-tel muted">—</span>`}</li>`).join("")}</ul></section>
     <section class="sec"><h3>운영진</h3>${staff.length ? `<ul class="watch">${staff.map(p => `<li><b>${esc(p.name)}</b>${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}${p.media ? `<span class="chip">영상 담당</span>` : ""}</li>`).join("")}</ul>` : emptyLine("아직 정해진 직책이 없어요.")}</section>`;
 }
 // 리포트: 지난주 요약 + 선수별 리포트(최근 4주) + 엑셀
@@ -1222,13 +1220,10 @@ function membersHtml() {
   const roleOpt = (v, cur, l) => `<option value="${v}" ${v === cur ? "selected" : ""}>${l}</option>`;
   const nameOf = m => (m.player_id && state.players[m.player_id] && state.players[m.player_id].name) || "";
   return `<details class="sec members" data-keep="members" ${keepOpen("members", list.some(m => m.role === "pending"))}><summary><h3>팀원 계정 <span class="muted small">${list.length}명${list.some(m => m.role === "pending") ? ` · 대기 ${list.filter(m => m.role === "pending").length}` : ""}</span></h3></summary>
-    <div class="tw"><table><thead><tr><th>이름</th><th>역할</th><th></th></tr></thead><tbody>
-    ${list.map(m => `<tr><td>${nameOf(m) ? `<b>${esc(nameOf(m))}</b>` : `<span class="muted">정보 없음</span>`}<br><span class="small muted">${esc(m.email || "")}</span>${m.role === "pending" ? ' <span class="chip warn">대기</span>' : ""}</td>
-      <td><select id="mr-${esc(m.id)}" aria-label="역할" ${m.id === state.session.user.id ? "disabled" : ""}>${roleOpt("pending", m.role, "대기")}${roleOpt("player", m.role, "선수")}${roleOpt("coach", m.role, "관리자")}</select></td>
-      <td>${m.id === state.session.user.id ? '<span class="small muted">나</span>' : `<div class="row nowrap">
-        <button class="btn" type="button" data-act="savemember" data-id="${esc(m.id)}">저장</button>
-        <button class="btn danger" type="button" data-act="delmember" data-id="${esc(m.id)}">삭제</button></div>`}</td></tr>`).join("")}
-    </tbody></table></div></details>`;
+    <ul class="mem-list">${list.map(m => `<li><div class="mem-who">${nameOf(m) ? `<b>${esc(nameOf(m))}</b>` : `<span class="muted">정보 없음</span>`}${m.role === "pending" ? ' <span class="chip warn">대기</span>' : ""}<span class="small muted">${esc(m.email || "")}</span></div>
+      ${m.id === state.session.user.id ? '<span class="small muted">나 · 관리자</span>' : `<div class="mem-act"><select id="mr-${esc(m.id)}" aria-label="역할">${roleOpt("pending", m.role, "대기")}${roleOpt("player", m.role, "부원")}${roleOpt("coach", m.role, "관리자")}</select>
+        <button class="btn small" type="button" data-act="savemember" data-id="${esc(m.id)}">저장</button>
+        <button class="btn small danger" type="button" data-act="delmember" data-id="${esc(m.id)}">삭제</button></div>`}</li>`).join("")}</ul></details>`;
 }
 function alumniHtml() {
   const l = state.alumni || [];
@@ -1407,7 +1402,7 @@ function calHtml(me) {
 function viewComps() {
   const { t, sy, from, to } = seasonRange();
   const list = normEvents(events()).filter(e => e.end >= from && e.start <= to);
-  const range = e => e.start === e.end ? longDate(parseD(e.start)) : `${md(parseD(e.start))} – ${md(parseD(e.end))}`;
+  const range = e => e.start === e.end ? shortDate(parseD(e.start)) : `${md(parseD(e.start))} – ${md(parseD(e.end))}`;
   const frs = Object.entries(state.friendlies).filter(([d]) => d >= dAdd(t, -30)).sort().flatMap(([d, fs]) => fs.map(f => [d, f]));
   return `<div class="cols">
     <div class="col"><section class="sec"><div class="sec-head"><h3>대회·일정 <span class="small muted">${sy}.3 – ${sy + 1}.2</span></h3>${can("schedule") ? addBtn("event", "일정") : ""}</div>
@@ -1430,13 +1425,13 @@ function viewSched() {
       </div><div class="row"><button class="btn primary" type="submit">저장</button></div></form>
     </section>
     <section class="sec"><div class="sec-head"><h3>그날만 시간 바꾸기</h3>${addBtn("ptday", "추가")}</div>
-      ${days.length ? `<ul class="watch">${days.map(([d, o]) => `<li><span class="num">${longDate(parseD(d))}</span><span>${esc(timeTxt(o))}</span>${o.note ? `<span class="small muted">${esc(o.note)}</span>` : ""}<button class="btn link danger" type="button" data-act="ptdel" data-key="${esc(d)}">취소</button></li>`).join("")}</ul>` : emptyLine("바꾼 날이 없어요.")}
+      ${days.length ? `<ul class="watch">${days.map(([d, o]) => `<li><span class="num">${shortDate(parseD(d))}</span><span>${esc(timeTxt(o))}</span>${o.note ? `<span class="small muted">${esc(o.note)}</span>` : ""}<button class="btn link danger" type="button" data-act="ptdel" data-key="${esc(d)}">취소</button></li>`).join("")}</ul>` : emptyLine("바꾼 날이 없어요.")}
     </section></div>
     <div class="col"><section class="sec"><div class="sec-head"><h3>자율 훈련</h3>${addBtn("open", "자율 훈련")}</div>
-      ${(() => { const l = Object.values(state.opens).flat().filter(o => o.date >= t).sort((a, b) => a.date.localeCompare(b.date)); return l.length ? `<ul class="watch">${l.map(o => `<li><span class="num">${longDate(parseD(o.date))}</span><span>${esc(openLabel(o).replace(/^자율 훈련 · ?/, ""))}</span><span class="chip ok">참석 ${Object.values(o.votes).filter(Boolean).length}</span><button class="btn link danger" type="button" data-act="delopen" data-id="${esc(o.id)}">취소</button></li>`).join("")}</ul>` : emptyLine("없어요."); })()}
+      ${(() => { const l = Object.values(state.opens).flat().filter(o => o.date >= t).sort((a, b) => a.date.localeCompare(b.date)); return l.length ? `<ul class="watch">${l.map(o => `<li><span class="num">${shortDate(parseD(o.date))}</span><span>${esc(openLabel(o).replace(/^자율 훈련 · ?/, ""))}</span><span class="chip ok">참석 ${Object.values(o.votes).filter(Boolean).length}</span><button class="btn link danger" type="button" data-act="delopen" data-id="${esc(o.id)}">취소</button></li>`).join("")}</ul>` : emptyLine("없어요."); })()}
     </section>
     <section class="sec"><div class="sec-head"><h3>정규 훈련 없는 날</h3>${addBtn("off", "추가")}</div>
-      ${off.length ? `<ul class="watch">${off.map(([d, o]) => `<li><span class="num">${longDate(parseD(d))}</span>${o.note ? `<span class="small muted">${esc(o.note)}</span>` : ""}<button class="btn link danger" type="button" data-act="teamoff" data-date="${esc(d)}">취소</button></li>`).join("")}</ul>` : emptyLine("없는 날이 없어요.")}
+      ${off.length ? `<ul class="watch">${off.map(([d, o]) => `<li><span class="num">${shortDate(parseD(d))}</span>${o.note ? `<span class="small muted">${esc(o.note)}</span>` : ""}<button class="btn link danger" type="button" data-act="teamoff" data-date="${esc(d)}">취소</button></li>`).join("")}</ul>` : emptyLine("없는 날이 없어요.")}
       
     </section></div>
   </div>`;
@@ -1858,7 +1853,7 @@ document.addEventListener("click", async ev => {
     const date = b.dataset.date;
     try {
       if (state.teamOff[date]) { ok(await sb.from("team_off").delete().eq("date", date)); delete state.teamOff[date]; toast("정규 훈련 있음으로 돌렸어요"); }
-      else { ok(await sb.from("team_off").insert({ date })); state.teamOff[date] = { note: "" }; toast("정규 훈련 없음 · 선수들이 골라서 해요"); }
+      else { ok(await sb.from("team_off").insert({ date })); state.teamOff[date] = { note: "" }; toast("정규 훈련 없음으로 정했어요"); }
     } catch (e) { toast(failMsg(e)); }
     state.dirty = false; return render();
   }
@@ -2058,6 +2053,8 @@ document.addEventListener("click", async ev => {
 });
 document.addEventListener("change", ev => {
   if (ev.target.id === "repSy") { state.repSy = Number(ev.target.value); return; }
+  if (ev.target.id === "drViewAs") return setView(ev.target.value);
+  if (ev.target.name && ev.target.name.startsWith("wl-")) { const v = ev.target.closest(".wl-row") && ev.target.closest(".wl-row").querySelector(".wl-v"); if (v) v.textContent = WELL_OPTS[ev.target.name.slice(3)][Number(ev.target.value) - 1]; return; }
   if (ev.target.classList.contains("inj-part")) {
     const row = ev.target.closest(".inj-row"), t = row.querySelector(".inj-type");
     t.innerHTML = injTypes(ev.target.value).map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
@@ -2330,10 +2327,10 @@ document.addEventListener("submit", async ev => {
       const date = txt("off-date");
       if (seasonDay(date, events()).slot !== "team") { toast("그날은 정규 훈련 날이 아니에요."); return; }
       ok(await sb.from("team_off").upsert({ date, note: txt("off-note") || null }));
-      toast("정규 훈련 없음 · 선수들이 골라서 해요");
+      toast("정규 훈련 없음으로 정했어요");
     } else if (f.id === "wellForm") {
       const row = { player_id: f.dataset.pid, date: iso(today()) };
-      for (const [k] of WELL_KEYS) row[k] = Number(document.getElementById("wl-" + k).value);
+      for (const [k] of WELL_KEYS) { const r = f.querySelector(`input[name="wl-${k}"]:checked`); row[k] = Number(r ? r.value : 3); }
       row.stress = row.mood; // 기분·스트레스를 한 문항으로
       state.openKeys["well-form"] = false;
       await dbWrite("wellness", "upsert", row, { onConflict: "player_id,date" });

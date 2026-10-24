@@ -123,7 +123,7 @@ nav.tabs { display: flex; align-items: center; gap: 10px; padding: 2px 0 10px; }
 .menu-item .small { text-align: right; }
 .menu-item .go, .hub-row .go { color: var(--muted); font-size: 20px; line-height: 1; }
 .ev-list { list-style: none; margin: 0; padding: 0; display: grid; }
-.ev-list li { display: grid; grid-template-columns: 96px minmax(0, 1fr) auto; gap: 4px 10px; align-items: start; padding: 10px 0; border-top: 1px solid var(--line); }
+.ev-list li { display: grid; grid-template-columns: 104px minmax(0, 1fr) auto; gap: 4px 10px; align-items: start; padding: 10px 0; border-top: 1px solid var(--line); }
 .ev-list li:first-child { border-top: 0; }
 .ev-list li.past { opacity: .55; }
 .ev-list .num { font-size: 13px; padding-top: 2px; }
@@ -663,6 +663,47 @@ i.dot.k-off { background: none; border: 1px dashed var(--muted); }
 .abs-l { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--crit); }
 .cal-detail { display: grid; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .sm-select { font: inherit; font-size: 14px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); width: auto; }
+/* 명단: 한 줄에 한 명 */
+.roster-list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.roster-list li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.roster-list li:first-child { border-top: 0; }
+.r-no { color: var(--muted); font-size: 13px; text-align: right; }
+.r-who { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
+.r-who b { white-space: nowrap; }
+.r-tel { white-space: nowrap; font-size: 13.5px; color: var(--blue); text-decoration: none; }
+/* 아침 컨디션: 접으면 한 줄 */
+.well-card { padding: 10px 14px; }
+.well-head { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
+.well-head::-webkit-details-marker { display: none; }
+.well-head h3 { margin: 0; font-size: 15px; }
+.well-head .small { margin-left: auto; }
+.well-card form { margin-top: 8px; display: grid; gap: 6px; }
+.wl-row { display: grid; grid-template-columns: 64px auto minmax(0, 1fr); align-items: center; gap: 8px; }
+.wl-k { font-size: 13.5px; font-weight: 600; white-space: nowrap; }
+.wl-v { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wl-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.wl-seg label { position: relative; }
+.wl-seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.wl-seg span { display: grid; place-items: center; width: 32px; height: 30px; font-size: 13px; font-weight: 600; color: var(--muted); border-left: 1px solid var(--line); }
+.wl-seg label:first-child span { border-left: 0; }
+.wl-seg input:checked + span { background: var(--blue); color: var(--surface); }
+.wl-seg input:focus-visible + span { outline: 2px solid var(--blue); outline-offset: -2px; }
+.well-card .btn.small { justify-self: start; }
+/* 메뉴: 화면 보기 한 칸 */
+.dr-roles select { width: 100%; font: inherit; font-size: 15px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
+.tw th, .tw td { white-space: nowrap; }
+.inj-end { flex: 1 1 100%; } .inj-end label, .inj-end .btn { white-space: nowrap; }
+.mem-list { list-style: none; margin: 8px 0 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
+.mem-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; padding: 10px 12px; border-top: 1px solid var(--line); }
+.mem-list li:first-child { border-top: 0; }
+.mem-who { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; }
+.mem-who .small { flex-basis: 100%; overflow-wrap: anywhere; }
+.mem-act { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.mem-act select { width: auto; font: inherit; font-size: 14px; padding: 5px 8px; }
+.ev-list .num, .watch .num { font-size: 13px; white-space: nowrap; }
+.dr-view { display: flex; align-items: center; gap: 10px; }
+.dr-view .dr-h { margin: 0; white-space: nowrap; }
+.dr-view .dr-roles { flex: 1; padding: 0; }
 </style>
 </head>
 <body>
@@ -683,9 +724,9 @@ i.dot.k-off { background: none; border: 1px dashed var(--muted); }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=49"></script>
-<script src="guide.js?v=49"></script>
-<script src="library.js?v=49"></script>
-<script src="app.js?v=49"></script>
+<script src="program.js?v=52"></script>
+<script src="guide.js?v=52"></script>
+<script src="library.js?v=52"></script>
+<script src="app.js?v=52"></script>
 </body>
 </html>
