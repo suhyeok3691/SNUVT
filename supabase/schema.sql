@@ -355,3 +355,8 @@ alter table public.logs add constraint logs_pain_area_check
 --   그날 슬롯 = friendly, 앞뒤 날 하체 웨이트는 weekFlow가 옮김 (base = 원래 일정)
 -- absences: 불참 (player_id, date, reason class|sick|personal|etc, note) · unique(player_id, date)
 --   본인과 관리자만 읽기·쓰기. 아픔·부상 → 그날 회복, 나머지 → 그날은 골라서 하는 날
+
+-- ===== notices_entries_practice_times (적용됨) =====
+-- notices: 공지 (title, body, pinned, notify) · 부원 읽기, 관리자 쓰기 · insert 트리거 → 알림(push_subs.notice)
+-- entries: 대회(kind 'event')·교류전('friendly')별 엔트리 명단 · 부원 읽기, 관리자 쓰기
+-- practice_times: 정규 훈련 시간 key 'S1'|'S2'(학기 기본) 또는 날짜(그날만)

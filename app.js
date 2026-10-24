@@ -1,4 +1,4 @@
-/* SNUVT Physical — 화면·데이터 (프로그램 규칙은 program.js) */
+/* SNUVT — 서울대 배구부 관리 (Physical 트레이닝 규칙은 program.js) */
 
 /* ---------- 기준값 ---------- */
 // 일정표를 못 불러올 때만 쓰는 기본값
@@ -87,7 +87,23 @@ const injText = x => `${(INJ_SIDES.find(s => s[0] === x.side) || ["", ""])[1].re
 const normYear = v => { const t = String(v || "").trim(); return /^[1-9]$/.test(t) ? t + "학년" : /^[1-9]\s*학년$/.test(t) ? t.replace(/\s+/g, "") : t; };
 const confirmDel = msg => { try { return window.confirm(msg); } catch (e) { return false; } };
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
-const VIEWS = ["home", "plan", "rec", "season", "intake", "load"];
+const VIEWS = ["home", "train", "plan", "rec", "season", "notice", "intake", "load"];
+// 섹션: 홈(아이콘) → Physical(트레이닝) · 일정 · 공지 · 관리
+const SECTIONS = {
+  physical: { label: "Physical", views: [["train", "오늘"], ["plan", "프로그램"], ["rec", "기록"]] },
+  schedule: { label: "일정", views: [["season", "일정"]] },
+  notice: { label: "공지", views: [["notice", "공지"]] },
+  admin: { label: "관리", views: [["intake", "부원·측정"], ["load", "부하·리포트"]] },
+};
+const SECTION_OF = { train: "physical", plan: "physical", rec: "physical", season: "schedule", notice: "notice", intake: "admin", load: "admin" };
+const ICON = {
+  physical: '<path d="M6.5 7v10M17.5 7v10M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/>',
+  schedule: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  notice: '<path d="M4 10.5v3a1 1 0 0 0 1 1h2.5l6.5 4.5V5L7.5 9.5H5a1 1 0 0 0-1 1z"/><path d="M17.5 9a4 4 0 0 1 0 6"/>',
+  admin: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M15.5 4.6a3.5 3.5 0 0 1 0 6.8M18 14.2a6.5 6.5 0 0 1 3.5 5.8"/>',
+  bell: '<path d="M6 9a6 6 0 0 1 12 0c0 6.5 2.5 8 2.5 8h-17S6 15.5 6 9"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
+};
+const svg = k => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[k]}</svg>`;
 
 /* ---------- 날짜 ---------- */
 const pad = n => String(n).padStart(2, "0");
@@ -108,7 +124,7 @@ const state = {
   players: {}, tests: {}, health: {}, logs: {}, inbody: {}, events: null,
   loaded: false, offline: false, admin: false, coach: false, canWrite: null, dirty: false, armed: null,
   session: null, role: null, myPid: null, email: "", profiles: [], authMode: "login", authMsg: "", authErr: false, booting: true,
-  selfPlayer: null, selfHealth: null, editingSelf: false, painChecks: {}, openKeys: {}, wellness: {}, lifts: {}, planCtx: null, teamOff: {}, picks: {}, friendlies: {}, absences: {},
+  selfPlayer: null, selfHealth: null, editingSelf: false, painChecks: {}, openKeys: {}, wellness: {}, lifts: {}, planCtx: null, teamOff: {}, picks: {}, friendlies: {}, absences: {}, notices: [], entries: {}, ptimes: {},
 };
 let sb = null;
 
@@ -149,11 +165,15 @@ const thisMon = () => mondayOf(iso(today()));
 const selMon = () => state.week ?? thisMon();
 const selDay = () => state.day ?? (selMon() === thisMon() ? dowMon(today()) : 0);
 // 정규 훈련 없는 날(관리자 지정)은 선수가 골라서 하는 날로
+// 정규 훈련 시간: 그날 바뀐 시간 → 학기 기본 → 18:00–21:00
+const teamTimeOn = date => state.ptimes[date] || state.ptimes[seasonDay(date, events()).sem] || { start: "18:00", end: "21:00" };
+const timeTxt = o => o.start + (o.end ? "–" + o.end : "");
 // 교류전(관리자 입력)이 있는 날은 교류전이 그날 훈련 (대회·트라이아웃 날은 그대로)
 const friendlyOn = date => (state.friendlies[date] || [])[0] || null;
 const infoOn = date => {
   const i = seasonDay(date, events()), off = state.teamOff[date], f = friendlyOn(date);
   if (f && !["match", "tryout"].includes(i.slot)) return { ...i, slot: "friendly", baseSlot: i.slot, friendly: f, measure: false };
+  if (i.slot === "team" && !off) { const tt = teamTimeOn(date); return { ...i, teamTime: timeTxt(tt), teamTimeNote: state.ptimes[date] ? state.ptimes[date].note || "시간 바뀜" : "" }; }
   if (!off || i.slot !== "team") return i;
   return { ...i, teamOff: true, teamOffNote: off.note || "", near: [seasonDay(dAdd(date, -1), events()).slot, seasonDay(dAdd(date, 1), events()).slot] };
 };
@@ -282,22 +302,51 @@ function header() {
   const modeBtn = state.coach && state.loaded ? `<button class="btn mode ${state.admin ? "" : "on"}" type="button" data-act="mode" title="관리자 화면과 선수 화면을 바꿔요">${state.admin ? "선수 화면으로" : "관리자 화면으로"}</button>` : "";
   who.innerHTML = state.session ? `<span>${esc(myName())}${roleKo ? " " + roleKo : ""}</span>${modeBtn}<button class="btn link" type="button" data-act="logout">로그아웃</button>` : "";
   if (!state.session || !state.role || state.role === "pending" || state.offline || needsSelfReg()) { document.getElementById("tabs").innerHTML = ""; return; }
-  const tabs = [["home", "홈"], ["plan", "프로그램"], ["rec", "기록"], ["season", "일정"]];
-  if (state.admin) tabs.push(["intake", "등록·측정"], ["load", "부하"]);
-  document.getElementById("tabs").innerHTML = tabs.map(([k, l]) =>
-    `<button type="button" data-act="view" data-v="${k}" ${state.view === k ? 'aria-current="page"' : ""}>${l}</button>`).join("");
+  const sec = SECTIONS[SECTION_OF[state.view]];
+  const nav = document.getElementById("tabs");
+  if (!sec) { nav.innerHTML = ""; nav.hidden = true; return; }
+  nav.hidden = false;
+  nav.innerHTML = `<button type="button" class="tab-home" data-act="view" data-v="home" aria-label="홈으로">‹ 홈</button><span class="tab-sec">${sec.label}</span>` +
+    (sec.views.length > 1 ? sec.views.map(([k, l]) => `<button type="button" data-act="view" data-v="${k}" ${state.view === k ? 'aria-current="page"' : ""}>${l}</button>`).join("") : "");
 }
 
 /* ---------- 홈 ---------- */
 function viewHome() {
   if (!state.loaded) return `<div class="panel empty"><strong>불러오는 중</strong></div>`;
+  const me = playerOf(state.myPid), t = iso(today()), team = infoOn(t);
+  // 오늘: 팀 일정 · 내 운동
+  const nextT = teamDays(dAdd(t, 1), 21)[0];
+  const teamLine = isTeamDay(team) ? tdLabel(team) : team.slot === "match" ? (team.event ? team.event.name : "대회") : team.teamOff ? `정규 훈련 없음${team.teamOffNote ? " · " + team.teamOffNote : ""}` : "팀 일정 없음";
+  const ab = me && absOf(me.id, t);
+  const plan = me ? planOn(me, t) : null;
+  const rows = [
+    `<div class="hub-row"><span class="k">팀</span><span class="v">${esc(teamLine)}${ab ? ` <span class="chip warn">불참</span>` : ""}${!isTeamDay(team) && nextT ? `<span class="small muted">다음 · ${md(parseD(nextT.date))} (${DOW_KO[parseD(nextT.date).getDay()]}) ${esc(tdLabel(nextT.i))}</span>` : ""}</span></div>`,
+    plan ? `<div class="hub-row tap" data-act="view" data-v="train" role="button" tabindex="0"><span class="k">내 운동</span><span class="v">${esc(plan.title)}${!wellOn(me.id, t) ? `<span class="small muted">아침 컨디션 아직</span>` : ""}</span><span class="go">›</span></div>` : "",
+    ...myEntries(me).map(e => `<div class="hub-row"><span class="k">엔트리</span><span class="v">${esc(e.name)} <span class="small muted">${md(parseD(e.date))}</span></span></div>`),
+  ].filter(Boolean).join("");
+  const unread = noticeUnread(), pending = state.admin ? state.profiles.filter(m => m.role === "pending" && m.id !== state.session.user.id).length : 0;
+  const tile = (act, v, k, label, sub, badge) => `<button type="button" class="tile-btn" data-act="${act}" ${v ? `data-v="${v}"` : ""}><span class="ic">${svg(k)}${badge ? `<span class="badge">${badge}</span>` : ""}</span><span class="tl">${label}</span><span class="ts">${sub}</span></button>`;
+  const tiles = [
+    tile("view", "train", "physical", "Physical", "오늘 운동 · 기록"),
+    tile("view", "season", "schedule", "일정", "훈련 · 교류전 · 대회"),
+    tile("view", "notice", "notice", "공지", unread ? `새 공지 ${unread}` : "팀 공지", unread),
+    state.admin ? tile("view", "intake", "admin", "관리", "부원 · 측정 · 부하", pending) : "",
+    me ? tile("pushopen", "", "bell", "알림", "휴대폰 알림") : "",
+  ].join("");
+  const ns = sortedNotices().slice(0, 2);
+  return `<section class="panel hub"><h3>오늘</h3>${rows}</section>
+    <nav class="tiles-grid" aria-label="기능">${tiles}</nav>
+    ${ns.length ? `<section class="panel hub-notice"><div class="row between"><h3>공지</h3><button class="btn link small" type="button" data-act="view" data-v="notice">전체 →</button></div>${ns.map(n => `<button type="button" class="hn-row" data-act="view" data-v="notice"><span>${n.pinned ? `<span class="chip">고정</span> ` : ""}${esc(n.title)}</span><span class="small muted">${md(new Date(n.created))}</span></button>`).join("")}</section>` : ""}`;
+}
+// Physical · 오늘 (예전 홈)
+function viewTrain() {
+  if (!state.loaded) return `<div class="panel empty"><strong>불러오는 중</strong></div>`;
   const me = playerOf(state.myPid);
   const parts = [];
-  if (state.admin) parts.push(teamStatusHtml(), attendPanel(null), weekSummaryHtml());
+  if (state.admin) parts.push(teamStatusHtml(), weekSummaryHtml());
   if (state.admin && !me) parts.push(`<section class="panel row between"><div><h3>내 선수 정보가 아직 없어요</h3></div><button class="btn primary" type="button" data-act="editself">내 정보 입력</button></section>`);
-  if (me) parts.push(wellnessHtml(me), todayHtml(me), state.admin ? "" : attendPanel(me), rtpHtml(me), myStatusHtml(me));
+  if (me) parts.push(wellnessHtml(me), todayHtml(me), rtpHtml(me), myStatusHtml(me));
   else if (!state.admin) parts.push(`<div class="panel empty"><strong>계정이 선수와 연결되지 않았어요</strong><span>관리자에게 연결을 요청해 주세요.</span></div>`);
-  if (me) parts.push(`<p class="foot"><button class="btn link small" type="button" data-act="pushopen">알림</button></p>`);
   return parts.join("");
 }
 function wellnessHtml(p) {
@@ -777,8 +826,8 @@ function viewAuth() {
     <div class="auth-hero">
       <img class="logo logo-light" src="logo.png?v=4" alt="서울대학교 배구부 엠블럼" width="130" height="128">
       <img class="logo logo-dark" src="logo-white.png?v=4" alt="서울대학교 배구부 엠블럼" width="130" height="128">
-      <h2>SNUVT <b>Physical</b></h2>
-      <p>서울대학교 배구부 피지컬 트레이닝</p>
+      <h2>SNUVT</h2>
+      <p>서울대학교 배구부</p>
     </div>
     <form class="f panel" id="authForm">
       <div><h3>${login ? "로그인" : "가입하기"}</h3><p class="small muted">${login ? "가입 → 내 정보 입력 → 관리자 승인 순서예요." : "가입하면 바로 내 정보 입력으로 넘어가요."}</p></div>
@@ -1048,7 +1097,7 @@ function viewSeason() {
     ${friendlyHtml()}
     <section class="sec"><h3>대회·일정</h3>
       ${list.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>이름</th><th>종류</th>${state.admin ? "<th></th>" : ""}</tr></thead><tbody>
-      ${list.map(e => `<tr class="${e.end < t ? "past" : ""}"><td class="num">${range(e)}</td><td><b>${esc(e.name)}</b>${e.note ? `<br><span class="small muted">${esc(e.note)}</span>` : ""}</td><td><span class="chip ${e.kind === "major" ? "warn" : ""}">${esc(EVENT_KINDS[e.kind] || e.kind)}</span></td>
+      ${list.map(e => `<tr class="${e.end < t ? "past" : ""}"><td class="num">${range(e)}</td><td><b>${esc(e.name)}</b>${e.note ? `<br><span class="small muted">${esc(e.note)}</span>` : ""}${e.id && (e.kind === "major" || e.kind === "minor") && e.end >= t ? `<br>${entryChip("event", e.id)}` : ""}</td><td><span class="chip ${e.kind === "major" ? "warn" : ""}">${esc(EVENT_KINDS[e.kind] || e.kind)}</span></td>
         ${state.admin ? `<td>${e.id ? `<button class="btn link danger" type="button" data-act="delevent" data-id="${esc(e.id)}">삭제</button>` : ""}</td>` : ""}</tr>`).join("")}
       </tbody></table></div>` : emptyLine("등록된 일정이 없어요.")}
       ${state.admin ? `<form class="f panel" id="eventForm">
@@ -1070,7 +1119,7 @@ function viewSeason() {
 /* ---------- 훈련·교류전 참석 (불참은 본인·관리자만) ---------- */
 function teamDays(from, n) { const out = []; for (let k = 0; k < n; k++) { const d = dAdd(from, k), i = infoOn(d); if (isTeamDay(i)) out.push({ date: d, i }); } return out; }
 const fmtKo = f => f.format === "9" ? "9인제" : "6인제";
-const tdLabel = i => i.slot === "friendly" ? `교류전 vs ${i.friendly.opponent} · ${fmtKo(i.friendly)}${i.friendly.start ? ` · ${i.friendly.start}${i.friendly.end ? "–" + i.friendly.end : ""}` : ""}${i.friendly.place ? ` · ${i.friendly.place}` : ""}` : "정규 훈련 · 18:00";
+const tdLabel = i => i.slot === "friendly" ? `교류전 vs ${i.friendly.opponent} · ${fmtKo(i.friendly)}${i.friendly.start ? ` · ${i.friendly.start}${i.friendly.end ? "–" + i.friendly.end : ""}` : ""}${i.friendly.place ? ` · ${i.friendly.place}` : ""}` : `정규 훈련 · ${i.teamTime || "18:00–21:00"}${i.teamTimeNote && i.teamTimeNote !== "시간 바뀜" ? " · " + i.teamTimeNote : ""}`;
 function attendRows(list, me) {
   return `<ul class="attend">${list.map(({ date, i }) => {
     const head = `<div class="at-when"><b>${longDate(parseD(date))}</b><span class="small muted">${esc(tdLabel(i))}</span></div>`;
@@ -1089,6 +1138,51 @@ function attendPanel(me, n = 3) {
   if (!list.length || (!state.admin && !me)) return "";
   return `<section class="panel attend-panel"><div class="row between"><h3>다가오는 훈련</h3><button class="btn link small" type="button" data-act="view" data-v="season">전체 →</button></div>${attendRows(list, me)}</section>`;
 }
+/* ---------- 공지 ---------- */
+const sortedNotices = () => [...state.notices].sort((a, b) => (b.pinned - a.pinned) || String(b.created).localeCompare(String(a.created)));
+const SEEN_KEY = () => "snuvt-notice-seen-" + uid();
+const noticeUnread = () => { const seen = lsGet(SEEN_KEY()) || ""; return state.notices.filter(n => String(n.created) > seen).length; };
+function viewNotice() {
+  const list = sortedNotices();
+  if (list.length) lsSet(SEEN_KEY(), list.map(n => String(n.created)).sort().at(-1));
+  return `<section class="sec"><h2>공지</h2>
+    ${state.admin ? `<details class="panel" data-keep="notice-form" ${keepOpen("notice-form", false)}><summary><b>공지 쓰기</b></summary>
+      <form class="f" id="noticeForm">
+        <label class="fl">제목<input id="nt-title" required maxlength="80"></label>
+        <label class="fl">내용<textarea id="nt-body" rows="5" maxlength="2000"></textarea></label>
+        <div class="checks"><label class="check"><input type="checkbox" id="nt-pin"> 위에 고정</label><label class="check"><input type="checkbox" id="nt-push" checked> 휴대폰 알림 보내기</label></div>
+        <div class="row"><button class="btn primary" type="submit">올리기</button></div>
+      </form></details>` : ""}
+    ${list.length ? list.map(n => `<article class="panel notice ${n.pinned ? "pinned" : ""}">
+      <div class="row between"><h3>${n.pinned ? `<span class="chip">고정</span> ` : ""}${esc(n.title)}</h3><span class="small muted">${md(new Date(n.created))}</span></div>
+      ${n.body ? `<p class="nbody">${esc(n.body)}</p>` : ""}
+      ${state.admin ? `<div class="row"><button class="btn link small" type="button" data-act="ntpin" data-id="${esc(n.id)}" data-p="${n.pinned ? "0" : "1"}">${n.pinned ? "고정 풀기" : "고정"}</button><button class="btn link small danger" type="button" data-act="ntdel" data-id="${esc(n.id)}">삭제</button></div>` : ""}
+    </article>`).join("") : emptyLine("아직 공지가 없어요.")}
+  </section>`;
+}
+/* ---------- 엔트리 (대회·교류전 명단) ---------- */
+const entryOf = (kind, id) => state.entries[kind + ":" + id] || new Set();
+// 앞으로 3주 안 내가 들어간 엔트리
+function myEntries(me) {
+  if (!me) return [];
+  const t = iso(today()), to = dAdd(t, 21), out = [];
+  for (const e of normEvents(events())) if (e.id && e.end >= t && e.start <= to && entryOf("event", e.id).has(me.id)) out.push({ name: e.name, date: e.start });
+  for (const [d, fs] of Object.entries(state.friendlies)) if (d >= t && d <= to) for (const f of fs) if (entryOf("friendly", f.id).has(me.id)) out.push({ name: `교류전 vs ${f.opponent}`, date: d });
+  return out.sort((a, b) => a.date.localeCompare(b.date));
+}
+const entryChip = (kind, id) => { const n = entryOf(kind, id).size, mine = state.myPid && entryOf(kind, id).has(state.myPid); return (n || state.admin) ? `<button type="button" class="chip entry ${mine ? "me" : ""}" data-act="entry" data-kind="${kind}" data-id="${esc(id)}">엔트리 ${n}${mine ? " · 나" : ""}</button>` : ""; };
+function openEntry(kind, id) {
+  let title = "", date = "";
+  if (kind === "event") { const e = (state.events || []).find(x => x.id === id); if (e) { title = e.name; date = e.start; } }
+  else for (const [d, fs] of Object.entries(state.friendlies)) { const f = fs.find(x => x.id === id); if (f) { title = `교류전 vs ${f.opponent} · ${fmtKo(f)}`; date = d; } }
+  const set = entryOf(kind, id), ps = sortedPlayers(), el = document.getElementById("sheet");
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>엔트리</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <p class="small">${esc(title)}${date ? ` · ${longDate(parseD(date))}` : ""}</p>
+    ${state.admin ? `<form class="f" id="entryForm" data-kind="${kind}" data-id="${esc(id)}"><div class="checks entry-list">${ps.map(p => `<label class="check"><input type="checkbox" value="${esc(p.id)}" ${set.has(p.id) ? "checked" : ""}> ${esc(p.name)} <span class="chip pos">${esc(p.pos)}</span>${absOf(p.id, date) ? ` <span class="chip warn">불참</span>` : ""}</label>`).join("")}</div>
+      <div class="row"><button class="btn primary" type="submit">저장</button><span class="small muted" id="en-n">${set.size}명</span></div></form>`
+    : set.size ? `<ul class="entry-names">${ps.filter(p => set.has(p.id)).map(p => `<li class="${p.id === state.myPid ? "me" : ""}">${esc(p.name)} <span class="chip pos">${esc(p.pos)}</span></li>`).join("")}</ul>` : emptyLine("아직 엔트리가 없어요.")}`;
+  el.hidden = false; document.body.classList.add("noscroll");
+}
 function openAbsent(date) {
   const i = infoOn(date), a = absOf(state.myPid, date), el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>불참</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
@@ -1106,7 +1200,7 @@ function friendlyHtml() {
   const t = iso(today()), list = Object.entries(state.friendlies).filter(([d]) => d >= dAdd(t, -30)).sort().flatMap(([d, fs]) => fs.map(f => [d, f]));
   if (!state.admin && !list.length) return "";
   return `<section class="sec"><h3>교류전</h3>
-    ${list.length ? `<ul class="watch fr-list">${list.map(([d, f]) => `<li class="${d < t ? "past" : ""}"><span class="num">${md(parseD(d))}</span><span><b>vs ${esc(f.opponent)}</b> <span class="chip">${fmtKo(f)}</span> <span class="small muted">${esc([f.start && f.start + (f.end ? "–" + f.end : ""), f.place, f.note].filter(Boolean).join(" · "))}</span></span>${state.admin ? `<button class="btn link danger" type="button" data-act="delfriendly" data-id="${esc(f.id)}">삭제</button>` : ""}</li>`).join("")}</ul>` : ""}
+    ${list.length ? `<ul class="watch fr-list">${list.map(([d, f]) => `<li class="${d < t ? "past" : ""}"><span class="num">${md(parseD(d))}</span><span><b>vs ${esc(f.opponent)}</b> <span class="chip">${fmtKo(f)}</span> <span class="small muted">${esc([f.start && f.start + (f.end ? "–" + f.end : ""), f.place, f.note].filter(Boolean).join(" · "))}</span> ${d >= t ? entryChip("friendly", f.id) : ""}</span>${state.admin ? `<button class="btn link danger" type="button" data-act="delfriendly" data-id="${esc(f.id)}">삭제</button>` : ""}</li>`).join("")}</ul>` : ""}
     ${state.admin ? `<form class="f panel" id="friendlyForm"><h4>교류전 추가</h4><div class="fields">
       <label class="fl">날짜<input type="date" id="fr-date" required></label>
       <label class="fl">상대<input id="fr-opp" required maxlength="60" placeholder="예: 연세대"></label>
@@ -1120,7 +1214,21 @@ function friendlyHtml() {
 }
 function teamOffHtml() {
   const t = iso(today()), list = Object.entries(state.teamOff).filter(([d]) => d >= dAdd(t, -14)).sort();
-  return `<section class="sec"><h3>정규 훈련 없는 날</h3>
+  const pt = k => state.ptimes[k] || { start: "18:00", end: "21:00" };
+  const days = Object.entries(state.ptimes).filter(([k]) => /^\d{4}/.test(k) && k >= dAdd(t, -14)).sort();
+  return `<section class="sec"><h3>정규 훈련 시간</h3>
+    <form class="f panel" id="ptForm"><div class="fields">
+      ${["S1", "S2"].map(k => `<div class="pair"><label class="fl">${k === "S1" ? "1학기 (월·목)" : "2학기 (수·금)"} 시작<input type="time" id="pt-${k}-s" value="${pt(k).start}" required></label><label class="fl">끝<input type="time" id="pt-${k}-e" value="${pt(k).end}"></label></div>`).join("")}
+    </div><div class="row"><button class="btn primary" type="submit">저장</button></div></form>
+    <h4 class="sub-h">그날만 시간 바꾸기</h4>
+    ${days.length ? `<ul class="watch">${days.map(([d, o]) => `<li><span class="num">${longDate(parseD(d))}</span><span>${esc(timeTxt(o))}</span>${o.note ? `<span class="small muted">${esc(o.note)}</span>` : ""}<button class="btn link danger" type="button" data-act="ptdel" data-key="${esc(d)}">취소</button></li>`).join("")}</ul>` : ""}
+    <form class="f panel" id="ptDayForm"><div class="fields">
+      <label class="fl">날짜<input type="date" id="ptd-date" required></label>
+      <div class="pair"><label class="fl">시작<input type="time" id="ptd-s" required></label><label class="fl">끝<input type="time" id="ptd-e"></label></div>
+      <label class="fl">메모<input id="ptd-note" maxlength="60" placeholder="예: 체육관 사정"></label>
+    </div><div class="row"><button class="btn primary" type="submit">추가</button></div></form>
+  </section>
+  <section class="sec"><h3>정규 훈련 없는 날</h3>
     ${list.length ? `<ul class="watch">${list.map(([d, o]) => `<li><span class="num">${longDate(parseD(d))}</span>${o.note ? `<span class="small muted">${esc(o.note)}</span>` : ""}<button class="btn link danger" type="button" data-act="teamoff" data-date="${esc(d)}">취소</button></li>`).join("")}</ul>` : ""}
     <form class="f panel" id="offForm"><div class="fields">
       <label class="fl">날짜<input type="date" id="off-date" required></label>
@@ -1312,7 +1420,7 @@ function render() {
   else if (needsSelfReg() || (state.coach && state.editingSelf)) html = viewSelfReg();
   else {
     const v = state.view;
-    html = v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : v === "load" ? viewLoad() : viewHome();
+    html = v === "train" ? viewTrain() : v === "notice" ? viewNotice() : v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : v === "load" ? viewLoad() : viewHome();
   }
   const q = state.session ? queue().length : 0;
   const bar = state.loaded && (state.net === false || q) ? `<div class="netbar">${state.net === false ? "오프라인 · 마지막으로 불러온 내용" : "기록 올리는 중"}${q ? ` · 올라갈 기록 ${q}건` : ""}</div>` : "";
@@ -1407,6 +1515,16 @@ document.addEventListener("click", async ev => {
   if (act === "logout") { lsDel(snapKey()); await pushOff(true); await sb.auth.signOut(); return; }
   if (act === "pushopen") return openPush();
   if (act === "absopen") return openAbsent(b.dataset.date);
+  if (act === "entry") return openEntry(b.dataset.kind, b.dataset.id);
+  if (act === "ntpin" || act === "ntdel" || act === "ptdel") {
+    try {
+      if (act === "ntpin") ok(await sb.from("notices").update({ pinned: b.dataset.p === "1" }).eq("id", b.dataset.id));
+      if (act === "ntdel") { if (!confirmDel("이 공지를 지울까요?")) return; ok(await sb.from("notices").delete().eq("id", b.dataset.id)); toast("지웠어요"); }
+      if (act === "ptdel") { ok(await sb.from("practice_times").delete().eq("key", b.dataset.key)); toast("원래 시간으로 돌렸어요"); }
+      await loadAll();
+    } catch (e) { toast(failMsg(e)); }
+    return;
+  }
   if (act === "absdel") {
     try { ok(await sb.from("absences").delete().eq("player_id", state.myPid).eq("date", b.dataset.date)); toast("불참을 취소했어요"); await loadAll(); } catch (e) { toast(failMsg(e)); }
     return;
@@ -1657,6 +1775,26 @@ document.addEventListener("submit", async ev => {
         pain: 0, note: txt("lg-note") || null, completion: document.getElementById("lg-done").value,
       });
       toast(lw.queued ? "연결되면 저장돼요" : "기록했어요");
+    } else if (f.id === "noticeForm") {
+      ok(await sb.from("notices").insert({ title: txt("nt-title"), body: document.getElementById("nt-body").value.trim() || null, pinned: document.getElementById("nt-pin").checked, notify: document.getElementById("nt-push").checked }));
+      state.openKeys["notice-form"] = false;
+      toast(document.getElementById("nt-push").checked ? "공지를 올리고 알림을 보냈어요" : "공지를 올렸어요");
+    } else if (f.id === "entryForm") {
+      const kind = f.dataset.kind, id = f.dataset.id, pids = [...f.querySelectorAll('input[type="checkbox"]:checked')].map(x => x.value);
+      ok(await sb.from("entries").delete().eq("kind", kind).eq("ref_id", id));
+      if (pids.length) ok(await sb.from("entries").insert(pids.map(player_id => ({ kind, ref_id: id, player_id }))));
+      closeSheet(); toast(`엔트리 ${pids.length}명 저장`);
+    } else if (f.id === "ptForm") {
+      const rows = ["S1", "S2"].map(k => ({ key: k, start_time: txt(`pt-${k}-s`), end_time: txt(`pt-${k}-e`) || null }));
+      if (rows.some(r => r.end_time && r.end_time <= r.start_time)) { toast("끝 시간이 시작보다 앞이에요."); return; }
+      ok(await sb.from("practice_times").upsert(rows));
+      toast("정규 훈련 시간을 저장했어요");
+    } else if (f.id === "ptDayForm") {
+      const date = txt("ptd-date"), st = txt("ptd-s"), en = txt("ptd-e") || null;
+      if (seasonDay(date, events()).slot !== "team") { toast("그날은 정규 훈련 날이 아니에요."); return; }
+      if (en && en <= st) { toast("끝 시간이 시작보다 앞이에요."); return; }
+      ok(await sb.from("practice_times").upsert({ key: date, start_time: st, end_time: en, note: txt("ptd-note") || null }));
+      toast("그날 훈련 시간을 바꿨어요");
     } else if (f.id === "friendlyForm") {
       const st = txt("fr-start") || null, en = txt("fr-end") || null;
       if (st && en && en <= st) { toast("끝 시간이 시작보다 앞이에요."); return; }
@@ -1794,14 +1932,17 @@ async function loadAll() {
       sb.from("day_picks").select("*"),
       sb.from("friendlies").select("*").order("date"),
       sb.from("absences").select("*").gte("date", iso(addDays(today(), -120))),
+      sb.from("notices").select("*").order("created_at", { ascending: false }).limit(60),
+      sb.from("entries").select("*"),
+      sb.from("practice_times").select("*"),
     ];
     if (state.coach) q.push(sb.from("profiles").select("*").order("created_at"));
     const res = await Promise.all(q);
-    const [st, pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq, frq, abq] = res, pr = state.coach ? res[13] : null;
+    const [st, pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq, frq, abq, nq, enq, ptq] = res, pr = state.coach ? res[16] : null;
     for (const r of [pl, ts, hl, lg]) if (r.error) throw r.error;
     const rows = r => r && !r.error && Array.isArray(r.data) ? r.data : [];
     raw = { players: pl.data, tests: ts.data, health: hl.data, logs: lg.data, pain_checks: rows(pcs), events: evq && !evq.error ? evq.data : null,
-      wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), profiles: pr && !pr.error ? pr.data : [],
+      wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), notices: rows(nq), entries: rows(enq), practice_times: rows(ptq), profiles: pr && !pr.error ? pr.data : [],
       me: { role: state.role, player_id: state.myPid } };
     lsSet(snapKey(), raw); state.net = true;
   } catch (e) {
@@ -1829,6 +1970,11 @@ function buildState(raw) {
   const ab = {};
   for (const r of raw.absences || []) (ab[r.player_id] = ab[r.player_id] || {})[r.date] = { id: r.id, reason: r.reason, note: r.note || "" };
   state.absences = ab;
+  state.notices = (raw.notices || []).map(r => ({ id: r.id, title: r.title, body: r.body || "", pinned: !!r.pinned, created: r.created_at }));
+  const en = {};
+  for (const r of raw.entries || []) (en[r.kind + ":" + r.ref_id] = en[r.kind + ":" + r.ref_id] || new Set()).add(r.player_id);
+  state.entries = en;
+  state.ptimes = Object.fromEntries((raw.practice_times || []).map(r => [r.key, { start: String(r.start_time).slice(0, 5), end: r.end_time ? String(r.end_time).slice(0, 5) : "", note: r.note || "" }]));
   const pk = {};
   for (const r of raw.day_picks || []) (pk[r.player_id] = pk[r.player_id] || {})[r.date] = r.pick;
   state.picks = pk;
@@ -1892,18 +2038,18 @@ async function openPush() {
   else if (Notification.permission === "denied") msg = "알림이 차단돼 있어요. 휴대폰 설정에서 이 앱(사이트) 알림을 허용해 주세요.";
   else {
     const sub = await pushSub().catch(() => null);
-    if (sub) { const r = await sb.from("push_subs").select("morning,evening").eq("endpoint", sub.endpoint).maybeSingle(); row = r.data || null; }
+    if (sub) { const r = await sb.from("push_subs").select("morning,evening,notice").eq("endpoint", sub.endpoint).maybeSingle(); row = r.data || null; }
   }
   const on = !!row, ck = (id, v, l) => `<label class="check"><input type="checkbox" id="${id}" ${v ? "checked" : ""}> ${l}</label>`;
   body.innerHTML = `<div class="row between"><h3>알림</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     ${msg ? `<p class="small">${esc(msg)}</p>` : `
-    <div class="checks">${ck("pu-m", on ? row.morning : true, "아침 8시 · 컨디션 (안 넣었을 때만)")}${ck("pu-e", on ? row.evening : true, "밤 10시 · 운동 기록 (안 남겼을 때만)")}</div>
+    <div class="checks">${ck("pu-m", on ? row.morning : true, "아침 8시 · 컨디션 (안 넣었을 때만)")}${ck("pu-e", on ? row.evening : true, "밤 10시 · 운동 기록 (안 남겼을 때만)")}${ck("pu-n", on ? row.notice !== false : true, "새 공지")}</div>
     <div class="row"><button class="btn primary" type="button" data-act="pushon">${on ? "저장" : "알림 켜기"}</button>${on ? `<button class="btn" type="button" data-act="pushoff">끄기</button>` : ""}</div>
     <p class="small muted">${on ? "이 기기에서 알림을 받고 있어요." : "기기마다 따로 켜요."}</p>`}`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
 async function pushOn() {
-  const m = document.getElementById("pu-m").checked, e = document.getElementById("pu-e").checked;
+  const m = document.getElementById("pu-m").checked, e = document.getElementById("pu-e").checked, nt = document.getElementById("pu-n").checked;
   const perm = await Notification.requestPermission();
   if (perm !== "granted") { toast("알림이 허용되지 않았어요"); return openPush(); }
   try {
@@ -1915,10 +2061,10 @@ async function pushOn() {
       sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(k.data) });
     }
     const j = sub.toJSON();
-    const r = await sb.from("push_subs").upsert({ endpoint: sub.endpoint, user_id: uid(), player_id: state.myPid, p256dh: j.keys.p256dh, auth: j.keys.auth, morning: m, evening: e, train_days: trainDays(state.myPid), updated_at: new Date().toISOString() }, { onConflict: "endpoint" });
+    const r = await sb.from("push_subs").upsert({ endpoint: sub.endpoint, user_id: uid(), player_id: state.myPid, p256dh: j.keys.p256dh, auth: j.keys.auth, morning: m, evening: e, notice: nt, train_days: trainDays(state.myPid), updated_at: new Date().toISOString() }, { onConflict: "endpoint" });
     if (r.error) throw r.error;
     lsSet(PUSH_DAY(), iso(today()));
-    toast(m || e ? "알림을 켰어요" : "알림을 모두 껐어요");
+    toast(m || e || nt ? "알림을 켰어요" : "알림을 모두 껐어요");
     closeSheet();
   } catch (err) { toast("알림을 켜지 못했어요. 잠시 뒤 다시 해 주세요"); }
 }

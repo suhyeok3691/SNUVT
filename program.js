@@ -809,7 +809,8 @@ const SLOT_FN = {
     out.kind = "정규 훈련"; out.logType = "team"; out.minutes = 180;
     out.title = o.light ? "가벼운 정규 훈련 (대회 전날)" : "정규 훈련";
     if (fx.preIso) h.add({ key: "pre", scope: "me", title: "훈련 전", items: [{ name: "레그 익스텐션 등척성 (무릎 약 60°)", rx: "45초 × 5", cue: "세트 간 2분", mod: "무릎 통증" }] });
-    h.add({ key: "team", title: "정규 훈련", items: [{ name: "정규 훈련", rx: "18:00–21:00" }] });
+    h.add({ key: "team", title: "정규 훈련", items: [{ name: "정규 훈련", rx: o.teamTime || "18:00–21:00" }] });
+    if (o.teamTimeNote) out.notes.push(`오늘 훈련 시간 ${o.teamTime} · ${o.teamTimeNote}`);
     h.add({ key: "after", title: "훈련 후", items: [{ name: "통증 체크", rx: "아픈 곳 있으면" }, { name: "세션 RPE 기록", rx: "30분 안에" }] });
     h.add(prevBlock(c, "team"));
     out.notes.push(...teamNotes(c));
