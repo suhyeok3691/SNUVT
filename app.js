@@ -92,7 +92,7 @@ const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
 const VIEWS = ["home", "practice", "notes", "video", "train", "plan", "rec", "season", "comps", "sched", "report", "roster", "intake"];
 // 섹션: 홈 → Physical(트레이닝) · 일정 · 관리 · 설정. 공지는 홈 맨 위
 const SECTIONS = {
-  physical: { label: "Physical", views: [["train", "오늘"], ["plan", "프로그램"], ["rec", "기록"]] },
+  physical: { label: "피지컬", views: [["train", "오늘"], ["plan", "프로그램"], ["rec", "기록"]] },
   schedule: { label: "일정", views: [["season", "다가오는"], ["comps", "대회·교류전"], ["sched", "훈련 관리", "attend"]] },
   admin: { label: "관리", views: [["roster", "명단", "roster"], ["intake", "부원", "full"], ["report", "리포트", "training"]] },
   practice: { label: "훈련", views: [["practice", "훈련 계획"], ["video", "영상"], ["notes", "훈련 노트"]] },
@@ -344,7 +344,7 @@ function header() {
   const adminV = secViews(SECTIONS.admin)[0];
   const vidTab = !adminV, onVid = state.view === "video";
   const btx = (v, k, label, on, cls = "") => `<button type="button" class="bt ${cls} ${on ? "on" : ""}" data-act="view" data-v="${v}" ${on ? 'aria-current="page"' : ""}><span class="bi">${svg(k)}</span><span>${label}</span></button>`;
-  bar.innerHTML = btx("practice", "ball", "훈련", onOf("practice") && !(vidTab && onVid)) + bt("train", "physical", "Physical") + bt("home", "home", "홈", "center") + bt("season", "schedule", "일정") + (adminV ? bt(adminV[0], "admin", "관리") : btx("video", "video", "영상", onVid));
+  bar.innerHTML = btx("practice", "ball", "훈련", onOf("practice") && !(vidTab && onVid)) + bt("train", "physical", "피지컬") + bt("home", "home", "홈", "center") + bt("season", "schedule", "일정") + (adminV ? bt(adminV[0], "admin", "관리") : btx("video", "video", "영상", onVid));
   bar.hidden = false; document.body.classList.add("has-bar");
   const vs = sec ? secViews(sec) : [];
   if (!sec || vs.length < 2) { nav.innerHTML = sec ? `<span class="tab-title">${sec.label}</span>` : ""; nav.hidden = !nav.innerHTML; return; }
@@ -615,7 +615,7 @@ function viewHome() {
   const adm = secViews(SECTIONS.admin);
   const tiles = [
     tile("view", "practice", "ball", "훈련"),
-    tile("view", "train", "physical", "Physical"),
+    tile("view", "train", "physical", "피지컬"),
     tile("view", "season", "schedule", "일정"),
     adm.length ? tile("view", adm[0][0], "admin", "관리", "", pending) : tile("view", "video", "video", "영상"),
   ].join("");
