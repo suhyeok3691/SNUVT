@@ -618,6 +618,41 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scrollbar-gutter:
 .run-how summary { cursor: pointer; color: var(--muted); }
 .run .setlog button[type="submit"] { display: none; }
 .run .setlog-row { grid-template-columns: 1fr 1fr 0.8fr; }
+/* 일정 달력 */
+:root { --c-match: #c2410c; --c-fr: #1f7a4d; --c-team: #173f8f; --c-try: #7c3aed; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --c-match: #ff9a5a; --c-fr: #5fd09a; --c-team: #8fb0ff; --c-try: #c4a5ff; } }
+:root[data-theme="dark"] { --c-match: #ff9a5a; --c-fr: #5fd09a; --c-team: #8fb0ff; --c-try: #c4a5ff; }
+.sched-cols { display: grid; gap: 16px; align-items: start; }
+@media (min-width: 760px) { .sched-cols { grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); } }
+.sched-cal { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; }
+.cal-head { display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+.cal-head h3 { margin: 0; flex: 1; text-align: center; font-size: 15px; }
+.cal-head .btn.link { min-width: 32px; font-size: 18px; padding: 2px 8px; }
+.cal-head .btn.link.small { font-size: 12px; }
+.cal { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.cw { text-align: center; font-size: 11.5px; font-weight: 600; color: var(--muted); padding-bottom: 2px; }
+.cw.sun { color: var(--crit); } .cw.sat { color: var(--blue); }
+.cd { position: relative; aspect-ratio: 1 / 1; min-height: 34px; font: inherit; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--ink); cursor: pointer; display: grid; place-items: center; padding: 0; }
+.cd.blank { cursor: default; }
+.cd .n { font-family: var(--f-data); font-size: 13px; font-weight: 600; }
+.cd.k-team { background: color-mix(in srgb, var(--c-team) 16%, transparent); }
+.cd.k-team .n { color: var(--c-team); }
+.cd.k-fr { background: var(--c-fr); } .cd.k-fr .n { color: var(--surface); }
+.cd.k-match { background: var(--c-match); } .cd.k-match .n { color: var(--surface); }
+.cd.k-try { background: var(--c-try); } .cd.k-try .n { color: var(--surface); }
+.cd.k-off .n { color: var(--muted); text-decoration: line-through; }
+.cd.past { opacity: .5; }
+.cd.today { border-color: var(--ink); }
+.cd.sel { box-shadow: 0 0 0 2px var(--yellow); }
+.cd .abs { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--crit); box-shadow: 0 0 0 1.5px var(--surface); }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.cal-legend span { display: inline-flex; align-items: center; gap: 5px; }
+i.dot { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+i.dot.k-team { background: color-mix(in srgb, var(--c-team) 30%, transparent); border: 1px solid var(--c-team); }
+i.dot.k-fr { background: var(--c-fr); } i.dot.k-match { background: var(--c-match); } i.dot.k-try { background: var(--c-try); }
+i.dot.k-off { background: none; border: 1px dashed var(--muted); }
+.abs-l { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--crit); }
+.cal-detail { display: grid; gap: 6px; justify-items: start; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 </style>
 </head>
 <body>
@@ -638,9 +673,9 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scrollbar-gutter:
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=46"></script>
-<script src="guide.js?v=46"></script>
-<script src="library.js?v=46"></script>
-<script src="app.js?v=46"></script>
+<script src="program.js?v=47"></script>
+<script src="guide.js?v=47"></script>
+<script src="library.js?v=47"></script>
+<script src="app.js?v=47"></script>
 </body>
 </html>

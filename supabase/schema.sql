@@ -382,3 +382,9 @@ alter table public.logs add constraint logs_pain_area_check
 -- videos(kind playlist|video, category, title, yt, date, note): 부원만 읽기 (재생목록 링크는 DB에만, 코드에 없음)
 -- training_notes(player_id, date, good, fix, next, body, shared): 본인만, 공유하면 can('practice')도 읽기
 -- push_subs.morning_at/evening_at (KST 시) · cron 'push-hourly' 매시 정각
+
+-- ===== 졸업·탈퇴 (alumni_and_leave) =====
+-- players.alumni, players.left_on 추가
+-- private.wipe_personal(pid): 연락처·키/몸무게·부상·노트·컨디션·통증·불참·인바디·개인 편집·선택·알림 삭제
+-- public.retire_member(target, wipe_all): 관리자·주장만. 졸업 = 개인정보·계정 삭제 + 이름/기록만 남김, wipe_all = 선수 행까지 삭제
+-- public.leave_team(): 본인 탈퇴(계정·기록 모두 삭제), 마지막 관리자는 불가

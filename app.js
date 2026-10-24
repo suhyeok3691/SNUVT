@@ -94,7 +94,7 @@ const VIEWS = ["home", "practice", "notes", "video", "train", "plan", "rec", "se
 const SECTIONS = {
   physical: { label: "Physical", views: [["train", "오늘"], ["plan", "프로그램"], ["rec", "기록"]] },
   schedule: { label: "일정", views: [["season", "다가오는"], ["comps", "대회·교류전"], ["sched", "훈련 관리", "schedule"]] },
-  admin: { label: "관리", views: [["report", "리포트", "training"], ["roster", "명단", "roster"], ["intake", "부원 관리", "full"]] },
+  admin: { label: "관리", views: [["roster", "명단", "roster"], ["intake", "부원", "full"], ["report", "리포트", "training"]] },
   practice: { label: "훈련", views: [["practice", "훈련 계획"], ["notes", "훈련 노트"]] },
   video: { label: "영상", views: [["video", "영상"]] },
 };
@@ -470,7 +470,8 @@ function loadYtApi() {
   return ytApi;
 }
 const latestSrc = () => { const pls = state.videos.filter(v => v.kind === "playlist"); return pls.find(v => v.id === state.latestId) || pls.find(v => v.cat === "practice") || pls[0] || null; };
-const latestEnd = id => { try { return localStorage.getItem("snuvt-yt-" + id) !== "front"; } catch (e) { return true; } };
+// 재생목록은 보통 최신 영상이 맨 앞. 맨 끝이 최신인 목록만 바꿔 둔다
+const latestEnd = id => { try { return localStorage.getItem("snuvt-ytx-" + id) === "end"; } catch (e) { return false; } };
 async function initLatest() {
   const v = latestSrc(), box = document.getElementById("ytLatest"); if (!v || !box || box.dataset.ready) return;
   box.dataset.ready = "1";
@@ -480,8 +481,8 @@ async function initLatest() {
   new YT.Player("ytLatest", { host: "https://www.youtube-nocookie.com", width: "100%", height: "100%", playerVars: { listType: "playlist", list: v.yt, playsinline: 1, rel: 0 },
     events: { onReady: e => {
       const pl = e.target.getPlaylist && e.target.getPlaylist();
-      if (pl && pl.length > 1 && latestEnd(v.yt)) { e.target.cuePlaylist({ listType: "playlist", list: v.yt, index: pl.length - 1 }); info(`${v.title} · ${pl.length}개 중 가장 최근(목록 맨 끝)`); }
-      else info(pl && pl.length ? `${v.title} · ${pl.length}개 중 목록 맨 앞` : v.title);
+      if (pl && pl.length > 1 && latestEnd(v.yt)) { e.target.cuePlaylist({ listType: "playlist", list: v.yt, index: pl.length - 1 }); info(`${v.title} · ${pl.length}개 중 목록 맨 끝`); }
+      else info(pl && pl.length ? `${v.title} · ${pl.length}개 중 가장 최근` : v.title);
     }, onError: () => info("이 재생목록은 열 수 없어요. 링크나 공개 범위(일부 공개)를 확인해 주세요.") } });
 }
 function viewVideo() {
@@ -490,7 +491,7 @@ function viewVideo() {
   const cats = ["all", ...Object.keys(VID_CATS).filter(k => state.videos.some(v => v.cat === k))];
   return `<section class="sec"><div class="sec-head"><h2>영상</h2>${can("video") ? `<button class="btn add" type="button" data-act="videdit" data-id="">＋ 영상 추가</button>` : ""}</div>
     <div class="lib-cats">${cats.map(k => `<button type="button" class="chip ${k === cat ? "on" : ""}" data-act="vidcat" data-c="${k}">${k === "all" ? "전체" : VID_CATS[k]}</button>`).join("")}</div>
-    ${src ? `<section class="panel latest"><div class="row between"><h3>가장 최근 영상</h3><button class="btn link small" type="button" data-act="ytorder" data-id="${esc(src.yt)}">${latestEnd(src.yt) ? "목록 맨 앞부터" : "목록 맨 끝부터"}</button></div>
+    ${src ? `<section class="panel latest"><div class="row between"><h3>가장 최근 영상</h3><button class="btn link small" type="button" data-act="ytorder" data-id="${esc(src.yt)}">${latestEnd(src.yt) ? "맨 앞 영상 보기" : "맨 끝 영상 보기"}</button></div>
       ${pls.length > 1 ? `<div class="lib-cats">${pls.map(v => `<button type="button" class="chip ${v.id === src.id ? "on" : ""}" data-act="ytlatest" data-id="${esc(v.id)}">${esc(v.title)}</button>`).join("")}</div>` : ""}
       <div class="vid-frame"><div id="ytLatest"></div></div><p class="small muted" id="ytInfo">불러오는 중</p></section>` : ""}
     <p class="small muted">부원만 볼 수 있어요. 링크를 밖으로 공유하지 말아 주세요.</p>
@@ -574,6 +575,7 @@ function viewSettings() {
       ${state.staff ? `<button type="button" class="menu-item" data-act="rolepick"><span>화면 보기</span><span class="small muted">${VIEW_LABEL(state.viewAs)}</span><span class="go">›</span></button>` : ""}
       <button type="button" class="menu-item" data-act="pwchange"><span>비밀번호 바꾸기</span><span></span><span class="go">›</span></button>
       <button type="button" class="menu-item danger" data-act="logout"><span>로그아웃</span><span></span><span class="go">›</span></button>
+      <button type="button" class="menu-item danger" data-act="leave"><span>팀 탈퇴</span><span class="small muted">계정과 내 기록을 모두 지워요</span><span class="go">›</span></button>
     </section>`;
 }
 // 설정은 지금 화면 위에 오른쪽에서 열리는 창으로
@@ -1216,6 +1218,12 @@ function membersHtml() {
         <button class="btn danger" type="button" data-act="delmember" data-id="${esc(m.id)}">삭제</button></div>`}</td></tr>`).join("")}
     </tbody></table></div></details>`;
 }
+function alumniHtml() {
+  const l = state.alumni || [];
+  if (!l.length) return "";
+  return `<details class="sec members" data-keep="alumni" ${keepOpen("alumni", false)}><summary><h3>졸업생 <span class="muted small">${l.length}명 · 계정·개인정보 없음, 기록만 남음</span></h3></summary>
+    <ul class="watch">${l.map(x => `<li><b>${esc(x.name)}</b><span class="chip pos">${esc(x.pos || "")}</span><span class="small muted">${x.left ? esc(x.left) + " 졸업" : ""}</span><button class="btn link danger small" type="button" data-act="alumdel" data-pid="${esc(x.id)}">기록까지 삭제</button></li>`).join("")}</ul></details>`;
+}
 function viewIntake() {
   if (!can("full")) return `<div class="panel empty"><strong>관리자 전용이에요</strong></div>`;
   const ps = sortedPlayers();
@@ -1227,8 +1235,9 @@ function viewIntake() {
   const list = `<div class="plist">${ps.map(x => `<button type="button" data-act="edit" data-pid="${esc(x.id)}" aria-pressed="${x.id === pid}"><span>${esc(x.name)}</span><span class="chip pos">${esc(x.pos)}</span></button>`).join("")}
     <button type="button" data-act="edit" data-pid="__new" aria-pressed="${isNew}"><span>+ 새 선수</span></button></div>`;
   const opt = (v, cur) => `value="${v}" ${String(cur ?? "") === String(v) ? "selected" : ""}`;
-  return `<section class="sec"><h2>부원 관리</h2><p class="small muted">직책: 관리자·주장 = 모든 기능 · 부주장 = 일정·공지·명단 · 훈련부장 = 일정·교류전·엔트리·불참·공지 · 총무 = 공지·명단 · 피지컬 코치 = 프로그램 편집·측정·리포트</p></section>
+  return `<section class="sec"><h2>부원</h2><p class="small muted">직책: 관리자·주장 = 모든 기능 · 부주장 = 일정·공지·명단 · 훈련부장 = 일정·교류전·엔트리·불참·공지 · 총무 = 공지·명단 · 피지컬 코치 = 프로그램 편집·측정·리포트</p></section>
   ${membersHtml()}
+  ${alumniHtml()}
   <section class="side">
     <div class="panel">${list}</div>
     <div class="sec">
@@ -1261,7 +1270,7 @@ function viewIntake() {
         </fieldset>
         <label class="check"><input type="checkbox" id="hf-consent" ${h.consent ? "checked" : ""} required> 선수가 프로그램 목적의 정보 사용에 동의함</label>
         <div class="row"><button class="btn primary" type="submit">${pid ? "저장" : "선수 추가"}</button>
-          ${pid ? `<button class="btn danger" type="button" data-act="delplayer" data-pid="${esc(pid)}">선수 삭제</button>` : ""}</div>
+          ${pid && pid !== state.myPid ? `<button class="btn" type="button" data-act="retire" data-pid="${esc(pid)}">졸업 처리</button><button class="btn danger" type="button" data-act="retireall" data-pid="${esc(pid)}">완전 삭제</button>` : ""}</div>
       </form>
       ${pid ? testFormHtml(pid) : ""}
     </div>
@@ -1355,7 +1364,35 @@ const seasonRange = () => { const t = iso(today()), y = Number(t.slice(0, 4)), m
 const addBtn = (form, label) => `<button class="btn add" type="button" data-act="addform" data-f="${form}">+ ${label}</button>`;
 function viewSeason() {
   const { t } = seasonRange(), me = playerOf(state.myPid), l = teamDays(t, 14);
-  return `<section class="sec"><h3>훈련·교류전 <span class="small muted">2주</span></h3>${l.length && (can("schedule") || me) ? attendRows(l, me) : emptyLine("2주 안에 팀 일정이 없어요.")}</section>`;
+  return `<div class="sched-cols"><section class="sec sched-list"><h3>훈련·교류전 <span class="small muted">2주</span></h3>${l.length && (can("schedule") || me) ? attendRows(l, me) : emptyLine("2주 안에 팀 일정이 없어요.")}</section>
+    <section class="sec sched-cal">${calHtml(me)}</section></div>`;
+}
+// 달력: 정규 훈련 · 교류전 · 대회 색을 나눠서 한 달을 한눈에
+const CAL_KIND = i => i.slot === "match" ? "match" : i.slot === "friendly" ? "fr" : i.slot === "tryout" ? "try" : i.slot === "team" ? (i.teamOff ? "off" : "team") : "";
+const CAL_LABEL = { team: "정규 훈련", fr: "교류전", match: "대회", try: "트라이아웃", off: "훈련 없음" };
+function calHtml(me) {
+  const t = iso(today()), ym = state.calMonth || t.slice(0, 7), [y, m] = ym.split("-").map(Number);
+  const first = new Date(y, m - 1, 1), days = new Date(y, m, 0).getDate(), lead = first.getDay();
+  const sel = state.calDay && state.calDay.startsWith(ym) ? state.calDay : (t.startsWith(ym) ? t : null);
+  const cells = [];
+  for (let k = 0; k < lead; k++) cells.push(`<span class="cd blank"></span>`);
+  for (let d = 1; d <= days; d++) {
+    const ds = `${ym}-${String(d).padStart(2, "0")}`, i = infoOn(ds), k = CAL_KIND(i), a = me && absOf(me.id, ds);
+    cells.push(`<button type="button" class="cd ${k ? "k-" + k : ""} ${ds === t ? "today" : ""} ${ds === sel ? "sel" : ""} ${ds < t ? "past" : ""}" data-act="calday" data-d="${ds}" aria-pressed="${ds === sel}" aria-label="${longDate(parseD(ds))}${k ? " " + CAL_LABEL[k] : ""}${a ? " 불참" : ""}"><span class="n">${d}</span>${a ? `<i class="abs" aria-hidden="true"></i>` : ""}</button>`);
+  }
+  let detail = "";
+  if (sel) {
+    const i = infoOn(sel), k = CAL_KIND(i), a = me && absOf(me.id, sel);
+    const line = k === "team" || k === "fr" ? esc(tdLabel(i)) : k === "match" ? esc((i.event && i.event.name) || "대회") + (i.days > 1 ? ` · ${i.dayNo}/${i.days}일째` : "") : k === "try" ? "트라이아웃" : k === "off" ? `훈련 없음${i.teamOffNote ? " · " + esc(i.teamOffNote) : ""}` : "팀 일정 없음";
+    detail = `<div class="cal-detail"><b>${longDate(parseD(sel))}</b><span class="small">${k ? `<i class="dot k-${k}"></i>` : ""}${line}</span>
+      ${a ? `<span class="chip warn">내 불참 · ${esc(ABS_REASONS[a.reason] || "")}</span>` : ""}
+      ${state.practice[sel] ? `<button type="button" class="btn link small" data-act="prgo" data-d="${sel}">훈련 계획 보기</button>` : ""}
+      ${me && isTeamDay(i) && sel >= t && !can("schedule") ? `<button class="btn small" type="button" data-act="absopen" data-date="${sel}">${a ? "불참 수정" : "불참"}</button>` : ""}</div>`;
+  }
+  const prev = new Date(y, m - 2, 1), next = new Date(y, m, 1), ymOf = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return `<div class="cal-head"><button class="btn link" type="button" data-act="calmonth" data-m="${ymOf(prev)}" aria-label="이전 달">‹</button><h3>${y}년 ${m}월</h3><button class="btn link" type="button" data-act="calmonth" data-m="${ymOf(next)}" aria-label="다음 달">›</button>${ym !== t.slice(0, 7) ? `<button class="btn link small" type="button" data-act="calmonth" data-m="${t.slice(0, 7)}">오늘</button>` : ""}</div>
+    <div class="cal">${DOW_KO.map((w, k) => `<span class="cw ${k === 0 ? "sun" : k === 6 ? "sat" : ""}">${w}</span>`).join("")}${cells.join("")}</div>
+    <div class="cal-legend">${["team", "fr", "match", "off"].map(k => `<span><i class="dot k-${k}"></i>${CAL_LABEL[k]}</span>`).join("")}${me ? `<span><i class="abs-l"></i>내 불참</span>` : ""}</div>${detail}`;
 }
 function viewComps() {
   const { t, sy, from, to } = seasonRange();
@@ -1704,7 +1741,7 @@ function openRolePick() {
   const el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>화면 보기</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <p class="small muted">${state.coach ? "각 직책이 보는 화면으로 바꿔서 확인해요. 데이터는 그대로예요." : "내 직책 화면과 선수 화면을 바꿔요."}</p>
-    <div class="role-list">${viewOptions().map(k => `<button type="button" class="role-opt ${state.viewAs === k ? "on" : ""}" data-act="viewas" data-k="${k}"><b>${VIEW_LABEL(k)}</b><span class="small muted">${k === "player" ? "내 운동 · 기록 · 일정" : k === "media" ? "영상 추가 · 수정" : esc(TITLE_JOB[k] || "")}</span></button>`).join("")}</div>`;
+    <div class="role-list">${viewOptions().map(k => `<button type="button" class="role-opt ${state.viewAs === k ? "on" : ""}" data-act="viewas" data-k="${k}"><b>${VIEW_LABEL(k)}</b></button>`).join("")}</div>`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
 const needsSelfReg = () => state.session && state.role === "player" && !state.myPid && state.loaded;
@@ -1821,6 +1858,29 @@ document.addEventListener("click", async ev => {
   if (act === "authmode") { state.authMode = b.dataset.m || (state.authMode === "login" ? "signup" : "login"); state.authMsg = ""; state.dirty = false; return render(); }
   if (act === "pwchange") { closeSettings(); state.recovery = true; state.dirty = false; return render(); }
   if (act === "cancelpw") { state.recovery = false; state.dirty = false; return render(); }
+  if (act === "leave") {
+    if (!confirmDel("팀에서 탈퇴할까요?\n계정, 연락처·키·몸무게, 측정·운동 기록, 컨디션·통증, 훈련 노트가 모두 지워지고 되돌릴 수 없어요.")) return;
+    const r = await sb.rpc("leave_team");
+    if (r.error) { toast(r.error.code === "42501" ? r.error.message : failMsg(r.error)); return; }
+    closeSettings(); lsDel(snapKey()); try { await sb.auth.signOut({ scope: "local" }); } catch (e) {} toast("탈퇴했어요. 그동안 고마웠어요"); return;
+  }
+  if (act === "calmonth") { state.calMonth = b.dataset.m; state.calDay = null; state.dirty = false; return render(); }
+  if (act === "calday") { state.calDay = b.dataset.d; state.dirty = false; return render(); }
+  if (act === "alumdel") {
+    const x = (state.alumni || []).find(y => y.id === b.dataset.pid) || {};
+    if (!confirmDel(`${x.name || "이 졸업생"}의 남은 기록까지 모두 지울까요?\n되돌릴 수 없어요.`)) return;
+    const r = await sb.rpc("retire_member", { target: b.dataset.pid, wipe_all: true });
+    toast(r.error ? (r.error.code === "42501" ? r.error.message : failMsg(r.error)) : "지웠어요");
+    state.dirty = false; return loadAll();
+  }
+  if (act === "retire" || act === "retireall") {
+    const nm = (state.players[b.dataset.pid] || {}).name || "이 선수", all = act === "retireall";
+    if (!confirmDel(all ? `${nm}의 모든 정보를 지울까요?\n계정·개인정보·측정·운동 기록이 전부 지워지고 되돌릴 수 없어요.` : `${nm}를 졸업 처리할까요?\n계정과 개인정보(연락처·키·몸무게·부상·컨디션·노트)는 지우고, 이름과 측정·운동 기록만 팀 기록으로 남겨요.`)) return;
+    const r = await sb.rpc("retire_member", { target: b.dataset.pid, wipe_all: all });
+    if (r.error) toast(r.error.code === "42501" ? r.error.message : failMsg(r.error));
+    else { toast(all ? "모두 지웠어요" : "졸업 처리했어요"); state.editPid = null; }
+    state.dirty = false; return loadAll();
+  }
   if (act === "logout") { closeSettings(); lsDel(snapKey()); await pushOff(true); await sb.auth.signOut(); return; }
   if (act === "pushopen") return openPush();
   if (act === "drawer") return openDrawer();
@@ -1839,7 +1899,7 @@ document.addEventListener("click", async ev => {
   if (act === "addform") return openForm(b.dataset.f);
   if (act === "edtest") return openTestEdit(b.dataset.id);
   if (act === "ytlatest") { state.latestId = b.dataset.id; state.dirty = false; return render(); }
-  if (act === "ytorder") { const id = b.dataset.id; try { localStorage.setItem("snuvt-yt-" + id, latestEnd(id) ? "front" : "end"); } catch (e) {} state.dirty = false; return render(); }
+  if (act === "ytorder") { const id = b.dataset.id; try { localStorage.setItem("snuvt-ytx-" + id, latestEnd(id) ? "front" : "end"); } catch (e) {} state.dirty = false; return render(); }
   if (act === "vidcat") { state.vidCat = b.dataset.c; state.dirty = false; return render(); }
   if (act === "vidopen") { state.vidOpen = state.vidOpen === b.dataset.id ? null : b.dataset.id; state.dirty = false; return render(); }
   if (act === "videdit") return openVidForm(b.dataset.id);
@@ -2395,7 +2455,9 @@ function buildState(raw) {
   for (const r of raw.day_picks || []) (pk[r.player_id] = pk[r.player_id] || {})[r.date] = r.pick;
   state.picks = pk;
   state.events = raw.events ? raw.events.map(r => ({ id: r.id, name: r.name, kind: r.kind, start: r.start_date, end: r.end_date, note: r.note })) : null;
-  state.players = Object.fromEntries((raw.players || []).map(r => [r.id, {
+  // 졸업생은 팀 명단에서 빼고 따로 둔다 (기록만 남음)
+  state.alumni = (raw.players || []).filter(r => r.alumni).map(r => ({ id: r.id, name: r.name, pos: r.pos, left: r.left_on })).sort((a, b) => String(b.left || "").localeCompare(String(a.left || "")));
+  state.players = Object.fromEntries((raw.players || []).filter(r => !r.alumni).map(r => [r.id, {
     name: r.name, pos: r.pos, year: r.year, height: r.height, weight: r.weight, exp: r.exp,
     weightExp: wexpNorm(r.weight_exp), adjust: r.adjust || {}, order: r.sort, title: r.title || null, number: r.number ?? null, media: !!r.media,
   }]));
