@@ -376,3 +376,9 @@ alter table public.logs add constraint logs_pain_area_check
 -- player_private: 키·몸무게 (본인 · 관리자·주장 · 트레이닝 담당만). players.height/weight 는 비우고 트리거로 옮김
 -- private.can('practice'): 관리자·주장 + 훈련부장
 -- practice_plans(date pk, title, goal, blocks jsonb[{title, minutes, groups:[{name, pos[], drills:[{n, m, note}]}]}], published)
+
+-- ===== videos_notes_push_hours (적용됨) =====
+-- players.media: 영상 담당 · private.can('video'): 관리자·주장 · 부주장 · 영상 담당
+-- videos(kind playlist|video, category, title, yt, date, note): 부원만 읽기 (재생목록 링크는 DB에만, 코드에 없음)
+-- training_notes(player_id, date, good, fix, next, body, shared): 본인만, 공유하면 can('practice')도 읽기
+-- push_subs.morning_at/evening_at (KST 시) · cron 'push-hourly' 매시 정각

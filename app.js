@@ -34,7 +34,9 @@ const WEXP = [
   ["oly", "상급 · 파워 클린·행 클린·푸시 저크 같은 역도 동작을 할 수 있어요"],
 ];
 const wexpNorm = v => v === "lt6" ? "machine" : v === "gte6" ? "free" : v;
-const wexpSelect = (id, cur, required) => `<label class="fl wide">웨이트 경험<select id="${id}" ${required ? "required" : ""}><option value="">고르기</option>${WEXP.map(([v, l]) => `<option value="${v}" ${wexpNorm(cur) === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>`;
+// 웨이트 경험: 고르는 칸에는 입문·초급·중급·상급만, 고르면 아래에 설명
+const wexpLabel = l => l.split(" · ")[0], wexpDesc = v => { const x = WEXP.find(w => w[0] === v); return x ? x[1].split(" · ").slice(1).join(" · ") : ""; };
+const wexpSelect = (id, cur, required, blank = "고르기") => `<label class="fl wide">웨이트 경험<select id="${id}" class="wexp-sel" ${required ? "required" : ""}>${!cur || blank !== "—" ? `<option value="">${blank}</option>` : ""}${WEXP.map(([v, l]) => `<option value="${v}" ${wexpNorm(cur) === v ? "selected" : ""}>${wexpLabel(l)}</option>`).join("")}</select><span class="small muted wexp-desc" id="${id}-desc">${esc(wexpDesc(wexpNorm(cur)))}</span></label>`;
 // 부상 이력: 부위 → 운동하다 흔히 다치는 종류
 const INJ_PARTS = [
   ["shoulder", "어깨", ["회전근개 손상 (힘줄염·부분파열)", "회전근개 파열", "와순 파열 (SLAP 등)", "어깨 탈구·불안정", "충돌증후군", "견봉쇄골(AC) 관절 손상", "쇄골 골절"]],
@@ -87,28 +89,29 @@ const injText = x => `${(INJ_SIDES.find(s => s[0] === x.side) || ["", ""])[1].re
 const normYear = v => { const t = String(v || "").trim(); return /^[1-9]$/.test(t) ? t + "학년" : /^[1-9]\s*학년$/.test(t) ? t.replace(/\s+/g, "") : t; };
 const confirmDel = msg => { try { return window.confirm(msg); } catch (e) { return false; } };
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
-const VIEWS = ["home", "practice", "train", "plan", "rec", "season", "comps", "sched", "week", "roster", "intake", "load", "settings"];
+const VIEWS = ["home", "practice", "notes", "video", "train", "plan", "rec", "season", "comps", "sched", "report", "roster", "intake"];
 // 섹션: 홈 → Physical(트레이닝) · 일정 · 관리 · 설정. 공지는 홈 맨 위
 const SECTIONS = {
   physical: { label: "Physical", views: [["train", "오늘"], ["plan", "프로그램"], ["rec", "기록"]] },
   schedule: { label: "일정", views: [["season", "다가오는"], ["comps", "대회·교류전"], ["sched", "훈련 관리", "schedule"]] },
-  admin: { label: "관리", views: [["week", "주간 요약", "training"], ["roster", "명단", "roster"], ["intake", "부원 관리", "full"], ["load", "부하·리포트", "training"]] },
-  practice: { label: "훈련", views: [["practice", "훈련 계획"]] },
-  settings: { label: "설정", views: [["settings", "설정"]] },
+  admin: { label: "관리", views: [["report", "리포트", "training"], ["roster", "명단", "roster"], ["intake", "부원 관리", "full"]] },
+  practice: { label: "훈련", views: [["practice", "훈련 계획"], ["notes", "훈련 노트"]] },
+  video: { label: "영상", views: [["video", "영상"]] },
 };
-const SECTION_OF = { practice: "practice", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", sched: "schedule", week: "admin", roster: "admin", intake: "admin", load: "admin", settings: "settings" };
+const SECTION_OF = { practice: "practice", notes: "practice", video: "video", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
 // 직책: 관리자·주장 = 전체 / 부주장·훈련부장·총무·트레이닝 담당 = 맡은 일만 (서버 규칙 private.can 과 같게)
 const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", ops: "훈련부장", treasurer: "총무", trainer: "트레이닝 담당" };
-const TITLE_JOB = { admin: "모든 기능 · 직책 지정", captain: "모든 기능 · 직책 지정", vice: "일정 · 공지 · 명단", ops: "훈련 설계 · 일정 · 훈련 시간 · 교류전 · 엔트리 · 불참 · 공지", treasurer: "공지 · 명단(연락처)", trainer: "프로그램 편집 · 측정 수정 · 부상·복귀 · 부하" };
-const STAFF_PERMS = { vice: ["schedule", "notice", "roster"], ops: ["schedule", "notice", "practice"], treasurer: ["notice", "roster"], trainer: ["training"] };
+const TITLE_JOB = { admin: "모든 기능 · 직책 지정", captain: "모든 기능 · 직책 지정", vice: "일정 · 공지 · 명단 · 영상", ops: "훈련 설계 · 일정 · 훈련 시간 · 교류전 · 엔트리 · 불참 · 공지", treasurer: "공지 · 명단(연락처)", trainer: "프로그램 편집 · 측정 수정 · 부상·복귀 · 부하" };
+const STAFF_PERMS = { vice: ["schedule", "notice", "roster", "video"], ops: ["schedule", "notice", "practice"], treasurer: ["notice", "roster"], trainer: ["training"] };
 // 관리 화면일 때만: full(관리자·주장) · schedule · notice · roster · training
-const can = perm => !!state.admin && (state.coach || (perm !== "full" && (STAFF_PERMS[state.title] || []).includes(perm)));
+const can = perm => !!state.admin && (state.coach || (perm !== "full" && ((STAFF_PERMS[state.title] || []).includes(perm) || (perm === "video" && state.media))));
 const secViews = sec => sec.views.filter(v => !v[2] || can(v[2]));
 const ICON = {
   physical: '<path d="M6.5 7v10M17.5 7v10M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/>',
   home: '<path d="M4 11.5 12 4.5l8 7V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  video: '<rect x="3" y="5.5" width="13" height="13" rx="2.5"/><path d="M16 10.5l5-3v9l-5-3z"/>',
   ball: '<circle cx="12" cy="12" r="9"/><path d="M12 3c-2 3-2 6 0 9s2 6 0 9M3.5 9c3 1 6 1 8.5-1s5.5-2 8.5-1M4 16c3-1.5 6-1.5 8.5 0s5.5 1.5 7.5 0"/>',
   trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 21h8M9 17h6"/>',
   record: '<path d="M8 4h8l1 2h2a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h2z"/><path d="M8.5 13l2.5 2.5 4.5-5"/>',
@@ -138,7 +141,7 @@ const state = {
   players: {}, tests: {}, health: {}, logs: {}, inbody: {}, events: null,
   loaded: false, offline: false, admin: false, coach: false, canWrite: null, dirty: false, armed: null,
   session: null, role: null, myPid: null, email: "", profiles: [], authMode: "login", authMsg: "", authErr: false, booting: true,
-  selfPlayer: null, selfHealth: null, editingSelf: false, painChecks: {}, openKeys: {}, wellness: {}, lifts: {}, planCtx: null, teamOff: {}, picks: {}, friendlies: {}, absences: {}, notices: [], entries: {}, ptimes: {}, contacts: {}, edits: [], title: null, staff: false, practice: {},
+  selfPlayer: null, selfHealth: null, editingSelf: false, painChecks: {}, openKeys: {}, wellness: {}, lifts: {}, planCtx: null, teamOff: {}, picks: {}, friendlies: {}, absences: {}, notices: [], entries: {}, ptimes: {}, contacts: {}, edits: [], title: null, staff: false, practice: {}, videos: [], notes: [],
 };
 let sb = null;
 
@@ -324,7 +327,9 @@ function header() {
   const onOf = v => (SECTION_OF[state.view] || "home") === (SECTION_OF[v] || "home");
   const bt = (v, k, label, cls = "") => `<button type="button" class="bt ${cls} ${onOf(v) ? "on" : ""}" data-act="view" data-v="${v}" ${onOf(v) ? 'aria-current="page"' : ""}><span class="bi">${svg(k)}</span><span>${label}</span></button>`;
   // 아래 탭: 홈이 가운데 (왼쪽 트레이닝 · 오른쪽 팀)
-  bar.innerHTML = bt("train", "physical", "Physical") + bt("home", "home", "홈", "center") + bt("season", "schedule", "일정");
+  // 아래 탭 바: 훈련 · Physical · 홈(가운데) · 일정 · 관리(관리 화면) / 영상
+  const adminV = secViews(SECTIONS.admin)[0];
+  bar.innerHTML = bt("practice", "ball", "훈련") + bt("train", "physical", "Physical") + bt("home", "home", "홈", "center") + bt("season", "schedule", "일정") + (adminV ? bt(adminV[0], "admin", "관리") : bt("video", "video", "영상"));
   bar.hidden = false; document.body.classList.add("has-bar");
   const vs = sec ? secViews(sec) : [];
   if (!sec || vs.length < 2) { nav.innerHTML = sec ? `<span class="tab-title">${sec.label}</span>` : ""; nav.hidden = !nav.innerHTML; return; }
@@ -383,6 +388,8 @@ function viewPractice() {
       : `${plan.title || plan.goal ? `<div class="panel pr-top">${plan.title ? `<b>${esc(plan.title)}</b>` : ""}${plan.goal ? `<span class="small">목표 · ${esc(plan.goal)}</span>` : ""}</div>` : ""}`}
     <p class="small muted">${plan.blocks.length}개 블록 · 약 ${total}분${!plan.published ? " · 선수에게 아직 안 보임" : ""}</p>
     <div class="pr-list">${blocks || emptyLine("블록이 없어요.")}</div>
+    ${state.videos.filter(v => v.date === date).map(v => vidCard(v, state.vidOpen === v.id)).join("")}
+    ${me && date <= iso(today()) ? `<button class="btn" type="button" data-act="notego" data-d="${date}">이날 훈련 노트 쓰기</button>` : ""}
     ${edit ? `<button class="btn add" type="button" data-act="prblk" data-b="new">＋ 블록 추가</button>` : ""}
   </section>`;
 }
@@ -420,6 +427,68 @@ function openPrDrill(bi, gi) {
   el.hidden = false; document.body.classList.add("noscroll");
 }
 const drillList = (cat, q) => DRILL_LIB.filter(x => q ? x.n.includes(q) : x.c === cat).map(x => `<button type="button" class="box lib-box" data-act="drpick" data-n="${esc(x.n)}" data-m="${x.m}"><span class="bn">${esc(x.n)}</span><span class="br">${x.m}분</span></button>`).join("") || `<p class="small muted">없어요. 위에 직접 써서 넣어도 돼요.</p>`;
+/* ---------- 영상 (유튜브 재생목록·영상, 부원만) ---------- */
+const VID_CATS = { practice: "훈련", friendly: "교류전", camp: "전지훈련", match: "대회", etc: "기타" };
+const ytEmbed = v => v.kind === "playlist" ? `https://www.youtube-nocookie.com/embed/videoseries?list=${encodeURIComponent(v.yt)}` : `https://www.youtube-nocookie.com/embed/${encodeURIComponent(v.yt)}`;
+const ytLink = v => v.kind === "playlist" ? `https://www.youtube.com/playlist?list=${encodeURIComponent(v.yt)}` : `https://www.youtube.com/watch?v=${encodeURIComponent(v.yt)}`;
+// 붙여 넣은 유튜브 주소 → { kind, yt }
+function parseYt(url) {
+  const u = String(url || "").trim(), list = u.match(/[?&]list=([A-Za-z0-9_-]{6,64})/), v = u.match(/(?:[?&]v=|youtu\.be\/|\/shorts\/|\/embed\/)([A-Za-z0-9_-]{6,20})/);
+  if (v && !/videoseries/.test(u)) return { kind: "video", yt: v[1] };
+  if (list) return { kind: "playlist", yt: list[1] };
+  return null;
+}
+const vidCard = (v, open) => `<article class="panel vid ${open ? "open" : ""}">
+    <div class="vid-head"><span class="vid-ic">${svg("video")}</span><div class="vid-t"><b>${esc(v.title)}</b><span class="small muted">${v.kind === "playlist" ? "재생목록" : "영상"} · ${VID_CATS[v.cat] || ""}${v.date ? ` · ${md(parseD(v.date))}` : ""}${v.note ? ` · ${esc(v.note)}` : ""}</span></div>
+      <button class="btn small ${open ? "" : "primary"}" type="button" data-act="vidopen" data-id="${esc(v.id)}">${open ? "닫기" : "재생"}</button></div>
+    ${open ? `<div class="vid-frame"><iframe src="${ytEmbed(v)}" title="${esc(v.title)}" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>` : ""}
+    <div class="row vid-foot"><a class="btn link small" href="${ytLink(v)}" target="_blank" rel="noopener noreferrer">유튜브에서 열기 ↗</a>${can("video") ? `<button class="btn link small" type="button" data-act="videdit" data-id="${esc(v.id)}">수정</button><button class="btn link small danger" type="button" data-act="viddel" data-id="${esc(v.id)}">삭제</button>` : ""}</div>
+  </article>`;
+function viewVideo() {
+  const cat = state.vidCat || "all", list = state.videos.filter(v => cat === "all" || v.cat === cat);
+  const cats = ["all", ...Object.keys(VID_CATS).filter(k => state.videos.some(v => v.cat === k))];
+  return `<section class="sec"><div class="sec-head"><h2>영상</h2>${can("video") ? `<button class="btn add" type="button" data-act="videdit" data-id="">＋ 영상 추가</button>` : ""}</div>
+    <div class="lib-cats">${cats.map(k => `<button type="button" class="chip ${k === cat ? "on" : ""}" data-act="vidcat" data-c="${k}">${k === "all" ? "전체" : VID_CATS[k]}</button>`).join("")}</div>
+    <p class="small muted">부원만 볼 수 있어요. 링크를 밖으로 공유하지 말아 주세요.</p>
+    <div class="vid-list">${list.length ? list.map(v => vidCard(v, state.vidOpen === v.id)).join("") : emptyLine("아직 올라온 영상이 없어요.")}</div></section>`;
+}
+function openVidForm(id) {
+  const v = state.videos.find(x => x.id === id) || {}, el = document.getElementById("sheet");
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${id ? "영상 수정" : "영상 추가"}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <form class="f" id="vidForm" data-id="${esc(id || "")}" data-close="1"><div class="fields">
+      <label class="fl wide">유튜브 주소<input id="vd-url" required maxlength="300" value="${v.yt ? esc(ytLink(v)) : ""}" placeholder="재생목록이나 영상 주소를 붙여 넣기"></label>
+      <label class="fl wide">제목<input id="vd-title" required maxlength="80" value="${esc(v.title || "")}" placeholder="예: 11/6 훈련 · 서브 리시브"></label>
+      <label class="fl">분류<select id="vd-cat">${Object.entries(VID_CATS).map(([k, l]) => `<option value="${k}" ${v.cat === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label class="fl">날짜<input id="vd-date" type="date" value="${esc(v.date || "")}"></label>
+      <label class="fl wide">메모<input id="vd-note" maxlength="200" value="${esc(v.note || "")}"></label>
+    </div><div class="row"><button class="btn primary" type="submit">${id ? "저장" : "추가"}</button></div>
+    <p class="small muted">재생목록을 한 번 넣어 두면 유튜브에서 그 목록에 올리는 영상이 여기에도 자동으로 보여요. 날짜를 넣은 영상은 그날 훈련 계획에도 나와요.</p></form>`;
+  el.hidden = false; document.body.classList.add("noscroll");
+}
+/* ---------- 훈련 노트 (쓰고 싶은 사람만, 기본은 나만 봄) ---------- */
+function viewNotes() {
+  const me = playerOf(state.myPid), t = iso(today());
+  const mine = state.notes.filter(n => me && n.pid === me.id), shared = can("practice") ? state.notes.filter(n => n.shared && (!me || n.pid !== me.id)) : [];
+  const d = state.noteDate || t, cur = mine.find(n => n.date === d) || {};
+  const month = mine.filter(n => n.date.slice(0, 7) === t.slice(0, 7)).length;
+  const ta = (id, l, v, ph, rows = 2, max = 500) => `<label class="fl wide">${l}<textarea id="${id}" rows="${rows}" maxlength="${max}" placeholder="${ph}">${esc(v || "")}</textarea></label>`;
+  const noteCard = n => `<article class="panel note"><div class="row between"><b>${longDate(parseD(n.date))}${n.pid !== state.myPid ? ` · ${esc((playerOf(n.pid) || {}).name || "")}` : ""}</b>${n.pid === state.myPid ? `<span class="row">${n.shared ? `<span class="chip">공유</span>` : ""}<button class="btn link small" type="button" data-act="noteedit" data-d="${n.date}">수정</button></span>` : ""}</div>
+    ${n.good ? `<p><span class="nk">잘된 것</span>${esc(n.good)}</p>` : ""}${n.fix ? `<p><span class="nk">고칠 것</span>${esc(n.fix)}</p>` : ""}${n.next ? `<p><span class="nk">다음 목표</span>${esc(n.next)}</p>` : ""}${n.body ? `<p class="nbody">${esc(n.body)}</p>` : ""}</article>`;
+  return `<section class="sec"><div class="sec-head"><h2>훈련 노트</h2>${me ? `<span class="small muted">이번 달 ${month}개</span>` : ""}</div>
+    <p class="small muted">꼭 안 써도 돼요. 짧게라도 남기면 내가 뭘 고치고 있는지 보여요. 기본은 나만 보고, 공유하면 주장·훈련부장이 봐요.</p>
+    ${me ? `<form class="f panel note-form" id="noteForm">
+      <div class="fields"><label class="fl">날짜<input type="date" id="nt-date" value="${d}" max="${t}" required></label></div>
+      ${ta("nt-good", "오늘 잘된 것", cur.good, "예: 리시브 때 발이 먼저 갔다")}
+      ${ta("nt-fix", "고칠 것", cur.fix, "예: 공격 어프로치 마지막 두 걸음이 느림")}
+      ${ta("nt-next", "다음 훈련 목표", cur.next, "예: 오픈 스파이크 크로스 코스 5개 중 3개", 1, 300)}
+      ${ta("nt-body", "자유 메모", cur.body, "코치·선배 조언, 느낀 점", 3, 2000)}
+      <label class="check"><input type="checkbox" id="nt-share" ${cur.shared ? "checked" : ""}> 주장·훈련부장에게 공유</label>
+      <div class="row"><button class="btn primary" type="submit">${cur.id ? "고치기" : "저장"}</button>${cur.id ? `<button class="btn link small danger" type="button" data-act="notedel" data-d="${d}">지우기</button>` : ""}</div>
+    </form>` : ""}
+    ${mine.length ? `<h3 class="sub-h">내 노트</h3><div class="notes-list">${mine.slice(0, 30).map(noteCard).join("")}</div>` : ""}
+    ${shared.length ? `<h3 class="sub-h">공유받은 노트</h3><div class="notes-list">${shared.slice(0, 40).map(noteCard).join("")}</div>` : ""}
+  </section>`;
+}
 /* ---------- 메뉴 (왼쪽에서 열림) ---------- */
 function openDrawer() {
   const el = document.getElementById("drawer"); if (!el) return;
@@ -427,7 +496,8 @@ function openDrawer() {
   const group = (k, ic) => { const sec = SECTIONS[k]; return `<div class="dr-group"><div class="dr-h">${svg(ic)}<span>${sec.label}</span></div>${secViews(sec).map(([v, l]) => link(v, l)).join("")}</div>`; };
   el.querySelector(".drawer-body").innerHTML = `<div class="dr-top"><b>SNUVT</b><button class="btn link" type="button" data-act="drawerclose" aria-label="닫기">닫기</button></div>
     <div class="dr-group">${link("home", "홈")}</div>
-    ${group("practice", "ball")}${group("physical", "physical")}${group("schedule", "schedule")}${secViews(SECTIONS.admin).length ? group("admin", "admin") : ""}
+    ${group("practice", "ball")}${group("physical", "physical")}${group("schedule", "schedule")}${group("video", "video")}${secViews(SECTIONS.admin).length ? group("admin", "admin") : ""}
+    <div class="dr-group"><button type="button" class="dr-link" data-act="settings">설정</button></div>
     ${state.staff ? `<div class="dr-group"><button type="button" class="dr-link" data-act="mode">${state.admin ? "선수 화면으로" : "관리자 화면으로"}</button></div>` : ""}`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
@@ -437,7 +507,7 @@ function viewSettings() {
   const me = playerOf(state.myPid), email = (state.session && state.session.user && state.session.user.email) || "";
   const theme = document.documentElement.dataset.theme || "auto";
   const opt = (v, cur, l) => `<option value="${v}" ${String(cur ?? "") === String(v) ? "selected" : ""}>${l}</option>`;
-  return `<div class="cols"><div class="col">
+  return `<div class="set-head"><h2>설정</h2><button class="btn link" type="button" data-act="setclose">닫기</button></div>
     ${me ? `<section class="panel set-sec"><h3>내 정보</h3>
       <div class="kv"><span>이름</span><b>${esc(me.name)}</b></div><div class="kv"><span>포지션</span><b>${esc(POS[me.pos] || me.pos)}</b></div>
       <div class="kv"><span>등번호</span><b>${me.number ?? "—"}</b></div>${me.title ? `<div class="kv"><span>직책</span><b>${esc(TITLES[me.title])}</b></div>` : ""}
@@ -447,12 +517,11 @@ function viewSettings() {
         <label class="fl">키 (cm)<input id="pr-h" type="number" inputmode="decimal" min="140" max="220" step="0.1" value="${esc(me.height ?? "")}"></label>
         <label class="fl">몸무게 (kg)<input id="pr-w" type="number" inputmode="decimal" min="40" max="150" step="0.1" value="${esc(me.weight ?? "")}"></label>
         <label class="fl">배구 경력 (년)<input id="pr-exp" type="number" inputmode="decimal" min="0" max="20" step="0.5" value="${esc(me.exp ?? "")}"></label>
-        <label class="fl">웨이트 경험<select id="pr-wexp">${me.weightExp ? "" : `<option value="">—</option>`}${WEXP.map(([v, l]) => opt(v, me.weightExp, l)).join("")}</select></label>
+        ${wexpSelect("pr-wexp", me.weightExp, false, "—")}
       </div><div class="row"><button class="btn primary" type="submit">저장</button></div></form>
       <p class="small muted">이름·포지션·등번호·부상 이력은 관리자에게 말해 주세요. 전화번호는 본인과 관리자·명단 담당만 봐요.</p>
     </section>` : ""}
     <section class="panel set-sec"><h3>알림</h3><div id="pushBox"><p class="small muted">불러오는 중</p></div></section>
-  </div><div class="col">
     <section class="panel set-sec"><h3>화면</h3>
       <div class="seg fill" role="radiogroup" aria-label="화면 밝기">${[["light", "밝게"], ["dark", "어둡게"], ["auto", "기기 따라"]].map(([v, l]) => `<button type="button" class="seg-tab ${theme === v ? "on solid" : ""}" data-act="themeset" data-t="${v}" aria-pressed="${theme === v}">${l}</button>`).join("")}</div>
     </section>
@@ -461,8 +530,19 @@ function viewSettings() {
       ${state.staff ? `<button type="button" class="menu-item" data-act="mode"><span>${state.admin ? "선수 화면으로 보기" : "관리자 화면으로 보기"}</span><span></span><span class="go">›</span></button>` : ""}
       <button type="button" class="menu-item" data-act="pwchange"><span>비밀번호 바꾸기</span><span></span><span class="go">›</span></button>
       <button type="button" class="menu-item danger" data-act="logout"><span>로그아웃</span><span></span><span class="go">›</span></button>
-    </section>
-  </div></div>`;
+    </section>`;
+}
+// 설정은 지금 화면 위에 오른쪽에서 열리는 창으로
+function openSettings() {
+  const el = document.getElementById("setpanel"); if (!el) return;
+  el.querySelector(".setpanel-body").innerHTML = viewSettings();
+  el.hidden = false; document.body.classList.add("noscroll");
+  fillPushBox();
+}
+function closeSettings() { const el = document.getElementById("setpanel"); if (el && !el.hidden) { el.hidden = true; document.body.classList.remove("noscroll"); } }
+function refreshSettings() {
+  const el = document.getElementById("setpanel");
+  if (el && !el.hidden && state.session && state.loaded) { el.querySelector(".setpanel-body").innerHTML = viewSettings(); fillPushBox(); }
 }
 /* ---------- 홈 ---------- */
 function viewHome() {
@@ -482,10 +562,12 @@ function viewHome() {
   ].filter(Boolean).join("");
   const pending = can("full") ? state.profiles.filter(m => m.role === "pending" && m.id !== state.session.user.id).length : 0;
   const tile = (act, v, k, label, sub, badge) => `<button type="button" class="tile-btn" data-act="${act}" ${v ? `data-v="${v}"` : ""}><span class="ic">${svg(k)}${badge ? `<span class="badge">${badge}</span>` : ""}</span><span class="tl">${label}</span><span class="ts">${sub}</span></button>`;
+  const adm = secViews(SECTIONS.admin);
   const tiles = [
+    tile("view", "practice", "ball", "훈련", "훈련 계획 · 훈련 노트"),
     tile("view", "train", "physical", "Physical", "오늘 운동 · 프로그램 · 기록"),
     tile("view", "season", "schedule", "일정", "훈련 · 불참 · 대회 · 교류전"),
-    secViews(SECTIONS.admin).length ? tile("view", secViews(SECTIONS.admin)[0][0], "admin", "관리", secViews(SECTIONS.admin).map(v => v[1]).join(" · "), pending) : "",
+    adm.length ? tile("view", adm[0][0], "admin", "관리", adm.map(v => v[1]).join(" · "), pending) : tile("view", "video", "video", "영상", "훈련 · 교류전 영상"),
   ].join("");
   return `${noticesHtml()}${can("full") || can("training") ? teamStatusHtml() : ""}<section class="panel hub"><h3>오늘</h3>${rows}</section>
     <nav class="tiles-grid" aria-label="기능">${tiles}</nav>`;
@@ -676,16 +758,19 @@ function teamStatusHtml() {
 function viewRoster() {
   if (!can("roster")) return `<div class="panel empty"><strong>명단 담당만 볼 수 있어요</strong></div>`;
   const ps = sortedPlayers().slice().sort((a, b) => (a.number ?? 999) - (b.number ?? 999) || a.name.localeCompare(b.name, "ko"));
-  const staff = ps.filter(p => p.title);
+  const staff = ps.filter(p => p.title || p.media);
   return `<section class="sec"><div class="sec-head"><h3>명단 <span class="small muted">${ps.length}명</span></h3>${can("full") ? `<button class="btn link small" type="button" data-act="view" data-v="intake">직책·정보 바꾸기 →</button>` : ""}</div>
     <div class="tw"><table class="roster"><thead><tr><th>번호</th><th>이름</th><th>포지션</th><th>학년</th><th>직책</th><th>전화</th></tr></thead><tbody>
     ${ps.map(p => `<tr><td class="num">${p.number ?? "—"}</td><td><b>${esc(p.name)}</b></td><td><span class="chip pos">${esc(p.pos)}</span></td><td>${esc(p.year || "")}</td><td>${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}</td><td>${state.contacts[p.id] ? `<a href="tel:${esc(state.contacts[p.id].replace(/[^0-9+]/g, ""))}">${esc(state.contacts[p.id])}</a>` : "—"}</td></tr>`).join("")}
     </tbody></table></div></section>
-    <section class="sec"><h3>운영진</h3>${staff.length ? `<ul class="watch">${staff.map(p => `<li><b>${esc(p.name)}</b><span class="chip">${esc(TITLES[p.title])}</span><span class="small muted">${esc(TITLE_JOB[p.title])}</span></li>`).join("")}</ul>` : emptyLine("아직 정해진 직책이 없어요.")}</section>`;
+    <section class="sec"><h3>운영진</h3>${staff.length ? `<ul class="watch">${staff.map(p => `<li><b>${esc(p.name)}</b>${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span><span class="small muted">${esc(TITLE_JOB[p.title])}</span>` : ""}${p.media ? `<span class="chip">영상 담당</span>` : ""}</li>`).join("")}</ul>` : emptyLine("아직 정해진 직책이 없어요.")}</section>`;
 }
-function viewWeek() {
+// 리포트: 지난주 요약 + 선수별 리포트(최근 4주) + 엑셀
+function viewReport() {
   if (!can("training")) return `<div class="panel empty"><strong>관리자 전용이에요</strong></div>`;
-  return weekSummaryHtml();
+  const ps = sortedPlayers();
+  return `<section class="sec"><div class="row between wrap"><h2>리포트</h2><div class="row"><button class="btn" type="button" data-act="xlsx" data-s="season">엑셀 (이번 시즌)</button><button class="btn link small" type="button" data-act="xlsx" data-s="all">전체</button></div></div></section>
+    ${weekSummaryHtml()}${ps.length ? teamReportHtml(ps) : ""}`;
 }
 // 지난주 요약 (관리 → 주간 요약): 기록 · 완료율 · 컨디션 · 통증 변화
 function weekSummaryHtml() {
@@ -1110,6 +1195,7 @@ function viewIntake() {
             <label class="fl">포지션<select id="pf-pos" required>${POS_ORDER.map(k => `<option ${opt(k, p.pos)}>${k}</option>`).join("")}</select></label>
             <label class="fl">등번호<input id="pf-num" type="number" inputmode="numeric" min="0" max="99" value="${esc(p.number ?? "")}"></label>
             <label class="fl">직책<select id="pf-title"><option value="">일반 부원</option>${Object.entries(TITLES).map(([k, l]) => `<option value="${k}" ${p.title === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+            <label class="check"><input type="checkbox" id="pf-media" ${p.media ? "checked" : ""}> 영상 담당</label>
             <label class="fl">전화번호<input id="pf-phone" type="tel" inputmode="tel" maxlength="20" placeholder="010-0000-0000" value="${esc((state.contacts || {})[pid] || "")}"></label>
             <label class="fl">학년<input id="pf-year" maxlength="10" placeholder="예: 3학년" value="${esc(p.year || "")}"></label>
             <label class="fl">키 (cm)<input id="pf-height" type="number" inputmode="decimal" min="140" max="220" step="0.1" value="${esc(p.height ?? "")}"></label>
@@ -1157,32 +1243,6 @@ function openTestEdit(id) {
 }
 
 /* ---------- 훈련 부하 (관리자) ---------- */
-function viewLoad() {
-  if (!can("training")) return `<div class="panel empty"><strong>관리자 전용이에요</strong></div>`;
-  const ps = sortedPlayers();
-  const mons = [-5, -4, -3, -2, -1, 0].map(k => dAdd(thisMon(), 7 * k));
-  const rows = ps.map(p => {
-    const agg = {};
-    for (const e of logsOf(p.id)) {
-      const k = mondayOf(e.date);
-      agg[k] = agg[k] || { s: 0, j: 0, n: 0 };
-      agg[k].s += (Number(e.rpe) || 0) * (Number(e.minutes) || 0);
-      agg[k].j += Number(e.jumps) || 0;
-      agg[k].n += 1;
-    }
-    const cells = mons.map(m => {
-      const a = agg[m], prev = agg[dAdd(m, -7)];
-      if (!a) return `<td class="muted">—</td>`;
-      const spike = prev && prev.s > 0 && a.s >= 2 * prev.s;
-      return `<td class="num ${spike ? "cell-warn" : ""}">${a.s.toLocaleString("ko-KR")}<br><span class="small">${a.n}건</span>${spike ? ' <span class="chip warn">2배↑</span>' : ""}</td>`;
-    }).join("");
-    return `<tr><td>${esc(p.name)} <span class="chip pos">${esc(p.pos)}</span></td>${cells}</tr>`;
-  }).join("");
-  return `<section class="sec"><div class="row between wrap"><h2>훈련 부하</h2><div class="row"><button class="btn" type="button" data-act="xlsx" data-s="season">엑셀 (이번 시즌)</button><button class="btn link small" type="button" data-act="xlsx" data-s="all">전체</button></div></div><div><p class="lede">주간 RPE×분 합(AU). 전주보다 2배 넘게 늘면 표시해요.</p></div>
-  ${ps.length ? `<div class="tw"><table><thead><tr><th>선수</th>${mons.map(m => `<th>${md(parseD(m))}주${m === thisMon() ? " <span class=\"muted\">이번 주</span>" : ""}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>` : emptyLine("선수를 먼저 등록해 주세요.")}
-  </section>
-  ${ps.length ? teamReportHtml(ps) : ""}`;
-}
 
 /* ---------- 엑셀 내보내기 (관리자) ---------- */
 const XL_COLS = {
@@ -1580,7 +1640,7 @@ const savedMode = () => { try { return localStorage.getItem("snuvt-mode"); } cat
 function setMode(admin) {
   state.admin = admin; state.pid = null; state.editPid = null; state.dirty = false;
   try { localStorage.setItem("snuvt-mode", admin ? "admin" : "player"); } catch (e) {}
-  if (!admin && ["intake", "load", "week", "roster", "sched"].includes(state.view)) state.view = "home";
+  if (!admin && ["intake", "report", "roster", "sched"].includes(state.view)) state.view = "home";
   render(); window.scrollTo(0, 0);
 }
 const needsSelfReg = () => state.session && state.role === "player" && !state.myPid && state.loaded;
@@ -1597,12 +1657,12 @@ function render() {
   else if (needsSelfReg() || (state.coach && state.editingSelf)) html = viewSelfReg();
   else {
     const v = state.view;
-    html = v === "train" ? viewTrain() : v === "comps" ? viewComps() : v === "sched" ? viewSched() : v === "week" ? viewWeek() : v === "practice" ? viewPractice() : v === "roster" ? viewRoster() : v === "settings" ? viewSettings() : v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : v === "load" ? viewLoad() : viewHome();
+    html = v === "train" ? viewTrain() : v === "comps" ? viewComps() : v === "sched" ? viewSched() : v === "report" ? viewReport() : v === "practice" ? viewPractice() : v === "notes" ? viewNotes() : v === "video" ? viewVideo() : v === "roster" ? viewRoster() : v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : viewHome();
   }
   const q = state.session ? queue().length : 0;
   const bar = state.loaded && (state.net === false || q) ? `<div class="netbar">${state.net === false ? "오프라인 · 마지막으로 불러온 내용" : "기록 올리는 중"}${q ? ` · 올라갈 기록 ${q}건` : ""}</div>` : "";
   document.getElementById("main").innerHTML = bar + html;
-  if (state.view === "settings" && state.session && state.loaded) fillPushBox();
+  refreshSettings();
 }
 // 화면 넘어갈 때 부드럽게: 섹션이 바뀌면 살짝 올라오며, 같은 섹션 안 탭은 옆으로 미끄러지며
 function go(view) {
@@ -1655,7 +1715,7 @@ document.addEventListener("click", async ev => {
       const m = state.picks[pid] = state.picks[pid] || {};
       if (back) delete m[date]; else m[date] = b.dataset.k;
     } catch (e) { toast(failMsg(e)); }
-    state.dirty = false; return render();
+    state.dirty = false; render(); return refreshSettings();
   }
   if (act === "teamoff") {
     const date = b.dataset.date;
@@ -1694,11 +1754,13 @@ document.addEventListener("click", async ev => {
   if (act === "open") { state.pid = b.dataset.pid; state.week = null; state.day = null; return go("plan"); }
   if (act === "edit") { state.editPid = b.dataset.pid; state.dirty = false; state.armed = null; return render(); }
   if (act === "authmode") { state.authMode = b.dataset.m || (state.authMode === "login" ? "signup" : "login"); state.authMsg = ""; state.dirty = false; return render(); }
-  if (act === "pwchange") { state.recovery = true; state.dirty = false; return render(); }
+  if (act === "pwchange") { closeSettings(); state.recovery = true; state.dirty = false; return render(); }
   if (act === "cancelpw") { state.recovery = false; state.dirty = false; return render(); }
-  if (act === "logout") { lsDel(snapKey()); await pushOff(true); await sb.auth.signOut(); return; }
+  if (act === "logout") { closeSettings(); lsDel(snapKey()); await pushOff(true); await sb.auth.signOut(); return; }
   if (act === "pushopen") return openPush();
   if (act === "drawer") return openDrawer();
+  if (act === "settings") { closeDrawer(); return openSettings(); }
+  if (act === "setclose") return closeSettings();
   if (act === "drawerclose") return closeDrawer();
   if (act === "themeset") {
     const r = document.documentElement, v = b.dataset.t;
@@ -1711,6 +1773,13 @@ document.addEventListener("click", async ev => {
   if (act === "entry") return openEntry(b.dataset.kind, b.dataset.id);
   if (act === "addform") return openForm(b.dataset.f);
   if (act === "edtest") return openTestEdit(b.dataset.id);
+  if (act === "vidcat") { state.vidCat = b.dataset.c; state.dirty = false; return render(); }
+  if (act === "vidopen") { state.vidOpen = state.vidOpen === b.dataset.id ? null : b.dataset.id; state.dirty = false; return render(); }
+  if (act === "videdit") return openVidForm(b.dataset.id);
+  if (act === "viddel") { if (!confirmDel("이 영상을 목록에서 지울까요? (유튜브 영상은 그대로)")) return; try { ok(await sb.from("videos").delete().eq("id", b.dataset.id)); toast("지웠어요"); await loadAll(); } catch (e) { toast(failMsg(e)); } return; }
+  if (act === "noteedit") { state.noteDate = b.dataset.d; state.dirty = false; render(); window.scrollTo(0, 0); return; }
+  if (act === "notedel") { if (!confirmDel("이 노트를 지울까요?")) return; try { ok(await sb.from("training_notes").delete().eq("player_id", state.myPid).eq("date", b.dataset.d)); state.noteDate = null; toast("지웠어요"); await loadAll(); } catch (e) { toast(failMsg(e)); } return; }
+  if (act === "notego") { state.noteDate = b.dataset.d; return go("notes"); }
   if (act === "prgo") { state.prDate = b.dataset.d; return go("practice"); }
   if (act === "prday") { state.prDate = b.dataset.d; state.dirty = false; return render(); }
   if (act === "predit") { state.prEdit = !state.prEdit; state.dirty = false; return render(); }
@@ -1823,6 +1892,7 @@ document.addEventListener("change", ev => {
     rtpSave(pid, inj, ev.target.checked ? "확인했어요" : "체크를 풀었어요");
     return;
   }
+  if (ev.target.classList && ev.target.classList.contains("wexp-sel")) { const d = document.getElementById(ev.target.id + "-desc"); if (d) d.textContent = wexpDesc(ev.target.value); return; }
   if (ev.target.id === "pp-select") { state.pid = ev.target.value; state.dirty = false; render(); return; }
   if (ev.target.id === "lg-type") {
     const k = ev.target.value, m = document.getElementById("lg-min");
@@ -1957,10 +2027,23 @@ document.addEventListener("submit", async ev => {
       // 직책 (관리자·주장은 전체 권한) · 연락처
       const title = document.getElementById("pf-title").value || null;
       if (title !== ((state.players[id] || {}).title || null)) ok(await sb.rpc("set_member_title", { target: id, new_title: title }));
+      const media = document.getElementById("pf-media").checked;
+      if (media !== !!(state.players[id] || {}).media) ok(await sb.rpc("set_member_media", { target: id, on_: media }));
       const phone = txt("pf-phone");
       if (phone !== ((state.contacts || {})[id] || "")) ok(await sb.from("player_contacts").upsert({ player_id: id, phone: phone || null, updated_at: new Date().toISOString() }));
       state.editPid = id;
       toast(prevPid ? "저장했어요" : `${name} 선수를 추가했어요`);
+    } else if (f.id === "vidForm") {
+      const y = parseYt(document.getElementById("vd-url").value);
+      if (!y) { toast("유튜브 재생목록이나 영상 주소를 넣어 주세요."); return; }
+      const row = { ...y, category: document.getElementById("vd-cat").value, title: txt("vd-title"), date: txt("vd-date") || null, note: txt("vd-note") || null };
+      if (f.dataset.id) ok(await sb.from("videos").update(row).eq("id", f.dataset.id)); else ok(await sb.from("videos").insert(row));
+      toast(f.dataset.id ? "고쳤어요" : "영상을 추가했어요");
+    } else if (f.id === "noteForm") {
+      const row = { player_id: state.myPid, date: txt("nt-date"), good: txt("nt-good") || null, fix: txt("nt-fix") || null, next: txt("nt-next") || null, body: document.getElementById("nt-body").value.trim() || null, shared: document.getElementById("nt-share").checked, updated_at: new Date().toISOString() };
+      if (!row.good && !row.fix && !row.next && !row.body) { toast("한 칸이라도 써 주세요."); return; }
+      ok(await sb.from("training_notes").upsert(row, { onConflict: "player_id,date" }));
+      state.noteDate = row.date; toast("노트를 저장했어요");
     } else if (f.id === "prMetaForm") {
       const title = txt("pr-title"), goal = txt("pr-goal");
       if (await prSave(f.dataset.d, p => { p.title = title; p.goal = goal; })) toast("저장했어요");
@@ -2196,17 +2279,19 @@ async function loadAll() {
       sb.from("program_edits").select("*").order("created_at"),
       sb.from("player_private").select("*"),
       sb.from("practice_plans").select("*"),
+      sb.from("videos").select("*").order("sort").order("created_at", { ascending: false }),
+      sb.from("training_notes").select("*").order("date", { ascending: false }).limit(200),
     ];
     if (state.coach) q.push(sb.from("profiles").select("*").order("created_at"));
     const res = await Promise.all(q);
-    const [st, pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq, frq, abq, nq, enq, ptq, ctq, peq, pvq, ppq] = res, pr = state.coach ? res[20] : null;
+    const [st, pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq, frq, abq, nq, enq, ptq, ctq, peq, pvq, ppq, vdq, tnq] = res, pr = state.coach ? res[22] : null;
     for (const r of [pl, ts, hl, lg]) if (r.error) throw r.error;
     const rows = r => r && !r.error && Array.isArray(r.data) ? r.data : [];
     raw = { players: pl.data, tests: ts.data, health: hl.data, logs: lg.data, pain_checks: rows(pcs), events: evq && !evq.error ? evq.data : null,
-      wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), notices: rows(nq), entries: rows(enq), practice_times: rows(ptq), player_contacts: rows(ctq), program_edits: rows(peq), player_private: rows(pvq), practice_plans: rows(ppq), profiles: pr && !pr.error ? pr.data : [],
+      wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), notices: rows(nq), entries: rows(enq), practice_times: rows(ptq), player_contacts: rows(ctq), program_edits: rows(peq), player_private: rows(pvq), practice_plans: rows(ppq), videos: rows(vdq), training_notes: rows(tnq), profiles: pr && !pr.error ? pr.data : [],
       me: { role: state.role, player_id: state.myPid } };
     // 기기에 남기는 사본에는 연락처와 다른 사람 키·몸무게를 넣지 않음
-    lsSet(snapKey(), { ...raw, player_contacts: (raw.player_contacts || []).filter(r => r.player_id === state.myPid), player_private: (raw.player_private || []).filter(r => r.player_id === state.myPid) }); state.net = true;
+    lsSet(snapKey(), { ...raw, training_notes: (raw.training_notes || []).filter(r => r.player_id === state.myPid), player_contacts: (raw.player_contacts || []).filter(r => r.player_id === state.myPid), player_private: (raw.player_private || []).filter(r => r.player_id === state.myPid) }); state.net = true;
   } catch (e) {
     raw = lsGet(snapKey());
     if (!raw) { state.offline = true; render(); return; }
@@ -2243,19 +2328,22 @@ function buildState(raw) {
   state.events = raw.events ? raw.events.map(r => ({ id: r.id, name: r.name, kind: r.kind, start: r.start_date, end: r.end_date, note: r.note })) : null;
   state.players = Object.fromEntries((raw.players || []).map(r => [r.id, {
     name: r.name, pos: r.pos, year: r.year, height: r.height, weight: r.weight, exp: r.exp,
-    weightExp: wexpNorm(r.weight_exp), adjust: r.adjust || {}, order: r.sort, title: r.title || null, number: r.number ?? null,
+    weightExp: wexpNorm(r.weight_exp), adjust: r.adjust || {}, order: r.sort, title: r.title || null, number: r.number ?? null, media: !!r.media,
   }]));
   // 내 직책 → 맡은 일 (관리자·주장은 role coach)
-  const myTitle = (state.players[state.myPid] || {}).title || null;
-  if (myTitle !== state.title) {
+  const myTitle = (state.players[state.myPid] || {}).title || null, myMedia = !!(state.players[state.myPid] || {}).media;
+  if (myTitle !== state.title || myMedia !== !!state.media) {
+    state.media = myMedia;
     state.title = myTitle;
     const wasStaff = state.staff;
-    state.staff = state.coach || !!STAFF_PERMS[myTitle];
+    state.staff = state.coach || !!STAFF_PERMS[myTitle] || state.media;
     if (!state.coach && state.staff !== wasStaff) state.admin = state.staff && savedMode() === "admin";
     if (!state.staff) state.admin = false;
   }
   state.contacts = Object.fromEntries((raw.player_contacts || []).map(r => [r.player_id, r.phone || ""]));
   for (const r of raw.player_private || []) if (state.players[r.player_id]) Object.assign(state.players[r.player_id], { height: r.height == null ? null : Number(r.height), weight: r.weight == null ? null : Number(r.weight) });
+  state.videos = (raw.videos || []).map(r => ({ id: r.id, kind: r.kind, cat: r.category, title: r.title, yt: r.yt, date: r.date, note: r.note || "" }));
+  state.notes = (raw.training_notes || []).map(r => ({ id: r.id, pid: r.player_id, date: r.date, good: r.good || "", fix: r.fix || "", next: r.next || "", body: r.body || "", shared: !!r.shared }));
   state.practice = Object.fromEntries((raw.practice_plans || []).map(r => [r.date, { title: r.title || "", goal: r.goal || "", blocks: Array.isArray(r.blocks) ? r.blocks : [], published: r.published !== false }]));
   state.edits = (raw.program_edits || []).map(r => ({ id: r.id, pid: r.player_id || null, slot: r.slot, block: r.block, op: r.op, name: r.name, rx: r.rx || "", cue: r.cue || "" }));
   const tests = {};
@@ -2315,18 +2403,20 @@ async function fillPushBox() {
   else if (Notification.permission === "denied") msg = "알림이 차단돼 있어요. 휴대폰 설정에서 이 앱(사이트) 알림을 허용해 주세요.";
   else {
     const sub = await pushSub().catch(() => null);
-    if (sub) { const r = await sb.from("push_subs").select("morning,evening,notice").eq("endpoint", sub.endpoint).maybeSingle(); row = r.data || null; }
+    if (sub) { const r = await sb.from("push_subs").select("morning,evening,notice,morning_at,evening_at").eq("endpoint", sub.endpoint).maybeSingle(); row = r.data || null; }
   }
   const el = document.getElementById("pushBox"); if (!el) return;
-  const on = !!row, ck = (id, v, l) => `<label class="check"><input type="checkbox" id="${id}" ${v ? "checked" : ""}> ${l}</label>`;
+  const on = !!row, hours = (id, from, to, cur) => `<select id="${id}" class="hour-sel" aria-label="시간">${Array.from({ length: to - from + 1 }, (_, i) => from + i).map(h => `<option value="${h}" ${h === cur ? "selected" : ""}>${h < 12 ? "오전" : "오후"} ${h % 12 || 12}시</option>`).join("")}</select>`;
+  const rowH = (id, v, l, sub, sel) => `<div class="push-row"><label class="check"><input type="checkbox" id="${id}" ${v ? "checked" : ""}> <span><b>${l}</b><span class="small muted">${sub}</span></span></label>${sel || ""}</div>`;
   el.innerHTML = msg ? `<p class="small">${esc(msg)}</p>` : `
-    <div class="checks">${ck("pu-m", on ? row.morning : true, "아침 8시 · 컨디션 (안 넣었을 때만)")}${ck("pu-e", on ? row.evening : true, "밤 10시 · 운동 기록 (안 남겼을 때만)")}${ck("pu-n", on ? row.notice !== false : true, "새 공지")}</div>
+    <div class="push-rows">${rowH("pu-m", on ? row.morning : true, "컨디션", "아직 안 넣었을 때만", hours("pu-mh", 5, 12, on ? row.morning_at ?? 8 : 8))}${rowH("pu-e", on ? row.evening : true, "운동 기록", "운동 있는 날, 안 남겼을 때만", hours("pu-eh", 17, 23, on ? row.evening_at ?? 22 : 22))}${rowH("pu-n", on ? row.notice !== false : true, "공지", "새 공지가 올라오면 바로")}</div>
     <div class="row"><button class="btn primary" type="button" data-act="pushon">${on ? "저장" : "알림 켜기"}</button>${on ? `<button class="btn" type="button" data-act="pushoff">끄기</button>` : ""}</div>
     <p class="small muted">${on ? "이 기기에서 알림을 받고 있어요." : "기기마다 따로 켜요."}</p>`;
 }
-const openPush = () => go("settings");
+const openPush = () => openSettings();
 async function pushOn() {
   const m = document.getElementById("pu-m").checked, e = document.getElementById("pu-e").checked, nt = document.getElementById("pu-n").checked;
+  const mh = Number(document.getElementById("pu-mh").value), eh = Number(document.getElementById("pu-eh").value);
   const perm = await Notification.requestPermission();
   if (perm !== "granted") { toast("알림이 허용되지 않았어요"); return fillPushBox(); }
   try {
@@ -2338,7 +2428,7 @@ async function pushOn() {
       sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(k.data) });
     }
     const j = sub.toJSON();
-    const r = await sb.from("push_subs").upsert({ endpoint: sub.endpoint, user_id: uid(), player_id: state.myPid, p256dh: j.keys.p256dh, auth: j.keys.auth, morning: m, evening: e, notice: nt, train_days: trainDays(state.myPid), updated_at: new Date().toISOString() }, { onConflict: "endpoint" });
+    const r = await sb.from("push_subs").upsert({ endpoint: sub.endpoint, user_id: uid(), player_id: state.myPid, p256dh: j.keys.p256dh, auth: j.keys.auth, morning: m, evening: e, notice: nt, morning_at: mh, evening_at: eh, train_days: trainDays(state.myPid), updated_at: new Date().toISOString() }, { onConflict: "endpoint" });
     if (r.error) throw r.error;
     lsSet(PUSH_DAY(), iso(today()));
     toast(m || e || nt ? "알림을 켰어요" : "알림을 모두 껐어요");
@@ -2365,7 +2455,7 @@ async function pushRefresh() {
 
 function boot() {
   const h = (location.hash || "").replace("#", "");
-  state.view = VIEWS.includes(h) ? h : h === "player" ? "plan" : h === "me" ? "settings" : "home";
+  state.view = VIEWS.includes(h) ? h : h === "player" ? "plan" : ["week", "load"].includes(h) ? "report" : "home";
   render();
   const cfg = window.SNUVT_CONFIG || {};
   if (!window.supabase || !cfg.url || !cfg.anonKey || /YOUR/.test(cfg.url + cfg.anonKey)) {
@@ -2389,6 +2479,7 @@ function boot() {
 }
 if (typeof document !== "undefined" && document.getElementById("main")) {
   document.body.insertAdjacentHTML("beforeend", `<div class="sheet-bg" id="sheet" hidden data-act="sheetclose"><div class="sheet" role="dialog" aria-modal="true" data-act="noop"><div class="sheet-body"></div></div></div>`);
+  document.body.insertAdjacentHTML("beforeend", `<div class="setpanel-bg" id="setpanel" hidden data-act="setclose"><aside class="setpanel" aria-label="설정" data-act="noop"><div class="setpanel-body"></div></aside></div>`);
   document.body.insertAdjacentHTML("beforeend", `<div class="drawer-bg" id="drawer" hidden data-act="drawerclose"><aside class="drawer" aria-label="전체 메뉴" data-act="noop"><div class="drawer-body"></div></aside></div>`);
   boot();
 }
