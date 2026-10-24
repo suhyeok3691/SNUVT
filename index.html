@@ -673,21 +673,12 @@ i.dot.k-off { background: none; border: 1px dashed var(--muted); }
 .r-tel { white-space: nowrap; font-size: 13.5px; color: var(--blue); text-decoration: none; }
 /* 아침 컨디션: 접으면 한 줄 */
 .well-card { padding: 10px 14px; }
-.well-head { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
-.well-head::-webkit-details-marker { display: none; }
-.well-head h3 { margin: 0; font-size: 15px; }
-.well-head .small { margin-left: auto; }
-.well-card form { margin-top: 8px; display: grid; gap: 6px; }
-.wl-row { display: grid; grid-template-columns: 64px auto minmax(0, 1fr); align-items: center; gap: 8px; }
-.wl-k { font-size: 13.5px; font-weight: 600; white-space: nowrap; }
-.wl-v { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wl-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-.wl-seg label { position: relative; }
-.wl-seg input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
-.wl-seg span { display: grid; place-items: center; width: 32px; height: 30px; font-size: 13px; font-weight: 600; color: var(--muted); border-left: 1px solid var(--line); }
-.wl-seg label:first-child span { border-left: 0; }
-.wl-seg input:checked + span { background: var(--blue); color: var(--surface); }
-.wl-seg input:focus-visible + span { outline: 2px solid var(--blue); outline-offset: -2px; }
+.well-card h3 { margin: 0; font-size: 15px; }
+.well-card details summary { margin: 2px 0 0; font-size: 12.5px; }
+.well-card form { margin-top: 6px; display: grid; gap: 8px; }
+.well-card .fields.well { gap: 6px 8px; }
+.well-card .fl { font-size: 12px; gap: 2px; }
+.well-card select { padding: 3px 8px; min-height: 32px; }
 .well-card .btn.small { justify-self: start; }
 /* 메뉴: 화면 보기 한 칸 */
 .dr-roles select { width: 100%; font: inherit; font-size: 15px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); }
@@ -704,6 +695,29 @@ i.dot.k-off { background: none; border: 1px dashed var(--muted); }
 .dr-view { display: flex; align-items: center; gap: 10px; }
 .dr-view .dr-h { margin: 0; white-space: nowrap; }
 .dr-view .dr-roles { flex: 1; padding: 0; }
+/* 시간 입력이 휴대폰에서 칸 밖으로 넘치지 않게 */
+.fields .pair { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.fields .pair .fl, .fields .fl { min-width: 0; }
+input[type="time"] { -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%; min-height: 36px; text-align: left; }
+input[type="time"]::-webkit-date-and-time-value { text-align: left; }
+/* 일정·훈련 관리: 섹션마다 박스 */
+.cols > .col > .sec, .sched-cols > .sec { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; }
+.cols > .col > .sec + .sec { margin-top: 14px; }
+.cols > .col > .sec .panel { border: 0; padding: 0; background: none; box-shadow: none; }
+.cols > .col > .sec .ev-list li:first-child, .cols > .col > .sec .watch li:first-child { border-top: 0; }
+.sched-cols > .sec.sched-cal { padding: 12px; }
+/* 군 복무 */
+.chip.mil { background: #e7efe4; color: #3d6b2f; border-color: transparent; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .chip.mil { background: #22331d; color: #9fd08a; } }
+:root[data-theme="dark"] .chip.mil { background: #22331d; color: #9fd08a; }
+/* 삭제 확인 창 */
+.cf-wrap { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(10, 16, 30, .45); }
+.cf-wrap[hidden] { display: none; }
+.cf-card { width: min(360px, 100%); background: var(--surface); color: var(--ink); border-radius: 14px; padding: 18px 16px 14px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+.cf-h { margin: 0 0 6px; font-weight: 700; font-size: 16px; }
+.cf-b { margin: 0 0 12px; }
+.cf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
+.btn.danger-fill { background: var(--crit); border-color: var(--crit); color: #fff; }
 </style>
 </head>
 <body>
@@ -724,9 +738,9 @@ i.dot.k-off { background: none; border: 1px dashed var(--muted); }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=52"></script>
-<script src="guide.js?v=52"></script>
-<script src="library.js?v=52"></script>
-<script src="app.js?v=52"></script>
+<script src="program.js?v=53"></script>
+<script src="guide.js?v=53"></script>
+<script src="library.js?v=53"></script>
+<script src="app.js?v=53"></script>
 </body>
 </html>

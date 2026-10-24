@@ -87,7 +87,21 @@ const readInjuries = prefix => [...document.querySelectorAll(`#${prefix}-inj .in
 const injText = x => `${(INJ_SIDES.find(s => s[0] === x.side) || ["", ""])[1].replace("해당 없음", "")} ${x.part === "finger" && FINGERS[x.finger] ? FINGERS[x.finger] + " " : ""}${x.type} (${[x.year && x.month ? `${x.year}.${x.month}` : x.year, x.surgery ? "수술" : "", x.status && x.status !== "ok" ? (INJ_STATUS.find(v => v[0] === x.status) || ["", ""])[1] : ""].filter(Boolean).join(", ")})`.trim();
 // 학년: 숫자만 적으면 '학년'을 붙여 저장 (3 → 3학년)
 const normYear = v => { const t = String(v || "").trim(); return /^[1-9]$/.test(t) ? t + "학년" : /^[1-9]\s*학년$/.test(t) ? t.replace(/\s+/g, "") : t; };
-const confirmDel = msg => { try { return window.confirm(msg); } catch (e) { return false; } };
+// 삭제 확인: 화면 가운데 창 (네 / 아니요)
+function confirmDel(msg, yes = "네, 삭제") {
+  return new Promise(res => {
+    let el = document.getElementById("confirmBox");
+    if (!el) { el = document.createElement("div"); el.id = "confirmBox"; el.className = "cf-wrap"; document.body.appendChild(el); }
+    const [head, ...rest] = String(msg).split("\n");
+    el.innerHTML = `<div class="cf-card" role="alertdialog" aria-modal="true" aria-labelledby="cfH"><p id="cfH" class="cf-h">${esc(head)}</p>${rest.length ? `<p class="cf-b small muted">${esc(rest.join(" "))}</p>` : ""}<div class="cf-row"><button type="button" class="btn" data-cf="0">아니요</button><button type="button" class="btn danger-fill" data-cf="1">${esc(yes)}</button></div></div>`;
+    el.hidden = false;
+    const done = v => { el.hidden = true; el.onclick = null; document.removeEventListener("keydown", key); res(v); };
+    const key = e => { if (e.key === "Escape") done(false); };
+    document.addEventListener("keydown", key);
+    el.onclick = e => { e.stopPropagation(); const b = e.target.closest("[data-cf]"); if (b) done(b.dataset.cf === "1"); else if (e.target === el) done(false); };
+    el.querySelector('[data-cf="0"]').focus();
+  });
+}
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
 const VIEWS = ["home", "practice", "notes", "video", "train", "plan", "rec", "season", "comps", "sched", "report", "roster", "intake"];
 // 섹션: 홈 → Physical(트레이닝) · 일정 · 관리 · 설정. 공지는 홈 맨 위
@@ -158,6 +172,8 @@ const state = {
 };
 let sb = null;
 
+// 군 복무 중인 부원은 리포트·팀 현황에서 뺀다
+const activePlayers = () => sortedPlayers().filter(p => !p.military);
 function sortedPlayers() {
   return Object.entries(state.players).map(([id, p]) => ({ id, ...p }))
     .sort((a, b) => (POS_ORDER.indexOf(a.pos) - POS_ORDER.indexOf(b.pos)) || ((a.order ?? 99) - (b.order ?? 99)) || String(a.name).localeCompare(String(b.name), "ko"));
@@ -635,12 +651,13 @@ function viewTrain() {
 }
 function wellnessHtml(p) {
   const t = iso(today()), w = wellOn(p.id, t), why = readiness(w, lastRpeBefore(p.id, t));
-  // 한 줄에 한 항목: 이름 · 1–5 · 고른 말
-  const row = (k, l0) => { const l = l0.split("·")[0]; const cur = w ? Number(w[k]) : 3; return `<div class="wl-row"><span class="wl-k">${l}</span><span class="wl-seg" role="radiogroup" aria-label="${l}">${[1, 2, 3, 4, 5].map(v => `<label><input type="radio" name="wl-${k}" value="${v}" ${cur === v ? "checked" : ""}><span>${v}</span></label>`).join("")}</span><span class="wl-v small muted">${WELL_OPTS[k][cur - 1]}</span></div>`; };
+  const sel = (k, l) => `<label class="fl">${l}<select id="wl-${k}">${[5, 4, 3, 2, 1].map(v => `<option value="${v}" ${(w ? Number(w[k]) : 3) === v ? "selected" : ""}>${WELL_OPTS[k][v - 1]}</option>`).join("")}</select></label>`;
   const key = "well-form";
-  return `<section class="panel well-card"><details data-keep="${key}" ${keepOpen(key, !w)}>
-    <summary class="well-head"><h3>아침 컨디션</h3>${w ? `<span class="chip ${why.length ? "warn" : ""}">${wellSum(w)}/20</span>` : why.length ? `<span class="chip warn">가볍게</span>` : `<span class="chip warn">입력</span>`}${w ? `<span class="small muted">수정</span>` : ""}</summary>
-    <form class="f" id="wellForm" data-pid="${esc(p.id)}">${WELL_KEYS.map(([k, l]) => row(k, l)).join("")}
+  return `<section class="panel well-card">
+    <div class="row between"><h3>아침 컨디션</h3>${w ? `<span class="chip ${why.length ? "warn" : ""}">${wellSum(w)}/20</span>` : why.length ? `<span class="chip warn">가볍게</span>` : ""}</div>
+    <details data-keep="${key}" ${keepOpen(key, !w)}><summary class="small muted">${w ? "수정" : "입력"}</summary>
+    <form class="f" id="wellForm" data-pid="${esc(p.id)}">
+      <div class="fields well">${WELL_KEYS.map(([k, l]) => sel(k, l)).join("")}</div>
       <div class="row"><button class="btn primary small" type="submit">저장</button></div>
     </form></details>
   </section>`;
@@ -774,7 +791,7 @@ function myStatusHtml(p) {
   </section>`;
 }
 function teamStatusHtml() {
-  const ps = sortedPlayers(), t = iso(today()), mon = thisMon();
+  const ps = activePlayers(), t = iso(today()), mon = thisMon();
   const pending = state.profiles.filter(m => m.role === "pending" && m.id !== state.session.user.id);
   const loggedToday = ps.filter(p => logsOf(p.id).some(e => e.date === t)).length;
   const recent = iso(addDays(today(), -3));
@@ -810,7 +827,7 @@ function viewRoster() {
   const ps = sortedPlayers().slice().sort((a, b) => (a.number ?? 999) - (b.number ?? 999) || a.name.localeCompare(b.name, "ko"));
   const staff = ps.filter(p => p.title || p.media);
   return `<section class="sec"><div class="sec-head"><h3>명단 <span class="small muted">${ps.length}명</span></h3>${can("full") ? `<button class="btn link small" type="button" data-act="view" data-v="intake">직책·정보 바꾸기 →</button>` : ""}</div>
-    <ul class="roster-list">${ps.map(p => `<li><span class="r-no num">${p.number ?? ""}</span><span class="r-who"><b>${esc(p.name)}</b><span class="chip pos">${esc(p.pos)}</span>${p.year ? `<span class="small muted">${esc(p.year)}</span>` : ""}${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}</span>${state.contacts[p.id] ? `<a class="r-tel num" href="tel:${esc(state.contacts[p.id].replace(/[^0-9+]/g, ""))}">${esc(state.contacts[p.id])}</a>` : `<span class="r-tel muted">—</span>`}</li>`).join("")}</ul></section>
+    <ul class="roster-list">${ps.map(p => `<li><span class="r-no num">${p.number ?? ""}</span><span class="r-who"><b>${esc(p.name)}</b><span class="chip pos">${esc(p.pos)}</span>${p.year ? `<span class="small muted">${esc(p.year)}</span>` : ""}${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}${p.military ? `<span class="chip mil">군 복무</span>` : ""}</span>${state.contacts[p.id] ? `<a class="r-tel num" href="tel:${esc(state.contacts[p.id].replace(/[^0-9+]/g, ""))}">${esc(state.contacts[p.id])}</a>` : `<span class="r-tel muted">—</span>`}</li>`).join("")}</ul></section>
     <section class="sec"><h3>운영진</h3>${staff.length ? `<ul class="watch">${staff.map(p => `<li><b>${esc(p.name)}</b>${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}${p.media ? `<span class="chip">영상 담당</span>` : ""}</li>`).join("")}</ul>` : emptyLine("아직 정해진 직책이 없어요.")}</section>`;
 }
 // 리포트: 지난주 요약 + 선수별 리포트(최근 4주) + 엑셀
@@ -824,13 +841,13 @@ function seasonSelect() {
 }
 function viewReport() {
   if (!can("training")) return `<div class="panel empty"><strong>관리자 전용이에요</strong></div>`;
-  const ps = sortedPlayers();
+  const ps = activePlayers();
   return `<section class="sec"><div class="row between"><div class="row"><h2>리포트</h2>${seasonSelect()}</div><button class="btn" type="button" data-act="xlsx">엑셀 내보내기</button></div></section>
     ${weekSummaryHtml()}${ps.length ? teamReportHtml(ps) : ""}`;
 }
 // 지난주 요약 (관리 → 주간 요약): 기록 · 완료율 · 컨디션 · 통증 변화
 function weekSummaryHtml() {
-  const ps = sortedPlayers(), mon = dAdd(thisMon(), -7), end = dAdd(mon, 6), pm = dAdd(mon, -7);
+  const ps = activePlayers(), mon = dAdd(thisMon(), -7), end = dAdd(mon, 6), pm = dAdd(mon, -7);
   const inW = (d, a, b) => d >= a && d <= b;
   const rows = ps.map(p => {
     let plan = 0;
@@ -1219,9 +1236,10 @@ function membersHtml() {
   if (!list.length) return "";
   const roleOpt = (v, cur, l) => `<option value="${v}" ${v === cur ? "selected" : ""}>${l}</option>`;
   const nameOf = m => (m.player_id && state.players[m.player_id] && state.players[m.player_id].name) || "";
+  const stOf = m => m.role === "player" && m.player_id && (state.players[m.player_id] || {}).military ? "military" : m.role;
   return `<details class="sec members" data-keep="members" ${keepOpen("members", list.some(m => m.role === "pending"))}><summary><h3>팀원 계정 <span class="muted small">${list.length}명${list.some(m => m.role === "pending") ? ` · 대기 ${list.filter(m => m.role === "pending").length}` : ""}</span></h3></summary>
-    <ul class="mem-list">${list.map(m => `<li><div class="mem-who">${nameOf(m) ? `<b>${esc(nameOf(m))}</b>` : `<span class="muted">정보 없음</span>`}${m.role === "pending" ? ' <span class="chip warn">대기</span>' : ""}<span class="small muted">${esc(m.email || "")}</span></div>
-      ${m.id === state.session.user.id ? '<span class="small muted">나 · 관리자</span>' : `<div class="mem-act"><select id="mr-${esc(m.id)}" aria-label="역할">${roleOpt("pending", m.role, "대기")}${roleOpt("player", m.role, "부원")}${roleOpt("coach", m.role, "관리자")}</select>
+    <ul class="mem-list">${list.map(m => `<li><div class="mem-who">${nameOf(m) ? `<b>${esc(nameOf(m))}</b>` : `<span class="muted">정보 없음</span>`}${m.role === "pending" ? ' <span class="chip warn">대기</span>' : ""}${stOf(m) === "military" ? ' <span class="chip mil">군 복무</span>' : ""}<span class="small muted">${esc(m.email || "")}</span></div>
+      ${m.id === state.session.user.id ? '<span class="small muted">나 · 관리자</span>' : `<div class="mem-act"><select id="mr-${esc(m.id)}" aria-label="역할">${roleOpt("pending", stOf(m), "대기")}${roleOpt("player", stOf(m), "부원")}${roleOpt("military", stOf(m), "군 복무")}${roleOpt("coach", stOf(m), "관리자")}${m.player_id ? roleOpt("alumni", "", "졸업") : ""}</select>
         <button class="btn small" type="button" data-act="savemember" data-id="${esc(m.id)}">저장</button>
         <button class="btn small danger" type="button" data-act="delmember" data-id="${esc(m.id)}">삭제</button></div>`}</li>`).join("")}</ul></details>`;
 }
@@ -1239,7 +1257,7 @@ function viewIntake() {
   const p = pid ? { id: pid, ...state.players[pid] } : {};
   const h = (pid && state.health[pid]) || {};
   const pain = h.pain || {};
-  const list = `<div class="plist">${ps.map(x => `<button type="button" data-act="edit" data-pid="${esc(x.id)}" aria-pressed="${x.id === pid}"><span>${esc(x.name)}</span><span class="chip pos">${esc(x.pos)}</span></button>`).join("")}
+  const list = `<div class="plist">${ps.map(x => `<button type="button" data-act="edit" data-pid="${esc(x.id)}" aria-pressed="${x.id === pid}"><span>${esc(x.name)}</span><span class="chip pos">${esc(x.pos)}</span>${x.military ? `<span class="chip mil">군</span>` : ""}</button>`).join("")}
     <button type="button" data-act="edit" data-pid="__new" aria-pressed="${isNew}"><span>+ 새 선수</span></button></div>`;
   const opt = (v, cur) => `value="${v}" ${String(cur ?? "") === String(v) ? "selected" : ""}`;
   return `<section class="sec"><h2>부원</h2></section>
@@ -1277,7 +1295,7 @@ function viewIntake() {
         </fieldset>
         <label class="check"><input type="checkbox" id="hf-consent" ${h.consent ? "checked" : ""} required> 선수가 프로그램 목적의 정보 사용에 동의함</label>
         <div class="row"><button class="btn primary" type="submit">${pid ? "저장" : "선수 추가"}</button>
-          ${pid && pid !== state.myPid ? `<button class="btn" type="button" data-act="retire" data-pid="${esc(pid)}">졸업 처리</button><button class="btn danger" type="button" data-act="retireall" data-pid="${esc(pid)}">완전 삭제</button>` : ""}</div>
+          ${pid && pid !== state.myPid ? `<button class="btn danger" type="button" data-act="retireall" data-pid="${esc(pid)}">삭제</button>` : ""}</div>
       </form>
       ${pid ? testFormHtml(pid) : ""}
     </div>
@@ -1889,7 +1907,7 @@ document.addEventListener("click", async ev => {
   if (act === "pwchange") { closeSettings(); state.recovery = true; state.dirty = false; return render(); }
   if (act === "cancelpw") { state.recovery = false; state.dirty = false; return render(); }
   if (act === "leave") {
-    if (!confirmDel("팀에서 탈퇴할까요?\n계정, 연락처·키·몸무게, 측정·운동 기록, 컨디션·통증, 훈련 노트가 모두 지워지고 되돌릴 수 없어요.")) return;
+    if (!await confirmDel("팀에서 탈퇴할까요?\n계정, 연락처·키·몸무게, 측정·운동 기록, 컨디션·통증, 훈련 노트가 모두 지워지고 되돌릴 수 없어요.")) return;
     const r = await sb.rpc("leave_team");
     if (r.error) { toast(r.error.code === "42501" ? r.error.message : failMsg(r.error)); return; }
     closeSettings(); lsDel(snapKey()); try { await sb.auth.signOut({ scope: "local" }); } catch (e) {} toast("탈퇴했어요. 그동안 고마웠어요"); return;
@@ -1904,7 +1922,7 @@ document.addEventListener("click", async ev => {
     state.dirty = false; return render();
   }
   if (act === "delopen") {
-    if (!confirmDel("이 자율 훈련을 취소할까요?")) return;
+    if (!await confirmDel("이 자율 훈련을 취소할까요?")) return;
     try { ok(await sb.from("open_sessions").delete().eq("id", b.dataset.id)); toast("취소했어요"); } catch (e) { toast(failMsg(e)); }
     state.dirty = false; return loadAll();
   }
@@ -1912,14 +1930,14 @@ document.addEventListener("click", async ev => {
   if (act === "calday") { state.calDay = b.dataset.d; state.dirty = false; return render(); }
   if (act === "alumdel") {
     const x = (state.alumni || []).find(y => y.id === b.dataset.pid) || {};
-    if (!confirmDel(`${x.name || "이 졸업생"}의 남은 기록까지 모두 지울까요?\n되돌릴 수 없어요.`)) return;
+    if (!await confirmDel(`${x.name || "이 졸업생"}의 남은 기록까지 모두 지울까요?\n되돌릴 수 없어요.`)) return;
     const r = await sb.rpc("retire_member", { target: b.dataset.pid, wipe_all: true });
     toast(r.error ? (r.error.code === "42501" ? r.error.message : failMsg(r.error)) : "지웠어요");
     state.dirty = false; return loadAll();
   }
   if (act === "retire" || act === "retireall") {
     const nm = (state.players[b.dataset.pid] || {}).name || "이 선수", all = act === "retireall";
-    if (!confirmDel(all ? `${nm}의 모든 정보를 지울까요?\n계정·개인정보·측정·운동 기록이 전부 지워지고 되돌릴 수 없어요.` : `${nm}를 졸업 처리할까요?\n계정과 개인정보(연락처·키·몸무게·부상·컨디션·노트)는 지우고, 이름과 측정·운동 기록만 팀 기록으로 남겨요.`)) return;
+    if (!await confirmDel(all ? `${nm}를 완전 삭제할까요?\n계정·개인정보·측정·운동 기록이 모두 지워지고 되돌릴 수 없어요.` : `${nm}를 졸업 처리할까요?\n계정과 개인정보는 지우고, 이름과 측정·운동 기록만 남겨요.`, all ? "네, 완전 삭제" : "네, 졸업")) return;
     const r = await sb.rpc("retire_member", { target: b.dataset.pid, wipe_all: all });
     if (r.error) toast(r.error.code === "42501" ? r.error.message : failMsg(r.error));
     else { toast(all ? "모두 지웠어요" : "졸업 처리했어요"); state.editPid = null; }
@@ -1947,9 +1965,9 @@ document.addEventListener("click", async ev => {
   if (act === "vidcat") { state.vidCat = b.dataset.c; state.dirty = false; return render(); }
   if (act === "vidopen") { state.vidOpen = state.vidOpen === b.dataset.id ? null : b.dataset.id; state.dirty = false; return render(); }
   if (act === "videdit") return openVidForm(b.dataset.id);
-  if (act === "viddel") { if (!confirmDel("이 영상을 목록에서 지울까요? (유튜브 영상은 그대로)")) return; try { ok(await sb.from("videos").delete().eq("id", b.dataset.id)); toast("지웠어요"); await loadAll(); } catch (e) { toast(failMsg(e)); } return; }
+  if (act === "viddel") { if (!await confirmDel("이 영상을 목록에서 지울까요? (유튜브 영상은 그대로)")) return; try { ok(await sb.from("videos").delete().eq("id", b.dataset.id)); toast("지웠어요"); await loadAll(); } catch (e) { toast(failMsg(e)); } return; }
   if (act === "noteedit") { state.noteDate = b.dataset.d; state.dirty = false; render(); window.scrollTo(0, 0); return; }
-  if (act === "notedel") { if (!confirmDel("이 노트를 지울까요?")) return; try { ok(await sb.from("training_notes").delete().eq("player_id", state.myPid).eq("date", b.dataset.d)); state.noteDate = null; toast("지웠어요"); await loadAll(); } catch (e) { toast(failMsg(e)); } return; }
+  if (act === "notedel") { if (!await confirmDel("이 노트를 지울까요?")) return; try { ok(await sb.from("training_notes").delete().eq("player_id", state.myPid).eq("date", b.dataset.d)); state.noteDate = null; toast("지웠어요"); await loadAll(); } catch (e) { toast(failMsg(e)); } return; }
   if (act === "notego") { state.noteDate = b.dataset.d; return go("notes"); }
   if (act === "prgo") { state.prDate = b.dataset.d; return go("practice"); }
   if (act === "prday") { state.prDate = b.dataset.d; state.dirty = false; return render(); }
@@ -1960,9 +1978,9 @@ document.addEventListener("click", async ev => {
     state.prEdit = true;
     return prSave(d, p => { p.blocks = k === "tpl" ? PRACTICE_TEMPLATE() : k === "copy" && prev ? JSON.parse(JSON.stringify(state.practice[prev].blocks)) : []; if (k === "copy" && prev) { p.title = state.practice[prev].title; p.goal = state.practice[prev].goal; } });
   }
-  if (act === "prwipe") { if (!confirmDel("이날 훈련 계획을 지울까요?")) return; const d = prDateNow(); try { ok(await sb.from("practice_plans").delete().eq("date", d)); delete state.practice[d]; state.prEdit = false; render(); toast("지웠어요"); } catch (e) { toast(failMsg(e)); } return; }
+  if (act === "prwipe") { if (!await confirmDel("이날 훈련 계획을 지울까요?")) return; const d = prDateNow(); try { ok(await sb.from("practice_plans").delete().eq("date", d)); delete state.practice[d]; state.prEdit = false; render(); toast("지웠어요"); } catch (e) { toast(failMsg(e)); } return; }
   if (act === "prmove") { const i = Number(b.dataset.b), j = i + Number(b.dataset.d); return prSave(prDateNow(), p => { if (j < 0 || j >= p.blocks.length) return; [p.blocks[i], p.blocks[j]] = [p.blocks[j], p.blocks[i]]; }); }
-  if (act === "prbdel") { if (!confirmDel("이 블록을 지울까요?")) return; const i = Number(b.dataset.b); return prSave(prDateNow(), p => { p.blocks.splice(i, 1); }); }
+  if (act === "prbdel") { if (!await confirmDel("이 블록을 지울까요?")) return; const i = Number(b.dataset.b); return prSave(prDateNow(), p => { p.blocks.splice(i, 1); }); }
   if (act === "prblk") return openPrBlock(b.dataset.b);
   if (act === "prdrill") return openPrDrill(b.dataset.b, b.dataset.g);
   if (act === "prdrop") { const [bi, gi, di] = [b.dataset.b, b.dataset.g, b.dataset.i].map(Number); return prSave(prDateNow(), p => { p.blocks[bi].groups[gi].drills.splice(di, 1); }); }
@@ -1981,7 +1999,7 @@ document.addEventListener("click", async ev => {
   if (act === "ntpin" || act === "ntdel" || act === "ptdel") {
     try {
       if (act === "ntpin") ok(await sb.from("notices").update({ pinned: b.dataset.p === "1" }).eq("id", b.dataset.id));
-      if (act === "ntdel") { if (!confirmDel("이 공지를 지울까요?")) return; ok(await sb.from("notices").delete().eq("id", b.dataset.id)); toast("지웠어요"); }
+      if (act === "ntdel") { if (!await confirmDel("이 공지를 지울까요?")) return; ok(await sb.from("notices").delete().eq("id", b.dataset.id)); toast("지웠어요"); }
       if (act === "ptdel") { ok(await sb.from("practice_times").delete().eq("key", b.dataset.key)); toast("원래 시간으로 돌렸어요"); }
       await loadAll();
     } catch (e) { toast(failMsg(e)); }
@@ -1992,7 +2010,7 @@ document.addEventListener("click", async ev => {
     return;
   }
   if (act === "delfriendly") {
-    if (!confirmDel("이 교류전을 지울까요?")) return;
+    if (!await confirmDel("이 교류전을 지울까요?")) return;
     try { ok(await sb.from("friendlies").delete().eq("id", b.dataset.id)); toast("지웠어요"); await loadAll(); } catch (e) { toast(failMsg(e)); }
     return;
   }
@@ -2007,7 +2025,7 @@ document.addEventListener("click", async ev => {
   if (act === "rtpdone") {
     const pid = b.dataset.pid, i = Number(b.dataset.i), inj = [...((state.health[pid] || {}).injuries || [])], x = inj[i]; if (!x) return;
     const p = playerOf(pid), all = rtpItems(p, x).every(y => y.ok);
-    if (!all && !confirmDel("아직 안 된 항목이 있어요. 그래도 다 나음으로 바꿀까요?")) return;
+    if (!all && !await confirmDel("아직 안 된 항목이 있어요. 그래도 다 나음으로 바꿀까요?")) return;
     inj[i] = { ...x, status: "ok", rtp: { ...(x.rtp || {}), done: iso(today()) } };
     return rtpSave(pid, inj, "다 나음으로 바꿨어요");
   }
@@ -2021,15 +2039,24 @@ document.addEventListener("click", async ev => {
   if (act === "canceledit") { state.editingSelf = false; state.dirty = false; return render(); }
   if (act === "savemember") {
     const id = b.dataset.id;
-    const role = document.getElementById("mr-" + id).value;
-    try { ok(await sb.from("profiles").update({ role }).eq("id", id)); toast("저장했어요"); }
-    catch (e) { toast(failMsg(e)); }
+    const v = document.getElementById("mr-" + id).value, m = state.profiles.find(x => x.id === id) || {};
+    try {
+      if (v === "alumni") {
+        const nm = (state.players[m.player_id] || {}).name || "이 부원";
+        if (!await confirmDel(`${nm}를 졸업 처리할까요?\n계정과 개인정보는 지우고, 이름과 측정·운동 기록만 남겨요.`, "네, 졸업")) { state.dirty = false; return render(); }
+        ok(await sb.rpc("retire_member", { target: m.player_id, wipe_all: false })); toast("졸업 처리했어요");
+      } else {
+        ok(await sb.from("profiles").update({ role: v === "military" ? "player" : v }).eq("id", id));
+        if (m.player_id) ok(await sb.from("players").update({ military: v === "military" }).eq("id", m.player_id));
+        toast("저장했어요");
+      }
+    } catch (e) { toast(e && e.code === "42501" ? e.message : failMsg(e)); }
     state.dirty = false; return loadAll();
   }
   if (act === "delmember") {
     const m = state.profiles.find(x => x.id === b.dataset.id) || {};
     const who = (m.player_id && state.players[m.player_id] && state.players[m.player_id].name) || m.email || "이 계정";
-    if (!confirmDel(`${who} 계정을 삭제할까요?\n선수 정보와 측정·기록·부상 정보가 모두 함께 지워져요.`)) return;
+    if (!await confirmDel(`${who} 계정을 삭제할까요?\n선수 정보와 측정·기록·부상 정보가 모두 함께 지워져요.`)) return;
     // 이 계정에만 연결된 선수 정보를 먼저 지운다 (측정·기록 등은 cascade 로 함께 삭제) → 그다음 계정 삭제
     if (m.player_id && !state.profiles.some(o => o.id !== m.id && o.player_id === m.player_id)) {
       const d = await sb.from("players").delete().eq("id", m.player_id);
@@ -2042,7 +2069,7 @@ document.addEventListener("click", async ev => {
   }
   if (["delplayer", "deltest", "dellog", "delpain", "delevent", "dellift"].includes(act)) {
     const msg = { dellift: "이 세트 기록을 삭제할까요?", delevent: "이 일정을 삭제할까요?\n프로그램이 바로 다시 맞춰져요.", delplayer: `${(state.players[b.dataset.pid] || {}).name || "이 선수"}를 삭제할까요?\n측정·기록·부상 정보도 함께 지워져요.`, deltest: "이 측정 기록을 삭제할까요?", dellog: "이 세션 기록을 삭제할까요?", delpain: "이 통증 기록을 삭제할까요?" }[act];
-    if (!confirmDel(msg)) return;
+    if (!await confirmDel(msg)) return;
     try {
       if (act === "delplayer") { ok(await sb.from("players").delete().eq("id", b.dataset.pid)); state.editPid = null; } // 부상·측정·기록도 함께 삭제됨
       else ok(await sb.from({ deltest: "tests", dellog: "logs", delpain: "pain_checks", delevent: "events", dellift: "lift_sets" }[act]).delete().eq("id", b.dataset.id));
@@ -2330,7 +2357,7 @@ document.addEventListener("submit", async ev => {
       toast("정규 훈련 없음으로 정했어요");
     } else if (f.id === "wellForm") {
       const row = { player_id: f.dataset.pid, date: iso(today()) };
-      for (const [k] of WELL_KEYS) { const r = f.querySelector(`input[name="wl-${k}"]:checked`); row[k] = Number(r ? r.value : 3); }
+      for (const [k] of WELL_KEYS) row[k] = Number(document.getElementById("wl-" + k).value);
       row.stress = row.mood; // 기분·스트레스를 한 문항으로
       state.openKeys["well-form"] = false;
       await dbWrite("wellness", "upsert", row, { onConflict: "player_id,date" });
@@ -2517,7 +2544,7 @@ function buildState(raw) {
   state.alumni = (raw.players || []).filter(r => r.alumni).map(r => ({ id: r.id, name: r.name, pos: r.pos, left: r.left_on })).sort((a, b) => String(b.left || "").localeCompare(String(a.left || "")));
   state.players = Object.fromEntries((raw.players || []).filter(r => !r.alumni).map(r => [r.id, {
     name: r.name, pos: r.pos, year: r.year, height: r.height, weight: r.weight, exp: r.exp,
-    weightExp: wexpNorm(r.weight_exp), adjust: r.adjust || {}, order: r.sort, title: r.title || null, number: r.number ?? null, media: !!r.media,
+    weightExp: wexpNorm(r.weight_exp), adjust: r.adjust || {}, order: r.sort, title: r.title || null, number: r.number ?? null, media: !!r.media, military: !!r.military,
   }]));
   // 내 직책 → 맡은 일 (관리자·주장은 role coach)
   const myTitle = (state.players[state.myPid] || {}).title || null, myMedia = !!(state.players[state.myPid] || {}).media;

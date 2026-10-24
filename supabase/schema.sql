@@ -394,3 +394,6 @@ alter table public.logs add constraint logs_pain_area_check
 -- practice_times · team_off 쓰기, absences 읽기 → can('attend')
 -- open_sessions(date, start_time, end_time, place, note): 읽기 = 부원, 쓰기 = can('attend')
 -- open_votes(session_id, player_id, going): 읽기 = 부원, 쓰기 = 본인
+
+-- ===== 군 복무 (players_military) =====
+-- players.military: 부원과 같은 권한, 상태만 '군 복무'. 리포트·팀 현황에서 제외
