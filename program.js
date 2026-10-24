@@ -1182,6 +1182,21 @@ function planForDay(ctx, info) {
   const low = ctx.ready ? readiness(ctx.ready.well, ctx.ready.lastRpe) : [];
   if (low.length && TRAIN_SLOTS.includes(i.slot) && i.w !== PH.TAPER) i = { ...i, w: PH.DELOAD, lowReady: true };
   const out = slotPlan(ctx, i.slot, i.w, i);
+  // 트레이닝 담당이 바꾼 박스 (날 종류 · 블록마다 빼기/추가, 팀 전체 → 그 선수 순서로)
+  const eds = (ctx.edits || []).filter(e => e && e.slot === i.slot);
+  if (eds.length) {
+    for (const b of out.blocks) {
+      const rem = new Set(eds.filter(e => e.op === "remove" && e.block === b.key).map(e => e.name));
+      if (rem.size) b.items = b.items.filter(x => !rem.has(x.name));
+      for (const e of eds.filter(e => e.op === "add" && e.block === b.key)) b.items.push({ name: e.name, rx: e.rx || "", cue: e.cue || "", mod: e.pid ? "개인" : "", edit: e.id });
+    }
+    const keys = new Set(out.blocks.map(b => b.key));
+    for (const [key, me, title] of [["extra", false, "추가 운동"], ["extra-me", true, "개인 추가"]]) {
+      const its = eds.filter(e => e.op === "add" && e.block === key && !keys.has(key));
+      if (its.length) out.blocks.push({ key, ...(me ? { scope: "me" } : {}), title, items: its.map(e => ({ name: e.name, rx: e.rx || "", cue: e.cue || "", mod: e.pid ? "개인" : "", edit: e.id })) });
+    }
+    out.blocks = out.blocks.filter(b => b.items.length);
+  }
   if (i.lowReady && info.measure) out.notes.push("컨디션 낮음 · 측정은 컨디션 괜찮은 날로 미루기 (이번 주 안)");
   if (i.lowReady) { out.title = slotPlan(ctx, i.slot, info.w, info).title + " · 회복 버전"; out.notes.unshift(`컨디션 낮음 (${low.join(", ")}) · 오늘은 양을 줄인 회복 버전`); }
   if (i.shifted && !i.lowReady) out.notes.unshift("기초 근력이 먼저라 근력·파워 대신 기초 근력 처방");

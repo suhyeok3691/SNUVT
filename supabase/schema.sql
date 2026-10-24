@@ -364,3 +364,10 @@ alter table public.logs add constraint logs_pain_area_check
 -- ===== tests_tryout_battery (적용됨) =====
 -- tests.side_step (반복 옆뛰기 20초, 회) · tests.pro_agility (5-10-5, 초) · 블로킹 점프는 tests.block
 -- update_my_profile(info): 승인된 부원이 학년·키·몸무게·배구 경력·웨이트 경험을 직접 수정
+
+-- ===== staff_titles_roster_program_edits (적용됨) =====
+-- players.title: admin 관리자 · captain 주장 (role coach, 전체) / vice 부주장 · ops 훈련부장 · treasurer 총무 · trainer 트레이닝 담당 (role player + 맡은 일)
+-- private.can(perm): schedule(부주장·훈련부장) · notice(부주장·훈련부장·총무) · roster(부주장·총무) · training(트레이닝 담당), coach는 모두
+-- set_member_title(target, title): 관리자·주장만, 관리자·주장 지정 시 role coach
+-- players.number 등번호 · player_contacts(전화, 본인·명단 담당만) · submit_my_info 에 number
+-- program_edits: 날 종류(slot)·블록(block)마다 운동 박스 add/remove, player_id 없으면 팀 전체 (트레이닝 담당 쓰기)
