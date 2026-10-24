@@ -45,6 +45,27 @@ function parseXn(html: string) {
   }
   return out;
 }
+// 세 번째 출처: 국민스포츠대회(国スポ·国体) 소년부 — zutto-sports.com 결과 글(해마다 같은 글에 쌓임).
+// 「結果速報・滋賀国民スポーツ大会バレーボール2025」 아래 「少年男子 準決勝」「熊本(鎮西高) 3-2 福岡(選抜)」. 팀은 현 대표라 a_pref=현, a_name=「현(학교)」
+const ZS = "https://zutto-sports.com/kokutai-volleyball-results";
+const KRND: Record<string, string> = { "1回戦": "R1", "2回戦": "R2", "準々決勝": "QF", "準決勝": "SF", "3・4位決定戦": "3rd", "3位決定戦": "3rd", "決勝": "F" };
+function parseKokutai(html: string) {
+  // 칸(td·span)이 붙지 않게 태그를 빈칸으로 바꿈
+  const t = text(html.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").replace(/ (\d) ?- ?(\d) /g, " $1-$2 "), out: any[] = [];
+  let year: number | null = null, g: string | null = null, rnd: string | null = null;
+  const re = /(?:国民スポーツ大会|国民体育大会|国スポ|国体)・?(?:バレーボール)?(?:競技は)?(20\d\d)|(少年男子|少年女子|成年男子|成年女子) (1回戦|2回戦|準々決勝|5・7位決定戦|準決勝|3・4位決定戦|3位決定戦|決勝)|([^\s()｜|]{2,4}) ?\(([^()\s]{1,12})\) (\d)-(\d) ([^\s()｜|]{2,4})(?: ?\(([^()\s]{1,12})\))?/g;
+  for (const m of t.matchAll(re)) {
+    if (m[1]) { year = Number(m[1]); continue; }
+    if (m[2]) { g = m[2] === "少年男子" ? "m" : m[2] === "少年女子" ? "w" : null; rnd = KRND[m[3]] || null; continue; }
+    if (!year || !g || !rnd) continue;
+    const side = (pref: string, sch?: string) => ({ name: sch && sch !== "選抜" ? `${pref}(${sch})` : pref, pref });
+    const a = side(m[4], m[5]), b = side(m[8], m[9]);
+    out.push({ tourn: "kokutai", year, gender: g, rnd, a_name: a.name, a_pref: a.pref, a_sets: Number(m[6]), b_sets: Number(m[7]), b_name: b.name, b_pref: b.pref, src: ZS });
+  }
+  // 같은 경기가 두 번(목차·본문) 나오면 하나만
+  const seen = new Set<string>();
+  return out.filter((r) => { const k = `${r.year}|${r.gender}|${r.rnd}|${r.a_name}|${r.b_name}`; if (seen.has(k)) return false; seen.add(k); return true; });
+}
 Deno.serve(async (req) => {
   const { data: kd } = await sb.rpc("push_keys"); const k = (Array.isArray(kd) ? kd[0] : kd) || {};
   if (!k.cron || req.headers.get("x-cron") !== k.cron) return json({ error: "forbidden" }, 403);
@@ -83,5 +104,16 @@ Deno.serve(async (req) => {
       res.push({ page: `xn haruko ${y}`, tourn: "haruko", gender: g, year: y, n: l.length, err: ins.error ? ins.error.message : undefined } as any);
     }
   }
+  // 국민스포츠대회
+  try {
+    const r = await fetch(ZS, { headers: UA });
+    const rows = r.ok ? parseKokutai(await r.text()) : [];
+    for (const y of [...new Set(rows.map((x) => x.year))]) for (const g of ["m", "w"]) {
+      const l = rows.filter((x) => x.year === y && x.gender === g); if (!l.length) continue;
+      await sb.from("jp_matches").delete().eq("tourn", "kokutai").eq("gender", g).eq("year", y);
+      const ins = await sb.from("jp_matches").insert(l);
+      res.push({ page: "zutto kokutai", tourn: "kokutai", gender: g, year: y, n: l.length, err: ins.error ? ins.error.message : undefined } as any);
+    }
+  } catch (e) { res.push({ page: "zutto kokutai", error: String(e) } as any); }
   return json({ pages: found.size, res });
 });
