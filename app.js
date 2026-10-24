@@ -25,7 +25,6 @@ const readPain = prefix => Object.fromEntries(PAIN_AREAS.map(a => {
   return [a, on ? { d: Number(document.getElementById(`${prefix}-${a}-d`).value) || 0, m: Number(document.getElementById(`${prefix}-${a}-m`).value) || 0, r: document.getElementById(`${prefix}-${a}-r`).checked } : { d: 0, m: 0, r: false }];
 }));
 const painMax = v => { const p = normPain(v); return !p ? 0 : p.r ? 10 : Math.max(p.d, p.m); };
-const coreSum = t => t && [t.sideL, t.sideR, t.plank].every(v => v != null) ? Number(t.sideL) + Number(t.sideR) + Number(t.plank) : null;
 // 웨이트 경험 4단계 (예전 값 lt6·gte6 도 읽음)
 const WEXP = [
   ["none", "입문 · 웨이트를 한 번도 안 해 봤어요"],
@@ -84,7 +83,6 @@ const readInjuries = prefix => [...document.querySelectorAll(`#${prefix}-inj .in
   finger: r.querySelector(".inj-part").value === "finger" ? (r.querySelector(".inj-finger").value || null) : null,
   rtp: (() => { try { const v = JSON.parse(r.dataset.rtp || "{}"); return v && typeof v === "object" ? v : {}; } catch (e) { return {}; } })(),
 }));
-const injText = x => `${(INJ_SIDES.find(s => s[0] === x.side) || ["", ""])[1].replace("해당 없음", "")} ${x.part === "finger" && FINGERS[x.finger] ? FINGERS[x.finger] + " " : ""}${x.type} (${[x.year && x.month ? `${x.year}.${x.month}` : x.year, x.surgery ? "수술" : "", x.status && x.status !== "ok" ? (INJ_STATUS.find(v => v[0] === x.status) || ["", ""])[1] : ""].filter(Boolean).join(", ")})`.trim();
 // 학년: 숫자만 적으면 '학년'을 붙여 저장 (3 → 3학년)
 const normYear = v => { const t = String(v || "").trim(); return /^[1-9]$/.test(t) ? t + "학년" : /^[1-9]\s*학년$/.test(t) ? t.replace(/\s+/g, "") : t; };
 // 삭제 확인: 화면 가운데 창 (네 / 아니요)
@@ -186,24 +184,16 @@ const TEST_KEYS = ["reach", "vert", "maxVert", "cmj", "block", "approach", "side
 const vertOf = t => t && t.vert != null ? Number(t.vert) : t && t.reach != null && t.block != null ? Number(t.block) - Number(t.reach) : null;
 const maxVertOf = t => t && t.maxVert != null ? Number(t.maxVert) : t && t.reach != null && t.approach != null ? Number(t.approach) - Number(t.reach) : null;
 // 네트 위 높이 = 스탠딩 리치 + 점프 높이 − 네트
-const overNet = (t, v) => t && t.reach != null && v != null ? Number(t.reach) + v - NET : null;
+const overNet = (t, v) => t && t.reach != null && v != null ? Number(t.reach) + v - TEAM.net : null;
 function latest(pid) {
   const r = runs(pid); if (!r.length) return null;
   const out = { date: r.at(-1).date };
   for (const t of r) for (const k of TEST_KEYS) if (t[k] != null) out[k] = t[k];
   return out;
 }
-const isMainTest = t => ["reach", "vert", "maxVert", "cmj", "block", "approach", "sideStep", "agility", "squat", "rdl", "pull", ...EXTRA_KEYS].some(k => t[k] != null);
-// 추가 측정 한 줄 요약 (RSI · 한 발 홉 · 무릎 벽 대기 · 어깨 내·외회전)
-const extraText = t => [t.rsi != null ? `RSI ${t.rsi}` : "", t.hopL != null || t.hopR != null ? `홉 ${t.hopL ?? "—"}/${t.hopR ?? "—"}` : "",
-  t.ktwL != null || t.ktwR != null ? `벽 ${t.ktwL ?? "—"}/${t.ktwR ?? "—"}` : "", t.irD != null || t.irN != null ? `내회전 ${t.irD ?? "—"}/${t.irN ?? "—"}` : "",
-  t.erD != null || t.erN != null ? `외회전 ${t.erD ?? "—"}/${t.erN ?? "—"}` : ""].filter(Boolean).join(" · ");
-const isCoreHs = t => coreSum(t) != null || t.hsStage != null || t.hsWalk != null || t.hsSec != null;
 const logsOf = pid => state.logs[pid] || [];
 const checksOf = pid => [...(state.painChecks[pid] || [])].sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.created).localeCompare(String(b.created)));
 const recentChecks = pid => { const from = iso(addDays(today(), -14)); return checksOf(pid).filter(c => c.date >= from); };
-const coreRuns = pid => runs(pid).filter(t => coreSum(t) != null);
-const hsText = t => t && t.hsStage ? `${t.hsStage}단계${t.hsStage >= 5 && t.hsWalk != null ? ` · ${t.hsWalk}m` : t.hsSec != null ? ` · ${t.hsSec}초` : ""}` : "—";
 // 다시 그려도 펼친 상태가 유지되게: <details data-keep="키">
 const keepOpen = (key, dflt) => (state.openKeys[key] ?? dflt) ? "open" : "";
 // 주는 월요일 날짜(YYYY-MM-DD)로 다룬다. 어떤 날의 프로그램은 일정표(대회·방학·학기)로 정해진다 (program.js seasonDay)
@@ -240,7 +230,6 @@ function weekLabel(mon) {
   const i = infos[3];
   return i.optional ? i.label : `${i.label} · ${PHASE_NAMES[i.w]}`;
 }
-const canSeePrivate = pid => can("training") || (!!pid && pid === state.myPid);
 // 처방·기록 화면에서 보는 선수 (선수는 항상 본인)
 function viewPid() {
   if (!can("training")) return state.myPid && state.players[state.myPid] ? state.myPid : null;
@@ -429,7 +418,7 @@ async function prSave(date, fn) {
   const cur = state.practice[date] ? JSON.parse(JSON.stringify(state.practice[date])) : { title: "", goal: "", blocks: [], published: true };
   const next = fn(cur) || cur;
   try {
-    ok(await sb.from("practice_plans").upsert({ date, title: next.title || null, goal: next.goal || null, blocks: next.blocks, published: next.published !== false, updated_at: new Date().toISOString() }));
+    ok(await sb.from("practice_plans").upsert({ team_id: TEAM.id, date, title: next.title || null, goal: next.goal || null, blocks: next.blocks, published: next.published !== false, updated_at: new Date().toISOString() }));
     state.practice[date] = next; state.dirty = false; render(); return true;
   } catch (e) { toast(failMsg(e)); return false; }
 }
@@ -692,65 +681,6 @@ function todayHtml(p) {
       <span class="row nowrap">${runBtn(p, t, plan, true)}<button class="btn ${canEditSelf(p) && hasRun(plan) ? "" : "primary"}" type="button" data-act="openday" data-m="${mon}" data-d="${d}">전체 프로그램 보기</button></span>
     </div>
   </section>`;
-}
-/* ---------- 복귀 체크 (다 나음 전) ----------
- * 자동: 통증 체크(최근 2주 2회 이상, 운동 중·다음 날 아침 2 이하, 쉴 때 통증 없음) · 한 발 홉 좌우 90%↑ (하체)
- *       · 어깨 외회전 좌우 90%↑ (어깨·팔꿈치) · 무릎 수술·십자인대 9개월↑
- * 관리자 체크: 의료진 허락 · 배구 동작 · 팀 훈련 부분 참여 → 모두 되면 관리자가 '다 나음'으로 */
-const RTP_AREA = { knee: "knee", shoulder: "shoulder", elbow: "shoulder", ankle: "ankle", calf: "ankle", foot: "ankle", back: "back", wrist: "wrist", finger: "finger" };
-const RTP_LOWER = ["hip", "thigh", "knee", "calf", "ankle", "foot"];
-const RTP_FUNC = { lower: "한 발 스쿼트·착지·방향 전환 통증 없이", upper: "스파이크·서브 단계적으로 통증 없이", back: "점프 착지·스파이크 동작 통증 없이", hand: "토스·블로킹 통증 없이 (테이핑 가능)", head: "단계별 복귀 (가벼운 운동 → 비접촉 → 전체) 증상 없이", other: "배구 동작 통증 없이" };
-function rtpItems(p, x) {
-  const t = iso(today()), from = dAdd(t, -14), items = [];
-  const since = x.year && /^\d+$/.test(String(x.year)) ? `${x.year}-${pad(x.month || 1)}-01` : "0000";
-  items.push({ k: "med", l: "의료진·재활 담당 복귀 허락", ok: !!(x.rtp || {}).med, manual: true });
-  const area = RTP_AREA[x.part];
-  if (x.part !== "head") {
-    if (area) {
-      const cs = checksOf(p.id).filter(c => c.area === area && c.date >= from);
-      const good = cs.length >= 2 && cs.every(c => (Number(c.during) || 0) <= 2 && (Number(c.morning) || 0) <= 2 && !c.rest);
-      items.push({ k: "pain", l: "통증 체크 2주 · 운동 중·아침 2 이하", ok: good, v: cs.length ? `${cs.length}회` : "체크 없음" });
-    } else items.push({ k: "pain", l: "운동 중·다음 날 아침 통증 2 이하", ok: !!(x.rtp || {}).pain, manual: true });
-  }
-  if (RTP_LOWER.includes(x.part)) {
-    const r = runs(p.id).filter(z => z.hopL != null && z.hopR != null && z.date >= since).at(-1);
-    let lsi = null;
-    if (r) { const L = Number(r.hopL), R = Number(r.hopR); lsi = x.side === "L" ? L / R : x.side === "R" ? R / L : Math.min(L, R) / Math.max(L, R); lsi = Math.round(100 * lsi); }
-    if (lsi != null) items.push({ k: "hop", l: "한 발 홉 거리 좌우 90% 이상", ok: lsi >= 90, v: `${lsi}%` });
-    else items.push({ k: "hop", l: "한 발 홉·착지 좌우 비슷하게 (재활 담당 확인)", ok: !!(x.rtp || {}).hop, manual: true });
-  }
-  if (x.part === "shoulder" || x.part === "elbow") {
-    const r = runs(p.id).filter(z => z.erD != null && z.erN != null && z.date >= since).at(-1);
-    const v = r ? Math.round(100 * Math.min(r.erD, r.erN) / Math.max(r.erD, r.erN)) : null;
-    if (v != null) items.push({ k: "er", l: "어깨 외회전 근력 좌우 90% 이상", ok: v >= 90, v: `${v}%` });
-    else items.push({ k: "er", l: "어깨 외회전 근력 좌우 비슷하게 (재활 담당 확인)", ok: !!(x.rtp || {}).er, manual: true });
-  }
-  if (x.part === "knee" && (x.surgery || /십자인대/.test(x.type || "")) && /^\d+$/.test(String(x.year))) {
-    const m = (today().getFullYear() - Number(x.year)) * 12 + (today().getMonth() + 1) - (x.month || 12);
-    items.push({ k: "time", l: "수술·다친 지 9개월 이상", ok: m >= 9, v: `${Math.max(0, m)}개월` });
-  }
-  const g = RTP_LOWER.includes(x.part) ? "lower" : ["shoulder", "elbow"].includes(x.part) ? "upper" : x.part === "back" ? "back" : ["wrist", "finger"].includes(x.part) ? "hand" : x.part === "head" ? "head" : "other";
-  items.push({ k: "func", l: RTP_FUNC[g], ok: !!(x.rtp || {}).func, manual: true });
-  items.push({ k: "team", l: "팀 훈련 부분 참여 1주 · 통증 없이", ok: !!(x.rtp || {}).team, manual: true });
-  return items;
-}
-function rtpHtml(p) {
-  const inj = ((state.health[p.id] || {}).injuries || []).map((x, i) => [x, i]).filter(([x]) => x.status && x.status !== "ok");
-  if (!inj.length || !(can("training") || isMe(p))) return "";
-  const adm = can("training");
-  return `<section class="panel rtp"><h3>복귀 체크</h3>${inj.map(([x, i]) => {
-    const it = rtpItems(p, x), n = it.filter(y => y.ok).length;
-    return `<div class="rtp-inj"><div class="row between"><strong>${esc(injText(x))}</strong><span class="chip ${n === it.length ? "ok" : ""}">${n}/${it.length}</span></div>
-      <ul class="rtp-list">${it.map(y => `<li class="${y.ok ? "ok" : ""}">${adm && y.manual
-        ? `<label class="check"><input type="checkbox" data-rtp="${esc(p.id)}|${i}|${y.k}" ${y.ok ? "checked" : ""}> ${esc(y.l)}</label>`
-        : `<span class="mk">${y.ok ? "✓" : "○"}</span> ${esc(y.l)}`}${y.v ? ` <span class="small muted">${esc(y.v)}</span>` : ""}</li>`).join("")}</ul>
-      ${adm ? `<button class="btn ${n === it.length ? "primary" : ""}" type="button" data-act="rtpdone" data-pid="${esc(p.id)}" data-i="${i}">다 나음으로</button>` : ""}</div>`;
-  }).join("")}${adm ? "" : ``}</section>`;
-}
-async function rtpSave(pid, injuries, msg) {
-  const r = await sb.from("health").update({ injuries }).eq("player_id", pid);
-  if (r.error) { toast("저장하지 못했어요"); return false; }
-  state.health[pid] = { ...(state.health[pid] || {}), injuries }; toast(msg); render(); return true;
 }
 function myStatusHtml(p) {
   const t = latest(p.id);
@@ -1050,11 +980,6 @@ function testsHtml(p) {
       </form></details>` : ""}
   </section>`;
 }
-// 추가 측정 입력 칸 (선수 측정·관리자 측정 공통)
-const EXTRA_FIELDS = [["hopL", "한 발 홉 왼 (cm)", "1", 400], ["hopR", "한 발 홉 오른 (cm)", "1", 400], ["ktwL", "무릎 벽 대기 왼 (cm)", "0.5", 30], ["ktwR", "무릎 벽 대기 오른 (cm)", "0.5", 30],
-  ["irD", "어깨 내회전 공격 팔 (°)", "1", 120], ["irN", "어깨 내회전 반대 팔 (°)", "1", 120], ["erD", "어깨 외회전 공격 팔 (°)", "1", 160], ["erN", "어깨 외회전 반대 팔 (°)", "1", 160]];
-const EXTRA_COL = { rsi: "rsi", hopL: "hop_l", hopR: "hop_r", ktwL: "ktw_l", ktwR: "ktw_r", irD: "ir_d", irN: "ir_n", erD: "er_d", erN: "er_n" };
-const extraFields = pre => EXTRA_FIELDS.map(([k, l, st, mx]) => `<label class="fl">${l}<input type="number" id="${pre}-${k}" inputmode="decimal" step="${st}" min="0" max="${mx}"></label>`).join("");
 // 측정 방법 (매번 같은 방법으로 재야 비교가 돼요)
 const PROTOCOL = [
   ["공통", "한 달에 한 번, 웨이트 A 전 같은 시간대·같은 신발. 워밍업 10분 뒤 아래 순서로"],
@@ -1064,7 +989,6 @@ const PROTOCOL = [
   ["반복 옆뛰기", "가운데 선을 밟고 서서 1m 옆 선까지 옆으로 (점프 금지). 선을 넘거나 밟을 때마다 1점, 20초 × 2회 중 좋은 값"],
 ];
 const protocolHtml = () => `<details class="proto"><summary class="small">측정 방법</summary><dl>${PROTOCOL.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl></details>`;
-const readExtra = (pre, row) => { for (const [k, col] of Object.entries(EXTRA_COL)) { const el = document.getElementById(`${pre}-${k}`); if (el) row[col] = el.value === "" ? null : Number(el.value); } return row; };
 
 /* ---------- 웨이트 기록 · 추정 1RM ---------- */
 function liftHtml(p) {
@@ -1116,7 +1040,6 @@ function reportHtml(p) {
     </tbody></table></div>` : emptyLine("측정 2회부터 나와요.")}
   </section>`;
 }
-const bal = v => v === true ? "○" : v === false ? "×" : "—";
 // 본인 기록: 선수 계정, 그리고 관리자가 '선수 화면'으로 볼 때의 자기 선수
 const isMe = p => !!p && !!state.myPid && p.id === state.myPid && (state.role === "player" || state.coach);
 function canEditSelf(p) { return can("full") || isMe(p); }
@@ -1145,8 +1068,6 @@ function painCheckList(p) {
       <td><button class="btn link danger" type="button" data-act="delpain" data-id="${esc(c.id)}">삭제</button></td></tr>`; }).join("")}
   </tbody></table></div>`;
 }
-const HS_SHORT = ["", "파이크 홀드", "백 투 월", "힐 풀", "프리스탠딩", "워크"];
-const hsStageSelect = id => `<label class="fl">핸드스탠드 단계<select id="${id}"><option value="">—</option>${HS_SHORT.slice(1).map((n, i) => `<option value="${i + 1}">${i + 1} ${n}</option>`).join("")}</select></label>`;
 /* ---------- 로그인 · 승인 대기 · 가입 정보 ---------- */
 function viewAuth() {
   const login = state.authMode === "login";
@@ -1167,6 +1088,7 @@ function viewAuth() {
     </div>
     <form class="f panel" id="authForm">
       <div><h3>${login ? "로그인" : "가입하기"}</h3><p class="small muted">${login ? "가입 → 내 정보 입력 → 관리자 승인 순서예요." : "가입하면 바로 내 정보 입력으로 넘어가요."}</p></div>
+      ${login ? "" : `<div class="seg-pick" role="radiogroup" aria-label="팀"><label><input type="radio" name="au-team" value="men" checked><span>남자부</span></label><label><input type="radio" name="au-team" value="women"><span>여자부</span></label></div>`}
       <label class="fl">이메일<input type="email" id="au-email" autocomplete="email" required></label>
       <label class="fl">비밀번호 (6자 이상)<input type="password" id="au-pw" autocomplete="${login ? "current-password" : "new-password"}" minlength="6" required></label>
       <div class="auth-actions"><button class="btn primary" type="submit">${login ? "로그인" : "가입하기"}</button>
@@ -1439,7 +1361,7 @@ function viewSched() {
   return `<div class="cols">
     <div class="col"><section class="sec"><h3>정규 훈련 시간</h3>
       <form class="f panel" id="ptForm"><div class="fields">
-        ${["S1", "S2"].map(k => `<div class="pair"><label class="fl">${k === "S1" ? "1학기 (월·목)" : "2학기 (수·금)"} 시작<input type="time" id="pt-${k}-s" value="${pt(k).start}" required></label><label class="fl">끝<input type="time" id="pt-${k}-e" value="${pt(k).end}"></label></div>`).join("")}
+        ${["S1", "S2"].map(k => `<div class="pair"><label class="fl">${k === "S1" ? "1학기" : "2학기"} (${teamDaysOf(k)}) 시작<input type="time" id="pt-${k}-s" value="${pt(k).start}" required></label><label class="fl">끝<input type="time" id="pt-${k}-e" value="${pt(k).end}"></label></div>`).join("")}
       </div><div class="row"><button class="btn primary" type="submit">저장</button></div></form>
     </section>
     <section class="sec"><div class="sec-head"><h3>그날만 시간 바꾸기</h3>${addBtn("ptday", "추가")}</div>
@@ -1534,15 +1456,9 @@ function attendRows(list, me) {
       : date >= t ? `<button class="btn small" type="button" data-act="absopen" data-date="${date}">불참</button>` : ""}</div></li>`;
   }).join("")}</ul>`;
 }
-function attendPanel(me, n = 3) {
-  const list = upcoming(iso(today()), 14).slice(0, n);
-  if (!list.length) return "";
-  return `<section class="panel attend-panel"><div class="row between"><h3>다가오는 훈련</h3><button class="btn link small" type="button" data-act="view" data-v="season">전체 →</button></div>${attendRows(list, me)}</section>`;
-}
 /* ---------- 공지 ---------- */
 const sortedNotices = () => [...state.notices].sort((a, b) => (b.pinned - a.pinned) || String(b.created).localeCompare(String(a.created)));
 const SEEN_KEY = () => "snuvt-notice-seen-" + uid();
-const noticeUnread_ = () => { const seen = lsGet(SEEN_KEY()) || ""; return state.notices.filter(n => String(n.created) > seen).length; };
 // 공지는 홈 맨 위: 고정 + 최근 2주, 나머지는 '지난 공지'로 접어 둠. 관리자는 여기서 올리고 고정·삭제
 function noticesHtml() {
   const list = sortedNotices(), t = Date.now(), seen = lsGet(SEEN_KEY()) || "";
@@ -1561,14 +1477,6 @@ function noticesHtml() {
 }
 /* ---------- 엔트리 (대회·교류전 명단) ---------- */
 const entryOf = (kind, id) => state.entries[kind + ":" + id] || new Set();
-// 앞으로 3주 안 내가 들어간 엔트리
-function myEntries(me) {
-  if (!me) return [];
-  const t = iso(today()), to = dAdd(t, 21), out = [];
-  for (const e of normEvents(events())) if (e.id && e.end >= t && e.start <= to && entryOf("event", e.id).has(me.id)) out.push({ name: e.name, date: e.start });
-  for (const [d, fs] of Object.entries(state.friendlies)) if (d >= t && d <= to) for (const f of fs) if (entryOf("friendly", f.id).has(me.id)) out.push({ name: frName(f.opponent), date: d });
-  return out.sort((a, b) => a.date.localeCompare(b.date));
-}
 const entryChip = (kind, id) => { const n = entryOf(kind, id).size, mine = state.myPid && entryOf(kind, id).has(state.myPid); return (n || can("schedule")) ? `<button type="button" class="chip entry ${mine ? "me" : ""}" data-act="entry" data-kind="${kind}" data-id="${esc(id)}">엔트리 ${n}${mine ? " · 나" : ""}</button>` : ""; };
 function openEntry(kind, id) {
   let title = "", date = "";
@@ -1766,7 +1674,6 @@ function offlineHtml() {
   return `<div class="panel empty"><strong>팀 데이터에 연결하지 못했어요</strong><span>인터넷 연결을 확인하고 새로고침해 주세요.</span></div>`;
 }
 const savedMode = () => { try { return localStorage.getItem("snuvt-mode"); } catch (e) { return null; } };
-function setMode(admin) { return setView(admin ? (state.coach ? (state.title === "captain" ? "captain" : "admin") : viewOptions()[0]) : "player"); }
 function setView(k) {
   if (!viewOptions().includes(k)) return;
   state.viewAs = k; state.admin = k !== "player"; state.pid = null; state.editPid = null; state.dirty = false; state.boxEdit = false; state.prEdit = false;
@@ -1897,7 +1804,6 @@ document.addEventListener("click", async ev => {
   }
   if (act === "tgo") return timerToggle();
   if (act === "treset") return timerSet(timer.def || timer.total);
-  if (act === "tset") return timerSet(Number(b.dataset.s));
   if (act === "week") { state.week = b.dataset.m; state.day = null; state.dirty = false; return render(); }
   if (act === "day") { state.day = Number(b.dataset.d); state.dirty = false; return render(); }
   if (act === "openday") { state.week = b.dataset.m; state.day = Number(b.dataset.d); state.pid = state.myPid; return go("plan"); }
@@ -1935,7 +1841,7 @@ document.addEventListener("click", async ev => {
     toast(r.error ? (r.error.code === "42501" ? r.error.message : failMsg(r.error)) : "지웠어요");
     state.dirty = false; return loadAll();
   }
-  if (act === "retire" || act === "retireall") {
+  if (act === "retireall") {
     const nm = (state.players[b.dataset.pid] || {}).name || "이 선수", all = act === "retireall";
     if (!await confirmDel(all ? `${nm}를 완전 삭제할까요?\n계정·개인정보·측정·운동 기록이 모두 지워지고 되돌릴 수 없어요.` : `${nm}를 졸업 처리할까요?\n계정과 개인정보는 지우고, 이름과 측정·운동 기록만 남겨요.`, all ? "네, 완전 삭제" : "네, 졸업")) return;
     const r = await sb.rpc("retire_member", { target: b.dataset.pid, wipe_all: all });
@@ -1944,7 +1850,6 @@ document.addEventListener("click", async ev => {
     state.dirty = false; return loadAll();
   }
   if (act === "logout") { closeSettings(); lsDel(snapKey()); await pushOff(true); await sb.auth.signOut(); return; }
-  if (act === "pushopen") return openPush();
   if (act === "drawer") return openDrawer();
   if (act === "settings") { closeDrawer(); return openSettings(); }
   if (act === "setclose") return closeSettings();
@@ -2022,16 +1927,8 @@ document.addEventListener("click", async ev => {
     return;
   }
   if (act === "xlsx") return exportXlsx(state.repSy || seasonRange().sy);
-  if (act === "rtpdone") {
-    const pid = b.dataset.pid, i = Number(b.dataset.i), inj = [...((state.health[pid] || {}).injuries || [])], x = inj[i]; if (!x) return;
-    const p = playerOf(pid), all = rtpItems(p, x).every(y => y.ok);
-    if (!all && !await confirmDel("아직 안 된 항목이 있어요. 그래도 다 나음으로 바꿀까요?")) return;
-    inj[i] = { ...x, status: "ok", rtp: { ...(x.rtp || {}), done: iso(today()) } };
-    return rtpSave(pid, inj, "다 나음으로 바꿨어요");
-  }
   if (act === "pushon") return pushOn();
   if (act === "pushoff") return pushOff();
-  if (act === "mode") { closeDrawer(); return setMode(!state.admin); }
   if (act === "rolepick") { closeDrawer(); closeSettings(); return openRolePick(); }
   if (act === "viewas") return setView(b.dataset.k);
   if (act === "refresh") { await loadProfile(); if (state.role === "pending") toast("아직 승인 전이에요."); return; }
@@ -2063,16 +1960,15 @@ document.addEventListener("click", async ev => {
       if (d.error) { toast(failMsg(d.error)); state.dirty = false; return loadAll(); }
     }
     const r = await sb.rpc("remove_member", { target: b.dataset.id });
-    if (r.error) toast(r.error.code === "PGRST202" ? "remove_member.sql 을 먼저 실행해 주세요." : (r.error.code === "42501" ? r.error.message : failMsg(r.error)));
+    if (r.error) toast(r.error.code === "42501" ? r.error.message : failMsg(r.error));
     else toast("계정을 삭제했어요");
     state.dirty = false; return loadAll();
   }
-  if (["delplayer", "deltest", "dellog", "delpain", "delevent", "dellift"].includes(act)) {
-    const msg = { dellift: "이 세트 기록을 삭제할까요?", delevent: "이 일정을 삭제할까요?\n프로그램이 바로 다시 맞춰져요.", delplayer: `${(state.players[b.dataset.pid] || {}).name || "이 선수"}를 삭제할까요?\n측정·기록·부상 정보도 함께 지워져요.`, deltest: "이 측정 기록을 삭제할까요?", dellog: "이 세션 기록을 삭제할까요?", delpain: "이 통증 기록을 삭제할까요?" }[act];
+  if (["deltest", "dellog", "delpain", "delevent", "dellift"].includes(act)) {
+    const msg = { dellift: "이 세트 기록을 삭제할까요?", delevent: "이 일정을 삭제할까요?\n프로그램이 바로 다시 맞춰져요.", deltest: "이 측정 기록을 삭제할까요?", dellog: "이 세션 기록을 삭제할까요?", delpain: "이 통증 기록을 삭제할까요?" }[act];
     if (!await confirmDel(msg)) return;
     try {
-      if (act === "delplayer") { ok(await sb.from("players").delete().eq("id", b.dataset.pid)); state.editPid = null; } // 부상·측정·기록도 함께 삭제됨
-      else ok(await sb.from({ deltest: "tests", dellog: "logs", delpain: "pain_checks", delevent: "events", dellift: "lift_sets" }[act]).delete().eq("id", b.dataset.id));
+      ok(await sb.from({ deltest: "tests", dellog: "logs", delpain: "pain_checks", delevent: "events", dellift: "lift_sets" }[act]).delete().eq("id", b.dataset.id));
       toast("삭제했어요");
     } catch (e) { toast(failMsg(e)); }
     state.dirty = false; return loadAll();
@@ -2081,18 +1977,10 @@ document.addEventListener("click", async ev => {
 document.addEventListener("change", ev => {
   if (ev.target.id === "repSy") { state.repSy = Number(ev.target.value); return; }
   if (ev.target.id === "drViewAs") return setView(ev.target.value);
-  if (ev.target.name && ev.target.name.startsWith("wl-")) { const v = ev.target.closest(".wl-row") && ev.target.closest(".wl-row").querySelector(".wl-v"); if (v) v.textContent = WELL_OPTS[ev.target.name.slice(3)][Number(ev.target.value) - 1]; return; }
   if (ev.target.classList.contains("inj-part")) {
     const row = ev.target.closest(".inj-row"), t = row.querySelector(".inj-type");
     t.innerHTML = injTypes(ev.target.value).map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
     row.querySelector(".inj-finger").hidden = ev.target.value !== "finger";
-    return;
-  }
-  if (ev.target.dataset && ev.target.dataset.rtp) {
-    const [pid, i, k] = ev.target.dataset.rtp.split("|"), inj = [...((state.health[pid] || {}).injuries || [])], x = inj[Number(i)];
-    if (!x || !can("training")) return;
-    inj[Number(i)] = { ...x, rtp: { ...(x.rtp || {}), [k]: ev.target.checked } };
-    rtpSave(pid, inj, ev.target.checked ? "확인했어요" : "체크를 풀었어요");
     return;
   }
   if (ev.target.classList && ev.target.classList.contains("wexp-sel")) { const d = document.getElementById(ev.target.id + "-desc"); if (d) d.textContent = wexpDesc(ev.target.value); return; }
@@ -2107,12 +1995,6 @@ document.addEventListener("input", ev => {
   if (ev.target.id === "pd-q") { const q = ev.target.value.trim(); const cat = (document.querySelector(".lib-cats .chip.on") || {}).dataset; document.getElementById("dlib").innerHTML = drillList(cat ? cat.c : "", q); return; }
   if (ev.target.id === "bx-q") { const q = ev.target.value.trim(); const cat = (document.querySelector(".lib-cats .chip.on") || {}).dataset; document.getElementById("lib").innerHTML = libList(cat ? cat.c : "", q); return; } const f = ev.target.closest("form.f"); if (f && f.id !== "authForm") state.dirty = true; });
 
-// 개인 조정 (관리자): 메모 · 빼기 · 바꾸기("원래 → 바꿀 것")
-function readCustom() {
-  const memo = txt("cu-memo"), skip = txt("cu-skip").split(/[,，]/).map(x => x.trim()).filter(Boolean).slice(0, 20);
-  const swap = document.getElementById("cu-swap").value.split("\n").map(l => l.split(/\s*(?:→|->|=>)\s*/)).filter(a => a.length === 2 && a[0].trim() && a[1].trim()).map(([a, b]) => ({ from: a.trim(), to: b.trim() })).slice(0, 20);
-  return { ...(memo ? { memo } : {}), ...(skip.length ? { skip } : {}), ...(swap.length ? { swap } : {}) };
-}
 const num = id => { const v = document.getElementById(id).value; return v === "" ? null : Number(v); };
 const txt = id => document.getElementById(id).value.trim();
 
@@ -2185,7 +2067,8 @@ document.addEventListener("submit", async ev => {
           state.authMsg = /confirm/i.test(m) ? "가입 확인 메일의 링크를 먼저 눌러 주세요." : /invalid/i.test(m) ? "이메일이나 비밀번호가 맞지 않아요." : "로그인하지 못했어요: " + m;
         } else { state.authMsg = ""; }
       } else {
-        const r = await sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname } });
+        const tm = (document.querySelector('input[name="au-team"]:checked') || {}).value || "men";
+        const r = await sb.auth.signUp({ email, password, options: { emailRedirectTo: location.origin + location.pathname, data: { team: tm } } });
         if (r.error) { state.authErr = true; state.authMsg = "가입하지 못했어요: " + r.error.message; }
         else if (!r.data.session) { // 이메일 확인이 켜져 있으면 세션이 없다 → 바로 로그인 시도
           const li = await sb.auth.signInWithPassword({ email, password });
@@ -2326,7 +2209,7 @@ document.addEventListener("submit", async ev => {
       if (pids.length) ok(await sb.from("entries").insert(pids.map(player_id => ({ kind, ref_id: id, player_id }))));
       closeSheet(); toast(`엔트리 ${pids.length}명 저장`);
     } else if (f.id === "ptForm") {
-      const rows = ["S1", "S2"].map(k => ({ key: k, start_time: txt(`pt-${k}-s`), end_time: txt(`pt-${k}-e`) || null }));
+      const rows = ["S1", "S2"].map(k => ({ team_id: TEAM.id, key: k, start_time: txt(`pt-${k}-s`), end_time: txt(`pt-${k}-e`) || null }));
       if (rows.some(r => r.end_time && r.end_time <= r.start_time)) { toast("끝 시간이 시작보다 앞이에요."); return; }
       ok(await sb.from("practice_times").upsert(rows));
       toast("정규 훈련 시간을 저장했어요");
@@ -2334,7 +2217,7 @@ document.addEventListener("submit", async ev => {
       const date = txt("ptd-date"), st = txt("ptd-s"), en = txt("ptd-e") || null;
       if (seasonDay(date, events()).slot !== "team") { toast("그날은 정규 훈련 날이 아니에요."); return; }
       if (en && en <= st) { toast("끝 시간이 시작보다 앞이에요."); return; }
-      ok(await sb.from("practice_times").upsert({ key: date, start_time: st, end_time: en, note: txt("ptd-note") || null }));
+      ok(await sb.from("practice_times").upsert({ team_id: TEAM.id, key: date, start_time: st, end_time: en, note: txt("ptd-note") || null }));
       toast("그날 훈련 시간을 바꿨어요");
     } else if (f.id === "friendlyForm") {
       const st = txt("fr-start") || null, en = txt("fr-end") || null;
@@ -2353,7 +2236,7 @@ document.addEventListener("submit", async ev => {
     } else if (f.id === "offForm") {
       const date = txt("off-date");
       if (seasonDay(date, events()).slot !== "team") { toast("그날은 정규 훈련 날이 아니에요."); return; }
-      ok(await sb.from("team_off").upsert({ date, note: txt("off-note") || null }));
+      ok(await sb.from("team_off").upsert({ team_id: TEAM.id, date, note: txt("off-note") || null }));
       toast("정규 훈련 없음으로 정했어요");
     } else if (f.id === "wellForm") {
       const row = { player_id: f.dataset.pid, date: iso(today()) };
@@ -2377,6 +2260,7 @@ async function loadProfile() {
   state.session = session;
   state.email = session && session.user ? (session.user.email || "") : "";
   if (!session) {
+    { const tg = document.getElementById("teamTag"); if (tg) tg.textContent = ""; }
     Object.assign(state, { role: null, admin: false, myPid: null, players: {}, tests: {}, health: {}, logs: {}, inbody: {}, profiles: [], loaded: false, booting: false, dirty: false, selfPlayer: null, selfHealth: null, editingSelf: false });
     render(); return;
   }
@@ -2386,8 +2270,9 @@ async function loadProfile() {
     // 연결이 없으면 이 기기에 저장해 둔 것으로
     const snap = isNetErr(r.error) ? lsGet(snapKey()) : null;
     if (!snap || !snap.me) { state.offline = true; state.booting = false; render(); return; }
-    r = { data: { role: snap.me.role, player_id: snap.me.player_id } };
+    r = { data: { role: snap.me.role, player_id: snap.me.player_id, team_id: snap.me.team } };
   }
+  await loadTeam(r.data ? r.data.team_id : "men");
   state.role = r.data ? r.data.role : "pending";
   state.myPid = r.data ? r.data.player_id : null;
   state.coach = state.role === "coach";
@@ -2408,7 +2293,6 @@ async function loadSelf() {
   state.selfPlayer = r ? { name: r.name, pos: r.pos, year: r.year, height: r.height, weight: r.weight, exp: r.exp, weightExp: wexpNorm(r.weight_exp), number: r.number } : null;
   state.selfHealth = h ? { ankleL: h.ankle_l, ankleR: h.ankle_r, injuries: h.injuries || [], pain: h.pain || {}, note: h.note, consent: h.consent } : null;
 }
-const numOrNull = v => v == null ? null : Number(v);
 /* ---------- 오프라인 ----------
  * 마지막으로 불러온 데이터를 이 기기에 저장해 두고(로그아웃하면 지움), 연결이 없으면 그걸로 화면을 보여 준다.
  * 연결이 없을 때 저장한 기록(세션·통증·컨디션·세트·코어·측정)은 이 기기에 모아 뒀다가 연결되면 올린다. */
@@ -2463,11 +2347,17 @@ function withQueued(raw) {
   });
   return out;
 }
+// 팀 (남자부·여자부): 이름·네트 높이·정규 훈련 요일
+const TEAMS_FALLBACK = { men: { id: "men", label: "남자부", net_cm: 243, swap_days: false }, women: { id: "women", label: "여자부", net_cm: 224, swap_days: true } };
+async function loadTeam(id) {
+  let t = TEAMS_FALLBACK[id] || TEAMS_FALLBACK.men;
+  try { const q = await sb.from("teams").select("*").eq("id", id || "men").maybeSingle(); if (q.data) t = q.data; } catch (e) { /* 연결 없으면 기본값 */ }
+  setTeam(t); document.documentElement.dataset.team = TEAM.id; const tg = document.getElementById("teamTag"); if (tg) tg.textContent = TEAM.label;
+}
 async function loadAll() {
   let raw = null;
   try {
     const q = [
-      sb.from("settings").select("*").maybeSingle(),
       sb.from("players").select("*"),
       sb.from("tests").select("*").order("date"),
       sb.from("health").select("*"),
@@ -2494,12 +2384,12 @@ async function loadAll() {
     ];
     if (state.coach) q.push(sb.from("profiles").select("*").order("created_at"));
     const res = await Promise.all(q);
-    const [st, pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq, frq, abq, nq, enq, ptq, ctq, peq, pvq, ppq, vdq, tnq, osq, ovq] = res, pr = state.coach ? res[24] : null;
+    const [pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq, frq, abq, nq, enq, ptq, ctq, peq, pvq, ppq, vdq, tnq, osq, ovq] = res, pr = state.coach ? res[23] : null;
     for (const r of [pl, ts, hl, lg]) if (r.error) throw r.error;
     const rows = r => r && !r.error && Array.isArray(r.data) ? r.data : [];
     raw = { players: pl.data, tests: ts.data, health: hl.data, logs: lg.data, pain_checks: rows(pcs), events: evq && !evq.error ? evq.data : null,
       wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), notices: rows(nq), entries: rows(enq), practice_times: rows(ptq), player_contacts: rows(ctq), program_edits: rows(peq), player_private: rows(pvq), practice_plans: rows(ppq), videos: rows(vdq), training_notes: rows(tnq), open_sessions: rows(osq), open_votes: rows(ovq), profiles: pr && !pr.error ? pr.data : [],
-      me: { role: state.role, player_id: state.myPid } };
+      me: { role: state.role, player_id: state.myPid, team: TEAM.id } };
     // 기기에 남기는 사본에는 연락처와 다른 사람 키·몸무게를 넣지 않음
     lsSet(snapKey(), { ...raw, training_notes: (raw.training_notes || []).filter(r => r.player_id === state.myPid), player_contacts: (raw.player_contacts || []).filter(r => r.player_id === state.myPid), player_private: (raw.player_private || []).filter(r => r.player_id === state.myPid) }); state.net = true;
   } catch (e) {
@@ -2628,7 +2518,6 @@ async function fillPushBox() {
     <div class="row"><button class="btn primary" type="button" data-act="pushon">${on ? "저장" : "알림 켜기"}</button>${on ? `<button class="btn" type="button" data-act="pushoff">끄기</button>` : ""}</div>
     <p class="small muted">${on ? "이 기기에서 알림을 받고 있어요." : "기기마다 따로 켜요."}</p>`;
 }
-const openPush = () => openSettings();
 async function pushOn() {
   const m = document.getElementById("pu-m").checked, e = document.getElementById("pu-e").checked, nt = document.getElementById("pu-n").checked;
   const mh = Number(document.getElementById("pu-mh").value), eh = Number(document.getElementById("pu-eh").value);

@@ -115,8 +115,6 @@ nav.tabs { display: flex; align-items: center; gap: 10px; padding: 2px 0 10px; }
 .btn:active, .tile-btn:active, .bt:active, .seg-tab:active, .menu-item:active, .hub-row.tap:active { transform: scale(.97); }
 :root[data-theme-transition] *, :root[data-theme-transition] *::before, :root[data-theme-transition] *::after { transition: background-color .25s, border-color .25s, color .25s !important; }
 @media (prefers-reduced-motion: reduce) { #main.in-up, #main.in-right, #main.in-left, .sheet-bg, .sheet { animation: none !important; } .seg-thumb { transition: none; } }
-/* 메뉴 · 일정 목록 */
-.me-card { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .menu { display: grid; }
 .menu h3 { margin-bottom: 4px; }
 .menu-item { font: inherit; color: var(--ink); background: none; border: 0; border-top: 1px solid var(--line); display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; padding: 12px 2px; text-align: left; cursor: pointer; font-weight: 600; }
@@ -176,12 +174,6 @@ summary h3 { display: inline; }
 .wnav .wcur span { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wnav .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--blue); vertical-align: middle; }
 .day.opt { border-style: dashed; }
-.season-weeks { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.season-weeks li { display: grid; grid-template-columns: 52px 1fr; gap: 8px; padding: 5px 8px; border-radius: 6px; background: var(--surface); font-size: 13.5px; }
-.season-weeks li.cup { background: var(--yellow-soft); }
-.season-weeks li.opt { background: var(--surface-2); color: var(--muted); }
-.season-weeks li .num { font-family: var(--f-data); color: var(--muted); }
-.rules li { padding: 2px 0; }
 tr.past td { opacity: 0.55; }
 .days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; padding-top: 6px; }
 .day { position: relative; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 2px; cursor: pointer; display: grid; gap: 0; justify-items: center; min-width: 0; }
@@ -232,13 +224,6 @@ small.neg { color: var(--crit) !important; }
 .team-status .btn.link { justify-self: start; }
 .wk-sum { display: grid; gap: 8px; }
 .rtp { display: grid; gap: 12px; }
-.rtp-inj { display: grid; gap: 6px; }
-.rtp-inj + .rtp-inj { border-top: 1px solid var(--line); padding-top: 10px; }
-.rtp-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
-.rtp-list .mk { display: inline-block; width: 13px; margin: 0 3px; text-align: center; color: var(--muted); }
-.rtp-list .check { gap: 6px; font-size: 14px; }
-.rtp-list .check input { margin: 0 3px; }
-.rtp-list li.ok .mk { color: var(--good); font-weight: 700; }
 .chip.ok { color: var(--good); border-color: var(--good); }
 .rtp .btn { justify-self: start; }
 .wk-sum table td, .wk-sum table th { white-space: nowrap; }
@@ -253,8 +238,6 @@ small.neg { color: var(--crit) !important; }
 .blocks { columns: 2 340px; column-gap: 12px; }
 .blk { break-inside: avoid; margin: 0 0 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
 .blk h4 { font-size: 12.5px; font-weight: 700; color: var(--muted); padding: 7px 12px; background: var(--surface-2); border-bottom: 1px solid var(--line); letter-spacing: 0.02em; }
-.blk.b-rehab { border-color: var(--warn); }
-.blk.b-rehab h4 { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
 .rows { list-style: none; margin: 0; padding: 0; }
 .rows li { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; padding: 7px 12px; border-top: 1px solid var(--line); }
 .rows li:first-child { border-top: 0; }
@@ -267,8 +250,6 @@ small.neg { color: var(--crit) !important; }
 .bnote { font-size: 12.5px; color: var(--muted); padding: 7px 12px; border-top: 1px solid var(--line); background: var(--surface-2); }
 .callout { border-left: 3px solid var(--warn); background: var(--warn-soft); padding: 8px 12px 8px 28px; border-radius: 0 8px 8px 0; font-size: 14px; }
 .notes { margin: 0; display: grid; gap: 2px; }
-.ladder { padding: 10px 14px; }
-.ladder summary { font-size: 14.5px; }
 .stages { margin: 10px 0 6px; padding: 0; list-style: none; display: grid; gap: 6px; }
 .stages li { display: grid; gap: 2px; padding: 7px 10px; border-radius: 8px; background: var(--surface-2); border-left: 3px solid var(--line); font-size: 14px; }
 .stages li.cur { border-left-color: var(--warn); background: var(--warn-soft); }
@@ -293,7 +274,7 @@ details.panel[open] > summary { margin-bottom: 10px; }
 .btn.link.danger:hover { border-color: var(--crit); background: var(--crit-soft); }
 .btn.link.small { padding: 3px 9px; font-size: 13px; }
 /* 이름처럼 글 안에 들어가는 링크는 박스 없이 */
-.watch .btn.link, .wk-sum .btn.link, td .btn.link[data-act="open"], .name-link { border: 0; background: none; padding: 0; }
+.watch .btn.link, .wk-sum .btn.link, td .btn.link[data-act="open"]{ border: 0; background: none; padding: 0; }
 .btn.link.danger { color: var(--crit); }
 .btn.link.danger.armed { color: var(--surface); padding: 2px 8px; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -319,14 +300,12 @@ label.check input[type="checkbox"] { flex: none; width: 18px; height: 18px; marg
 .attend > li:first-child { border-top: 0; }
 .at-when { display: grid; min-width: 0; }
 .at-list { list-style: none; margin: 0; padding: 0; width: 100%; display: grid; gap: 2px; font-size: 14px; }
-.attend-panel { display: grid; gap: 6px; }
 .reasons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .rsn { display: flex; }
 .rsn input { position: absolute; opacity: 0; width: 1px; height: 1px; }
 .rsn span { flex: 1; text-align: center; padding: 9px 6px; border: 1px solid var(--line); border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; background: var(--surface); }
 .rsn input:checked + span { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
 .rsn input:focus-visible + span { outline: 2px solid var(--blue); outline-offset: 2px; }
-.fr-list li.past { opacity: .55; }
 /* 홈: 오늘 + 아이콘 */
 .hub { display: grid; gap: 2px; }
 .hub h3 { margin-bottom: 4px; }
@@ -343,12 +322,6 @@ label.check input[type="checkbox"] { flex: none; width: 18px; height: 18px; marg
 .tile-btn .tl { font-weight: 700; font-size: 16px; }
 .tile-btn .ts { font-size: 12.5px; color: var(--muted); }
 .badge { position: absolute; top: -6px; right: -8px; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--crit); color: #fff; font-size: 12px; font-weight: 700; display: grid; place-items: center; }
-.hub-notice { display: grid; gap: 2px; }
-.hn-row { font: inherit; color: var(--ink); background: none; border: 0; border-top: 1px solid var(--line); padding: 9px 0; display: flex; justify-content: space-between; gap: 10px; text-align: left; cursor: pointer; }
-.hn-row span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-nav.tabs .tab-home { color: var(--blue); }
-nav.tabs .tab-sec { flex: none; align-self: center; font-weight: 700; font-size: 14px; padding: 0 10px 0 2px; margin-right: 4px; border-right: 1px solid var(--line); }
-nav.tabs .tab-sec:last-child { border-right: 0; }
 /* 공지 · 엔트리 */
 .notice { display: grid; gap: 6px; }
 .notice.pinned { border-color: var(--blue); }
@@ -404,10 +377,6 @@ header.top .wrap { position: relative; }
 .notices details > .notice { margin-top: 8px; }
 fieldset { border: 1px solid var(--line); border-radius: var(--r); padding: 10px 12px 12px; margin: 0; display: grid; gap: 8px; min-width: 0; }
 legend { font-weight: 700; padding: 0 6px; font-size: 14px; }
-.inner { background: var(--surface-2); }
-.rh { display: grid; gap: 6px; }
-.stage-key { display: flex; flex-wrap: wrap; gap: 2px 14px; color: var(--muted); }
-.stage-key b { color: var(--ink); }
 /* 날짜 칸이 휴대폰에서 옆 칸을 넘지 않게 */
 input[type="date"] { -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%; min-height: 36px; text-align: left; }
 input[type="date"]::-webkit-date-and-time-value { text-align: left; }
@@ -417,12 +386,7 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 .split .sp-col { min-width: 0; }
 @media (min-width: 860px) { .split { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
 .blk h4 { margin: 0; }
-.ed-row { grid-template-columns: minmax(0, 1fr) auto; }
-.ed { grid-column: 1 / -1; display: flex; gap: 12px; justify-content: flex-end; margin-top: 2px; }
 .cu-btn { justify-self: start; }
-.cu-panel { display: grid; gap: 8px; border-color: var(--warn); }
-.cu-panel #cuMemoForm { flex-wrap: nowrap; }
-.cu-panel #cuMemoForm input { flex: 1; }
 /* 프로그램 박스 편집 */
 .edit-bar { display: grid; gap: 8px; border-color: var(--blue); background: var(--blue-soft); }
 .removed { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -521,7 +485,6 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 .note .nk { display: inline-block; min-width: 64px; font-size: 12px; font-weight: 700; color: var(--muted); margin-right: 6px; }
 .sub-h { margin-top: 8px; }
 table.roster td a { color: var(--blue); text-decoration: none; }
-.cu-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 14px; }
 .scope-h.me { border-bottom-color: var(--warn); }
 .sub-h { font-size: 13.5px; font-weight: 700; margin: 4px 0 0; }
 /* 부상 이력 */
@@ -570,10 +533,6 @@ body.noscroll { overflow: hidden; }
 .pain-row:has(.pain-on:checked) .pain-detail { display: grid; }
 .pcheck { border-top: 1px solid var(--line); padding-top: 8px; }
 .pcheck[open] > summary { margin-bottom: 8px; }
-.pcheck .stage-key { margin-top: 8px; }
-.rh-row { display: grid; grid-template-columns: 56px minmax(0, 1.3fr) minmax(0, 1fr); gap: 8px; align-items: center; }
-.rh-lab { font-size: 14px; font-weight: 600; }
-@media (max-width: 640px) { .rh-row { grid-template-columns: 56px minmax(0, 1fr); } .rh-row input { grid-column: 2; } }
 
 /* 표 */
 .tw { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
@@ -718,13 +677,22 @@ input[type="time"]::-webkit-date-and-time-value { text-align: left; }
 .cf-b { margin: 0 0 12px; }
 .cf-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
 .btn.danger-fill { background: var(--crit); border-color: var(--crit); color: #fff; }
+.team-tag { font-size: 12px; font-weight: 700; color: var(--blue); background: var(--blue-soft); border-radius: 6px; padding: 1px 6px; align-self: center; }
+.team-tag:empty { display: none; }
+.seg-pick { display: grid; grid-template-columns: 1fr 1fr; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.seg-pick label { position: relative; }
+.seg-pick input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.seg-pick span { display: block; text-align: center; padding: 9px 0; font-weight: 700; color: var(--muted); }
+.seg-pick label + label span { border-left: 1px solid var(--line); }
+.seg-pick input:checked + span { background: var(--blue); color: #fff; }
+.seg-pick input:focus-visible + span { outline: 2px solid var(--blue); outline-offset: -2px; }
 </style>
 </head>
 <body>
 <header class="top">
   <div class="wrap">
     <div class="top-row">
-      <div class="brand"><button class="menu-btn" id="menuBtn" type="button" data-act="drawer" aria-label="전체 메뉴" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><a class="home-link" href="#home" data-act="view" data-v="home" aria-label="홈으로"><img class="logo logo-light" src="logo.png?v=4" alt="" width="39" height="38"><img class="logo logo-dark" src="logo-white.png?v=4" alt="" width="39" height="38"><h1>SNUVT</h1></a><span class="when"><span class="today" id="today"></span><span class="dday" id="dday"></span></span></div>
+      <div class="brand"><button class="menu-btn" id="menuBtn" type="button" data-act="drawer" aria-label="전체 메뉴" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button><a class="home-link" href="#home" data-act="view" data-v="home" aria-label="홈으로"><img class="logo logo-light" src="logo.png?v=4" alt="" width="39" height="38"><img class="logo logo-dark" src="logo-white.png?v=4" alt="" width="39" height="38"><h1>SNUVT</h1><span class="team-tag" id="teamTag"></span></a><span class="when"><span class="today" id="today"></span><span class="dday" id="dday"></span></span></div>
       <div class="right"><div class="who" id="who"></div></div>
     </div>
     <button class="btn set-btn" id="setBtn" type="button" data-act="settings" aria-label="설정" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
@@ -738,9 +706,9 @@ input[type="time"]::-webkit-date-and-time-value { text-align: left; }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=53"></script>
-<script src="guide.js?v=53"></script>
-<script src="library.js?v=53"></script>
-<script src="app.js?v=53"></script>
+<script src="program.js?v=55"></script>
+<script src="guide.js?v=55"></script>
+<script src="library.js?v=55"></script>
+<script src="app.js?v=55"></script>
 </body>
 </html>

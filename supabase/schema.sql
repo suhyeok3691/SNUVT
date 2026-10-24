@@ -397,3 +397,12 @@ alter table public.logs add constraint logs_pain_area_check
 
 -- ===== 군 복무 (players_military) =====
 -- players.military: 부원과 같은 권한, 상태만 '군 복무'. 리포트·팀 현황에서 제외
+
+-- ===== 남자부·여자부 (teams_split) =====
+-- teams(id, name, label, net_cm, swap_days): men(남자부, 243, 월·목/수·금) · women(여자부, 224, 학기 요일 반대)
+-- profiles.team_id: 가입할 때 고른 팀 (handle_new_user 가 raw_user_meta_data.team 을 읽음)
+-- 팀 단위 표(players, events, friendlies, notices, practice_plans, practice_times, team_off, videos, open_sessions, program_edits)에 team_id
+--   기본값 private.my_team(), 키는 (team_id, date|key)
+-- 모든 표에 restrictive 정책 "team scope": 내 팀 행만 (선수 기록 표는 private.player_team(player_id) 로 확인)
+-- 관리 함수(직책·영상·졸업·삭제·탈퇴)는 같은 팀만. 공지 알림은 push_targets_team(kind, team) 으로 같은 팀에만
+-- 여자부 첫 관리자: update public.profiles set role = 'coach' where email = '...' and team_id = 'women';

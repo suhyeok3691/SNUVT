@@ -3,7 +3,9 @@
  * 화면과 분리된 순수 함수만 둔다 (입력: 선수·측정·인바디·통증 단계 / 출력: 요일 프로그램).
  */
 
-const NET = 243; // 남자부 네트 높이 (cm)
+// 팀 설정: 남자부 기본. 여자부는 네트 224cm, 정규 훈련 요일이 학기마다 남자부와 반대 (1학기 수·금, 2학기 월·목)
+const TEAM = { id: "men", label: "남자부", net: 243, swap: false };
+function setTeam(t) { if (t) Object.assign(TEAM, { id: t.id || TEAM.id, label: t.label || TEAM.label, net: Number(t.net_cm || t.net) || TEAM.net, swap: !!(t.swap_days ?? t.swap) }); }
 const POS = { OH: "아웃사이드 히터", MB: "미들블로커", OP: "아포짓", S: "세터", Li: "리베로" };
 const POS_ORDER = ["OH", "MB", "OP", "S", "Li"];
 const DAYS = ["월", "화", "수", "목", "금", "토", "일"]; // 0 = 월요일
@@ -16,12 +18,6 @@ const WARMUP = [
   { name: "스쿼트 점프 착지 고정", rx: "5회", cue: "무릎은 발끝 방향, 착지 소리 작게" },
   { name: "어깨 밴드 · Y·T · 오픈북", rx: "4분", cue: "어깨 외회전·견갑·흉추" },
   { name: "어프로치 점프", rx: "3회", cue: "70% → 90%" },
-];
-const COOLDOWN = [
-  { name: "가볍게 걷기·조깅", rx: "3분", cue: "심박 내리기" },
-  { name: "종아리 · 엉덩이 굴곡근 · 햄스트링 · 어깨 뒤쪽 스트레칭", rx: "부위당 30초", cue: "통증 없는 범위" },
-  { name: "통증 체크", rx: "—", cue: "아픈 곳이 있으면 ‘통증 체크’에 남기고, 다음 날 아침에도 한 번 더" },
-  { name: "세션 RPE 기록", rx: "30분 안에", cue: "‘기록’ 탭" },
 ];
 // 핸드스탠드 단계 — 목표는 버티기를 넘어 다 같이 코트를 걸어가는 것 (5단계 핸드스탠드 워크)
 // 1–4단계는 버틴 시간(초), 5단계는 걸은 거리(m)로 기록. 기준을 넘으면 다음 단계로.
@@ -945,6 +941,10 @@ const SLOT_WEEK = {
   OFF: ["gymA", "gymB", "bwU", "gymA", "gymB", "bwL", "rest"], // 비시즌: 웨이트 주 4회 (볼 대신 몸 만들기)
 };
 const TEAM_DAYS = { S1: "월·목", S2: "수·금" };
+// 우리 팀의 그 학기 요일 배치 (여자부는 학기를 바꿔 씀)
+const flipSem = sem => sem === "S1" ? "S2" : sem === "S2" ? "S1" : sem;
+const weekOf = sem => SLOT_WEEK[TEAM.swap ? flipSem(sem) : sem];
+const teamDaysOf = sem => TEAM_DAYS[TEAM.swap ? flipSem(sem) : sem];
 const EVENT_KINDS = { major: "주요 대회", minor: "9인제·기타 대회", tryout: "트라이아웃", termend: "2학기 종강", off: "비시즌·방학" };
 const DAY_MS = 864e5;
 const dParse = s => { const [y, m, d] = String(s).slice(0, 10).split("-").map(Number); return Date.UTC(y, m - 1, d); };
@@ -1043,7 +1043,7 @@ function seasonDay(date, events) {
   const comps = evs.filter(e => (e.kind === "major" || e.kind === "minor") && e.start <= sun && e.end >= mon);
   const weekEvent = comps.find(e => e.kind === "major") || comps[0] || null;
   const sem = semesterOf(mon);
-  const info = { date, mon, d, sem, slot: SLOT_WEEK[sem][d], w: 1, event: null, weekEvent, optional: false, label: "", nordicHere: false, noNordic: false, measure: measureWeeks(mon, evs).get(mon) || false, phase: 0 };
+  const info = { date, mon, d, sem, slot: weekOf(sem)[d], w: 1, event: null, weekEvent, optional: false, label: "", nordicHere: false, noNordic: false, measure: measureWeeks(mon, evs).get(mon) || false, phase: 0 };
   const wp = weekPhase(mon, evs);
   info.w = wp.w; info.postMajor = wp.postMajor;
   info.label = sem === "S1" ? "1학기" : "2학기";
@@ -1072,7 +1072,7 @@ function seasonDay(date, events) {
     if (dt === 1 && base !== "rest") return { ...info, slot: "prep" };
     if ((base === "gymA" || base === "gymB") && dt <= 3) return { ...info, slot: "act" };
     // 대회 2–3일 전에 웨이트 날이 없으면 맨몸 날을 활성화로
-    const gymNear = [2, 3].some(x => { const j = dDiff(dAdd(weekEvent.start, -x), mon); return j >= 0 && j < 7 && /^gym/.test(SLOT_WEEK[sem][j]); });
+    const gymNear = [2, 3].some(x => { const j = dDiff(dAdd(weekEvent.start, -x), mon); return j >= 0 && j < 7 && /^gym/.test(weekOf(sem)[j]); });
     if (/^bw/.test(base) && dt <= 3 && !gymNear) return { ...info, slot: "act" };
     return info;
   }
@@ -1267,4 +1267,4 @@ function daySummary(plan) {
   return { kind: plan.kind, title: plan.title, landings: plan.landings, items: main ? main.items.length : 0 };
 }
 
-if (typeof module !== "undefined") module.exports = { fmtRx, painStage, normPain, PAIN_AREAS, STAGE_NAMES, STAGE_HINT, PAIN_RULE, NEXT_RULE, painLabel, dayPlan, daySummary, slotPlan, PH, PHASE_NAMES, POS_EXTRA, readiness, WELL_KEYS, WELL_OPTS, WELL_LOW, PICKS, weekFlow, resolvePick, relOf, baseName, e1rmOf, LIFT_OF, JUMP_RE, seasonDay, planForDay, measureWeeks, nextMeasure, HS_GOAL, INJ_PART_LABEL, FINGERS, PAIN_SEV, nextMajor, normEvents, mondayOf, dAdd, dDiff, SLOT_WEEK, EVENT_KINDS, HANDSTAND, HS_STAGES, effectiveModules, moduleEffects, relStrength, REHAB, REHAB_AREAS, DAYS, POS, POS_ORDER, NET };
+if (typeof module !== "undefined") module.exports = { TEAM, setTeam, weekOf, teamDaysOf, fmtRx, painStage, normPain, PAIN_AREAS, STAGE_NAMES, STAGE_HINT, PAIN_RULE, NEXT_RULE, painLabel, dayPlan, daySummary, slotPlan, PH, PHASE_NAMES, POS_EXTRA, readiness, WELL_KEYS, WELL_OPTS, WELL_LOW, PICKS, weekFlow, resolvePick, relOf, baseName, e1rmOf, LIFT_OF, JUMP_RE, seasonDay, planForDay, measureWeeks, nextMeasure, HS_GOAL, INJ_PART_LABEL, FINGERS, PAIN_SEV, nextMajor, normEvents, mondayOf, dAdd, dDiff, SLOT_WEEK, EVENT_KINDS, HANDSTAND, HS_STAGES, effectiveModules, moduleEffects, relStrength, REHAB, REHAB_AREAS, DAYS, POS, POS_ORDER };
