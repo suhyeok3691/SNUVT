@@ -428,3 +428,12 @@ alter table public.logs add constraint logs_pain_area_check
 -- 부른 사람 로그인으로 videos(kind=playlist)를 읽고 유튜브 재생목록 페이지의 '마지막 업데이트' 날짜·영상 수를 돌려줌 (유튜브 주소는 안 돌려줌)
 -- 일부 공개 영상은 RSS 피드에 안 나와서 페이지를 읽음. 10분 캐시. '가장 최근 영상' 칸은 없애고 최근 업데이트된 재생목록을 위로
 -- yt-probe: 테스트용이었고 지금은 410만 돌려줌 (대시보드에서 지워도 됨)
+
+-- ===== 일본 고교 배구 영상 (jp_volley_library · jp_sources_manage_cron) =====
+-- jp_sources(id, kind channel|playlist, ref @핸들|재생목록ID, label, role match|visit, cursor, full_done): 모으는 유튜브 채널. 추가·삭제는 관리자
+-- jp_schools(id, name_ja, name_ko, pref 都道府県, gender m|w|mw, aliases 're:'=정규식): 학교 사전 (남녀부 공통, 부원 읽기만)
+-- jp_videos(id 유튜브 영상ID, source, title, published, year, tourn haruko|ih|kokutai|block|senbatsu|shinjin|practice|univ|other, rnd, gender, schools[])
+-- edge function jp-sync(x-cron): 채널 영상 목록을 읽고 제목으로 학교·대회·라운드 태그. mode new|full|retag
+--   private.jp_sync_call(mode), public.jp_sync_now()(관리자), cron jp-sync-new 05:00 KST · jp-sync-full 05:30 KST
+-- edge function jp-search(로그인): 유튜브 검색 결과만 돌려줌(저장 안 함)
+-- 학교 사전을 고친 뒤에는 select private.jp_sync_call('retag');

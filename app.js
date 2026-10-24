@@ -101,16 +101,16 @@ function confirmDel(msg, yes = "네, 삭제") {
   });
 }
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
-const VIEWS = ["home", "practice", "notes", "video", "scout", "train", "plan", "rec", "season", "comps", "sched", "report", "roster", "intake"];
+const VIEWS = ["home", "practice", "notes", "video", "jp", "scout", "train", "plan", "rec", "season", "comps", "sched", "report", "roster", "intake"];
 // 섹션: 홈 → Physical(트레이닝) · 일정 · 관리 · 설정. 공지는 홈 맨 위
 const SECTIONS = {
   physical: { label: "피지컬", views: [["train", "오늘"], ["plan", "프로그램"], ["rec", "기록"]] },
   schedule: { label: "일정", views: [["season", "다가오는"], ["comps", "대회·교류전"], ["sched", "훈련 관리", "attend"]] },
   scout: { label: "전력분석", views: [["scout", "전력분석"]] },
   admin: { label: "관리", views: [["roster", "명단", "roster"], ["intake", "부원", "full"], ["report", "리포트", "training"]] },
-  practice: { label: "훈련", views: [["practice", "훈련 계획"], ["notes", "훈련 노트"], ["video", "영상"]] },
+  practice: { label: "훈련", views: [["practice", "훈련 계획"], ["notes", "훈련 노트"], ["video", "영상"], ["jp", "일본 고교"]] },
 };
-const SECTION_OF = { scout: "scout", practice: "practice", notes: "practice", video: "practice", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
+const SECTION_OF = { scout: "scout", practice: "practice", notes: "practice", video: "practice", jp: "practice", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
 // 직책: 관리자·주장 = 전체 / 부주장·훈련 담당·총무·피지컬 담당 = 맡은 일만 (서버 규칙 private.can 과 같게)
 const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", treasurer: "총무", ops: "훈련 담당", trainer: "피지컬 담당", analyst: "전력분석 담당" };
 // attend = 정규 훈련 변경(시간·없음) · 자율 훈련 · 불참 확인
@@ -529,6 +529,135 @@ function openVidForm(id) {
     </div><div class="row"><button class="btn primary" type="submit">${id ? "저장" : "추가"}</button></div>
     </form>`;
   el.hidden = false; document.body.classList.add("noscroll");
+}
+/* ---------- 일본 고교 배구: 채널 영상을 학교(현별)·대회로 모아 보기 (서버 jp-sync 가 매일 모음) ---------- */
+const JP_PREF = { 北海道: ["홋카이도", 0], 青森: ["아오모리", 0], 岩手: ["이와테", 0], 宮城: ["미야기", 0], 秋田: ["아키타", 0], 山形: ["야마가타", 0], 福島: ["후쿠시마", 0],
+  茨城: ["이바라키", 1], 栃木: ["도치기", 1], 群馬: ["군마", 1], 埼玉: ["사이타마", 1], 千葉: ["지바", 1], 東京: ["도쿄", 1], 神奈川: ["가나가와", 1],
+  新潟: ["니가타", 2], 富山: ["도야마", 2], 石川: ["이시카와", 2], 福井: ["후쿠이", 2], 山梨: ["야마나시", 2], 長野: ["나가노", 2],
+  岐阜: ["기후", 3], 静岡: ["시즈오카", 3], 愛知: ["아이치", 3], 三重: ["미에", 3],
+  滋賀: ["시가", 4], 京都: ["교토", 4], 大阪: ["오사카", 4], 兵庫: ["효고", 4], 奈良: ["나라", 4], 和歌山: ["와카야마", 4],
+  鳥取: ["돗토리", 5], 島根: ["시마네", 5], 岡山: ["오카야마", 5], 広島: ["히로시마", 5], 山口: ["야마구치", 5],
+  徳島: ["도쿠시마", 6], 香川: ["가가와", 6], 愛媛: ["에히메", 6], 高知: ["고치", 6],
+  福岡: ["후쿠오카", 7], 佐賀: ["사가", 7], 長崎: ["나가사키", 7], 熊本: ["구마모토", 7], 大分: ["오이타", 7], 宮崎: ["미야자키", 7], 鹿児島: ["가고시마", 7], 沖縄: ["오키나와", 7] };
+const JP_REGIONS = ["홋카이도·도호쿠", "간토", "호쿠신에쓰", "도카이", "긴키", "주고쿠", "시코쿠", "규슈·오키나와"];
+const JP_TOURN = { haruko: "하루코", ih: "인터하이", kokutai: "국스포", block: "지역 대회", senbatsu: "선발전", shinjin: "신인전", practice: "연습·탐방", univ: "대학", other: "기타" };
+const JP_TOURN_Q = { haruko: "春高バレー", ih: "インターハイ バレー", kokutai: "国スポ バレー 少年", block: "バレー 大会", senbatsu: "選抜 バレー", shinjin: "新人戦 バレー" };
+const JP_RND = [["F", "결승"], ["SF", "준결승"], ["3rd", "3위 결정전"], ["QF", "준준결승"], ["R5", "5회전"], ["R4", "4회전"], ["R3", "3회전"], ["R2", "2회전"], ["R1", "1회전"], ["yosen", "현 예선"], ["", "기타"]];
+const JP_GLOSS = [["春の高校バレー", "하루코"], ["春高バレー", "하루코"], ["春高", "하루코"], ["インターハイ", "인터하이"], ["インハイ", "인터하이"], ["国民スポーツ大会", "국스포"], ["国スポ", "국스포"], ["国体", "국체"],
+  ["準々決勝", "준준결승"], ["準決勝", "준결승"], ["決勝戦", "결승"], ["決勝", "결승"], ["代表決定戦", "대표 결정전"], ["位決定戦", "위 결정전"], ["回戦", "회전"], ["予選", "예선"], ["グループ", "그룹"], ["トーナメント", "토너먼트"],
+  ["九州ブロック", "규슈 블록"], ["全九州", "전규슈"], ["九州", "규슈"], ["近畿", "긴키"], ["東北", "도호쿠"], ["関東", "간토"], ["総体", "총체"], ["総合", "종합"], ["選抜", "선발"], ["新人戦", "신인전"], ["大会", "대회"],
+  ["少年男子", "소년 남자"], ["成年男子", "성년 남자"], ["男子", "남자"], ["女子", "여자"], ["高校", "고교"], ["バレーボール", "배구"], ["バレー部", "배구부"], ["バレー", "배구"],
+  ["第", "제"], ["セット", "세트"], ["フル", "풀영상"], ["ノーカット", "노컷"], ["ハイライト", "하이라이트"], ["スパイク練習", "스파이크 연습"], ["練習", "연습"], ["試合", "경기"], ["得点集", "득점 모음"], ["注目選手", "주목 선수"], ["プレー集", "플레이 모음"],
+["練習風景", "연습 풍경"], ["全て公開します", "전부 공개"], ["公開", "공개"], ["強さの秘訣に迫ります", "강함의 비결"], ["秘訣", "비결"], ["屈指の", "손꼽히는"], ["全国常連校", "전국 단골 학교"], ["常連", "단골"], ["王者", "챔피언"], ["直前", "직전"], ["開幕", "개막"], ["1日", "하루"], ["超強豪", "초강호"], ["天才", "천재"], ["設備", "시설"], ["母校凱旋", "모교 방문"], ["創部", "창단"], ["年目", "년 차"], ["本気", "진심"], ["対決", "대결"], ["最強", "최강"], ["伝説", "전설"], ["衝撃", "충격"], ["驚愕", "경악"], ["過酷", "혹독"], ["超貴重映像", "초귀중 영상"], ["映像", "영상"], ["選手", "선수"], ["監督", "감독"], ["メニュー", "메뉴"], ["種類", "종류"], ["全員", "전원"], ["高校1年生", "고1"],
+  ["潜入してみた", "잠입해 봤다"], ["潜入", "잠입"], ["密着", "밀착"], ["前編", "전편"], ["後編", "후편"], ["強豪", "강호"], ["超名門", "초명문"], ["名門", "명문"], ["全国", "전국"], ["日本一", "일본 1위"], ["準優勝", "준우승"], ["優勝", "우승"], ["代表", "대표"], ["県", "현"], ["途中から", "중간부터"]];
+const jp = () => state.jp || (state.jp = { loaded: false, schools: [], videos: [], sources: [], tab: "school", g: "m", school: null, tourn: "haruko", year: 0, open: null, search: null });
+const jpSchool = id => jp().schools.find(s => s.id === id);
+async function jpLoad() {
+  const J = jp(); if (J.loading) return; J.loading = true;
+  try {
+    const [s, src] = await Promise.all([sb.from("jp_schools").select("*"), sb.from("jp_sources").select("id,kind,ref,label,role,full_done,synced_at")]);
+    const vids = [];
+    for (let from = 0; ; from += 1000) { const r = await sb.from("jp_videos").select("id,source,title,published,year,tourn,gender,rnd,schools").order("added_at", { ascending: false }).range(from, from + 999); if (r.error) throw r.error; vids.push(...(r.data || [])); if ((r.data || []).length < 1000) break; }
+    J.schools = s.data || []; J.sources = src.data || []; J.videos = vids;
+    // 한국어 제목용 바꾸기 목록 (긴 것부터)
+    const rep = [];
+    for (const x of J.schools) { for (const n of [x.name_ja, ...(x.aliases || [])]) { if (!n) continue; if (n.startsWith("re:")) { try { rep.push([new RegExp(n.slice(3), "g"), x.name_ko, 99]); } catch (e) {} } else rep.push([n, x.name_ko, n.length]); } }
+    for (const [ja, [ko]] of Object.entries(JP_PREF)) rep.push([ja, ko, ja.length]);
+    rep.push(["東京都", "도쿄도", 3]);
+    J.rep = rep.sort((a, b) => b[2] - a[2]);
+    J.loaded = true;
+  } catch (e) { J.err = failMsg(e); }
+  J.loading = false; if (state.view === "jp") { state.dirty = false; render(); }
+}
+function jpKo(title) {
+  let t = String(title || "").normalize("NFKC").replace(/#[^\s#]+/g, "").replace(/[｜|]\s*$/, "").replace(/\s+/g, " ").trim();
+  const J = jp();
+  for (const [a, b] of J.rep || []) t = typeof a === "string" ? t.split(a).join(` ${b} `) : t.replace(a, ` ${b} `);
+  for (const [a, b] of JP_GLOSS) t = t.split(a).join(` ${b} `);
+  // 남은 조사(の·に·が…)는 한글 사이에서 지움
+  t = t.replace(/(?<=[\p{Script=Hangul}\s\]!！?？])[のにがをはでとへも](?=[\p{Script=Hangul}\s\[!！A-Za-z0-9])/gu, " ");
+  return t.replace(/【\s*/g, "[").replace(/\s*】/g, "] ").replace(/\s+([!！?？,、。)\]])/g, "$1").replace(/\(\s+/g, "(").replace(/\s+/g, " ").trim();
+}
+const jpRnd = r => { if (!r) return ""; return r.split(":").map(x => (JP_RND.find(y => y[0] === x) || ["", ""])[1]).filter(Boolean).join(" · "); };
+const jpMeta = v => [v.tourn && JP_TOURN[v.tourn] ? JP_TOURN[v.tourn] + (v.year ? " " + v.year : "") : (v.year || ""), jpRnd(v.rnd), v.schools && jpG(v) === "w" ? "여자" : "", (jp().sources.find(s => s.id === v.source) || {}).label || v.ch || ""].filter(Boolean).join(" · ");
+function jpRow(v) {
+  const open = jp().open === v.id;
+  return `<li class="jp-v ${open ? "open" : ""}"><button type="button" class="jp-vh" data-act="jpplay" data-id="${esc(v.id)}"><span class="jp-ic">${svg("video")}</span><span class="jp-vt"><b>${esc(jpKo(v.title))}</b><span class="small muted">${esc(jpMeta(v))}${v.len ? " · " + esc(v.len) : ""}</span><span class="jp-ja">${esc(v.title)}</span></span></button>
+    ${open ? `<div class="vid-frame"><iframe src="https://www.youtube-nocookie.com/embed/${esc(v.id)}?playsinline=1&rel=0&autoplay=1" title="${esc(v.title)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div><a class="btn link small" href="https://www.youtube.com/watch?v=${esc(v.id)}" target="_blank" rel="noopener noreferrer">유튜브에서 열기 ↗</a>` : ""}</li>`;
+}
+const jpList = l => l.length ? `<ul class="jp-list">${l.map(jpRow).join("")}</ul>` : emptyLine("영상이 없어요.");
+const jpGenderOk = (g, x) => x === "mw" || x === g;
+// 제목에 女子가 없어도 나온 학교가 모두 여자부면 여자 경기로
+const jpG = v => v.gender || ((v.schools || []).length && v.schools.every(id => (jpSchool(id) || {}).gender === "w") ? "w" : "m");
+const jpIsVisit = v => (jp().sources.find(s => s.id === v.source) || {}).role === "visit";
+function viewJp() {
+  const J = jp();
+  if (!J.loaded) { jpLoad(); return J.err ? `<div class="panel empty"><strong>불러오지 못했어요</strong><span>${esc(J.err)}</span></div>` : loaderHtml(); }
+  if (J.school) return jpSchoolPage(jpSchool(J.school));
+  const seg = `<div class="seg fill sc-tabs" role="tablist">${[["school", "학교"], ["tourn", "대회"], ["visit", "학교 탐방"]].map(([k, l]) => `<button type="button" class="seg-tab ${J.tab === k ? "on solid" : ""}" role="tab" aria-selected="${J.tab === k}" data-act="jptab" data-k="${k}">${l}</button>`).join("")}</div>`;
+  const gsel = `<div class="sc-row">${[["m", "남자"], ["w", "여자"]].map(([k, l]) => `<button type="button" class="chip sc-chip ${J.g === k ? "on" : ""}" data-act="jpg" data-v="${k}">${l}</button>`).join("")}</div>`;
+  let body = "";
+  if (J.tab === "school") {
+    const cnt = {}; for (const v of J.videos) for (const s of v.schools || []) cnt[s] = (cnt[s] || 0) + 1;
+    const byReg = JP_REGIONS.map(() => ({}));
+    for (const s of J.schools.filter(s => jpGenderOk(J.g, s.gender) && (J.all || cnt[s.id]))) { const p = JP_PREF[s.pref]; if (!p) continue; (byReg[p[1]][s.pref] = byReg[p[1]][s.pref] || []).push(s); }
+    body = `<div class="row between">${gsel}<button type="button" class="chip sc-chip ${J.all ? "on" : ""}" data-act="jpall">모든 학교</button></div>` + JP_REGIONS.map((rg, i) => { const prefs = Object.entries(byReg[i]); if (!prefs.length) return "";
+      return `<section class="sec jp-reg"><h3>${rg}</h3>${prefs.sort((a, b) => Object.keys(JP_PREF).indexOf(a[0]) - Object.keys(JP_PREF).indexOf(b[0])).map(([pf, l]) => `<div class="jp-pref"><span class="jp-pn">${JP_PREF[pf][0]}<span class="jp-ja">${pf}</span></span><div class="jp-sch">${l.sort((a, b) => (cnt[b.id] || 0) - (cnt[a.id] || 0)).map(s => `<button type="button" class="chip jp-chip ${cnt[s.id] ? "" : "zero"}" data-act="jpschool" data-id="${esc(s.id)}">${esc(s.name_ko)}${cnt[s.id] ? ` <span class="small">${cnt[s.id]}</span>` : ""}</button>`).join("")}</div></div>`).join("")}</section>`; }).join("");
+  } else if (J.tab === "tourn") {
+    const T = ["haruko", "ih", "kokutai", "block", "senbatsu", "shinjin"];
+    const inT = J.videos.filter(v => v.tourn === J.tourn && jpG(v) === J.g && !jpIsVisit(v));
+    const years = [...new Set(inT.map(v => v.year).filter(Boolean))].sort((a, b) => b - a);
+    const yr = years.includes(J.year) ? J.year : years[0] || 0;
+    const l = inT.filter(v => !yr || v.year === yr);
+    const groups = JP_RND.map(([k, lab]) => [lab, l.filter(v => { const r = (v.rnd || "").split(":"); return k === "" ? !JP_RND.slice(0, -1).some(([kk]) => r.includes(kk)) : k === "yosen" ? r.includes("yosen") : r.includes(k) && !r.includes("yosen"); })]).filter(([, x]) => x.length);
+    body = `<div class="sc-row">${T.map(k => `<button type="button" class="chip sc-chip ${J.tourn === k ? "on" : ""}" data-act="jptourn" data-v="${k}">${JP_TOURN[k]}</button>`).join("")}</div>${gsel}
+      ${years.length ? `<div class="sc-row"><span class="sc-k">연도</span>${years.map(y => `<button type="button" class="chip sc-chip ${yr === y ? "on" : ""}" data-act="jpyear" data-v="${y}">${y}</button>`).join("")}</div>` : ""}
+      ${groups.length ? groups.map(([lab, x]) => `<section class="sec"><h3>${lab} <span class="small muted">${x.length}</span></h3>${jpList(x)}</section>`).join("") : emptyLine("모아 둔 영상이 없어요.")}
+      ${jpSearchBox(`${JP_TOURN_Q[J.tourn] || ""} ${yr || ""} ${J.g === "w" ? "女子" : "男子"}`)}`;
+  } else {
+    const l = J.videos.filter(v => (J.sources.find(s => s.id === v.source) || {}).role === "visit");
+    const by = {}; for (const v of l) for (const s of (v.schools.length ? v.schools : ["?"])) (by[s] = by[s] || []).push(v);
+    body = Object.entries(by).sort((a, b) => a[0] === "?" ? 1 : b[0] === "?" ? -1 : 0).map(([sid, x]) => { const s = jpSchool(sid);
+      return `<section class="sec"><h3>${s ? `<button type="button" class="btn link" data-act="jpschool" data-id="${esc(s.id)}">${esc(s.name_ko)}</button> <span class="small muted">${JP_PREF[s.pref] ? JP_PREF[s.pref][0] : ""}</span>` : "기타"}</h3>${jpList(x)}</section>`; }).join("") || emptyLine("탐방 영상이 없어요.");
+  }
+  return `<section class="sec"><div class="sec-head"><h2>일본 고교</h2></div>${seg}${body}</section>${can("full") ? jpSourcesHtml() : ""}`;
+}
+function jpSchoolPage(s) {
+  const J = jp(); if (!s) { J.school = null; return viewJp(); }
+  const l = J.videos.filter(v => (v.schools || []).includes(s.id));
+  const visit = l.filter(v => (J.sources.find(x => x.id === v.source) || {}).role === "visit"), games = l.filter(v => !visit.includes(v));
+  const order = ["haruko", "ih", "kokutai", "block", "senbatsu", "shinjin", "practice", "univ", "other", null];
+  const groups = order.map(k => [k, games.filter(v => (v.tourn || null) === k).sort((a, b) => (b.year || 0) - (a.year || 0))]).filter(([, x]) => x.length);
+  const q = s.name_ja.replace(/高校$/, "");
+  return `<section class="sec"><div class="row"><button class="btn link small" type="button" data-act="jpback">‹ 목록</button></div>
+    <div class="jp-head"><h2>${esc(s.name_ko)}</h2><span class="small muted">${esc(s.name_ja)} · ${JP_PREF[s.pref] ? JP_PREF[s.pref][0] : esc(s.pref)}${s.gender === "w" ? " · 여자부" : s.gender === "mw" ? " · 남녀" : ""}</span></div>
+    ${visit.length ? `<section class="sec"><h3>학교 탐방 <span class="small muted">${visit.length}</span></h3>${jpList(visit)}</section>` : ""}
+    ${groups.map(([k, x]) => `<section class="sec"><h3>${k ? JP_TOURN[k] : "기타"} <span class="small muted">${x.length}</span></h3>${jpList(x)}</section>`).join("")}
+    ${!l.length ? emptyLine("모아 둔 영상이 없어요. 아래에서 유튜브를 찾아보세요.") : ""}
+    ${jpSearchBox(`${q} バレー`, [["", "전체"], ["春高", "하루코"], ["インターハイ", "인터하이"], ["練習", "연습"]])}</section>`;
+}
+// 유튜브 검색 (서버 jp-search): 일본어 검색어는 앱이 만들어 줌
+function jpSearchBox(base, extra) {
+  const S = jp().search, q = S && S.base === base ? S.q : base;
+  return `<section class="sec jp-search"><div class="sec-head"><h3>유튜브에서 더 찾기</h3></div>
+    <div class="sc-row">${(extra || [["", "찾기"]]).map(([k, l]) => `<button type="button" class="chip sc-chip ${S && S.base === base && S.k === k ? "on" : ""}" data-act="jpsearch" data-base="${esc(base)}" data-k="${esc(k)}">${l}</button>`).join("")}<span class="small muted jp-ja">${esc(q)}</span></div>
+    ${S && S.base === base ? S.loading ? loaderHtml(true) : S.err ? `<p class="small muted">${esc(S.err)}</p>` : jpList(S.items.map(x => ({ ...x, ch: x.ch, tourn: null }))) : ""}</section>`;
+}
+async function jpSearch(base, k) {
+  const J = jp(), q = `${base} ${k || ""}`.trim();
+  J.search = { base, k, q, loading: true, items: [] }; state.dirty = false; render();
+  try { const r = await sb.functions.invoke("jp-search", { body: { q } }); if (r.error) throw r.error; J.search = { base, k, q, items: (r.data && r.data.items) || [] }; }
+  catch (e) { J.search = { base, k, q, items: [], err: "검색하지 못했어요" }; }
+  if (state.view === "jp") { state.dirty = false; render(); }
+}
+// 채널·재생목록 관리 (관리자)
+function jpSourcesHtml() {
+  const J = jp(), n = {}; for (const v of J.videos) n[v.source] = (n[v.source] || 0) + 1;
+  return `<details class="sec jp-src" data-keep="jp-src" ${keepOpen("jp-src", false)}><summary class="small muted">모으는 채널 ${J.sources.length}</summary><div class="row"><button class="btn small" type="button" data-act="jpsync">지금 가져오기</button></div>
+    <ul class="watch">${J.sources.map(s => `<li><span>${esc(s.label)}</span><span class="small muted">${s.role === "visit" ? "탐방" : "경기"} · ${n[s.id] || 0}개${s.full_done ? "" : " · 가져오는 중"}</span><button class="btn link danger small" type="button" data-act="jpsrcdel" data-id="${esc(s.id)}">빼기</button></li>`).join("")}</ul>
+    <form class="f" id="jpSrcForm"><div class="fields"><label class="fl wide">유튜브 채널 또는 재생목록 주소<input id="jps-url" required maxlength="300" placeholder="https://www.youtube.com/@채널 또는 ...list=..."></label>
+      <label class="fl">종류<select id="jps-role"><option value="match">경기 영상</option><option value="visit">학교 탐방·연습</option></select></label></div>
+      <div class="row"><button class="btn primary" type="submit">추가</button></div></form></details>`;
 }
 /* ---------- 훈련 노트 (쓰고 싶은 사람만, 기본은 나만 봄) ---------- */
 function viewNotes() {
@@ -2104,7 +2233,7 @@ function render() {
   else if (needsSelfReg() || (state.coach && state.editingSelf)) html = viewSelfReg();
   else {
     const v = state.view;
-    html = v === "train" ? viewTrain() : v === "comps" ? viewComps() : v === "sched" ? viewSched() : v === "report" ? viewReport() : v === "practice" ? viewPractice() : v === "notes" ? viewNotes() : v === "video" ? viewVideo() : v === "scout" ? viewScout() : v === "roster" ? viewRoster() : v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : viewHome();
+    html = v === "train" ? viewTrain() : v === "comps" ? viewComps() : v === "sched" ? viewSched() : v === "report" ? viewReport() : v === "practice" ? viewPractice() : v === "notes" ? viewNotes() : v === "video" ? viewVideo() : v === "scout" ? viewScout() : v === "jp" ? viewJp() : v === "roster" ? viewRoster() : v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : viewHome();
   }
   const q = state.session ? queue().length : 0;
   const bar = state.loaded && (state.net === false || q) ? `<div class="netbar">${state.net === false ? "오프라인 · 마지막으로 불러온 내용" : "기록 올리는 중"}${q ? ` · 올라갈 기록 ${q}건` : ""}</div>` : "";
@@ -2257,6 +2386,24 @@ document.addEventListener("click", async ev => {
   }
   if (act === "absopen") return openAbsent(b.dataset.date);
   if (act === "voteopen") return openVote(b.dataset.type, b.dataset.id);
+  if (act.startsWith("jp")) {
+    const J = jp(), v = b.dataset.v;
+    if (act === "jpplay") J.open = J.open === b.dataset.id ? null : b.dataset.id;
+    else if (act === "jptab") { J.tab = b.dataset.k; J.open = null; }
+    else if (act === "jpg") J.g = v;
+    else if (act === "jpall") J.all = !J.all;
+    else if (act === "jpschool") { J.school = b.dataset.id; J.open = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
+    else if (act === "jpback") { J.school = null; J.open = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
+    else if (act === "jptourn") { J.tourn = v; J.year = 0; }
+    else if (act === "jpyear") J.year = Number(v);
+    else if (act === "jpsearch") return jpSearch(b.dataset.base, b.dataset.k);
+    else if (act === "jpsync") { try { ok(await sb.rpc("jp_sync_now")); toast("가져오는 중이에요. 몇 분 뒤 다시 열어 보세요."); } catch (e) { toast(failMsg(e)); } return; }
+    else if (act === "jpsrcdel") {
+      if (!await confirmDel("이 채널과 모은 영상을 뺄까요?")) return;
+      try { ok(await sb.from("jp_sources").delete().eq("id", b.dataset.id)); J.sources = J.sources.filter(x => x.id !== b.dataset.id); J.videos = J.videos.filter(x => x.source !== b.dataset.id); } catch (e) { toast(failMsg(e)); }
+    }
+    state.dirty = false; return render();
+  }
   if (act.startsWith("sc")) {
     const S = sc(), x = S.sel, v = b.dataset.v;
     if (act === "scnew") return openScoutForm("");
@@ -2556,6 +2703,16 @@ document.addEventListener("submit", async ev => {
       if (phone !== ((state.contacts || {})[id] || "")) ok(await sb.from("player_contacts").upsert({ player_id: id, phone: phone || null, updated_at: new Date().toISOString() }));
       state.editPid = id;
       toast(prevPid ? "저장했어요" : `${name} 선수를 추가했어요`);
+    } else if (f.id === "jpSrcForm") {
+      const u = document.getElementById("jps-url").value.trim(), role = document.getElementById("jps-role").value;
+      const pl = u.match(/[?&]list=([A-Za-z0-9_-]{10,64})/), ch = u.match(/youtube\.com\/(@[^/?#\s]+)/);
+      let ref = null, kind = null;
+      if (pl) { ref = pl[1]; kind = "playlist"; } else if (ch) { ref = decodeURIComponent(ch[1]); kind = "channel"; } else if (/^@\S+$/.test(u)) { ref = u; kind = "channel"; }
+      if (!ref) { toast("유튜브 채널(@이름)이나 재생목록 주소를 넣어 주세요."); return; }
+      const id = (kind === "playlist" ? "pl-" : "ch-") + ref.replace(/^@/, "").slice(0, 40);
+      ok(await sb.from("jp_sources").insert({ id, kind, ref, label: kind === "channel" ? ref : "재생목록", role }));
+      try { await sb.rpc("jp_sync_now"); } catch (e) { /* 다음 예약 때 */ }
+      jp().loaded = false; toast("추가했어요. 몇 분 뒤 영상이 채워져요.");
     } else if (f.id === "vidForm") {
       const y = parseYt(document.getElementById("vd-url").value);
       if (!y) { toast("유튜브 재생목록이나 영상 주소를 넣어 주세요."); return; }
