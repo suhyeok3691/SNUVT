@@ -55,7 +55,13 @@ async function nextPage(key: string, ver: string, visitor: string, token: string
 // 학교 이름: jp_schools.name_ja + aliases ('re:' 로 시작하면 정규식). 제목의 '｜' 뒤(선수 이름)와 #해시태그는 빼고 찾음.
 // 짧은 이름이 긴 이름 안에 들어가면(鎮西 ⊂ 鎮西学院) 긴 쪽만.
 type S = { id: string; name_ja: string; aliases: string[] };
-let schools: { id: string; res: RegExp[] }[] = [];
+let schools: { id: string; pref: string; res: RegExp[] }[] = [];
+// 전국대회 대진(jp_matches) · 역대 결과(jp_results): 영상이 전국 본선인지 현 예선인지 가름
+type Side = { ids: string[]; raw: string };
+let MATCH = new Map<string, { rnd: string; gender: string; a: Side; b: Side }[]>();
+let RESULT = new Map<string, { place: number; id: string | null; g: string }[]>();
+const idsOf = (name: string) => { const n = norm(name); return schools.filter((s) => s.res.some((re) => { re.lastIndex = 0; return re.test(n); })).map((s) => s.id); };
+const rawOf = (name: string) => norm(name).replace(/(高等学校|高校)$/, "");
 const norm = (s: string) => s.normalize("NFKC").replace(/\s+/g, "");
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 function tag(title: string) {
@@ -83,16 +89,57 @@ function tag(title: string) {
   else { const r = t.match(/([1-5一二三四五])回戦/); if (r) add("R" + ("1一".includes(r[1]) ? 1 : "2二".includes(r[1]) ? 2 : "3三".includes(r[1]) ? 3 : "4四".includes(r[1]) ? 4 : 5)); }
   let year: number | null = null;
   const y = t.match(/(20[0-3]\d)/); if (y) year = Number(y[1]);
+  else if (t.match(/令和(元|\d{1,2})年/)) { const n = t.match(/令和(元|\d{1,2})年/)!; year = 2018 + (n[1] === "元" ? 1 : Number(n[1])); }
+  else if (t.match(/平成(\d{1,2})年/)) year = 1988 + Number(t.match(/平成(\d{1,2})年/)![1]);
   else { const n = t.match(/第(\d{1,2})回/); if (n && tourn === "haruko") year = Number(n[1]) + (Number(n[1]) < 45 ? 1969 : 1948); else if (n && tourn === "ih") year = Number(n[1]) + 1953; }
-  const gender = /女子|女バレ|ガールズ/.test(t) ? "w" : /男子|男バレ/.test(t) ? "m" : null;
+  let gender: string | null = /女子|女バレ|ガールズ/.test(t) ? "w" : /男子|男バレ/.test(t) ? "m" : null;
   const hits: { id: string; a: number; b: number }[] = [];
   for (const s of schools) for (const re of s.res) { re.lastIndex = 0; let m; while ((m = re.exec(body))) { hits.push({ id: s.id, a: m.index, b: m.index + m[0].length }); if (!m[0].length) break; } }
   const keep = hits.filter((h) => !hits.some((o) => o.id !== h.id && o.a <= h.a && o.b >= h.b && (o.b - o.a) > (h.b - h.a)));
-  return { tourn, rnd, year, gender, schools: [...new Set(keep.map((h) => h.id))] };
+  const ids = [...new Set(keep.map((h) => h.id))];
+  // ---- 위계: 전국 본선 vs 현 예선 ----
+  // 학교 이름을 뺀 제목에 「鹿児島県男子」「県大会」「県高校総体」 같은 말이 있으면 현 대회
+  let rest = body; for (const h of [...keep].sort((x, y) => y.a - x.a)) rest = rest.slice(0, h.a) + " " + rest.slice(h.b);
+  const prefLocal = /[県都府](男子|女子|高等学校|高校総体|総体|大会|予選|代表|決勝|準決勝|準々決勝|バレー|新人)/.test(rest);
+  if ((tourn === "haruko" || tourn === "ih") && !year && prefLocal) rnd = ["yosen", (rnd || "").split(":").filter((x) => x && x !== "yosen").join(":")].filter(Boolean).join(":");
+  if ((tourn === "haruko" || tourn === "ih") && year) {
+    const key = `${tourn}|${year}`, ms = MATCH.get(key) || [], set = new Set(ids);
+    const hit = (sd: Side) => sd.ids.some((i) => set.has(i)) || (sd.raw.length >= 2 && body.includes(sd.raw));
+    const isVs = /vs|VS|Vs|対|×|\s[-ー－]\s/.test(title) || ids.length >= 2;
+    const found = ms.filter((m) => hit(m.a) && hit(m.b) && (!gender || m.gender === gender));
+    const strip = (r: string | null) => (r || "").split(":").filter((x) => x && x !== "yosen").join(":");
+    if (found.length) {
+      const m = found.find((f) => (rnd || "").split(":").includes(f.rnd)) || found[0];
+      rnd = m.rnd; gender = gender || m.gender;
+    } else if (prefLocal) {
+      rnd = ["yosen", strip(rnd)].filter(Boolean).join(":");
+    } else if (ms.length && isVs) {
+      rnd = ["yosen", strip(rnd)].filter(Boolean).join(":");
+    } else if (!ms.length && ids.length >= 2) {
+      const rs = (RESULT.get(key) || []).filter((r) => !gender || r.g === gender), gs = [...new Set(rs.map((r) => r.g))];
+      const r0 = (rnd || "").split(":"), pref = ids.map((i) => (schools.find((s) => s.id === i) || {} as any).pref);
+      const sameP = pref.length >= 2 && pref[0] && pref.every((p) => p === pref[0]);
+      // 결승: 그해 실제 우승·준우승 두 학교, 준결승: 둘 다 그해 4강
+      const okF = gs.some((g) => rs.filter((r) => r.g === g && r.place <= 2).every((r) => set.has(r.id as string)));
+      const okSF = gs.some((g) => ids.every((i) => rs.some((r) => r.g === g && r.id === i)));
+      const badF = r0.includes("F") && !r0.includes("yosen") && rs.length && !okF;
+      const badSF = r0.includes("SF") && !r0.includes("yosen") && rs.length && !okSF;
+      if (sameP || badF || badSF) rnd = ["yosen", strip(rnd)].filter(Boolean).join(":");
+    }
+  }
+  return { tourn, rnd, year, gender, schools: ids };
 }
 async function loadSchools() {
-  const r = await sb.from("jp_schools").select("id,name_ja,aliases");
-  schools = ((r.data || []) as S[]).map((s) => ({ id: s.id, res: [s.name_ja, ...(s.aliases || [])].filter(Boolean).map((x) => x.startsWith("re:") ? new RegExp(x.slice(3), "g") : new RegExp(esc(norm(x)), "g")) }));
+  const r = await sb.from("jp_schools").select("id,name_ja,aliases,pref");
+  schools = ((r.data || []) as (S & { pref: string })[]).map((s) => ({ id: s.id, pref: s.pref, res: [s.name_ja, ...(s.aliases || [])].filter(Boolean).map((x) => x.startsWith("re:") ? new RegExp(x.slice(3), "g") : new RegExp(esc(norm(x)), "g")) }));
+  MATCH = new Map(); RESULT = new Map();
+  for (let from = 0; ; from += 1000) {
+    const m = await sb.from("jp_matches").select("tourn,year,gender,rnd,a_name,b_name").range(from, from + 999);
+    for (const x of m.data || []) { const k = `${x.tourn}|${x.year}`; if (!MATCH.has(k)) MATCH.set(k, []); MATCH.get(k)!.push({ rnd: x.rnd, gender: x.gender, a: { ids: idsOf(x.a_name), raw: rawOf(x.a_name) }, b: { ids: idsOf(x.b_name), raw: rawOf(x.b_name) } }); }
+    if ((m.data || []).length < 1000) break;
+  }
+  const rr = await sb.from("jp_results").select("tourn,year,place,school_id,gender");
+  for (const x of rr.data || []) { const k = `${x.tourn}|${x.year}`; if (!RESULT.has(k)) RESULT.set(k, []); RESULT.get(k)!.push({ place: x.place, id: x.school_id, g: x.gender }); }
 }
 
 async function upsert(src: any, vs: V[]) {

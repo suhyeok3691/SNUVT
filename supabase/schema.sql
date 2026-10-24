@@ -455,3 +455,11 @@ alter table public.logs add constraint logs_pain_area_check
 -- 일정 추가에서 방식(6·9인제) 선택 → events.format. 대회 페이지의 방식 선택은 없앰
 -- lineups.data.members: 교류전 세트별 출전 선수 (1~5세트). 9인제는 같은 세트에 서브 타순(rows)도
 -- jp_videos: 2010년 이전 영상 지움 + 트리거 jp_skip_old 로 앞으로도 안 쌓음. 채널 추가: H-VB · sebas channel sports
+
+-- ===== 전국 본선 / 현 예선 위계 (jp_matches · jp-nat) =====
+-- jp_matches(tourn haruko|ih, gender, year, rnd F|SF|QF|R1~R6|rep|group|3rd, a_name, a_pref, b_name, b_pref, 세트 점수, src):
+--   전국대회 대진. edge function jp-nat 가 koko-volley.com '日程・結果' 글(+ 春高 연도별 결과 글)에서 모음. 매주 월 19:00 UTC(jp-nat-weekly)
+-- jp-sync 태그 순서: ① 그해 전국 대진에 두 학교가 있으면 → 전국(대진의 라운드로) ② 학교 이름을 뺀 제목에 「県男子·県大会·県総体…」 → 현 예선
+--   ③ 대진이 있는 해인데 대진에 없는 대결 → 현 예선 ④ 대진이 없는 해: 같은 현끼리이거나 결승·4강인데 jp_results 와 안 맞으면 현 예선
+--   令和·平成 연도도 읽음. 매주 월 19:30 UTC 에 다시 분류(jp-retag-weekly)
+-- 앱: 하루코·인터하이는 결승 → 4강 → 8강 → 16강 → 2회전 → 1회전 → 현 예선 순. 학교 페이지도 대회를 고르면 같은 순서
