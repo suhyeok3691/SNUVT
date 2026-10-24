@@ -417,3 +417,4 @@ alter table public.logs add constraint logs_pain_area_check
 -- event_votes(kind event|friendly, ref_id, player_id, going, reason, note): 대회·교류전 참가 투표, 본인만 씀
 -- scout_matches(team_id, title, date, opponent, yt, note): 전력분석 경기, can('analysis') = 전력분석부장·관리자
 -- scout_events(match_id, set_no, side us|opp, player_id, opp_no, skill, kind, len, zone, grade #+!-/=, t): 부원 누구나 입력, 본인 것만 지움
+-- wipe_personal 에 event_votes 삭제 추가 (졸업·탈퇴 때 참가 투표도 지움)

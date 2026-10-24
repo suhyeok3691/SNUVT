@@ -1005,11 +1005,12 @@ function weekPhase(mon, evs) {
  *  그 달에서 회복 주·적응 주를 먼저 고르고, 없으면 첫 주. 대회 주·피크 주·대회 뒤 회복 주·방학 첫 주는 피한다. */
 const _measureCache = new Map();
 function measureWeeks(mon, evs) {
-  const key = mon + "|" + evs.map(e => e.kind + e.start + e.end).join(",");
+  // 한 시즌(3월 → 다음 해 2월) 전체를 한 번에 계산해 두고 재사용 (앞 달의 선택은 뒤 달에 영향받지 않음)
+  const y = Number(mon.slice(0, 4)), sy = Number(mon.slice(5, 7)) >= 3 ? y : y - 1, ys = mondayOf(`${sy}-03-01`);
+  const key = sy + "|" + evs.map(e => e.kind + e.start + e.end).join(",");
   if (_measureCache.has(key)) return _measureCache.get(key);
   const out = new Map();
-  const y = Number(mon.slice(0, 4)), ys = mondayOf(`${Number(mon.slice(5, 7)) >= 3 ? y : y - 1}-03-01`);
-  const monthOf = m => dAdd(m, 3).slice(0, 7), lastOfMonth = monthOf(mon);
+  const monthOf = m => dAdd(m, 3).slice(0, 7), lastOfMonth = `${sy + 1}-02`;
   const months = new Map(), start = monthOf(ys) < ys.slice(0, 5) + "03" ? dAdd(ys, 7) : ys;
   for (let m = start; monthOf(m) <= lastOfMonth; m = dAdd(m, 7)) { const k = monthOf(m); if (!months.has(k)) months.set(k, []); months.get(k).push(m); }
   let last = null;
@@ -1036,7 +1037,18 @@ function nextMeasure(date, events) {
   return null;
 }
 // 날짜 하나 → { slot, w, 학기, 그 주 대회, 라벨 … }
+// 같은 일정·같은 날은 계산 결과를 재사용 (화면을 그릴 때 수백 번 불림)
+const _sdCache = new WeakMap();
 function seasonDay(date, events) {
+  if (events && typeof events === "object") {
+    let m = _sdCache.get(events); if (!m) { m = new Map(); _sdCache.set(events, m); }
+    const k = date + (TEAM.swap ? "w" : "m"), hit = m.get(k);
+    if (hit) return { ...hit };
+    const r = seasonDayRaw(date, events); m.set(k, r); return { ...r };
+  }
+  return seasonDayRaw(date, events);
+}
+function seasonDayRaw(date, events) {
   const evs = normEvents(events);
   const mon = mondayOf(date), sun = dAdd(mon, 6), d = dDiff(date, mon);
   const on = k => evs.find(e => e.kind === k && e.start <= date && date <= e.end);

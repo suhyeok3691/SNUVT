@@ -334,18 +334,20 @@ function myName() {
   const p = (state.myPid && state.players[state.myPid]) || state.selfPlayer;
   return p && p.name ? p.name : (state.email || "").split("@")[0];
 }
+// 같은 내용이면 DOM을 건드리지 않음 (다시 그릴 때 깜빡임·잔상·불필요한 레이아웃 계산 줄이기)
+const setHtml = (el, html) => { if (el && el._h !== html) { el.innerHTML = html; el._h = html; } };
 function header() {
   document.getElementById("today").textContent = longDate(today());
   const nm = nextMajor(events(), iso(today()));
   const d = nm ? daysBetween(parseD(nm.start), today()) : null;
-  document.getElementById("dday").innerHTML = !nm ? "" : d > 0 ? `${esc(nm.name)} <strong>D-${d}</strong>` : `${esc(nm.name)} <strong>${d === 0 ? "D-DAY" : "대회 중"}</strong>`;
+  setHtml(document.getElementById("dday"), !nm ? "" : d > 0 ? `${esc(nm.name)} <strong>D-${d}</strong>` : `${esc(nm.name)} <strong>${d === 0 ? "D-DAY" : "대회 중"}</strong>`);
   const who = document.getElementById("who");
   const roleKo = state.title ? TITLES[state.title] : state.coach ? "관리자" : state.role === "player" ? "선수" : "";
   const modeBtn = state.staff && state.loaded ? `<button class="btn mode ${state.admin ? "" : "on"}" type="button" data-act="rolepick" title="어느 화면으로 볼지 골라요">${VIEW_LABEL(state.viewAs)} 화면 ▾</button>` : "";
-  who.innerHTML = state.session ? `<span>${esc(myName())}${roleKo ? " " + roleKo : ""}</span>${modeBtn}<button class="btn link" type="button" data-act="logout">로그아웃</button>` : "";
+  setHtml(who, state.session ? `<span>${esc(myName())}${roleKo ? " " + roleKo : ""}</span>${modeBtn}<button class="btn link" type="button" data-act="logout">로그아웃</button>` : "");
   const ready = state.session && state.role && state.role !== "pending" && !state.offline && !needsSelfReg();
   document.getElementById("menuBtn").hidden = !ready; document.getElementById("setBtn").hidden = !ready;
-  if (!state.session || !state.role || state.role === "pending" || state.offline || needsSelfReg()) { document.getElementById("tabs").innerHTML = ""; document.getElementById("tabbar").hidden = true; document.body.classList.remove("has-bar"); return; }
+  if (!state.session || !state.role || state.role === "pending" || state.offline || needsSelfReg()) { setHtml(document.getElementById("tabs"), ""); document.getElementById("tabs")._key = ""; document.getElementById("tabbar").hidden = true; document.body.classList.remove("has-bar"); return; }
   const secKey = SECTION_OF[state.view], sec = SECTIONS[secKey];
   const nav = document.getElementById("tabs"), bar = document.getElementById("tabbar");
   // 아래 탭 (휴대폰): 홈 · Physical · 일정(가운데) · 공지 · 메뉴
@@ -355,25 +357,40 @@ function header() {
   // 아래 탭 바: 훈련 · Physical · 홈(가운데) · 일정 · 관리(관리 화면) / 영상
   // 다섯 번째 칸: 관리 화면이 있으면 관리, 없으면 전력분석 (영상은 훈련 안에)
   const adminV = secViews(SECTIONS.admin)[0];
-  bar.innerHTML = bt("practice", "ball", "훈련") + bt("train", "physical", "피지컬") + bt("home", "home", "홈", "center") + bt("season", "schedule", "일정") + (adminV ? bt(adminV[0], "admin", "관리") : bt("scout", "chart", "전력분석"));
+  const fifth = adminV ? [adminV[0], "admin", "관리"] : ["scout", "chart", "전력분석"];
+  const barKey = fifth.join("|");
+  if (bar._key === barKey) {
+    // 같은 칸들: 다시 만들지 않고 고른 칸 표시만 바꿈 (누른 자국·깜빡임 없음)
+    for (const b of bar.querySelectorAll(".bt")) { const on = onOf(b.dataset.v); b.classList.toggle("on", on); if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); }
+  } else {
+    bar.innerHTML = bt("practice", "ball", "훈련") + bt("train", "physical", "피지컬") + bt("home", "home", "홈", "center") + bt("season", "schedule", "일정") + bt(fifth[0], fifth[1], fifth[2]);
+    bar._key = barKey;
+  }
   bar.hidden = false; document.body.classList.add("has-bar");
   const vs = sec ? secViews(sec) : [];
-  if (!sec || vs.length < 2) { nav.innerHTML = sec ? `<span class="tab-title">${sec.label}</span>` : ""; nav.hidden = !nav.innerHTML; return; }
+  if (!sec || vs.length < 2) { const h = sec ? `<span class="tab-title">${sec.label}</span>` : ""; setHtml(nav, h); nav._key = ""; nav.hidden = !h; return; }
   nav.hidden = false;
-  nav.innerHTML = `<span class="tab-title">${sec.label}</span><div class="seg" role="tablist"><span class="seg-thumb"></span>${vs.map(([k, l]) => `<button type="button" class="seg-tab ${state.view === k ? "on" : ""}" role="tab" aria-selected="${state.view === k}" data-act="view" data-v="${k}">${l}</button>`).join("")}</div>`;
-  moveThumb(nav);
+  const key = secKey + "|" + vs.map(v => v[0] + v[1]).join(",");
+  if (nav._key === key) {
+    // 같은 섹션: 버튼은 그대로 두고 고른 탭만 바꿈 → 흰 칸이 부드럽게 미끄러짐
+    for (const b of nav.querySelectorAll(".seg-tab")) { const on = b.dataset.v === state.view; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); }
+    placeThumb(nav, true);
+  } else {
+    nav.innerHTML = `<span class="tab-title">${sec.label}</span><div class="seg" role="tablist"><span class="seg-thumb"></span>${vs.map(([k, l]) => `<button type="button" class="seg-tab ${state.view === k ? "on" : ""}" role="tab" aria-selected="${state.view === k}" data-act="view" data-v="${k}">${l}</button>`).join("")}</div>`;
+    nav._key = key; nav._h = null;
+    placeThumb(nav, false);
+  }
 }
 
-// 하위 탭 밑의 흰 칸이 고른 탭으로 미끄러져 감
-let thumbAt = null;
-function moveThumb(nav) {
-  const seg = nav.querySelector(".seg"), on = nav.querySelector(".seg-tab.on"), th = nav.querySelector(".seg-thumb");
-  if (!seg || !on || !th) return;
-  const go = () => { th.style.width = on.offsetWidth + "px"; th.style.transform = `translateX(${on.offsetLeft}px)`; };
-  const key = SECTION_OF[state.view];
-  if (thumbAt && thumbAt.key === key) { th.style.transition = "none"; th.style.width = thumbAt.w + "px"; th.style.transform = `translateX(${thumbAt.x}px)`; th.offsetWidth; th.style.transition = ""; }
-  requestAnimationFrame(go);
-  thumbAt = { key, x: on.offsetLeft, w: on.offsetWidth };
+// 하위 탭 밑의 흰 칸: 위치는 다음 프레임에 한 번만 잼 (그리는 도중에 강제로 레이아웃을 계산하지 않음)
+function placeThumb(nav, animate) {
+  requestAnimationFrame(() => {
+    const on = nav.querySelector(".seg-tab.on"), th = nav.querySelector(".seg-thumb");
+    if (!on || !th) return;
+    if (!animate) th.style.transition = "none";
+    th.style.width = on.offsetWidth + "px"; th.style.transform = `translateX(${on.offsetLeft}px)`;
+    if (!animate) requestAnimationFrame(() => { th.style.transition = ""; });
+  });
 }
 /* ---------- 훈련 계획 (주장·훈련부장이 설계, 모두 봄) ---------- */
 const prMin = b => (b.groups || []).reduce((mx, g) => Math.max(mx, (g.drills || []).reduce((a, d) => a + (Number(d.m) || 0), 0)), 0);
@@ -1903,27 +1920,19 @@ function render() {
   if (state.view === "video") initLatest();
   scoutDock();
 }
-// 화면 넘어갈 때 부드럽게: 섹션이 바뀌면 살짝 올라오며, 같은 섹션 안 탭은 옆으로 미끄러지며
-// 화면 넘김: 지원되면 View Transition(이전 화면이 빠지고 새 화면이 미끄러져 들어옴), 아니면 들어오는 쪽만 움직임
+// 화면 넘김: 새 화면만 짧게 서서히 나타남 (투명도만 바꿔서 휴대폰에서도 가볍게)
 const reduceMotion = () => { try { return matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; } };
 // 불러오는 중: 가운데서 도는 배구공
 const BALL_SVG = '<svg class="ball-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M11.1 7.1a16.55 16.55 0 0 1 10.9 4M12 12a12.6 12.6 0 0 1-8.7 5M16.8 13.6a16.55 16.55 0 0 1-9 7.5M20.7 17a12.8 12.8 0 0 0-8.7-5 13.3 13.3 0 0 1 0-10M6.3 3.8a16.55 16.55 0 0 0 1.9 11.5"/></svg>';
 const loaderHtml = small => `<div class="loader ${small ? "sm" : ""}" role="status" aria-label="불러오는 중">${BALL_SVG}</div>`;
 function go(view) {
-  const from = state.view, sameSec = SECTION_OF[from] && SECTION_OF[from] === SECTION_OF[view];
-  const order = v => (SECTIONS[SECTION_OF[v]] ? SECTIONS[SECTION_OF[v]].views.findIndex(x => x[0] === v) : 0);
-  const dir = sameSec ? (order(view) > order(from) ? "right" : "left") : "up";
+  const from = state.view;
   state.view = view; state.dirty = false; state.armed = null;
   try { history.replaceState(null, "", "#" + view); } catch (e) {}
-  const swap = () => { render(); window.scrollTo(0, 0); };
-  if (from !== view && document.startViewTransition && !reduceMotion()) {
-    document.documentElement.dataset.nav = dir;
-    try { document.startViewTransition(swap); return; } catch (e) { /* 아래로 */ }
-  }
-  swap();
-  if (from === view) return;
-  const m = document.getElementById("main"), cls = "in-" + dir;
-  m.classList.remove("in-right", "in-left", "in-up"); void m.offsetWidth; m.classList.add(cls);
+  render(); window.scrollTo(0, 0);
+  if (from === view || reduceMotion()) return;
+  const m = document.getElementById("main");
+  try { m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: "ease-out" }); } catch (e) { /* 지원 안 하면 그냥 바뀜 */ }
 }
 let toastT;
 function toast(msg) {

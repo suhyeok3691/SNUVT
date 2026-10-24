@@ -106,9 +106,6 @@ nav.tabs { display: flex; align-items: center; gap: 10px; padding: 2px 0 10px; }
 @keyframes in-left { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes sheet-up { from { transform: translateY(32px); opacity: .5; } }
-#main.in-up { animation: in-up .24s cubic-bezier(.2, .8, .2, 1); }
-#main.in-right { animation: in-right .22s cubic-bezier(.2, .8, .2, 1); }
-#main.in-left { animation: in-left .22s cubic-bezier(.2, .8, .2, 1); }
 .sheet-bg:not([hidden]) { animation: fade-in .18s ease-out; }
 .sheet-bg:not([hidden]) .sheet { animation: sheet-up .26s cubic-bezier(.2, .8, .2, 1); }
 .btn, .tile-btn, .menu-item, .hub-row.tap, .chip.entry { transition: background-color .18s, color .18s, border-color .18s, transform .12s; }
@@ -704,17 +701,8 @@ table.roster td.num, table.roster th.num { text-align: right; width: 36px; color
 @keyframes ball-spin { 0% { transform: rotate(0) translateY(0); } 50% { transform: rotate(180deg) translateY(-4px); } 100% { transform: rotate(360deg) translateY(0); } }
 @media (prefers-reduced-motion: reduce) { .ball-spin { animation-duration: 3s; } }
 /* 눌렀을 때 남는 네모 잔상 없애기 */
-html { -webkit-tap-highlight-color: transparent; }
+html { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
 button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
-/* 화면 넘김 (View Transition): 움직임은 줄이고, 이전 화면이 먼저 빠진 뒤 새 화면이 살짝 떠오름 */
-#main { view-transition-name: main; }
-::view-transition-old(root), ::view-transition-new(root) { animation: none; }
-::view-transition-group(main) { animation: none; }
-::view-transition-image-pair(main) { isolation: auto; }
-::view-transition-old(main) { animation: vt-out 90ms ease-out both; }
-::view-transition-new(main) { animation: vt-in 200ms cubic-bezier(.25, .8, .25, 1) 50ms both; }
-@keyframes vt-out { to { opacity: 0; } }
-@keyframes vt-in { from { opacity: 0; transform: translateY(4px); } }
 .team-switch { width: 170px; }
 .team-switch span { padding: 6px 0; font-size: 14px; }
 .t-inline { display: none; margin-left: 6px; font-size: 11px; padding: 0 6px; }
@@ -782,9 +770,9 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=61"></script>
-<script src="guide.js?v=61"></script>
-<script src="library.js?v=61"></script>
-<script src="app.js?v=61"></script>
+<script src="program.js?v=63"></script>
+<script src="guide.js?v=63"></script>
+<script src="library.js?v=63"></script>
+<script src="app.js?v=63"></script>
 </body>
 </html>
