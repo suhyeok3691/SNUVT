@@ -1576,6 +1576,7 @@ const FORMS = {
   event: ["일정 추가", `<form class="f" id="eventForm" data-close="1"><div class="fields">
       <label class="fl">이름<input id="ev-name" required maxlength="40" placeholder="예: KUSF 중부 예선"></label>
       <label class="fl">종류<select id="ev-kind">${Object.entries(EVENT_KINDS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
+      <label class="fl">방식<select id="ev-fmt"><option value="6">6인제</option><option value="9">9인제</option></select></label>
       <div class="pair"><label class="fl">시작<input type="date" id="ev-start" required></label><label class="fl">끝<input type="date" id="ev-end"></label></div>
       <label class="fl wide">메모<input id="ev-note" maxlength="100" placeholder="예: 본선 진출 시에만"></label>
     </div><div class="row"><button class="btn primary" type="submit">추가</button></div></form>`],
@@ -2104,22 +2105,35 @@ function cupPage(x) {
     : en.size ? `<div class="cup-en"><p><span class="cup-k">주전</span>${[...st].map(id => playerOf(id)).filter(Boolean).map(p => `<span class="chip cup-p ${p.id === state.myPid ? "me" : ""}">${pNo(p)}${esc(p.name)}</span>`).join("") || `<span class="small muted">아직 안 정했어요</span>`}</p>
         <p><span class="cup-k">후보</span>${[...en].filter(id => !st.has(id)).map(id => playerOf(id)).filter(Boolean).map(p => `<span class="chip cup-p ${p.id === state.myPid ? "me" : ""}">${pNo(p)}${esc(p.name)}</span>`).join("") || `<span class="small muted">없음</span>`}</p></div>`
     : emptyLine("아직 엔트리가 없어요.");
-  let serve = "";
-  if (x.fmt === "9") {
+  // 세트별 출전(교류전) · 서브 타순(9인제): 세트마다 따로
+  const needSets = x.kind === "friendly" || x.fmt === "9", nSets = x.kind === "friendly" ? 5 : 3;
+  let sets = "";
+  if (needSets) {
     const L = C.lineups[key];
-    if (!L) { cupLoadLineups(x.kind, x.id); serve = loaderHtml(true); }
-    else serve = `<div class="sc-row">${[1, 2, 3].map(n => `<button type="button" class="chip sc-chip ${C.set === n ? "on" : ""}" data-act="cupset" data-v="${n}">${n}세트</button>`).join("")}<button type="button" class="btn small" data-act="cupprint">인쇄</button></div>${serveSheet(x, L[C.set] || {}, can("schedule"))}`;
+    if (C.set > nSets) C.set = 1;
+    if (!L) { cupLoadLineups(x.kind, x.id); sets = loaderHtml(true); }
+    else {
+      const d = L[C.set] || {}, tabs = `<div class="sc-row">${Array.from({ length: nSets }, (_, i) => i + 1).map(n => `<button type="button" class="chip sc-chip ${C.set === n ? "on" : ""}" data-act="cupset" data-v="${n}">${n}세트${(L[n] && (L[n].members || []).length) ? ` <span class="small">${L[n].members.length}</span>` : ""}</button>`).join("")}${x.fmt === "9" ? `<button type="button" class="btn small" data-act="cupprint">인쇄</button>` : ""}</div>`;
+      sets = tabs + (x.kind === "friendly" ? setMembers(x, d, can("schedule")) : "") + (x.fmt === "9" ? `<h4 class="cup-sub">서브 타순</h4>${serveSheet(x, d, can("schedule"))}` : "");
+    }
   }
   return `<section class="sec"><div class="row"><button class="btn link small" type="button" data-act="cupback">‹ 목록</button></div>
     <div class="jp-head"><h2 class="dyn">${esc(x.name)}</h2><span class="small muted">${esc(x.when)} · ${x.fmt === "9" ? "9인제" : "6인제"}</span></div>
-    ${x.kind === "event" && can("schedule") ? `<div class="sc-row"><span class="sc-k">방식</span>${[["6", "6인제"], ["9", "9인제"]].map(([k, l]) => `<button type="button" class="chip sc-chip ${x.fmt === k ? "on" : ""}" data-act="cupfmt" data-v="${k}">${l}</button>`).join("")}</div>` : ""}
     <div class="panel">${voteBox(x.kind, x.id)}</div>
     <section class="panel sec"><div class="sec-head"><h3>엔트리</h3>${can("schedule") && !C.edit ? `<button class="btn small" type="button" data-act="cupedit">선정</button>` : ""}</div>${entry}</section>
-    ${x.fmt === "9" ? `<section class="panel sec"><div class="sec-head"><h3>서브 타순</h3></div>${serve}</section>` : ""}</section>`;
+    ${needSets ? `<section class="panel sec"><div class="sec-head"><h3>세트별 ${x.kind === "friendly" ? "출전" : "서브 타순"}</h3></div>${sets}</section>` : ""}</section>`;
+}
+// 교류전 세트별 출전: 6인제 6명 · 9인제 9명 (엔트리가 있으면 엔트리 안에서)
+function setMembers(x, d, canEdit) {
+  const need = x.fmt === "9" ? 9 : 6, en = entryOf(x.kind, x.id), mem = new Set(d.members || []);
+  const pool = sortedPlayers().filter(p => !p.military && (!en.size || en.has(p.id))).sort((a, b) => (a.number ?? 999) - (b.number ?? 999));
+  if (!canEdit) return mem.size ? `<div class="jp-chips cup-mem">${pool.concat(sortedPlayers().filter(p => mem.has(p.id) && !pool.includes(p))).filter(p => mem.has(p.id)).map(p => `<span class="chip cup-p ${p.id === state.myPid ? "me" : ""}">${pNo(p)}${esc(p.name)}</span>`).join("")}</div>` : emptyLine("아직 안 정했어요.");
+  return `<form class="f" id="setMemForm" data-kind="${x.kind}" data-id="${esc(x.id)}"><div class="jp-chips cup-mem">${pool.map(p => `<label class="chip-check"><input type="checkbox" value="${esc(p.id)}" ${mem.has(p.id) ? "checked" : ""}><span>${pNo(p)}${esc(p.name)}</span></label>`).join("")}</div>
+    <div class="row"><button class="btn primary small" type="submit">${cupState().set}세트 저장</button><span class="small muted" id="sm-n">${mem.size} / ${need}명</span></div></form>`;
 }
 // 서브 타순표: 팀명 · 코트 · 감독 · 코치 · 코치 · 주장 · 1~15번 (등번호 · 선수 · 체크)
 function serveSheet(x, d, canEdit) {
-  const en = entryOf(x.kind, x.id), pool = sortedPlayers().filter(p => en.size ? en.has(p.id) : !p.military).sort((a, b) => (a.number ?? 999) - (b.number ?? 999));
+  const en = entryOf(x.kind, x.id), mem = new Set(d.members || []), pool = sortedPlayers().filter(p => mem.size ? mem.has(p.id) : en.size ? en.has(p.id) : !p.military).sort((a, b) => (a.number ?? 999) - (b.number ?? 999));
   const rows = Array.from({ length: 15 }, (_, i) => (d.rows || [])[i] || {});
   const pname = id => { const p = playerOf(id); return p ? p.name : ""; };
   if (!canEdit && !rows.some(r => r.pid)) return emptyLine("아직 안 적었어요.");
@@ -2719,6 +2733,7 @@ document.addEventListener("change", ev => {
   if (ev.target.id === "scOpp") { sc().sel.opp = ev.target.value; return; }
   if (ev.target.id === "scSy") { sc().sy = Number(ev.target.value); state.dirty = false; return render(); }
   if (ev.target.id === "scOppSel") { sc().oppSel = ev.target.value; state.dirty = false; return render(); }
+  if (ev.target.closest && ev.target.closest("#setMemForm")) { const f = ev.target.closest("#setMemForm"), n = f.querySelectorAll('input[type="checkbox"]:checked').length, el = f.querySelector("#sm-n"); if (el) el.textContent = el.textContent.replace(/^\d+/, n); return; }
   if (ev.target.classList.contains("ss-p")) { const p = playerOf(ev.target.value), c = ev.target.closest("tr").querySelector(".ss-no"); if (c) c.textContent = p && p.number != null ? p.number : ""; return; }
   if (ev.target.name === "chg-kind") { const off = ev.target.value === "off", w = document.getElementById("chgTimes"); if (w) { w.hidden = off; w.querySelector("#ptd-s").required = !off; } return; }
   if (ev.target.name === "teamsw") return switchTeam(ev.target.value);
@@ -2949,7 +2964,7 @@ document.addEventListener("submit", async ev => {
     } else if (f.id === "eventForm") {
       const start = txt("ev-start"), end = txt("ev-end") || start;
       if (end < start) { toast("끝 날짜가 시작보다 앞이에요."); return; }
-      ok(await sb.from("events").insert({ name: txt("ev-name"), kind: document.getElementById("ev-kind").value, start_date: start, end_date: end, note: txt("ev-note") || null }));
+      ok(await sb.from("events").insert({ name: txt("ev-name"), kind: document.getElementById("ev-kind").value, format: document.getElementById("ev-fmt").value, start_date: start, end_date: end, note: txt("ev-note") || null }));
       toast("일정을 추가했어요. 프로그램이 맞춰졌어요.");
     } else if (f.id === "logForm") {
       const lw = await dbWrite("logs", "insert", {
@@ -2967,10 +2982,17 @@ document.addEventListener("submit", async ev => {
       ok(await sb.from("entries").delete().eq("kind", kind).eq("ref_id", id));
       if (en.size) ok(await sb.from("entries").insert([...en].map(player_id => ({ kind, ref_id: id, player_id, starter: st.includes(player_id) }))));
       cupState().edit = false; toast(`엔트리 ${en.size}명 · 주전 ${st.length}명`);
+    } else if (f.id === "setMemForm") {
+      const C = cupState(), kind = f.dataset.kind, id = f.dataset.id, prev = ((C.lineups[kind + ":" + id] || {})[C.set]) || {};
+      const data = { ...prev, members: [...f.querySelectorAll('input[type="checkbox"]:checked')].map(x => x.value) };
+      ok(await sb.from("lineups").upsert({ team_id: TEAM.id, kind, ref_id: id, set_no: C.set, data, updated_at: new Date().toISOString() }));
+      ((C.lineups[kind + ":" + id] = C.lineups[kind + ":" + id] || {}))[C.set] = data;
+      toast(`${C.set}세트 ${data.members.length}명 저장`); state.dirty = false; render(); return;
     } else if (f.id === "serveForm") {
       const C = cupState(), kind = f.dataset.kind, id = f.dataset.id;
       const rows = Array.from({ length: 15 }, (_, i) => ({ pid: (f.querySelector(`.ss-p[data-i="${i}"]`) || {}).value || null, chk: !!(f.querySelector(`.ss-chk[data-i="${i}"]`) || {}).checked }));
-      const data = { team: txt("ss-team"), court: txt("ss-court"), coachHead: txt("ss-head"), coach1: txt("ss-c1"), coach2: txt("ss-c2"), captain: document.getElementById("ss-cap").value || null, rows };
+      const prev = ((C.lineups[kind + ":" + id] || {})[C.set]) || {};
+      const data = { ...prev, team: txt("ss-team"), court: txt("ss-court"), coachHead: txt("ss-head"), coach1: txt("ss-c1"), coach2: txt("ss-c2"), captain: document.getElementById("ss-cap").value || null, rows };
       ok(await sb.from("lineups").upsert({ team_id: TEAM.id, kind, ref_id: id, set_no: C.set, data, updated_at: new Date().toISOString() }));
       ((C.lineups[kind + ":" + id] = C.lineups[kind + ":" + id] || {}))[C.set] = data;
       toast(`${C.set}세트 서브 타순을 저장했어요`); state.dirty = false; render(); return;
@@ -3233,7 +3255,7 @@ function buildState(raw) {
   const pk = {};
   for (const r of raw.day_picks || []) (pk[r.player_id] = pk[r.player_id] || {})[r.date] = r.pick;
   state.picks = pk;
-  state.events = raw.events ? raw.events.map(r => ({ id: r.id, name: r.name, kind: r.kind, start: r.start_date, end: r.end_date, note: r.note })) : null;
+  state.events = raw.events ? raw.events.map(r => ({ id: r.id, name: r.name, kind: r.kind, start: r.start_date, end: r.end_date, note: r.note, format: r.format || null })) : null;
   // 졸업생은 팀 명단에서 빼고 따로 둔다 (기록만 남음)
   state.alumni = (raw.players || []).filter(r => r.alumni).map(r => ({ id: r.id, name: r.name, pos: r.pos, left: r.left_on })).sort((a, b) => String(b.left || "").localeCompare(String(a.left || "")));
   state.players = Object.fromEntries((raw.players || []).filter(r => !r.alumni).map(r => [r.id, {

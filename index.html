@@ -870,6 +870,13 @@ td.num.good { color: var(--good); font-weight: 700; } td.num.crit { color: var(-
 .ss-tbl input:not([type="checkbox"]), .ss-tbl select { width: 100%; border: 0; background: transparent; font: inherit; color: inherit; padding: 2px 0; min-height: 0; }
 .ss-tbl input[type="checkbox"] { width: 18px; height: 18px; }
 #serveForm .row { margin-top: 10px; }
+.cup-sub { margin: 14px 0 6px; font-size: 14px; }
+.cup-mem { margin: 4px 0 8px; }
+.chip-check { position: relative; }
+.chip-check input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.chip-check span { display: inline-block; padding: 6px 12px; border: 1.5px solid var(--line); border-radius: 999px; font-size: 13.5px; font-weight: 600; background: var(--surface); }
+.chip-check input:checked + span { background: var(--blue); border-color: var(--blue); color: #fff; }
+.chip-check input:focus-visible + span { outline: 2px solid var(--blue); outline-offset: 2px; }
 
 /* 박스: 항목마다 칸으로 나눔 (기본) */
 .box-cols { display: grid; gap: 16px; }
@@ -898,9 +905,9 @@ ul.ev-list.boxes { gap: 8px; }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=73"></script>
-<script src="guide.js?v=73"></script>
-<script src="library.js?v=73"></script>
-<script src="app.js?v=73"></script>
+<script src="program.js?v=74"></script>
+<script src="guide.js?v=74"></script>
+<script src="library.js?v=74"></script>
+<script src="app.js?v=74"></script>
 </body>
 </html>
