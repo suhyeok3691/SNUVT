@@ -357,7 +357,8 @@ function header() {
   // 아래 탭 바: 훈련 · Physical · 홈(가운데) · 일정 · 관리(관리 화면) / 영상
   // 다섯 번째 칸: 관리 화면이 있으면 관리, 없으면 전력분석 (영상은 훈련 안에)
   const adminV = secViews(SECTIONS.admin)[0];
-  const fifth = adminV ? [adminV[0], "admin", "관리"] : ["scout", "chart", "전력분석"];
+  // 관리는 자주 안 들어가니 메뉴·홈 칸으로만, 아래 탭은 모두 같게
+  const fifth = ["scout", "chart", "전력분석"];
   const barKey = fifth.join("|");
   if (bar._key === barKey) {
     // 같은 칸들: 다시 만들지 않고 고른 칸 표시만 바꿈 (누른 자국·깜빡임 없음)
