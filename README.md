@@ -4,7 +4,7 @@
 
 - 화면: 정적 파일(HTML·JS)
 - 로그인·데이터: Supabase (프로젝트 `juhcaodotxspzzzfzrnt`)
-- 배포: Vercel. GitHub `suhyeok3691/snuvt-physical`의 `main`에 올리면 자동으로 배포돼요.
+- 배포: Vercel. GitHub `suhyeok3691/SNUVT`(예전 이름 snuvt-physical)의 `main`에 올리면 자동으로 배포돼요.
 - 주소: https://snuvt-physical.vercel.app
 
 이 문서 하나에 구조·데이터·운영을 모았어요. DB의 정확한 정의는 `supabase/schema.sql`에 있어요.
