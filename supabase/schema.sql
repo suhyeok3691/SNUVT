@@ -423,3 +423,8 @@ alter table public.logs add constraint logs_pain_area_check
 -- scout_events.src: 공격 토스 위치 L 레프트 · M 속공 · R 라이트 · P 파이프 · B 백라이트 (세터 분배 분석)
 -- scout_points(match_id, set_no, rot 1~6, serve us|opp, won, t, author): 랠리 결과 → 로테이션별 사이드아웃·브레이크
 --   읽기·입력은 팀 부원, 지우기는 본인 또는 can('analysis'). restrictive "team scope" = private.scout_team(match_id)
+
+-- ===== 영상 정렬 (edge function yt-latest) =====
+-- 부른 사람 로그인으로 videos(kind=playlist)를 읽고 유튜브 재생목록 페이지의 '마지막 업데이트' 날짜·영상 수를 돌려줌 (유튜브 주소는 안 돌려줌)
+-- 일부 공개 영상은 RSS 피드에 안 나와서 페이지를 읽음. 10분 캐시. '가장 최근 영상' 칸은 없애고 최근 업데이트된 재생목록을 위로
+-- yt-probe: 테스트용이었고 지금은 410만 돌려줌 (대시보드에서 지워도 됨)
