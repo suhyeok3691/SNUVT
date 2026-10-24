@@ -371,3 +371,8 @@ alter table public.logs add constraint logs_pain_area_check
 -- set_member_title(target, title): 관리자·주장만, 관리자·주장 지정 시 role coach
 -- players.number 등번호 · player_contacts(전화, 본인·명단 담당만) · submit_my_info 에 number
 -- program_edits: 날 종류(slot)·블록(block)마다 운동 박스 add/remove, player_id 없으면 팀 전체 (트레이닝 담당 쓰기)
+
+-- ===== private_body_and_practice_plans (적용됨) =====
+-- player_private: 키·몸무게 (본인 · 관리자·주장 · 트레이닝 담당만). players.height/weight 는 비우고 트리거로 옮김
+-- private.can('practice'): 관리자·주장 + 훈련부장
+-- practice_plans(date pk, title, goal, blocks jsonb[{title, minutes, groups:[{name, pos[], drills:[{n, m, note}]}]}], published)

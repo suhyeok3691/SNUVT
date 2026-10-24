@@ -87,19 +87,20 @@ const injText = x => `${(INJ_SIDES.find(s => s[0] === x.side) || ["", ""])[1].re
 const normYear = v => { const t = String(v || "").trim(); return /^[1-9]$/.test(t) ? t + "학년" : /^[1-9]\s*학년$/.test(t) ? t.replace(/\s+/g, "") : t; };
 const confirmDel = msg => { try { return window.confirm(msg); } catch (e) { return false; } };
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
-const VIEWS = ["home", "train", "plan", "rec", "season", "comps", "sched", "week", "roster", "intake", "load", "settings"];
+const VIEWS = ["home", "practice", "train", "plan", "rec", "season", "comps", "sched", "week", "roster", "intake", "load", "settings"];
 // 섹션: 홈 → Physical(트레이닝) · 일정 · 관리 · 설정. 공지는 홈 맨 위
 const SECTIONS = {
   physical: { label: "Physical", views: [["train", "오늘"], ["plan", "프로그램"], ["rec", "기록"]] },
   schedule: { label: "일정", views: [["season", "다가오는"], ["comps", "대회·교류전"], ["sched", "훈련 관리", "schedule"]] },
   admin: { label: "관리", views: [["week", "주간 요약", "training"], ["roster", "명단", "roster"], ["intake", "부원 관리", "full"], ["load", "부하·리포트", "training"]] },
+  practice: { label: "훈련", views: [["practice", "훈련 계획"]] },
   settings: { label: "설정", views: [["settings", "설정"]] },
 };
-const SECTION_OF = { train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", sched: "schedule", week: "admin", roster: "admin", intake: "admin", load: "admin", settings: "settings" };
+const SECTION_OF = { practice: "practice", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", sched: "schedule", week: "admin", roster: "admin", intake: "admin", load: "admin", settings: "settings" };
 // 직책: 관리자·주장 = 전체 / 부주장·훈련부장·총무·트레이닝 담당 = 맡은 일만 (서버 규칙 private.can 과 같게)
 const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", ops: "훈련부장", treasurer: "총무", trainer: "트레이닝 담당" };
-const TITLE_JOB = { admin: "모든 기능 · 직책 지정", captain: "모든 기능 · 직책 지정", vice: "일정 · 공지 · 명단", ops: "일정 · 훈련 시간 · 교류전 · 엔트리 · 불참 · 공지", treasurer: "공지 · 명단(연락처)", trainer: "프로그램 편집 · 측정 수정 · 부상·복귀 · 부하" };
-const STAFF_PERMS = { vice: ["schedule", "notice", "roster"], ops: ["schedule", "notice"], treasurer: ["notice", "roster"], trainer: ["training"] };
+const TITLE_JOB = { admin: "모든 기능 · 직책 지정", captain: "모든 기능 · 직책 지정", vice: "일정 · 공지 · 명단", ops: "훈련 설계 · 일정 · 훈련 시간 · 교류전 · 엔트리 · 불참 · 공지", treasurer: "공지 · 명단(연락처)", trainer: "프로그램 편집 · 측정 수정 · 부상·복귀 · 부하" };
+const STAFF_PERMS = { vice: ["schedule", "notice", "roster"], ops: ["schedule", "notice", "practice"], treasurer: ["notice", "roster"], trainer: ["training"] };
 // 관리 화면일 때만: full(관리자·주장) · schedule · notice · roster · training
 const can = perm => !!state.admin && (state.coach || (perm !== "full" && (STAFF_PERMS[state.title] || []).includes(perm)));
 const secViews = sec => sec.views.filter(v => !v[2] || can(v[2]));
@@ -108,6 +109,7 @@ const ICON = {
   home: '<path d="M4 11.5 12 4.5l8 7V20a1 1 0 0 1-1 1h-4.5v-6h-5v6H5a1 1 0 0 1-1-1z"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  ball: '<circle cx="12" cy="12" r="9"/><path d="M12 3c-2 3-2 6 0 9s2 6 0 9M3.5 9c3 1 6 1 8.5-1s5.5-2 8.5-1M4 16c3-1.5 6-1.5 8.5 0s5.5 1.5 7.5 0"/>',
   trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 21h8M9 17h6"/>',
   record: '<path d="M8 4h8l1 2h2a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h2z"/><path d="M8.5 13l2.5 2.5 4.5-5"/>',
   schedule: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
@@ -136,7 +138,7 @@ const state = {
   players: {}, tests: {}, health: {}, logs: {}, inbody: {}, events: null,
   loaded: false, offline: false, admin: false, coach: false, canWrite: null, dirty: false, armed: null,
   session: null, role: null, myPid: null, email: "", profiles: [], authMode: "login", authMsg: "", authErr: false, booting: true,
-  selfPlayer: null, selfHealth: null, editingSelf: false, painChecks: {}, openKeys: {}, wellness: {}, lifts: {}, planCtx: null, teamOff: {}, picks: {}, friendlies: {}, absences: {}, notices: [], entries: {}, ptimes: {}, contacts: {}, edits: [], title: null, staff: false,
+  selfPlayer: null, selfHealth: null, editingSelf: false, painChecks: {}, openKeys: {}, wellness: {}, lifts: {}, planCtx: null, teamOff: {}, picks: {}, friendlies: {}, absences: {}, notices: [], entries: {}, ptimes: {}, contacts: {}, edits: [], title: null, staff: false, practice: {},
 };
 let sb = null;
 
@@ -342,6 +344,82 @@ function moveThumb(nav) {
   requestAnimationFrame(go);
   thumbAt = { key, x: on.offsetLeft, w: on.offsetWidth };
 }
+/* ---------- 훈련 계획 (주장·훈련부장이 설계, 모두 봄) ---------- */
+const prMin = b => (b.groups || []).reduce((mx, g) => Math.max(mx, (g.drills || []).reduce((a, d) => a + (Number(d.m) || 0), 0)), 0);
+function practiceDays() { const t = iso(today()); return teamDays(dAdd(t, -7), 35).filter(x => x.i.slot === "team"); }
+function prDateNow() {
+  const t = iso(today()), days = practiceDays();
+  if (state.prDate && (days.some(d => d.date === state.prDate) || state.practice[state.prDate])) return state.prDate;
+  return (days.find(d => d.date >= t) || days.at(-1) || {}).date || null;
+}
+function viewPractice() {
+  const days = practiceDays(), date = prDateNow(), canEd = can("practice"), edit = canEd && state.prEdit;
+  if (!date) return emptyLine("앞으로 정규 훈련 날이 없어요.");
+  const plan = state.practice[date], me = playerOf(state.myPid), info = infoOn(date);
+  const chips = `<div class="pr-days">${days.map(d => `<button type="button" class="pr-day ${d.date === date ? "on" : ""} ${d.date < iso(today()) ? "past" : ""}" data-act="prday" data-d="${d.date}"><b>${md(parseD(d.date))}</b><span>${DOW_KO[parseD(d.date).getDay()]}</span>${state.practice[d.date] ? `<i class="dot"></i>` : ""}</button>`).join("")}</div>`;
+  const head = `<div class="row between pr-head"><div><h3>${longDate(parseD(date))}</h3><span class="small muted">${esc(tdLabel(info))}</span></div>
+    ${canEd && plan ? `<div class="row">${edit ? `<label class="check"><input type="checkbox" data-act="prpub" ${plan.published ? "checked" : ""}> 선수에게 공개</label>` : ""}<button class="btn ${edit ? "primary" : ""} small" type="button" data-act="predit">${edit ? "완료" : "편집"}</button></div>` : ""}</div>`;
+  if (!plan) return `${chips}<section class="sec">${head}
+    ${canEd ? `<div class="panel pr-empty"><p>아직 이날 훈련 계획이 없어요.</p><div class="row"><button class="btn primary" type="button" data-act="prnew" data-k="tpl">기본 틀로 시작</button>${Object.keys(state.practice).some(d => d < date) ? `<button class="btn" type="button" data-act="prnew" data-k="copy">지난 훈련 복사</button>` : ""}<button class="btn" type="button" data-act="prnew" data-k="blank">빈 계획</button></div>
+      <p class="small muted">기본 틀: 볼 체조 → 기본기(대인) → 포지션별 → 서브·리시브 → 연계(3단 공격) → 게임형 → 미팅</p></div>` : emptyLine("아직 훈련 계획이 올라오지 않았어요.")}</section>`;
+  const total = plan.blocks.reduce((a, b) => a + (Number(b.minutes) || prMin(b)), 0);
+  const blocks = plan.blocks.map((b, bi) => {
+    const groups = b.groups || [];
+    const gHtml = groups.map((g, gi) => {
+      const mine = me && g.pos && g.pos.length && g.pos.includes(me.pos);
+      const drills = (g.drills || []).map((d, di) => edit
+        ? `<div class="box"><span class="bn">${esc(d.n)}</span><span class="br">${d.m ? d.m + "분" : ""}</span><button type="button" class="bx" data-act="prdrop" data-b="${bi}" data-g="${gi}" data-i="${di}" aria-label="${esc(d.n)} 제외">✕</button></div>`
+        : `<li><span class="nm">${esc(d.n)}${d.note ? `<span class="small muted"> · ${esc(d.note)}</span>` : ""}</span><span class="rx">${d.m ? d.m + "분" : ""}</span></li>`).join("");
+      return `<div class="pr-grp ${mine ? "mine" : ""}">${groups.length > 1 || (g.pos && g.pos.length) ? `<div class="pr-gname">${esc(g.name || "그룹")}${mine ? ` <span class="tag-in">내 포지션</span>` : ""}</div>` : ""}
+        ${edit ? `<div class="boxes">${drills}<button type="button" class="box add-box" data-act="prdrill" data-b="${bi}" data-g="${gi}">＋ 드릴 추가</button></div>` : `<ul class="pr-drills">${drills || `<li class="small muted">드릴 없음</li>`}</ul>`}</div>`;
+    }).join("");
+    return `<section class="pr-blk ${groups.length > 1 ? "split-blk" : ""}">
+      <div class="pr-bh"><span class="pr-no">${bi + 1}</span><b>${esc(b.title)}</b><span class="small muted">${Number(b.minutes) || prMin(b)}분${groups.length > 1 ? " · 포지션별 동시에" : ""}</span>
+        ${edit ? `<span class="pr-ctl"><button type="button" class="btn link small" data-act="prblk" data-b="${bi}">수정</button><button type="button" class="btn link small" data-act="prmove" data-b="${bi}" data-d="-1" ${bi ? "" : "disabled"} aria-label="위로">↑</button><button type="button" class="btn link small" data-act="prmove" data-b="${bi}" data-d="1" ${bi < plan.blocks.length - 1 ? "" : "disabled"} aria-label="아래로">↓</button><button type="button" class="btn link small danger" data-act="prbdel" data-b="${bi}">삭제</button></span>` : ""}</div>
+      <div class="pr-groups">${gHtml}</div></section>`;
+  }).join("");
+  return `${chips}<section class="sec">${head}
+    ${edit ? `<form class="f panel pr-meta" id="prMetaForm" data-d="${date}"><div class="fields"><label class="fl">제목<input id="pr-title" maxlength="60" value="${esc(plan.title)}" placeholder="예: 리시브 집중"></label><label class="fl wide">목표<input id="pr-goal" maxlength="200" value="${esc(plan.goal)}" placeholder="예: 서브 리시브 A패스 60% 이상"></label></div><div class="row"><button class="btn" type="submit">저장</button><button class="btn link small danger" type="button" data-act="prwipe">계획 지우기</button></div></form>`
+      : `${plan.title || plan.goal ? `<div class="panel pr-top">${plan.title ? `<b>${esc(plan.title)}</b>` : ""}${plan.goal ? `<span class="small">목표 · ${esc(plan.goal)}</span>` : ""}</div>` : ""}`}
+    <p class="small muted">${plan.blocks.length}개 블록 · 약 ${total}분${!plan.published ? " · 선수에게 아직 안 보임" : ""}</p>
+    <div class="pr-list">${blocks || emptyLine("블록이 없어요.")}</div>
+    ${edit ? `<button class="btn add" type="button" data-act="prblk" data-b="new">＋ 블록 추가</button>` : ""}
+  </section>`;
+}
+async function prSave(date, fn) {
+  const cur = state.practice[date] ? JSON.parse(JSON.stringify(state.practice[date])) : { title: "", goal: "", blocks: [], published: true };
+  const next = fn(cur) || cur;
+  try {
+    ok(await sb.from("practice_plans").upsert({ date, title: next.title || null, goal: next.goal || null, blocks: next.blocks, published: next.published !== false, updated_at: new Date().toISOString() }));
+    state.practice[date] = next; state.dirty = false; render(); return true;
+  } catch (e) { toast(failMsg(e)); return false; }
+}
+function openPrBlock(bi) {
+  const date = prDateNow(), plan = state.practice[date] || { blocks: [] }, b = bi === "new" ? null : plan.blocks[Number(bi)];
+  const split = b ? (b.groups || []).length > 1 : false;
+  const el = document.getElementById("sheet");
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${b ? "블록 수정" : "블록 추가"}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <form class="f" id="prBlockForm" data-b="${bi}" data-close="1"><div class="fields">
+      <label class="fl wide">이름<input id="pb-title" required maxlength="40" value="${esc(b ? b.title : "")}" placeholder="예: 서브 · 서브 리시브"></label>
+      <label class="fl">시간 (분)<input id="pb-min" type="number" inputmode="numeric" min="0" max="180" value="${esc(b ? b.minutes ?? "" : "")}"></label>
+      <label class="fl">누가<select id="pb-split"><option value="all" ${split ? "" : "selected"}>공통 (다 같이)</option><option value="pos" ${split ? "selected" : ""}>포지션별 (나눠서 동시에)</option></select></label>
+    </div><div class="row"><button class="btn primary" type="submit">${b ? "저장" : "추가"}</button></div>
+    <p class="small muted">포지션별: ${PRACTICE_GROUPS.map(g => g[0]).join(" · ")} 그룹으로 나뉘어요.</p></form>`;
+  el.hidden = false; document.body.classList.add("noscroll");
+}
+function openPrDrill(bi, gi) {
+  const el = document.getElementById("sheet"), cats = [...new Set(DRILL_LIB.map(x => x.c))];
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>드릴 추가</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <form class="f" id="prDrillForm" data-b="${bi}" data-g="${gi}" data-close="1">
+      <div class="fields"><label class="fl wide">드릴<input id="pd-name" required maxlength="60" placeholder="목록에서 고르거나 직접 쓰기"></label><label class="fl">시간 (분)<input id="pd-min" type="number" inputmode="numeric" min="0" max="120"></label><label class="fl wide">메모<input id="pd-note" maxlength="80" placeholder="예: 리시브 A패스만 카운트"></label></div>
+      <div class="row"><button class="btn primary" type="submit">추가</button></div>
+    </form>
+    <input id="pd-q" class="bx-q" placeholder="찾기 (예: 리시브, 토스, 게임)" autocomplete="off">
+    <div class="lib-cats">${cats.map((c, i) => `<button type="button" class="chip ${i ? "" : "on"}" data-act="drcat" data-c="${esc(c)}">${esc(c)}</button>`).join("")}</div>
+    <div class="lib" id="dlib">${drillList(cats[0], "")}</div>`;
+  el.hidden = false; document.body.classList.add("noscroll");
+}
+const drillList = (cat, q) => DRILL_LIB.filter(x => q ? x.n.includes(q) : x.c === cat).map(x => `<button type="button" class="box lib-box" data-act="drpick" data-n="${esc(x.n)}" data-m="${x.m}"><span class="bn">${esc(x.n)}</span><span class="br">${x.m}분</span></button>`).join("") || `<p class="small muted">없어요. 위에 직접 써서 넣어도 돼요.</p>`;
 /* ---------- 메뉴 (왼쪽에서 열림) ---------- */
 function openDrawer() {
   const el = document.getElementById("drawer"); if (!el) return;
@@ -349,7 +427,7 @@ function openDrawer() {
   const group = (k, ic) => { const sec = SECTIONS[k]; return `<div class="dr-group"><div class="dr-h">${svg(ic)}<span>${sec.label}</span></div>${secViews(sec).map(([v, l]) => link(v, l)).join("")}</div>`; };
   el.querySelector(".drawer-body").innerHTML = `<div class="dr-top"><b>SNUVT</b><button class="btn link" type="button" data-act="drawerclose" aria-label="닫기">닫기</button></div>
     <div class="dr-group">${link("home", "홈")}</div>
-    ${group("physical", "physical")}${group("schedule", "schedule")}${secViews(SECTIONS.admin).length ? group("admin", "admin") : ""}
+    ${group("practice", "ball")}${group("physical", "physical")}${group("schedule", "schedule")}${secViews(SECTIONS.admin).length ? group("admin", "admin") : ""}
     ${state.staff ? `<div class="dr-group"><button type="button" class="dr-link" data-act="mode">${state.admin ? "선수 화면으로" : "관리자 화면으로"}</button></div>` : ""}`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
@@ -398,6 +476,7 @@ function viewHome() {
   const fr = Object.entries(state.friendlies).filter(([d]) => d >= t && d <= dAdd(t, 21)).sort().flatMap(([d, fs]) => fs.map(f => ({ d, f })))[0];
   const rows = [
     `<div class="hub-row tap" data-act="view" data-v="season" role="button" tabindex="0"><span class="k">팀 일정</span><span class="v">${esc(teamLine)}${ab ? ` <span class="chip warn">불참</span>` : ""}${!isTeamDay(team) && nextT ? `<span class="small muted">다음 · ${md(parseD(nextT.date))} (${DOW_KO[parseD(nextT.date).getDay()]}) ${esc(tdLabel(nextT.i))}</span>` : ""}</span><span class="go">›</span></div>`,
+    state.practice[t] && isTeamDay(team) ? `<div class="hub-row tap" data-act="prgo" data-d="${t}" role="button" tabindex="0"><span class="k">훈련 계획</span><span class="v">${esc(state.practice[t].title || "오늘 훈련")}<span class="small muted">${state.practice[t].blocks.length}개 블록 · ${state.practice[t].blocks.reduce((a, b) => a + (Number(b.minutes) || 0), 0)}분</span></span><span class="go">›</span></div>` : "",
     plan ? `<div class="hub-row tap" data-act="view" data-v="train" role="button" tabindex="0"><span class="k">개인 훈련</span><span class="v">${esc(plan.title)}${!wellOn(me.id, t) ? `<span class="small muted">아침 컨디션 아직</span>` : ""}</span><span class="go">›</span></div>` : "",
     fr ? `<div class="hub-row tap" data-act="view" data-v="comps" role="button" tabindex="0"><span class="k">교류전</span><span class="v"><span class="line">${md(parseD(fr.d))} (${DOW_KO[parseD(fr.d).getDay()]}) vs ${esc(fr.f.opponent)}${me && entryOf("friendly", fr.f.id).has(me.id) ? ` <span class="tag-in">엔트리</span>` : ""}</span><span class="small muted">${fmtKo(fr.f)}${fr.f.start ? ` · ${fr.f.start}${fr.f.end ? "–" + fr.f.end : ""}` : ""}${fr.f.place ? ` · ${esc(fr.f.place)}` : ""}</span></span><span class="go">›</span></div>` : "",
   ].filter(Boolean).join("");
@@ -417,7 +496,7 @@ function viewTrain() {
   const me = playerOf(state.myPid);
   const parts = [];
   if (state.admin && !me) parts.push(`<section class="panel row between"><div><h3>내 선수 정보가 아직 없어요</h3></div><button class="btn primary" type="button" data-act="editself">내 정보 입력</button></section>`);
-  if (me) parts.push(wellnessHtml(me), todayHtml(me), rtpHtml(me), myStatusHtml(me));
+  if (me) parts.push(wellnessHtml(me), todayHtml(me), myStatusHtml(me));
   else if (!state.admin) parts.push(`<div class="panel empty"><strong>계정이 선수와 연결되지 않았어요</strong><span>관리자에게 연결을 요청해 주세요.</span></div>`);
   return parts.join("");
 }
@@ -649,7 +728,7 @@ function blockHtml(b, edit) {
   if (edit) {
     const boxes = b.items.map(x => NOEDIT_RE.test(x.name) ? `<div class="box fixed"><span class="bn">${esc(x.name)}</span><span class="br">${esc(rxMain(x.rx))}</span></div>`
       : `<div class="box ${x.edit ? "added" : ""}"><span class="bn">${esc(x.name)}${x.mod ? ` <span class="mod">${esc(x.mod)}</span>` : ""}</span><span class="br">${esc(rxMain(x.rx))}</span><button type="button" class="bx" data-act="boxdel" data-b="${esc(b.key)}" data-n="${esc(x.name)}" ${x.edit ? `data-e="${esc(x.edit)}"` : ""} aria-label="${esc(x.name)} 빼기">✕</button></div>`).join("");
-    return `<section class="blk b-${esc(b.key)} editing"><h4>${esc(b.title)}</h4><div class="boxes">${boxes}<button type="button" class="box add-box" data-act="boxadd" data-b="${esc(b.key)}">+ 박스</button></div></section>`;
+    return `<section class="blk b-${esc(b.key)} editing"><h4>${esc(b.title)}</h4><div class="boxes">${boxes}<button type="button" class="box add-box" data-act="boxadd" data-b="${esc(b.key)}">＋ 운동 추가</button></div></section>`;
   }
   return `<section class="blk b-${esc(b.key)}"><h4>${esc(b.title)}</h4><ul class="rows">${b.items.map(x => {
     const rec = x.name === "통증 체크" ? "pain" : x.name === "세션 RPE 기록" ? "log" : "";
@@ -663,13 +742,13 @@ function blockHtml(b, edit) {
 const SLOT_KO = { gymA: "하체 웨이트 날", gymB: "상체 웨이트 날", bwU: "맨몸 상체 날", bwL: "맨몸 하체 날", act: "활성화 날", team: "정규 훈련 날", recover: "회복 날", prep: "대회 전날" };
 const editCtx = { slot: null, pid: null };
 function editBar(plan, p) {
-  if (!SLOT_KO[plan.slot]) return `<section class="panel edit-bar"><div class="row between"><b>프로그램 편집</b><button class="btn small" type="button" data-act="boxedit">끝내기</button></div><p class="small muted">이날(${esc(plan.kind || plan.slot)})은 편집할 수 없어요. 웨이트·맨몸·활성화·정규 훈련·회복 날을 골라 주세요.</p></section>`;
+  if (!SLOT_KO[plan.slot]) return `<section class="panel edit-bar"><div class="row between"><b>프로그램 편집</b><button class="btn small" type="button" data-act="boxedit">완료</button></div><p class="small muted">이날(${esc(plan.kind || plan.slot)})은 편집할 수 없어요. 웨이트·맨몸·활성화·정규 훈련·회복 날을 골라 주세요.</p></section>`;
   const team = !p || state.editScope === "team";
   const rem = state.edits.filter(e => e.op === "remove" && e.slot === plan.slot && (team ? !e.pid : e.pid === p.id));
-  return `<section class="panel edit-bar"><div class="row between"><b>프로그램 편집 · ${SLOT_KO[plan.slot]}</b><button class="btn small primary" type="button" data-act="boxedit">끝내기</button></div>
+  return `<section class="panel edit-bar"><div class="row between"><b>프로그램 편집 · ${SLOT_KO[plan.slot]}</b><button class="btn small primary" type="button" data-act="boxedit">완료</button></div>
     ${p ? `<div class="seg fill" role="radiogroup" aria-label="적용 범위"><button type="button" class="seg-tab ${team ? "" : "on solid"}" data-act="boxscope" data-s="me">${esc(p.name)}만</button><button type="button" class="seg-tab ${team ? "on solid" : ""}" data-act="boxscope" data-s="team">팀 전체</button></div>` : ""}
-    <p class="small muted">${team ? "모든 선수" : esc(p.name) + " 선수"}의 '${SLOT_KO[plan.slot]}'마다 똑같이 바뀌어요. ✕ 빼기 · '+ 박스' 넣기</p>
-    ${rem.length ? `<div class="removed"><span class="small muted">뺀 박스</span>${rem.map(e => `<button type="button" class="chip" data-act="boxundo" data-e="${esc(e.id)}" title="되돌리기">${esc(e.name)} ↺</button>`).join("")}</div>` : ""}
+    <p class="small muted">${team ? "모든 선수" : esc(p.name) + " 선수"}의 '${SLOT_KO[plan.slot]}'마다 똑같이 바뀌어요. ✕ 제외 · '＋ 운동 추가'로 넣기</p>
+    ${rem.length ? `<div class="removed"><span class="small muted">제외한 운동</span>${rem.map(e => `<button type="button" class="chip" data-act="boxundo" data-e="${esc(e.id)}" title="다시 넣기">${esc(e.name)} ↺</button>`).join("")}</div>` : ""}
   </section>`;
 }
 async function boxWrite(op, row) {
@@ -682,10 +761,10 @@ async function boxWrite(op, row) {
 }
 function openBoxLib(block) {
   const el = document.getElementById("sheet"), cats = [...new Set(BOX_LIB.map(x => x.c))];
-  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>박스 넣기</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>운동 추가</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="boxForm" data-b="${esc(block)}" data-close="1">
       <div class="fields"><label class="fl wide">운동<input id="bx-name" required maxlength="80" placeholder="목록에서 고르거나 직접 쓰기"></label><label class="fl">세트×반복<input id="bx-rx" maxlength="40" placeholder="예: 3×8"></label></div>
-      <div class="row"><button class="btn primary" type="submit">넣기</button></div>
+      <div class="row"><button class="btn primary" type="submit">추가</button></div>
     </form>
     <input id="bx-q" class="bx-q" placeholder="찾기 (예: 홉, 스쿼트, 발목)" autocomplete="off">
     <div class="lib-cats">${cats.map((c, i) => `<button type="button" class="chip ${i ? "" : "on"}" data-act="libcat" data-c="${esc(c)}">${esc(c)}</button>`).join("")}</div>
@@ -717,7 +796,7 @@ function viewPlan() {
     ${can("training") ? (state.boxEdit ? editBar(plan, p) : `<button class="btn small cu-btn" type="button" data-act="boxedit">프로그램 편집</button>`) : ""}
     ${notes.length ? `<ul class="notes callout">${notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
     ${picksHtml(plan, pid, date)}${scopedBlocks(plan, false, can("training") && state.boxEdit && !!SLOT_KO[plan.slot])}
-  </section>${can("training") ? rtpHtml(p) : ""}`;
+  </section>`;
 }
 // 팀 세션(다 같이) / 개인(포지션 · 재활 · 예방)으로 나눠 보여 주기
 // 비시즌은 '자율', 쉬는 날·대회 날은 나누지 않음
@@ -726,10 +805,10 @@ function scopedBlocks(plan, teamOnly, edit) {
   const team = plan.blocks.filter(b => b.scope !== "me"), me = teamOnly ? [] : plan.blocks.filter(b => b.scope === "me");
   if (["rest", "recover", "match", "prep"].includes(plan.slot) && !me.length) return `<div class="blocks">${team.map(bh).join("")}</div>`;
   const teamH = plan.optional ? "자율" : "팀 세션";
-  if (teamOnly) return `<h3 class="scope-h">${teamH}</h3><div class="blocks">${team.map(bh).join("")}</div>${edit && !plan.blocks.some(b => b.key === "extra") ? `<button type="button" class="btn add" data-act="boxadd" data-b="extra">+ 새 블록 (추가 운동)</button>` : ""}`;
+  if (teamOnly) return `<h3 class="scope-h">${teamH}</h3><div class="blocks">${team.map(bh).join("")}</div>${edit && !plan.blocks.some(b => b.key === "extra") ? `<button type="button" class="btn add" data-act="boxadd" data-b="extra">＋ 블록 추가</button>` : ""}`;
   const more = (key, label) => edit && !plan.blocks.some(b => b.key === key) ? `<button type="button" class="btn add" data-act="boxadd" data-b="${key}">+ ${label}</button>` : "";
-  return `<div class="split"><div class="sp-col"><h3 class="scope-h">${teamH}</h3>${team.map(bh).join("")}${more("extra", "새 블록 (추가 운동)")}</div>
-    <div class="sp-col"><h3 class="scope-h me">개인</h3>${me.length ? me.map(bh).join("") : edit ? "" : `<p class="small muted">오늘은 개인 운동이 없어요.</p>`}${more("extra-me", "새 블록 (개인 추가)")}</div></div>`;
+  return `<div class="split"><div class="sp-col"><h3 class="scope-h">${teamH}</h3>${team.map(bh).join("")}${more("extra", "블록 추가 (팀)")}</div>
+    <div class="sp-col"><h3 class="scope-h me">개인</h3>${me.length ? me.map(bh).join("") : edit ? "" : `<p class="small muted">오늘은 개인 운동이 없어요.</p>`}${more("extra-me", "블록 추가 (개인)")}</div></div>`;
 }
 function viewTeamPlan() {
   const mon = selMon(), d = selDay(), date = dAdd(mon, d);
@@ -1172,16 +1251,7 @@ const seasonRange = () => { const t = iso(today()), y = Number(t.slice(0, 4)), m
 const addBtn = (form, label) => `<button class="btn add" type="button" data-act="addform" data-f="${form}">+ ${label}</button>`;
 function viewSeason() {
   const { t } = seasonRange(), me = playerOf(state.myPid), l = teamDays(t, 14);
-  const weeks = Array.from({ length: 8 }, (_, k) => dAdd(thisMon(), 7 * k)).map(mon => {
-    const infos = DAYS.map((_, d) => infoOn(dAdd(mon, d)));
-    const i = infos[3], tag = infos.some(x => x.slot === "match") ? "cup" : infos.every(x => x.optional) ? "opt" : i.measure ? "test" : "";
-    const note = i.measure ? "측정" : "", nf = infos.filter(x => x.slot === "friendly").length;
-    return `<li class="${tag}"><span class="num">${md(parseD(mon))}</span><span>${esc(weekLabel(mon).replace(/^[12]학기 · 정규 훈련 [^ ]+ · /, ""))}${note ? ` <span class="chip">${note}</span>` : ""}${nf ? ` <span class="chip">교류전${nf > 1 ? " " + nf : ""}</span>` : ""}</span></li>`;
-  }).join("");
-  return `<div class="cols">
-    <div class="col"><section class="sec"><h3>훈련·교류전 <span class="small muted">2주</span></h3>${l.length && (can("schedule") || me) ? attendRows(l, me) : emptyLine("2주 안에 팀 일정이 없어요.")}</section></div>
-    <div class="col"><section class="sec"><h3>앞으로 8주</h3><ul class="season-weeks">${weeks}</ul></section></div>
-  </div>`;
+  return `<section class="sec"><h3>훈련·교류전 <span class="small muted">2주</span></h3>${l.length && (can("schedule") || me) ? attendRows(l, me) : emptyLine("2주 안에 팀 일정이 없어요.")}</section>`;
 }
 function viewComps() {
   const { t, sy, from, to } = seasonRange();
@@ -1264,7 +1334,7 @@ const fmtKo = f => f.format === "9" ? "9인제" : "6인제";
 const tdLabel = i => i.slot === "friendly" ? `교류전 vs ${i.friendly.opponent} · ${fmtKo(i.friendly)}${i.friendly.start ? ` · ${i.friendly.start}${i.friendly.end ? "–" + i.friendly.end : ""}` : ""}${i.friendly.place ? ` · ${i.friendly.place}` : ""}` : `정규 훈련 · ${i.teamTime || "18:00–21:00"}${i.teamTimeNote && i.teamTimeNote !== "시간 바뀜" ? " · " + i.teamTimeNote : ""}`;
 function attendRows(list, me) {
   return `<ul class="attend">${list.map(({ date, i }) => {
-    const head = `<div class="at-when"><b>${longDate(parseD(date))}</b><span class="small muted">${esc(tdLabel(i))}</span></div>`;
+    const head = `<div class="at-when"><b>${longDate(parseD(date))}</b><span class="small muted">${esc(tdLabel(i))}</span>${state.practice[date] ? `<button type="button" class="btn link small pr-link" data-act="prgo" data-d="${date}">훈련 계획 보기</button>` : ""}</div>`;
     if (can("schedule")) {
       const abs = sortedPlayers().map(p => [p, absOf(p.id, date)]).filter(([, a]) => a);
       return `<li>${head}<div class="at-who">${abs.length ? `<span class="chip warn">불참 ${abs.length}</span>` : `<span class="small muted">불참 없음</span>`}</div>
@@ -1527,7 +1597,7 @@ function render() {
   else if (needsSelfReg() || (state.coach && state.editingSelf)) html = viewSelfReg();
   else {
     const v = state.view;
-    html = v === "train" ? viewTrain() : v === "comps" ? viewComps() : v === "sched" ? viewSched() : v === "week" ? viewWeek() : v === "roster" ? viewRoster() : v === "settings" ? viewSettings() : v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : v === "load" ? viewLoad() : viewHome();
+    html = v === "train" ? viewTrain() : v === "comps" ? viewComps() : v === "sched" ? viewSched() : v === "week" ? viewWeek() : v === "practice" ? viewPractice() : v === "roster" ? viewRoster() : v === "settings" ? viewSettings() : v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : v === "load" ? viewLoad() : viewHome();
   }
   const q = state.session ? queue().length : 0;
   const bar = state.loaded && (state.net === false || q) ? `<div class="netbar">${state.net === false ? "오프라인 · 마지막으로 불러온 내용" : "기록 올리는 중"}${q ? ` · 올라갈 기록 ${q}건` : ""}</div>` : "";
@@ -1641,6 +1711,23 @@ document.addEventListener("click", async ev => {
   if (act === "entry") return openEntry(b.dataset.kind, b.dataset.id);
   if (act === "addform") return openForm(b.dataset.f);
   if (act === "edtest") return openTestEdit(b.dataset.id);
+  if (act === "prgo") { state.prDate = b.dataset.d; return go("practice"); }
+  if (act === "prday") { state.prDate = b.dataset.d; state.dirty = false; return render(); }
+  if (act === "predit") { state.prEdit = !state.prEdit; state.dirty = false; return render(); }
+  if (act === "prpub") { const d = prDateNow(), on = b.checked; return prSave(d, p => { p.published = on; }).then(r => r && toast(on ? "선수에게 공개했어요" : "선수에게 안 보이게 했어요")); }
+  if (act === "prnew") {
+    const d = prDateNow(), k = b.dataset.k, prev = Object.keys(state.practice).filter(x => x < d).sort().at(-1);
+    state.prEdit = true;
+    return prSave(d, p => { p.blocks = k === "tpl" ? PRACTICE_TEMPLATE() : k === "copy" && prev ? JSON.parse(JSON.stringify(state.practice[prev].blocks)) : []; if (k === "copy" && prev) { p.title = state.practice[prev].title; p.goal = state.practice[prev].goal; } });
+  }
+  if (act === "prwipe") { if (!confirmDel("이날 훈련 계획을 지울까요?")) return; const d = prDateNow(); try { ok(await sb.from("practice_plans").delete().eq("date", d)); delete state.practice[d]; state.prEdit = false; render(); toast("지웠어요"); } catch (e) { toast(failMsg(e)); } return; }
+  if (act === "prmove") { const i = Number(b.dataset.b), j = i + Number(b.dataset.d); return prSave(prDateNow(), p => { if (j < 0 || j >= p.blocks.length) return; [p.blocks[i], p.blocks[j]] = [p.blocks[j], p.blocks[i]]; }); }
+  if (act === "prbdel") { if (!confirmDel("이 블록을 지울까요?")) return; const i = Number(b.dataset.b); return prSave(prDateNow(), p => { p.blocks.splice(i, 1); }); }
+  if (act === "prblk") return openPrBlock(b.dataset.b);
+  if (act === "prdrill") return openPrDrill(b.dataset.b, b.dataset.g);
+  if (act === "prdrop") { const [bi, gi, di] = [b.dataset.b, b.dataset.g, b.dataset.i].map(Number); return prSave(prDateNow(), p => { p.blocks[bi].groups[gi].drills.splice(di, 1); }); }
+  if (act === "drcat") { document.querySelectorAll(".lib-cats .chip").forEach(x => x.classList.toggle("on", x === b)); document.getElementById("pd-q").value = ""; document.getElementById("dlib").innerHTML = drillList(b.dataset.c, ""); return; }
+  if (act === "drpick") { document.getElementById("pd-name").value = b.dataset.n; document.getElementById("pd-min").value = b.dataset.m || ""; document.querySelectorAll(".lib-box").forEach(x => x.classList.toggle("on", x === b)); return; }
   if (act === "boxedit") { state.boxEdit = !state.boxEdit; if (state.boxEdit && !state.editScope) state.editScope = "team"; state.dirty = false; return render(); }
   if (act === "boxscope") { state.editScope = b.dataset.s; state.dirty = false; return render(); }
   if (act === "boxadd") return openBoxLib(b.dataset.b);
@@ -1744,6 +1831,7 @@ document.addEventListener("change", ev => {
 });
 document.addEventListener("toggle", ev => { const d = ev.target; if (d && d.dataset && d.dataset.keep) state.openKeys[d.dataset.keep] = d.open; }, true);
 document.addEventListener("input", ev => {
+  if (ev.target.id === "pd-q") { const q = ev.target.value.trim(); const cat = (document.querySelector(".lib-cats .chip.on") || {}).dataset; document.getElementById("dlib").innerHTML = drillList(cat ? cat.c : "", q); return; }
   if (ev.target.id === "bx-q") { const q = ev.target.value.trim(); const cat = (document.querySelector(".lib-cats .chip.on") || {}).dataset; document.getElementById("lib").innerHTML = libList(cat ? cat.c : "", q); return; } const f = ev.target.closest("form.f"); if (f && f.id !== "authForm") state.dirty = true; });
 
 // 개인 조정 (관리자): 메모 · 빼기 · 바꾸기("원래 → 바꿀 것")
@@ -1873,10 +1961,29 @@ document.addEventListener("submit", async ev => {
       if (phone !== ((state.contacts || {})[id] || "")) ok(await sb.from("player_contacts").upsert({ player_id: id, phone: phone || null, updated_at: new Date().toISOString() }));
       state.editPid = id;
       toast(prevPid ? "저장했어요" : `${name} 선수를 추가했어요`);
+    } else if (f.id === "prMetaForm") {
+      const title = txt("pr-title"), goal = txt("pr-goal");
+      if (await prSave(f.dataset.d, p => { p.title = title; p.goal = goal; })) toast("저장했어요");
+      return;
+    } else if (f.id === "prBlockForm") {
+      const bi = f.dataset.b, title = txt("pb-title"), minutes = num("pb-min"), split = document.getElementById("pb-split").value === "pos";
+      closeSheet();
+      await prSave(prDateNow(), p => {
+        const groupsFor = old => split ? PRACTICE_GROUPS.map(([name, pos]) => (old || []).find(g => g.name === name) || { name, pos, drills: [] }) : [{ name: "공통", pos: [], drills: (old || []).flatMap(g => g.drills || []) }];
+        if (bi === "new") p.blocks.push({ title, minutes, groups: groupsFor(null) });
+        else { const b = p.blocks[Number(bi)]; const was = (b.groups || []).length > 1; b.title = title; b.minutes = minutes; if (was !== split) b.groups = groupsFor(was ? null : b.groups); }
+      });
+      return;
+    } else if (f.id === "prDrillForm") {
+      const bi = Number(f.dataset.b), gi = Number(f.dataset.g), n = txt("pd-name"); if (!n) return;
+      const d = { n, m: num("pd-min") || null, note: txt("pd-note") || undefined };
+      closeSheet();
+      if (await prSave(prDateNow(), p => { p.blocks[bi].groups[gi].drills.push(d); })) toast(`${n} 추가했어요`);
+      return;
     } else if (f.id === "boxForm") {
       const name = txt("bx-name"); if (!name) return;
       closeSheet();
-      if (await boxWrite("insert", { player_id: editCtx.pid, slot: editCtx.slot, block: f.dataset.b, op: "add", name, rx: txt("bx-rx") || null })) toast(`${name} 넣었어요`);
+      if (await boxWrite("insert", { player_id: editCtx.pid, slot: editCtx.slot, block: f.dataset.b, op: "add", name, rx: txt("bx-rx") || null })) toast(`${name} 추가했어요`);
       return;
     } else if (f.id === "profileForm") {
       const phone = txt("pr-phone");
@@ -2087,16 +2194,19 @@ async function loadAll() {
       sb.from("practice_times").select("*"),
       sb.from("player_contacts").select("*"),
       sb.from("program_edits").select("*").order("created_at"),
+      sb.from("player_private").select("*"),
+      sb.from("practice_plans").select("*"),
     ];
     if (state.coach) q.push(sb.from("profiles").select("*").order("created_at"));
     const res = await Promise.all(q);
-    const [st, pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq, frq, abq, nq, enq, ptq, ctq, peq] = res, pr = state.coach ? res[18] : null;
+    const [st, pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq, frq, abq, nq, enq, ptq, ctq, peq, pvq, ppq] = res, pr = state.coach ? res[20] : null;
     for (const r of [pl, ts, hl, lg]) if (r.error) throw r.error;
     const rows = r => r && !r.error && Array.isArray(r.data) ? r.data : [];
     raw = { players: pl.data, tests: ts.data, health: hl.data, logs: lg.data, pain_checks: rows(pcs), events: evq && !evq.error ? evq.data : null,
-      wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), notices: rows(nq), entries: rows(enq), practice_times: rows(ptq), player_contacts: rows(ctq), program_edits: rows(peq), profiles: pr && !pr.error ? pr.data : [],
+      wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), notices: rows(nq), entries: rows(enq), practice_times: rows(ptq), player_contacts: rows(ctq), program_edits: rows(peq), player_private: rows(pvq), practice_plans: rows(ppq), profiles: pr && !pr.error ? pr.data : [],
       me: { role: state.role, player_id: state.myPid } };
-    lsSet(snapKey(), raw); state.net = true;
+    // 기기에 남기는 사본에는 연락처와 다른 사람 키·몸무게를 넣지 않음
+    lsSet(snapKey(), { ...raw, player_contacts: (raw.player_contacts || []).filter(r => r.player_id === state.myPid), player_private: (raw.player_private || []).filter(r => r.player_id === state.myPid) }); state.net = true;
   } catch (e) {
     raw = lsGet(snapKey());
     if (!raw) { state.offline = true; render(); return; }
@@ -2145,6 +2255,8 @@ function buildState(raw) {
     if (!state.staff) state.admin = false;
   }
   state.contacts = Object.fromEntries((raw.player_contacts || []).map(r => [r.player_id, r.phone || ""]));
+  for (const r of raw.player_private || []) if (state.players[r.player_id]) Object.assign(state.players[r.player_id], { height: r.height == null ? null : Number(r.height), weight: r.weight == null ? null : Number(r.weight) });
+  state.practice = Object.fromEntries((raw.practice_plans || []).map(r => [r.date, { title: r.title || "", goal: r.goal || "", blocks: Array.isArray(r.blocks) ? r.blocks : [], published: r.published !== false }]));
   state.edits = (raw.program_edits || []).map(r => ({ id: r.id, pid: r.player_id || null, slot: r.slot, block: r.block, op: r.op, name: r.name, rx: r.rx || "", cue: r.cue || "" }));
   const tests = {};
   for (const r of raw.tests || []) {
