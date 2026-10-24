@@ -108,7 +108,7 @@ const state = {
   players: {}, tests: {}, health: {}, logs: {}, inbody: {}, events: null,
   loaded: false, offline: false, admin: false, coach: false, canWrite: null, dirty: false, armed: null,
   session: null, role: null, myPid: null, email: "", profiles: [], authMode: "login", authMsg: "", authErr: false, booting: true,
-  selfPlayer: null, selfHealth: null, editingSelf: false, painChecks: {}, openKeys: {}, wellness: {}, lifts: {}, planCtx: null, teamOff: {}, picks: {},
+  selfPlayer: null, selfHealth: null, editingSelf: false, painChecks: {}, openKeys: {}, wellness: {}, lifts: {}, planCtx: null, teamOff: {}, picks: {}, friendlies: {}, absences: {},
 };
 let sb = null;
 
@@ -149,11 +149,24 @@ const thisMon = () => mondayOf(iso(today()));
 const selMon = () => state.week ?? thisMon();
 const selDay = () => state.day ?? (selMon() === thisMon() ? dowMon(today()) : 0);
 // 정규 훈련 없는 날(관리자 지정)은 선수가 골라서 하는 날로
+// 교류전(관리자 입력)이 있는 날은 교류전이 그날 훈련 (대회·트라이아웃 날은 그대로)
+const friendlyOn = date => (state.friendlies[date] || [])[0] || null;
 const infoOn = date => {
-  const i = seasonDay(date, events()), off = state.teamOff[date];
+  const i = seasonDay(date, events()), off = state.teamOff[date], f = friendlyOn(date);
+  if (f && !["match", "tryout"].includes(i.slot)) return { ...i, slot: "friendly", baseSlot: i.slot, friendly: f, measure: false };
   if (!off || i.slot !== "team") return i;
   return { ...i, teamOff: true, teamOffNote: off.note || "", near: [seasonDay(dAdd(date, -1), events()).slot, seasonDay(dAdd(date, 1), events()).slot] };
 };
+// 불참 (본인·관리자만 봄): 아파서면 회복, 아니면 그날은 골라서 하는 날
+const ABS_REASONS = { class: "수업·시험", sick: "아픔·부상", personal: "개인 사정", etc: "기타" };
+const absOf = (pid, date) => (state.absences[pid] || {})[date] || null;
+const isTeamDay = i => (i.slot === "team" && !i.teamOff) || i.slot === "friendly";
+function infoFor(pid, date) {
+  const i = infoOn(date), a = pid ? absOf(pid, date) : null;
+  if (!a || !isTeamDay(i)) return i;
+  if (a.reason === "sick") return { ...i, slot: "recover", absent: a, measure: false };
+  return { ...i, slot: "team", teamOff: true, teamOffNote: "", absent: a, near: [infoOn(dAdd(date, -1)).slot, infoOn(dAdd(date, 1)).slot] };
+}
 function weekLabel(mon) {
   const infos = DAYS.map((_, d) => infoOn(dAdd(mon, d)));
   const ev = infos.find(i => /^(대회 주|컨디셔닝|트라이아웃|대회 뒤)/.test(i.label));
@@ -220,11 +233,11 @@ function flowFor(pid, date) {
   const mon = mondayOf(date), k = pid + mon;
   if (!flowCache.has(k)) {
     const picks = state.picks[pid] || {};
-    flowCache.set(k, weekFlow(DAYS.map((_, d) => { const dt = dAdd(mon, d), i = infoOn(dt); return { slot: i.slot, off: !!i.teamOff, pick: picks[dt] || null, event: !!i.weekEvent }; })));
+    flowCache.set(k, weekFlow(DAYS.map((_, d) => { const dt = dAdd(mon, d), i = infoFor(pid, dt); return { slot: i.slot, base: i.baseSlot, off: !!i.teamOff, pick: picks[dt] || null, event: !!i.weekEvent }; })));
   }
   return flowCache.get(k)[dDiff(date, mon)];
 }
-const planOn = (p, date) => planForDay(ctxFor(p, date), { ...infoOn(date), hardTeam: hardTeamOf(p.id, date), flow: flowFor(p.id, date) });
+const planOn = (p, date) => planForDay(ctxFor(p, date), { ...infoFor(p.id, date), hardTeam: hardTeamOf(p.id, date), flow: flowFor(p.id, date) });
 const teamPlanOn = date => planForDay({ player: {} }, infoOn(date));
 const modsFor = p => { const h = state.health[p.id] || {}; return effectiveModules(p.adjust, [], state.health[p.id] ? (h.pain || {}) : null, recentChecks(p.id)); };
 const playerOf = pid => pid && state.players[pid] ? { id: pid, ...state.players[pid] } : null;
@@ -232,7 +245,7 @@ const playerOf = pid => pid && state.players[pid] ? { id: pid, ...state.players[
 /* ---------- 공통 조각 ---------- */
 const chipsHtml = list => list.length ? `<div class="chips">${list.map(([c, t]) => `<span class="chip ${c}">${esc(t)}</span>`).join("")}</div>` : "";
 const emptyLine = t => `<p class="empty-line">${t}</p>`;
-const SHORT = { "플라이오메트릭 + 하체 근력": "하체", "상체·엉덩이·코어": "상체", "활성화 30분": "활성화", "정규 훈련": "훈련", "맨몸 상체·코어": "맨몸", "맨몸 하체·균형": "맨몸", "완전 휴식": "휴식", "대회": "대회", "대회 전날": "전날", "회복": "회복", "트라이아웃": "트라이", "고르기": "선택", };
+const SHORT = { "플라이오메트릭 + 하체 근력": "하체", "상체·엉덩이·코어": "상체", "활성화 30분": "활성화", "정규 훈련": "훈련", "맨몸 상체·코어": "맨몸", "맨몸 하체·균형": "맨몸", "완전 휴식": "휴식", "대회": "대회", "대회 전날": "전날", "회복": "회복", "트라이아웃": "트라이", "고르기": "선택", "교류전": "교류전", };
 function weeksHtml(mon) {
   const now = thisMon();
   return `<div class="wnav" role="group" aria-label="주">
@@ -280,9 +293,9 @@ function viewHome() {
   if (!state.loaded) return `<div class="panel empty"><strong>불러오는 중</strong></div>`;
   const me = playerOf(state.myPid);
   const parts = [];
-  if (state.admin) parts.push(teamStatusHtml(), weekSummaryHtml());
+  if (state.admin) parts.push(teamStatusHtml(), attendPanel(null), weekSummaryHtml());
   if (state.admin && !me) parts.push(`<section class="panel row between"><div><h3>내 선수 정보가 아직 없어요</h3></div><button class="btn primary" type="button" data-act="editself">내 정보 입력</button></section>`);
-  if (me) parts.push(wellnessHtml(me), todayHtml(me), rtpHtml(me), myStatusHtml(me));
+  if (me) parts.push(wellnessHtml(me), todayHtml(me), state.admin ? "" : attendPanel(me), rtpHtml(me), myStatusHtml(me));
   else if (!state.admin) parts.push(`<div class="panel empty"><strong>계정이 선수와 연결되지 않았어요</strong><span>관리자에게 연결을 요청해 주세요.</span></div>`);
   if (me) parts.push(`<p class="foot"><button class="btn link small" type="button" data-act="pushopen">알림</button></p>`);
   return parts.join("");
@@ -963,8 +976,9 @@ const XL_COLS = {
   wellness: { date: "날짜", sleep: "수면", fatigue: "피로", soreness: "근육통", mood: "기분·스트레스" },
   lift_sets: { date: "날짜", name: "운동", kg: "kg", reps: "반복", rir: "RIR" },
   pain_checks: { date: "날짜", area: "부위", during: "운동 중", morning: "다음 날 아침", rest: "쉴 때도", note: "메모" },
+  absences: { date: "날짜", reason: "사유", note: "메모" },
 };
-const XL_SHEETS = [["tests", "측정"], ["logs", "세션 기록"], ["wellness", "컨디션"], ["lift_sets", "무게"], ["pain_checks", "통증"]];
+const XL_SHEETS = [["absences", "불참"], ["tests", "측정"], ["logs", "세션 기록"], ["wellness", "컨디션"], ["lift_sets", "무게"], ["pain_checks", "통증"]];
 function loadScript(src) {
   return new Promise((ok, no) => { const el = document.createElement("script"); el.src = src; el.onload = ok; el.onerror = no; document.head.appendChild(el); });
 }
@@ -978,6 +992,8 @@ async function exportXlsx(scope) {
     const name = Object.fromEntries((pr.data || []).map(p => [p.id, p.name])), pos = Object.fromEntries((pr.data || []).map(p => [p.id, p.pos]));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sortedPlayers().map(p => ({ 이름: p.name, 포지션: p.pos, 학년: p.year || "", "키(cm)": p.height ?? "", "체중(kg)": p.weight ?? "", "배구 경력(년)": p.exp ?? "" }))), "선수");
+    const fq = await sb.from("friendlies").select("*").gte("date", from).order("date");
+    if (!fq.error) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((fq.data || []).length ? fq.data.map(f => ({ 날짜: f.date, 상대: f.opponent, 방식: f.format === "9" ? "9인제" : "6인제", 시작: (f.start_time || "").slice(0, 5), 끝: (f.end_time || "").slice(0, 5), 장소: f.place || "", 메모: f.note || "" })) : [{ 날짜: "기록 없음" }]), "교류전");
     for (const [tb, label] of XL_SHEETS) {
       const r = await sb.from(tb).select("*").gte("date", from).order("date");
       if (r.error) throw r.error;
@@ -990,6 +1006,7 @@ async function exportXlsx(scope) {
           if (tb === "logs" && k === "completion") v = { all: "100%", part: "50%", none: "0%" }[v] || "";
           if ((tb === "pain_checks" && k === "area") || (tb === "logs" && k === "pain_area")) v = AREA_KO[v] || v || "";
           if (k === "rest") v = v ? "예" : "";
+          if (tb === "absences" && k === "reason") v = ABS_REASONS[v] || v;
           o[l] = v ?? "";
         }
         return o;
@@ -1021,13 +1038,15 @@ function viewSeason() {
   const weeks = Array.from({ length: 8 }, (_, k) => dAdd(thisMon(), 7 * k)).map(mon => {
     const infos = DAYS.map((_, d) => infoOn(dAdd(mon, d)));
     const i = infos[3], tag = infos.some(x => x.slot === "match") ? "cup" : infos.every(x => x.optional) ? "opt" : i.measure ? "test" : "";
-    const note = i.measure === "jump" ? "점프 측정" : i.measure ? "측정" : "";
-    return `<li class="${tag}"><span class="num">${md(parseD(mon))}</span><span>${esc(weekLabel(mon).replace(/^[12]학기 · 정규 훈련 [^ ]+ · /, ""))}${note ? ` <span class="chip">${note}</span>` : ""}</span></li>`;
+    const note = i.measure === "jump" ? "점프 측정" : i.measure ? "측정" : "", nf = infos.filter(x => x.slot === "friendly").length;
+    return `<li class="${tag}"><span class="num">${md(parseD(mon))}</span><span>${esc(weekLabel(mon).replace(/^[12]학기 · 정규 훈련 [^ ]+ · /, ""))}${note ? ` <span class="chip">${note}</span>` : ""}${nf ? ` <span class="chip">교류전${nf > 1 ? " " + nf : ""}</span>` : ""}</span></li>`;
   }).join("");
   return `<section class="sec"><div><h2>일정 <span class="small muted">${sy}.3 – ${sy + 1}.2</span></h2>
     </div></section>
   <div class="cols">
-    <div class="col"><section class="sec"><h3>대회·일정</h3>
+    <div class="col">${(() => { const me = playerOf(state.myPid), l = teamDays(t, 14); return l.length && (state.admin || me) ? `<section class="sec"><h3>훈련·교류전 <span class="small muted">2주</span></h3>${attendRows(l, me)}</section>` : ""; })()}
+    ${friendlyHtml()}
+    <section class="sec"><h3>대회·일정</h3>
       ${list.length ? `<div class="tw"><table><thead><tr><th>날짜</th><th>이름</th><th>종류</th>${state.admin ? "<th></th>" : ""}</tr></thead><tbody>
       ${list.map(e => `<tr class="${e.end < t ? "past" : ""}"><td class="num">${range(e)}</td><td><b>${esc(e.name)}</b>${e.note ? `<br><span class="small muted">${esc(e.note)}</span>` : ""}</td><td><span class="chip ${e.kind === "major" ? "warn" : ""}">${esc(EVENT_KINDS[e.kind] || e.kind)}</span></td>
         ${state.admin ? `<td>${e.id ? `<button class="btn link danger" type="button" data-act="delevent" data-id="${esc(e.id)}">삭제</button>` : ""}</td>` : ""}</tr>`).join("")}
@@ -1048,6 +1067,57 @@ function viewSeason() {
   </div>`;
 }
 
+/* ---------- 훈련·교류전 참석 (불참은 본인·관리자만) ---------- */
+function teamDays(from, n) { const out = []; for (let k = 0; k < n; k++) { const d = dAdd(from, k), i = infoOn(d); if (isTeamDay(i)) out.push({ date: d, i }); } return out; }
+const fmtKo = f => f.format === "9" ? "9인제" : "6인제";
+const tdLabel = i => i.slot === "friendly" ? `교류전 vs ${i.friendly.opponent} · ${fmtKo(i.friendly)}${i.friendly.start ? ` · ${i.friendly.start}${i.friendly.end ? "–" + i.friendly.end : ""}` : ""}${i.friendly.place ? ` · ${i.friendly.place}` : ""}` : "정규 훈련 · 18:00";
+function attendRows(list, me) {
+  return `<ul class="attend">${list.map(({ date, i }) => {
+    const head = `<div class="at-when"><b>${longDate(parseD(date))}</b><span class="small muted">${esc(tdLabel(i))}</span></div>`;
+    if (state.admin) {
+      const abs = sortedPlayers().map(p => [p, absOf(p.id, date)]).filter(([, a]) => a);
+      return `<li>${head}<div class="at-who">${abs.length ? `<span class="chip warn">불참 ${abs.length}</span>` : `<span class="small muted">불참 없음</span>`}</div>
+        ${abs.length ? `<ul class="at-list">${abs.map(([p, a]) => `<li><b>${esc(p.name)}</b> <span class="small">${esc(ABS_REASONS[a.reason] || a.reason)}${a.note ? ` · ${esc(a.note)}` : ""}</span></li>`).join("")}</ul>` : ""}</li>`;
+    }
+    const a = me && absOf(me.id, date);
+    return `<li>${head}<div class="at-me">${a ? `<span class="chip warn">불참 · ${esc(ABS_REASONS[a.reason] || "")}</span><button class="btn link small" type="button" data-act="absopen" data-date="${date}">수정</button><button class="btn link small" type="button" data-act="absdel" data-date="${date}">취소</button>`
+      : `<span class="small muted">참석</span><button class="btn small" type="button" data-act="absopen" data-date="${date}">불참</button>`}</div></li>`;
+  }).join("")}</ul>`;
+}
+function attendPanel(me, n = 3) {
+  const list = teamDays(iso(today()), 14).slice(0, n);
+  if (!list.length || (!state.admin && !me)) return "";
+  return `<section class="panel attend-panel"><div class="row between"><h3>다가오는 훈련</h3><button class="btn link small" type="button" data-act="view" data-v="season">전체 →</button></div>${attendRows(list, me)}</section>`;
+}
+function openAbsent(date) {
+  const i = infoOn(date), a = absOf(state.myPid, date), el = document.getElementById("sheet");
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>불참</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <p class="small">${longDate(parseD(date))} · ${esc(tdLabel(i))}</p>
+    <form class="f" id="absForm" data-date="${esc(date)}">
+      <div class="reasons" role="radiogroup" aria-label="사유">${Object.entries(ABS_REASONS).map(([k, l], n) => `<label class="rsn"><input type="radio" name="abs-r" value="${k}" ${(a ? a.reason === k : n === 0) ? "checked" : ""}><span>${l}</span></label>`).join("")}</div>
+      <label class="fl">메모 (선택)<input id="abs-note" maxlength="100" value="${esc(a ? a.note : "")}"></label>
+      <p class="small muted">관리자만 봐요 · 아픔·부상이면 그날은 회복, 나머지는 그날 운동을 골라서 해요</p>
+      <div class="row"><button class="btn primary" type="submit">${a ? "저장" : "불참 내기"}</button></div>
+    </form>`;
+  el.hidden = false; document.body.classList.add("noscroll");
+}
+// 교류전 (관리자가 추가 · 모두 봄)
+function friendlyHtml() {
+  const t = iso(today()), list = Object.entries(state.friendlies).filter(([d]) => d >= dAdd(t, -30)).sort().flatMap(([d, fs]) => fs.map(f => [d, f]));
+  if (!state.admin && !list.length) return "";
+  return `<section class="sec"><h3>교류전</h3>
+    ${list.length ? `<ul class="watch fr-list">${list.map(([d, f]) => `<li class="${d < t ? "past" : ""}"><span class="num">${md(parseD(d))}</span><span><b>vs ${esc(f.opponent)}</b> <span class="chip">${fmtKo(f)}</span> <span class="small muted">${esc([f.start && f.start + (f.end ? "–" + f.end : ""), f.place, f.note].filter(Boolean).join(" · "))}</span></span>${state.admin ? `<button class="btn link danger" type="button" data-act="delfriendly" data-id="${esc(f.id)}">삭제</button>` : ""}</li>`).join("")}</ul>` : ""}
+    ${state.admin ? `<form class="f panel" id="friendlyForm"><h4>교류전 추가</h4><div class="fields">
+      <label class="fl">날짜<input type="date" id="fr-date" required></label>
+      <label class="fl">상대<input id="fr-opp" required maxlength="60" placeholder="예: 연세대"></label>
+      <label class="fl">방식<select id="fr-fmt"><option value="6">6인제</option><option value="9">9인제</option></select></label>
+      <div class="pair"><label class="fl">시작<input type="time" id="fr-start"></label><label class="fl">끝<input type="time" id="fr-end"></label></div>
+      <label class="fl">장소<input id="fr-place" maxlength="60" placeholder="예: 상대 학교 체육관"></label>
+      <label class="fl wide">메모<input id="fr-note" maxlength="200"></label>
+    </div><div class="row"><button class="btn primary" type="submit">추가</button></div>
+    <p class="small muted">그날은 교류전이 훈련이 되고, 앞뒤 날 하체 웨이트는 다른 날로 옮겨져요.</p></form>` : ""}
+  </section>`;
+}
 function teamOffHtml() {
   const t = iso(today()), list = Object.entries(state.teamOff).filter(([d]) => d >= dAdd(t, -14)).sort();
   return `<section class="sec"><h3>정규 훈련 없는 날</h3>
@@ -1336,6 +1406,16 @@ document.addEventListener("click", async ev => {
   if (act === "cancelpw") { state.recovery = false; state.dirty = false; return render(); }
   if (act === "logout") { lsDel(snapKey()); await pushOff(true); await sb.auth.signOut(); return; }
   if (act === "pushopen") return openPush();
+  if (act === "absopen") return openAbsent(b.dataset.date);
+  if (act === "absdel") {
+    try { ok(await sb.from("absences").delete().eq("player_id", state.myPid).eq("date", b.dataset.date)); toast("불참을 취소했어요"); await loadAll(); } catch (e) { toast(failMsg(e)); }
+    return;
+  }
+  if (act === "delfriendly") {
+    if (!confirmDel("이 교류전을 지울까요?")) return;
+    try { ok(await sb.from("friendlies").delete().eq("id", b.dataset.id)); toast("지웠어요"); await loadAll(); } catch (e) { toast(failMsg(e)); }
+    return;
+  }
   if (act === "theme") {
     const r = document.documentElement, dark = r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
     r.dataset.theme = dark ? "light" : "dark";
@@ -1577,6 +1657,15 @@ document.addEventListener("submit", async ev => {
         pain: 0, note: txt("lg-note") || null, completion: document.getElementById("lg-done").value,
       });
       toast(lw.queued ? "연결되면 저장돼요" : "기록했어요");
+    } else if (f.id === "friendlyForm") {
+      const st = txt("fr-start") || null, en = txt("fr-end") || null;
+      if (st && en && en <= st) { toast("끝 시간이 시작보다 앞이에요."); return; }
+      ok(await sb.from("friendlies").insert({ date: txt("fr-date"), opponent: txt("fr-opp"), format: document.getElementById("fr-fmt").value, start_time: st, end_time: en, place: txt("fr-place") || null, note: txt("fr-note") || null }));
+      toast("교류전을 넣었어요 · 그 주 프로그램이 맞춰졌어요");
+    } else if (f.id === "absForm") {
+      const r = f.querySelector('input[name="abs-r"]:checked');
+      ok(await sb.from("absences").upsert({ player_id: state.myPid, date: f.dataset.date, reason: r ? r.value : "etc", note: txt("abs-note") || null, author: uid() }, { onConflict: "player_id,date" }));
+      closeSheet(); toast("불참을 냈어요 · 관리자만 봐요");
     } else if (f.id === "offForm") {
       const date = txt("off-date");
       if (seasonDay(date, events()).slot !== "team") { toast("그날은 정규 훈련 날이 아니에요."); return; }
@@ -1703,14 +1792,16 @@ async function loadAll() {
       sb.from("lift_sets").select("*").order("date"),
       sb.from("team_off").select("*"),
       sb.from("day_picks").select("*"),
+      sb.from("friendlies").select("*").order("date"),
+      sb.from("absences").select("*").gte("date", iso(addDays(today(), -120))),
     ];
     if (state.coach) q.push(sb.from("profiles").select("*").order("created_at"));
     const res = await Promise.all(q);
-    const [st, pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq] = res, pr = state.coach ? res[11] : null;
+    const [st, pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq, frq, abq] = res, pr = state.coach ? res[13] : null;
     for (const r of [pl, ts, hl, lg]) if (r.error) throw r.error;
     const rows = r => r && !r.error && Array.isArray(r.data) ? r.data : [];
     raw = { players: pl.data, tests: ts.data, health: hl.data, logs: lg.data, pain_checks: rows(pcs), events: evq && !evq.error ? evq.data : null,
-      wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), profiles: pr && !pr.error ? pr.data : [],
+      wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), profiles: pr && !pr.error ? pr.data : [],
       me: { role: state.role, player_id: state.myPid } };
     lsSet(snapKey(), raw); state.net = true;
   } catch (e) {
@@ -1732,6 +1823,12 @@ function buildState(raw) {
   for (const r of raw.lift_sets || []) (lif[r.player_id] = lif[r.player_id] || []).push({ id: r.id, date: r.date, name: r.name, lift: r.lift, kg: Number(r.kg), reps: r.reps, rir: r.rir, author: r.author, created: r.created_at });
   state.lifts = lif;
   state.teamOff = Object.fromEntries((raw.team_off || []).map(r => [r.date, { note: r.note }]));
+  const fr = {};
+  for (const r of raw.friendlies || []) (fr[r.date] = fr[r.date] || []).push({ id: r.id, opponent: r.opponent, format: r.format, start: r.start_time ? String(r.start_time).slice(0, 5) : "", end: r.end_time ? String(r.end_time).slice(0, 5) : "", place: r.place || "", note: r.note || "" });
+  state.friendlies = fr;
+  const ab = {};
+  for (const r of raw.absences || []) (ab[r.player_id] = ab[r.player_id] || {})[r.date] = { id: r.id, reason: r.reason, note: r.note || "" };
+  state.absences = ab;
   const pk = {};
   for (const r of raw.day_picks || []) (pk[r.player_id] = pk[r.player_id] || {})[r.date] = r.pick;
   state.picks = pk;

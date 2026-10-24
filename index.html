@@ -240,6 +240,20 @@ label.check { display: flex; gap: 8px; align-items: center; font-size: 14px; col
 label.check input { width: auto; }
 label.check input[type="checkbox"] { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--blue); }
 .checks { display: grid; gap: 10px; }
+.attend { list-style: none; margin: 0; padding: 0; display: grid; }
+.attend > li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; padding: 8px 0; border-top: 1px solid var(--line); }
+.attend > li:first-child { border-top: 0; }
+.at-when { display: grid; min-width: 0; }
+.at-me, .at-who { display: flex; align-items: center; gap: 8px; }
+.at-list { list-style: none; margin: 0; padding: 0; width: 100%; display: grid; gap: 2px; font-size: 14px; }
+.attend-panel { display: grid; gap: 6px; }
+.reasons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.rsn { display: flex; }
+.rsn input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.rsn span { flex: 1; text-align: center; padding: 9px 6px; border: 1px solid var(--line); border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; background: var(--surface); }
+.rsn input:checked + span { border-color: var(--blue); background: var(--blue-soft); color: var(--blue); }
+.rsn input:focus-visible + span { outline: 2px solid var(--blue); outline-offset: 2px; }
+.fr-list li.past { opacity: .55; }
 .auth-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .auth-actions .btn.primary { min-width: 96px; }
 .auth-alt { border-top: 1px solid var(--line); padding-top: 14px; }
@@ -378,8 +392,8 @@ html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; scrollbar-gutter:
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=34"></script>
-<script src="guide.js?v=34"></script>
-<script src="app.js?v=34"></script>
+<script src="program.js?v=35"></script>
+<script src="guide.js?v=35"></script>
+<script src="app.js?v=35"></script>
 </body>
 </html>

@@ -816,6 +816,25 @@ const SLOT_FN = {
   },
   bwU(c, w, o, out, h) { bwPlan(c, w, o, out, h, true); },
   bwL(c, w, o, out, h) { bwPlan(c, w, o, out, h, false); },
+  // ---- 교류전 (관리자가 일정에 넣음): 그날은 교류전이 훈련, 앞뒤 날 하체 웨이트는 피함 (weekFlow)
+  friendly(c, w, o, out, h) {
+    const { fx } = c, f = o.friendly || {}, nine = f.format === "9";
+    const time = f.start ? `${f.start}${f.end ? `–${f.end}` : ""}` : "";
+    out.kind = "교류전"; out.logType = "match"; out.minutes = nine ? 120 : 150;
+    out.title = `교류전${f.opponent ? ` · vs ${f.opponent}` : ""} (${nine ? "9인제" : "6인제"})`;
+    if (c.recentAnkle) out.notes.push("발목 다친 지 1년 안 · 보조기나 테이핑");
+    if (fx.preIso) h.add({ key: "pre", scope: "me", title: "시작 전", items: [{ name: "레그 익스텐션 등척성 (무릎 약 60°)", rx: "45초 × 5", cue: "세트 간 2분", mod: "무릎 통증" }] });
+    h.add({ key: "match", title: "교류전", items: [
+      { name: "팀 워밍업", rx: time ? `${f.start} 전 30분` : "평소대로", cue: fx.noJumps || fx.tierMax < 3 ? "통증·제한이 있으면 어프로치 점프는 빼기" : "끝나고 어프로치 점프 2–3회로 마무리" },
+      { name: "교류전", rx: time || "—" },
+      { name: "세트 사이 체온 유지 · 물", rx: "세트마다" },
+    ] });
+    h.add({ key: "after", title: "끝나고", items: [{ name: "통증 체크", rx: "아픈 곳 있으면" }, { name: "세션 RPE 기록", rx: "30분 안에" }] });
+    if (f.place) out.notes.push(`장소 · ${f.place}`);
+    if (f.note) out.notes.push(f.note);
+    if (nine) out.notes.push("9인제 · 자리 고정이라 전위는 점프·블로킹이 많음 → 끝나고 통증 체크");
+    out.notes.push(...teamNotes(c));
+  },
   // ---- 대회 전날
   prep(c, w, o, out, h) {
     out.kind = "대회 전날"; out.title = "대회 전날 · 가볍게 몸 풀기"; out.minutes = 20;
@@ -1107,26 +1126,31 @@ function resolvePick(pick, base, near) {
 function weekFlow(days) {
   const TR = x => TRAIN_SLOTS.includes(x);
   const cnt = arr => arr.reduce((m, x) => (m[x] = (m[x] || 0) + 1, m), {});
-  const target = cnt(days.filter(d => TR(d.slot)).map(d => d.slot));
+  // 교류전이 웨이트 날을 차지하면 그 웨이트는 다른 날로 (base = 원래 일정)
+  const target = cnt(days.map(d => d.base || d.slot).filter(TR));
+  const fr = days.some(d => d.slot === "friendly");
   const eff = [], out = [];
   days.forEach((d, i) => {
     const flex = TR(d.slot) || (d.slot === "team" && d.off);
     if (!flex) { eff[i] = d.slot; out[i] = null; return; }
     const prev = eff[i - 1], nx = days[i + 1], next = nx ? (nx.off ? "pick" : nx.slot) : null;
-    const clash = x => prev === x || next === x || (x === "gymA" && (next === "team" || prev === "gymA" || next === "gymA"));
+    const clash = x => prev === x || next === x || (x === "gymA" && (next === "team" || next === "friendly" || prev === "friendly" || prev === "gymA" || next === "gymA"));
+    const nearFriendly = d.slot === "gymA" && (next === "friendly" || prev === "friendly"); // 교류전 앞뒤 날 하체 웨이트는 옮김
     let rec = null, why = "";
     if (d.event) rec = TR(d.slot) ? d.slot : "recover";
     else {
       const done = cnt(eff.slice(0, i).filter(TR)), later = cnt(days.slice(i + 1).filter(x => TR(x.slot)).map(x => x.slot));
       const missing = Object.keys(target).filter(k => target[k] - (done[k] || 0) - (later[k] || 0) > 0);
-      if (TR(d.slot) && (missing.includes(d.slot) || !missing.length)) rec = d.slot;
+      if (fr && /^bw/.test(d.slot) && missing.includes("gymA") && !clash("gymA") && !(done.gymA >= 2)) { rec = "gymA"; why = "교류전 때문에 하체 웨이트를 이날로"; }
+      else if (TR(d.slot) && !nearFriendly && (missing.includes(d.slot) || !missing.length)) rec = d.slot;
       else {
         const m = ["gymA", "gymB", "bwL", "bwU"].find(x => missing.includes(x) && !clash(x));
         if (m) { rec = m; why = `이번 주 ${FLOW_NAME[m]} 아직`; }
+        else if (nearFriendly) { rec = ["gymB", "bwU", "bwL"].find(x => !clash(x)) || "recover"; why = "교류전 앞뒤라 하체 웨이트는 다른 날로"; }
       }
       // 같은 웨이트가 그 주에 이미 2번이면 다른 걸로 (하체 웨이트 3번은 많음)
       const twice = x => (x === "gymA" || x === "gymB") && (done[x] || 0) + (later[x] || 0) >= 2;
-      if (!rec) rec = TR(d.slot) ? d.slot : (["gymA", "gymB", "bwU", "bwL"].find(x => !clash(x) && !twice(x)) || "recover");
+      if (!rec) rec = TR(d.slot) && !nearFriendly ? d.slot : (["gymA", "gymB", "bwU", "bwL"].find(x => !clash(x) && !twice(x)) || "recover");
     }
     eff[i] = d.pick && PICKS[d.pick] ? resolvePick(d.pick, TR(d.slot) ? d.slot : rec, [prev, next]) : rec;
     out[i] = { rec, why, slot: eff[i] };
@@ -1180,9 +1204,11 @@ function planForDay(ctx, info) {
   if (flow) {
     out.choices = choicesFor(flow.rec, flow.slot);
     out.picked = ctx.pick || null;
-    if (info.teamOff) { out.title = `정규 훈련 없음 · ${out.title}`; if (info.teamOffNote) out.notes.unshift(`정규 훈련 없음 · ${info.teamOffNote}`); }
+    if (info.absent) out.title = `불참 · ${out.title}`;
+    else if (info.teamOff) { out.title = `정규 훈련 없음 · ${out.title}`; if (info.teamOffNote) out.notes.unshift(`정규 훈련 없음 · ${info.teamOffNote}`); }
     if (!ctx.pick && flow.why && flow.slot !== info.slot) out.notes.unshift(`권고 바뀜 · ${flow.why}`);
   }
+  if (info.absent && !flow) out.title = `불참 · ${out.title}`;
   out.season = info;
   return out;
 }

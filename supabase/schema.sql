@@ -349,3 +349,9 @@ alter table public.logs add constraint logs_pain_area_check
 -- push_pubkey(): 로그인한 사용자용 공개 키
 -- edge function 'push' (x-cron 비밀값 확인) ← private.push_call(kind) ← pg_cron
 --   push-morning '0 23 * * *' (KST 08:00, 컨디션 안 넣은 사람) · push-evening '0 13 * * *' (KST 22:00, 운동 있는 날 기록 없는 사람)
+
+-- ===== friendlies_and_absences (적용됨) =====
+-- friendlies: 교류전 (date, start_time, end_time, opponent, format '6'|'9', place, note) · 부원 읽기, 관리자 쓰기
+--   그날 슬롯 = friendly, 앞뒤 날 하체 웨이트는 weekFlow가 옮김 (base = 원래 일정)
+-- absences: 불참 (player_id, date, reason class|sick|personal|etc, note) · unique(player_id, date)
+--   본인과 관리자만 읽기·쓰기. 아픔·부상 → 그날 회복, 나머지 → 그날은 골라서 하는 날
