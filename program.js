@@ -560,7 +560,7 @@ function measureNote(c) {
   const legPain = (fx.knee && fx.knee <= 2) || fx.ankle === 1 || fx.tierMax < 2;
   if (!c.t || c.t.reach == null) tests.push("리치");
   if (fx.noJumps || fx.tierMax < 2) skip.push("점프"); else { tests.push("버티컬"); if (fx.tierMax >= 3) tests.push("맥스 버티컬"); else skip.push("맥스 버티컬"); }
-  if (legPain) skip.push("반복 옆뛰기"); else tests.push("반복 옆뛰기");
+  if (legPain) skip.push("사이드 스텝"); else tests.push("사이드 스텝");
   const head = "이번 달 측정";
   if (!tests.length) return `${head} · 통증 줄면`;
   return `${head} · ${tests.join("·")}`;
@@ -876,7 +876,7 @@ const SLOT_FN = {
     const { fx } = c, skip = [];
     const tests = TRYOUT_TESTS.filter(x => {
       if ((fx.noJumps || fx.tierMax < 2) && /버티컬/.test(x.name)) { skip.push(x.name.replace(/ \(.*$/, "")); return false; }
-      if (((fx.knee && fx.knee <= 2) || fx.ankle === 1 || fx.tierMax < 2) && /옆뛰기/.test(x.name)) { skip.push(x.name.replace(/ \(.*$/, "")); return false; }
+      if (((fx.knee && fx.knee <= 2) || fx.ankle === 1 || fx.tierMax < 2) && /사이드 스텝/.test(x.name)) { skip.push(x.name.replace(/ \(.*$/, "")); return false; }
       if (fx.tierMax < 3 && /맥스 버티컬/.test(x.name)) { skip.push("맥스 버티컬"); return false; }
       return true;
     });
@@ -892,7 +892,7 @@ const TRYOUT_TESTS = [
   { name: "스탠딩 리치", rx: "1회", cue: "벽 옆에 서서 한 손을 최대한 뻗어 닿는 높이" },
   { name: "버티컬 (제자리 점프 높이)", rx: "3회 중 최고", cue: "팔 스윙 허용, 손끝 도달 높이 − 리치" },
   { name: "맥스 버티컬 (도움닫기 점프 높이)", rx: "3회 중 최고", cue: "실전 어프로치 한 손 도달 높이 − 리치" },
-  { name: "반복 옆뛰기 (사이드스텝)", rx: "20초 × 2회", cue: "선 간격 1m, 가운데 선을 넘고 좌우 선을 밟거나 넘을 때마다 1점" },
+  { name: "사이드 스텝", rx: "20초 × 2회", cue: "선 간격 1m, 가운데 선을 넘고 좌우 선을 밟거나 넘을 때마다 1점" },
 ]
 // ---- 맨몸 (팀 필수, 점프 없음): 상체·코어·핸드스탠드 / 하체·발목·균형
 function bwPlan(c, w, o, out, h, upper) {
@@ -1003,7 +1003,7 @@ function weekPhase(mon, evs) {
   if (w === PH.DELOAD && !postMajor && minorNear) w = PH.BASE;
   return { reset, since, k, nm, offBetween, off, comp, w, postMajor };
 }
-/* 측정 주 — 한 달에 한 번 (트라이아웃식 신체 능력, 15분 안쪽): 버티컬 · 맥스 버티컬 · 반복 옆뛰기 20초 (리치는 처음 한 번)
+/* 측정 주 — 한 달에 한 번 (트라이아웃식 신체 능력, 15분 안쪽): 버티컬 · 맥스 버티컬 · 사이드 스텝 20초 (리치는 처음 한 번)
  *  그 달에서 회복 주·적응 주를 먼저 고르고, 없으면 첫 주. 대회 주·피크 주·대회 뒤 회복 주·방학 첫 주는 피한다. */
 const _measureCache = new Map();
 function measureWeeks(mon, evs) {

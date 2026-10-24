@@ -735,7 +735,7 @@ function myStatusHtml(p) {
         ${stat("버티컬", v != null ? v : "—")}
         ${stat("스파이크 네트 위", blk != null ? (blk >= 0 ? "+" : "") + blk : "—")}
         ${stat("상대 근력", rel != null ? rel.toFixed(2) : "—")}
-        ${stat("반복 옆뛰기", t.sideStep != null ? t.sideStep + "회" : "—")}
+        ${stat("사이드 스텝", t.sideStep != null ? t.sideStep + "회" : "—")}
 </div>` : emptyLine("측정 후 나와요.")}
       ${nm ? `<p class="small muted">다음 측정 ${md(parseD(nm.mon))} 주${nm.mon === thisMon() ? " (이번 주)" : ""}</p>` : ""}
     </div>
@@ -984,7 +984,7 @@ function logHtml(p) {
 // 측정: 선수가 직접 입력 (한 달에 한 번 측정 주에 안내), 관리자는 고치거나 지움
 const measTable = (r, opts = {}) => {
   const sign = v => v == null ? "—" : (v >= 0 ? "+" : "") + v, mine = t => can("training") || t.author === (state.session && state.session.user.id);
-  return `<div class="tw"><table><thead><tr><th>날짜</th>${opts.reach ? "<th>리치</th>" : ""}<th>버티컬</th><th>맥스 버티컬</th><th>네트 위</th><th>옆뛰기</th><th></th></tr></thead><tbody>
+  return `<div class="tw"><table><thead><tr><th>날짜</th>${opts.reach ? "<th>리치</th>" : ""}<th>버티컬</th><th>맥스 버티컬</th><th>네트 위</th><th>사이드 스텝</th><th></th></tr></thead><tbody>
     ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td>${opts.reach ? `<td class="num">${t.reach ?? "—"}</td>` : ""}<td class="num">${vertOf(t) ?? "—"}</td><td class="num">${maxVertOf(t) ?? "—"}</td><td class="num">${sign(overNet(t, maxVertOf(t)))}</td><td class="num">${t.sideStep ?? "—"}</td>
       <td class="acts">${can("training") ? `<button class="btn link small" type="button" data-act="edtest" data-id="${esc(t.id)}">수정</button>` : ""}${mine(t) ? `<button class="btn link danger small" type="button" data-act="deltest" data-id="${esc(t.id)}">삭제</button>` : ""}</td></tr>`).join("")}
     </tbody></table></div>`;
@@ -1000,7 +1000,7 @@ function testsHtml(p) {
       <form class="f" id="measureForm" data-pid="${esc(p.id)}">
         <div class="fields">
           <label class="fl">날짜<input type="date" id="ms-date" value="${iso(today())}" required></label>
-          ${latest(p.id) && latest(p.id).reach != null ? "" : nf("ms-reach", "스탠딩 리치 (cm)")}${nf("ms-vert", "버티컬 (cm)", "0.5", 150)}${nf("ms-maxvert", "맥스 버티컬 (cm)", "0.5", 150)}${nf("ms-side", "반복 옆뛰기 20초 (회)", "1", 120)}
+          ${latest(p.id) && latest(p.id).reach != null ? "" : nf("ms-reach", "스탠딩 리치 (cm)")}${nf("ms-vert", "버티컬 (cm)", "0.5", 150)}${nf("ms-maxvert", "맥스 버티컬 (cm)", "0.5", 150)}${nf("ms-side", "사이드 스텝 20초 (회)", "1", 120)}
         </div>
         ${protocolHtml()}
         <div class="row"><button class="btn primary" type="submit">저장</button></div>
@@ -1013,7 +1013,7 @@ const PROTOCOL = [
   ["스탠딩 리치", "처음 한 번만. 벽 옆에 서서 발뒤꿈치 붙이고 한 손 끝까지"],
   ["버티컬", "제자리, 팔 스윙 허용, 3회 중 최고 · 손끝 도달 − 리치"],
   ["맥스 버티컬", "평소 스파이크 도움닫기, 한 손 터치, 3회 중 최고 · 도달 − 리치"],
-  ["반복 옆뛰기", "가운데 선을 밟고 서서 1m 옆 선까지 옆으로 (점프 금지). 선을 넘거나 밟을 때마다 1점, 20초 × 2회 중 좋은 값"],
+  ["사이드 스텝", "가운데 선을 밟고 서서 1m 옆 선까지 옆으로 (점프 금지). 선을 넘거나 밟을 때마다 1점, 20초 × 2회 중 좋은 값"],
 ];
 const protocolHtml = () => `<details class="proto"><summary class="small">측정 방법</summary><dl>${PROTOCOL.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl></details>`;
 
@@ -1039,7 +1039,7 @@ function growthRows(pid, weight) {
   const lifts = liftsOf(pid).slice().sort((a, b) => String(a.date).localeCompare(String(b.date)));
   const lf = k => { const a = lifts.filter(l => l.lift === k).map(l => e1rmOf(l.kg, l.reps, l.rir)); return a.length >= 2 ? [Math.round(a[0]), Math.round(Math.max(...a.slice(-4)))] : [null, null]; };
   const rows = [
-    ["맥스 버티컬", ...fv(maxVertOf), "cm"], ["버티컬", ...fv(vertOf), "cm"], ["블로킹 점프", ...fk("block"), "cm"], ["반복 옆뛰기", ...fk("sideStep"), "회"], ["5-10-5", ...fk("agility"), "초"], ["CMJ", ...fk("cmj"), "cm"], ["RSI", ...fk("rsi"), ""],
+    ["맥스 버티컬", ...fv(maxVertOf), "cm"], ["버티컬", ...fv(vertOf), "cm"], ["블로킹 점프", ...fk("block"), "cm"], ["사이드 스텝", ...fk("sideStep"), "회"], ["5-10-5", ...fk("agility"), "초"], ["CMJ", ...fk("cmj"), "cm"], ["RSI", ...fk("rsi"), ""],
     ["스쿼트 5RM", ...fk("squat"), "kg"], ["RDL 5RM", ...fk("rdl"), "kg"], ["턱걸이", ...fk("pull"), "회"],
     ...Object.keys(LIFT_KO).map(k => [`${LIFT_KO[k]} 추정 1RM`, ...lf(k), "kg"]),
   ];
@@ -1264,7 +1264,7 @@ function openTestEdit(id) {
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>측정 고치기 · ${esc((playerOf(pid) || {}).name || "")}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="testEditForm" data-id="${esc(id)}" data-close="1"><div class="fields">
       <label class="fl">날짜<input type="date" id="et-date" value="${esc(t.date)}" required></label>
-      ${f("reach", "스탠딩 리치 (cm)", t.reach, "0.5", 400)}${f("vert", "버티컬 (cm)", t.vert, "0.5", 150)}${f("maxvert", "맥스 버티컬 (cm)", t.maxVert, "0.5", 150)}${f("side", "반복 옆뛰기 (회)", t.sideStep, "1", 120)}
+      ${f("reach", "스탠딩 리치 (cm)", t.reach, "0.5", 400)}${f("vert", "버티컬 (cm)", t.vert, "0.5", 150)}${f("maxvert", "맥스 버티컬 (cm)", t.maxVert, "0.5", 150)}${f("side", "사이드 스텝 (회)", t.sideStep, "1", 120)}
     </div><div class="row"><button class="btn primary" type="submit">저장</button></div></form>`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
@@ -1273,7 +1273,7 @@ function openTestEdit(id) {
 
 /* ---------- 엑셀 내보내기 (관리자) ---------- */
 const XL_COLS = {
-  tests: { date: "날짜", reach: "스탠딩 리치", vert: "버티컬", max_vert: "맥스 버티컬", cmj: "CMJ", block: "블로킹 점프", approach: "어프로치 점프", side_step: "반복 옆뛰기(회)", pro_agility: "5-10-5(초)", rsi: "RSI",
+  tests: { date: "날짜", reach: "스탠딩 리치", vert: "버티컬", max_vert: "맥스 버티컬", cmj: "CMJ", block: "블로킹 점프", approach: "어프로치 점프", side_step: "사이드 스텝(회)", pro_agility: "5-10-5(초)", rsi: "RSI",
     squat: "스쿼트 5RM", rdl: "RDL 5RM", pull: "턱걸이", plank: "플랭크(초)", side_l: "사이드 플랭크 왼", side_r: "사이드 플랭크 오른", sorensen: "소렌슨(초)", flexor: "굴곡근(초)",
     bal_l: "한 발 서기 왼", bal_r: "한 발 서기 오른", hop_l: "한 발 홉 왼", hop_r: "한 발 홉 오른", ktw_l: "무릎 벽 왼", ktw_r: "무릎 벽 오른",
     ir_d: "내회전 주손", ir_n: "내회전 반대손", er_d: "외회전 주손", er_n: "외회전 반대손", hs_stage: "핸드스탠드 단계", hs_sec: "핸드스탠드(초)", hs_walk: "핸드스탠드 걷기" },
@@ -1325,10 +1325,10 @@ async function exportXlsx(sy) {
 function teamReportHtml(ps) {
   const ch = (rows, n) => { const r = rows.find(x => x[0] === n); if (!r) return "—"; const v = Math.round((r[2] - r[1]) * 10) / 10; return `${r[2]} <small class="${(LOWER_BETTER.has(n) ? v > 0 : v < 0) ? "neg" : ""}">${v > 0 ? "+" : ""}${v}</small>`; };
   return `<section class="sec"><h3>선수별 리포트 <span class="small muted">최근 4주</span></h3>
-    <div class="tw"><table><thead><tr><th>선수</th><th>컨디션</th><th>완료율</th><th>세션</th><th>맥스 버티컬</th><th>스쿼트 1RM</th><th>옆뛰기</th></tr></thead><tbody>
+    <div class="tw"><table><thead><tr><th>선수</th><th>컨디션</th><th>완료율</th><th>세션</th><th>맥스 버티컬</th><th>스쿼트 1RM</th><th>사이드 스텝</th></tr></thead><tbody>
     ${ps.map(p => { const a = adherence(p.id), g = growthRows(p.id, p.weight);
       return `<tr><td>${esc(p.name)} <span class="chip pos">${esc(p.pos)}</span></td><td class="num ${a.well != null && a.well <= WELL_LOW ? "cell-warn" : ""}">${a.well ?? "—"}</td><td class="num">${a.done != null ? a.done + "%" : "—"}</td><td class="num">${a.logs}</td>
-        <td class="num">${ch(g, "맥스 버티컬")}</td><td class="num">${ch(g, `${LIFT_KO.squat} 추정 1RM`)}</td><td class="num">${ch(g, "반복 옆뛰기")}</td></tr>`; }).join("")}
+        <td class="num">${ch(g, "맥스 버티컬")}</td><td class="num">${ch(g, `${LIFT_KO.squat} 추정 1RM`)}</td><td class="num">${ch(g, "사이드 스텝")}</td></tr>`; }).join("")}
     </tbody></table></div></section>`;
 }
 
@@ -1464,7 +1464,7 @@ function attendRows(list, me) {
     const when = `<div class="at-when"><b>${longDate(parseD(date))}</b><span class="small muted">${esc(open ? openLabel(open) : tdLabel(i))}</span>${!open && state.practice[date] ? `<button type="button" class="btn link small pr-link" data-act="prgo" data-d="${date}">훈련 계획</button>` : ""}</div>`;
     if (open) {
       const going = sortedPlayers().filter(p => open.votes[p.id] === true), mine = me ? open.votes[me.id] : undefined;
-      const btns = me && date >= t ? `<span class="vote"><button type="button" class="btn small ${mine === true ? "on" : ""}" aria-pressed="${mine === true}" data-act="vote" data-id="${esc(open.id)}" data-go="1">참석</button><button type="button" class="btn small ${mine === false ? "on" : ""}" aria-pressed="${mine === false}" data-act="vote" data-id="${esc(open.id)}" data-go="0">불참</button></span>` : "";
+      const btns = me && date >= t ? voteBtn("open", open.id, mine === true ? "go" : mine === false ? "no" : "") : "";
       return `<li class="open">${when}<div class="at-side"><span class="chip ok">참석 ${going.length}</span>${btns}</div>${going.length ? `<p class="at-names small muted">${going.map(p => esc(p.name)).join(" · ")}</p>` : ""}</li>`;
     }
     if (can("attend")) {
@@ -1641,7 +1641,7 @@ function voteItems() {
 function voteBox(kind, id) {
   const vs = evVotesOf(kind, id), ps = sortedPlayers().filter(p => !p.military), mine = state.myPid ? vs[state.myPid] : null;
   const yes = ps.filter(p => vs[p.id] && vs[p.id].going), no = ps.filter(p => vs[p.id] && !vs[p.id].going);
-  const btns = state.myPid ? `<span class="vote"><button type="button" class="btn small ${mine && mine.going ? "on" : ""}" aria-pressed="${!!(mine && mine.going)}" data-act="evgo" data-kind="${kind}" data-id="${esc(id)}" data-go="1">참가</button><button type="button" class="btn small ${mine && !mine.going ? "on" : ""}" aria-pressed="${!!(mine && !mine.going)}" data-act="evno" data-kind="${kind}" data-id="${esc(id)}" data-go="0">불참</button></span>` : "";
+  const btns = state.myPid ? voteBtn(kind, id, mine ? (mine.going ? "go" : "no") : "") : "";
   const sum = `<span class="small muted">참가 ${yes.length} · 불참 ${no.length} · 미응답 ${ps.length - yes.length - no.length}</span>`;
   const detail = can("schedule") && (yes.length || no.length) ? `<details class="ev-who"><summary class="small">명단 보기</summary>
     ${yes.length ? `<p class="small"><b>참가</b> ${yes.map(p => esc(p.name)).join(" · ")}</p>` : ""}
@@ -1678,18 +1678,26 @@ function voteCardsHtml() {
   const todo = voteItems().filter(x => !evVotesOf(x.kind, x.id)[state.myPid]);
   if (!todo.length) return "";
   return `<section class="panel vote-cards"><h3>참가 투표</h3>${todo.map(x => `<div class="vc-row"><div class="vc-t"><b>${esc(x.name)}</b><span class="small muted">${esc(x.when)}</span></div>
-    <span class="vote"><button type="button" class="btn small" data-act="evgo" data-kind="${x.kind}" data-id="${esc(x.id)}">참가</button><button type="button" class="btn small" data-act="evno" data-kind="${x.kind}" data-id="${esc(x.id)}">불참</button></span></div>`).join("")}</section>`;
+    ${voteBtn(x.kind, x.id, "")}</div>`).join("")}</section>`;
 }
-function openEvAbsent(kind, id) {
-  const it = voteItems().find(x => x.kind === kind && x.id === id) || {}, a = evVotesOf(kind, id)[state.myPid], el = document.getElementById("sheet");
-  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>불참</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
-    <p class="small">${esc(it.name || "")} · ${esc(it.when || "")}</p>
-    <form class="f" id="evAbsForm" data-kind="${kind}" data-id="${esc(id)}">
-      <div class="reasons" role="radiogroup" aria-label="사유">${Object.entries(ABS_REASONS).map(([k, l], n) => `<label class="rsn"><input type="radio" name="eva-r" value="${k}" ${(a && !a.going ? a.reason === k : n === 0) ? "checked" : ""}><span>${l}</span></label>`).join("")}</div>
-      <label class="fl">메모 (선택)<input id="eva-note" maxlength="100" value="${esc(a && !a.going ? a.note : "")}"></label>
-      <div class="row"><button class="btn primary" type="submit">불참 내기</button></div>
-    </form>`;
-  el.hidden = false; document.body.classList.add("noscroll");
+// 투표 버튼: 누르면 가운데 창에서 참가 / 불참 (불참은 사유)
+const voteBtn = (type, id, cur) => `<button type="button" class="btn small vote-btn ${cur ? "voted " + cur : "primary"}" data-act="voteopen" data-type="${type}" data-id="${esc(id)}">${cur === "go" ? "참가 ✓" : cur === "no" ? "불참" : "투표"}</button>`;
+function openVote(type, id) {
+  let title = "", when = "", cur = null, withReason = type !== "open";
+  if (type === "open") { const o = Object.values(state.opens).flat().find(x => x.id === id) || {}; title = "자율 훈련"; when = `${o.date ? shortDate(parseD(o.date)) : ""} ${openLabel(o).replace(/^자율 훈련 · ?/, "")}`; const v = (o.votes || {})[state.myPid]; cur = v === undefined ? null : { going: v }; }
+  else { const it = voteItems().find(x => x.kind === type && x.id === id) || {}; title = it.name || ""; when = it.when || ""; cur = evVotesOf(type, id)[state.myPid] || null; }
+  const el = document.getElementById("confirmBox") || (() => { const d = document.createElement("div"); d.id = "confirmBox"; d.className = "cf-wrap"; document.body.appendChild(d); return d; })();
+  const no = cur && !cur.going;
+  el.innerHTML = `<form class="cf-card vote-card" id="voteForm" data-type="${type}" data-id="${esc(id)}" role="dialog" aria-modal="true" aria-labelledby="vfH">
+    <p id="vfH" class="cf-h">${esc(title)}</p><p class="cf-b small muted">${esc(when)}</p>
+    <div class="vote-pick" role="radiogroup" aria-label="참가 여부"><label><input type="radio" name="vt-go" value="1" ${cur && cur.going ? "checked" : ""}><span class="go">참가</span></label><label><input type="radio" name="vt-go" value="0" ${no ? "checked" : ""}><span class="no">불참</span></label></div>
+    ${withReason ? `<div class="vote-why" ${no ? "" : "hidden"}><div class="reasons" role="radiogroup" aria-label="사유">${Object.entries(ABS_REASONS).map(([k, l], n) => `<label class="rsn"><input type="radio" name="vt-r" value="${k}" ${(no ? cur.reason === k : n === 0) ? "checked" : ""}><span>${l}</span></label>`).join("")}</div>
+      <label class="fl">메모 (선택)<input id="vt-note" maxlength="100" value="${esc(no ? cur.note || "" : "")}"></label></div>` : ""}
+    <div class="cf-row"><button type="button" class="btn" data-cf="0">닫기</button><button type="submit" class="btn primary">저장</button></div></form>`;
+  el.hidden = false;
+  const f = el.querySelector("#voteForm");
+  f.addEventListener("change", e => { if (e.target.name === "vt-go") { const w = f.querySelector(".vote-why"); if (w) w.hidden = e.target.value !== "0"; } });
+  el.onclick = e => { if (e.target === el || e.target.closest('[data-cf="0"]')) { el.hidden = true; el.onclick = null; } };
 }
 /* ---------- 엔트리 (대회·교류전 명단) ---------- */
 const entryOf = (kind, id) => state.entries[kind + ":" + id] || new Set();
@@ -2082,7 +2090,7 @@ document.addEventListener("click", async ev => {
     state.dirty = false; return render();
   }
   if (act === "absopen") return openAbsent(b.dataset.date);
-  if (act === "evno") return openEvAbsent(b.dataset.kind, b.dataset.id);
+  if (act === "voteopen") return openVote(b.dataset.type, b.dataset.id);
   if (act.startsWith("sc")) {
     const S = sc(), x = S.sel, v = b.dataset.v;
     if (act === "scnew") return openScoutForm("");
@@ -2109,11 +2117,6 @@ document.addEventListener("click", async ev => {
       try { ok(await sb.from("scout_matches").delete().eq("id", b.dataset.id)); S.matches = S.matches.filter(m => m.id !== b.dataset.id); state.scoutId = null; toast("지웠어요"); } catch (e) { toast(failMsg(e)); }
     }
     state.dirty = false; return render();
-  }
-  if (act === "evgo") {
-    try { ok(await sb.from("event_votes").upsert({ kind: b.dataset.kind, ref_id: b.dataset.id, player_id: state.myPid, going: true, reason: null, note: null, updated_at: new Date().toISOString() }, { onConflict: "kind,ref_id,player_id" })); toast("참가로 냈어요"); }
-    catch (e) { toast(failMsg(e)); }
-    state.dirty = false; return loadAll();
   }
   if (act === "entry") return openEntry(b.dataset.kind, b.dataset.id);
   if (act === "addform") return openForm(b.dataset.f);
@@ -2494,10 +2497,13 @@ document.addEventListener("submit", async ev => {
       const row = { title: txt("scf-title"), date: txt("scf-date") || null, opponent: txt("scf-opp") || null, yt: yt || null, note: txt("scf-note") || null };
       ok(f.dataset.id ? await sb.from("scout_matches").update(row).eq("id", f.dataset.id) : await sb.from("scout_matches").insert(row));
       closeSheet(); toast("저장했어요"); await scoutLoad(); return;
-    } else if (f.id === "evAbsForm") {
-      const r = f.querySelector('input[name="eva-r"]:checked');
-      ok(await sb.from("event_votes").upsert({ kind: f.dataset.kind, ref_id: f.dataset.id, player_id: state.myPid, going: false, reason: r ? r.value : "etc", note: txt("eva-note") || null, updated_at: new Date().toISOString() }, { onConflict: "kind,ref_id,player_id" }));
-      closeSheet(); toast("불참을 냈어요");
+    } else if (f.id === "voteForm") {
+      const g = f.querySelector('input[name="vt-go"]:checked');
+      if (!g) { toast("참가나 불참을 골라 주세요"); return; }
+      const going = g.value === "1", type = f.dataset.type, id = f.dataset.id, now = new Date().toISOString();
+      if (type === "open") ok(await sb.from("open_votes").upsert({ session_id: id, player_id: state.myPid, going, updated_at: now }, { onConflict: "session_id,player_id" }));
+      else { const r = f.querySelector('input[name="vt-r"]:checked'); ok(await sb.from("event_votes").upsert({ kind: type, ref_id: id, player_id: state.myPid, going, reason: going ? null : (r ? r.value : "etc"), note: going ? null : (txt("vt-note") || null), updated_at: now }, { onConflict: "kind,ref_id,player_id" })); }
+      document.getElementById("confirmBox").hidden = true; toast(going ? "참가로 냈어요" : "불참을 냈어요");
     } else if (f.id === "absForm") {
       const r = f.querySelector('input[name="abs-r"]:checked');
       ok(await sb.from("absences").upsert({ player_id: state.myPid, date: f.dataset.date, reason: r ? r.value : "etc", note: txt("abs-note") || null, author: uid() }, { onConflict: "player_id,date" }));
