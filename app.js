@@ -110,12 +110,12 @@ const SECTIONS = {
   practice: { label: "훈련", views: [["practice", "훈련 계획"], ["video", "영상"], ["notes", "훈련 노트"]] },
 };
 const SECTION_OF = { practice: "practice", notes: "practice", video: "practice", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
-// 직책: 관리자·주장 = 전체 / 부주장·훈련부장·총무·피지컬 코치 = 맡은 일만 (서버 규칙 private.can 과 같게)
-const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", ops: "훈련부장", treasurer: "총무", trainer: "피지컬 코치" };
+// 직책: 관리자·주장 = 전체 / 부주장·훈련부장·총무·피지컬부장 = 맡은 일만 (서버 규칙 private.can 과 같게)
+const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", ops: "훈련부장", treasurer: "총무", trainer: "피지컬부장" };
 // attend = 정규 훈련 시간·없는 날 · 자율 훈련 · 불참 확인
 const STAFF_PERMS = { vice: ["schedule", "notice", "roster", "video", "attend"], ops: ["practice", "attend"], treasurer: ["notice", "roster"], trainer: ["training"] };
 // 화면 보기(viewAs): 관리자·주장은 모든 직책 화면으로 바꿔 볼 수 있고, 직책이 있으면 '내 직책 ↔ 선수'
-const VIEW_LABEL = k => k === "player" ? "부원" : k === "media" ? "영상 담당" : TITLES[k] || k;
+const VIEW_LABEL = k => k === "player" ? "부원" : k === "media" ? "영상부장" : TITLES[k] || k;
 function viewOptions() {
   const o = state.coach ? ["admin", "captain", "vice", "ops", "treasurer", "trainer", "media"] : [...(STAFF_PERMS[state.title] ? [state.title] : []), ...(state.media ? ["media"] : [])];
   return [...o, "player"];
@@ -282,7 +282,7 @@ function ctxFor(p, date) {
 }
 // 최근 3일 정규 훈련·경기를 본인이 RPE 7 이상으로 기록한 횟수 → 웨이트 A 플라이오메트릭 양
 const hardTeamOf = (pid, date) => logsOf(pid).filter(e => (e.type === "team" || e.type === "match") && Number(e.rpe) >= 7 && e.date < date && e.date >= dAdd(date, -3)).length;
-// 그 주 흐름: 고른 것에 따라 남은 날 권고가 바뀜 (선수·주마다 계산, 다시 그릴 때 새로)
+// 그 주 흐름: 고른 것에 따라 남은 날 권장가 바뀜 (선수·주마다 계산, 다시 그릴 때 새로)
 const flowCache = new Map();
 function flowFor(pid, date) {
   const mon = mondayOf(date), k = pid + mon;
@@ -460,10 +460,9 @@ function parseYt(url) {
   return null;
 }
 const vidCard = (v, open) => `<article class="panel vid ${open ? "open" : ""}">
-    <div class="vid-head"><span class="vid-ic">${svg("video")}</span><div class="vid-t"><b>${esc(v.title)}</b><span class="small muted">${v.kind === "playlist" ? "재생목록" : "영상"} · ${VID_CATS[v.cat] || ""}${v.date ? ` · ${md(parseD(v.date))}` : ""}${v.note ? ` · ${esc(v.note)}` : ""}</span></div>
-      <button class="btn small ${open ? "" : "primary"}" type="button" data-act="vidopen" data-id="${esc(v.id)}">${open ? "닫기" : "재생"}</button></div>
-    ${open ? `<div class="vid-frame"><iframe src="${ytEmbed(v)}" title="${esc(v.title)}" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>` : ""}
-    <div class="row vid-foot"><a class="btn link small" href="${ytLink(v)}" target="_blank" rel="noopener noreferrer">유튜브에서 열기 ↗</a>${can("video") ? `<button class="btn link small" type="button" data-act="videdit" data-id="${esc(v.id)}">수정</button><button class="btn link small danger" type="button" data-act="viddel" data-id="${esc(v.id)}">삭제</button>` : ""}</div>
+    <button type="button" class="vid-head" data-act="vidopen" data-id="${esc(v.id)}" aria-expanded="${open}"><span class="vid-ic">${svg("video")}</span><span class="vid-t"><b>${esc(v.title)}</b><span class="small muted">${v.kind === "playlist" ? "재생목록" : "영상"} · ${VID_CATS[v.cat] || ""}${v.date ? ` · ${md(parseD(v.date))}` : ""}${v.note ? ` · ${esc(v.note)}` : ""}</span></span><span class="vid-chev" aria-hidden="true">›</span></button>
+    ${open ? `<div class="vid-body"><div class="vid-frame"><iframe src="${ytEmbed(v)}" title="${esc(v.title)}" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+    <div class="row vid-foot"><a class="btn link small" href="${ytLink(v)}" target="_blank" rel="noopener noreferrer">유튜브에서 열기 ↗</a>${can("video") ? `<button class="btn link small" type="button" data-act="videdit" data-id="${esc(v.id)}">수정</button><button class="btn link small danger" type="button" data-act="viddel" data-id="${esc(v.id)}">삭제</button>` : ""}</div></div>` : ""}
   </article>`;
 // 가장 최근 영상: 유튜브 플레이어가 재생목록을 읽은 뒤 맨 끝(최근 추가)으로 맞춤 · 목록이 최신순이면 '맨 앞'으로 바꿈
 let ytApi = null;
@@ -479,20 +478,18 @@ function loadYtApi() {
   return ytApi;
 }
 const latestSrc = () => { const pls = state.videos.filter(v => v.kind === "playlist"); return pls.find(v => v.id === state.latestId) || pls.find(v => v.cat === "practice") || pls[0] || null; };
-// 재생목록은 보통 최신 영상이 맨 앞. 맨 끝이 최신인 목록만 바꿔 둔다
-const latestEnd = id => { try { return localStorage.getItem("snuvt-ytx-" + id) === "end"; } catch (e) { return false; } };
+// 가장 최근 영상: 재생목록 맨 앞부터, '이전 · 다음'으로 넘겨 봄
+let ytPlayer = null;
 async function initLatest() {
   const v = latestSrc(), box = document.getElementById("ytLatest"); if (!v || !box || box.dataset.ready) return;
-  box.dataset.ready = "1";
+  box.dataset.ready = "1"; ytPlayer = null;
   const info = t => { const el = document.getElementById("ytInfo"); if (el) el.textContent = t; };
+  const pos = p => { const pl = p.getPlaylist && p.getPlaylist(), i = p.getPlaylistIndex ? p.getPlaylistIndex() : 0; info(pl && pl.length ? `${v.title} · ${i + 1} / ${pl.length}` : v.title); };
   const YT = await loadYtApi();
-  if (!YT || !document.getElementById("ytLatest")) { info("유튜브를 불러오지 못했어요. 아래 '재생'이나 '유튜브에서 열기'로 봐 주세요."); return; }
+  if (!YT || !document.getElementById("ytLatest")) { info("유튜브를 불러오지 못했어요. 아래 목록에서 '유튜브에서 열기'로 봐 주세요."); return; }
   new YT.Player("ytLatest", { host: "https://www.youtube-nocookie.com", width: "100%", height: "100%", playerVars: { listType: "playlist", list: v.yt, playsinline: 1, rel: 0 },
-    events: { onReady: e => {
-      const pl = e.target.getPlaylist && e.target.getPlaylist();
-      if (pl && pl.length > 1 && latestEnd(v.yt)) { e.target.cuePlaylist({ listType: "playlist", list: v.yt, index: pl.length - 1 }); info(`${v.title} · ${pl.length}개 중 목록 맨 끝`); }
-      else info(pl && pl.length ? `${v.title} · ${pl.length}개 중 가장 최근` : v.title);
-    }, onError: () => info("이 재생목록은 열 수 없어요. 링크나 공개 범위(일부 공개)를 확인해 주세요.") } });
+    events: { onReady: e => { ytPlayer = e.target; pos(e.target); }, onStateChange: e => pos(e.target),
+      onError: () => info("이 재생목록은 열 수 없어요. 링크나 공개 범위(일부 공개)를 확인해 주세요.") } });
 }
 function viewVideo() {
   const cat = state.vidCat || "all", list = state.videos.filter(v => cat === "all" || v.cat === cat);
@@ -500,7 +497,7 @@ function viewVideo() {
   const cats = ["all", ...Object.keys(VID_CATS).filter(k => state.videos.some(v => v.cat === k))];
   return `<section class="sec"><div class="sec-head"><h2>영상</h2>${can("video") ? `<button class="btn add" type="button" data-act="videdit" data-id="">＋ 영상 추가</button>` : ""}</div>
     <div class="lib-cats">${cats.map(k => `<button type="button" class="chip ${k === cat ? "on" : ""}" data-act="vidcat" data-c="${k}">${k === "all" ? "전체" : VID_CATS[k]}</button>`).join("")}</div>
-    ${src ? `<section class="panel latest"><div class="row between"><h3>가장 최근 영상</h3><button class="btn link small" type="button" data-act="ytorder" data-id="${esc(src.yt)}">${latestEnd(src.yt) ? "맨 앞 영상 보기" : "맨 끝 영상 보기"}</button></div>
+    ${src ? `<section class="panel latest"><div class="row between"><h3>가장 최근 영상</h3><span class="row nowrap"><button class="btn small" type="button" data-act="ytprev">‹ 이전</button><button class="btn small" type="button" data-act="ytnext">다음 ›</button></span></div>
       ${pls.length > 1 ? `<div class="lib-cats">${pls.map(v => `<button type="button" class="chip ${v.id === src.id ? "on" : ""}" data-act="ytlatest" data-id="${esc(v.id)}">${esc(v.title)}</button>`).join("")}</div>` : ""}
       <div class="vid-frame"><div id="ytLatest"></div></div><p class="small muted" id="ytInfo">불러오는 중</p></section>` : ""}
     
@@ -573,14 +570,18 @@ function viewSettings() {
         <label class="fl">배구 경력 (년)<input id="pr-exp" type="number" inputmode="decimal" min="0" max="20" step="0.5" value="${esc(me.exp ?? "")}"></label>
         ${wexpSelect("pr-wexp", me.weightExp, false, "—")}
       </div><div class="row"><button class="btn primary" type="submit">저장</button></div></form>
-      
+    </section>
+    <section class="panel set-sec"><h3>부상 · 지금 상태</h3>
+      <form class="f" id="myInjForm">${injuryEditor("mi", (state.health[me.id] || {}).injuries || [])}
+        <div class="row"><button class="btn primary" type="submit">저장</button></div></form>
     </section>` : ""}
-    <section class="panel set-sec"><h3>알림</h3><div id="pushBox"><p class="small muted">불러오는 중</p></div></section>
+    <section class="panel set-sec"><h3>알림</h3><div id="pushBox">${loaderHtml(true)}</div></section>
     <section class="panel set-sec"><h3>화면</h3>
       <div class="seg fill" role="radiogroup" aria-label="화면 밝기">${[["light", "밝게"], ["dark", "어둡게"], ["auto", "기기 따라"]].map(([v, l]) => `<button type="button" class="seg-tab ${theme === v ? "on solid" : ""}" data-act="themeset" data-t="${v}" aria-pressed="${theme === v}">${l}</button>`).join("")}</div>
     </section>
     <section class="panel set-sec"><h3>계정</h3>
       ${email ? `<div class="kv"><span>이메일</span><b>${esc(email)}</b></div>` : ""}
+      ${state.superAdmin ? `<div class="kv"><span>팀</span><div class="seg-pick team-switch" role="radiogroup" aria-label="팀 바꾸기">${[["men", "남자부"], ["women", "여자부"]].map(([v, l]) => `<label><input type="radio" name="teamsw" value="${v}" ${TEAM.id === v ? "checked" : ""}><span>${l}</span></label>`).join("")}</div></div>` : ""}
       ${state.staff ? `<button type="button" class="menu-item" data-act="rolepick"><span>화면 보기</span><span class="small muted">${VIEW_LABEL(state.viewAs)}</span><span class="go">›</span></button>` : ""}
       <button type="button" class="menu-item" data-act="pwchange"><span>비밀번호 바꾸기</span><span></span><span class="go">›</span></button>
       <button type="button" class="menu-item danger" data-act="logout"><span>로그아웃</span><span></span><span class="go">›</span></button>
@@ -601,7 +602,7 @@ function refreshSettings() {
 }
 /* ---------- 홈 ---------- */
 function viewHome() {
-  if (!state.loaded) return `<div class="panel empty"><strong>불러오는 중</strong></div>`;
+  if (!state.loaded) return loaderHtml();
   const me = playerOf(state.myPid), t = iso(today()), team = infoOn(t);
   const nextT = upcoming(dAdd(t, 1), 21)[0], todayO = opensOn(t)[0];
   const itemLabel = x => x.open ? openLabel(x.open) : tdLabel(x.i);
@@ -630,7 +631,7 @@ function viewHome() {
 }
 // Physical · 오늘 (예전 홈)
 function viewTrain() {
-  if (!state.loaded) return `<div class="panel empty"><strong>불러오는 중</strong></div>`;
+  if (!state.loaded) return loaderHtml();
   const me = playerOf(state.myPid);
   const parts = [];
   if (state.admin && !me) parts.push(`<section class="panel row between"><div><h3>내 선수 정보가 아직 없어요</h3></div><button class="btn primary" type="button" data-act="editself">내 정보 입력</button></section>`);
@@ -651,11 +652,11 @@ function wellnessHtml(p) {
     </form></details>
   </section>`;
 }
-// 오늘 할 것: 권고가 표시되고, 눌러서 바꿈 (권고를 다시 누르면 원래대로)
+// 오늘 할 것: 권장가 표시되고, 눌러서 바꿈 (권장를 다시 누르면 원래대로)
 function picksHtml(plan, pid, date) {
   if (!plan.choices) return "";
   const can = pid && canEditSelf(playerOf(pid));
-  return `<div class="picks" role="group" aria-label="오늘 할 것">${plan.choices.map(c => `<button type="button" class="pick${c.rec ? " rec" : ""}" aria-pressed="${!!c.sel}" ${can ? `data-act="pick" data-pid="${esc(pid)}" data-date="${esc(date)}" data-k="${c.key}" data-rec="${c.rec ? 1 : 0}"` : "disabled"}>${esc(c.label)}${c.rec ? "<em>권고</em>" : ""}</button>`).join("")}</div>`;
+  return `<div class="picks" role="group" aria-label="오늘 할 것">${plan.choices.map(c => `<button type="button" class="pick${c.rec ? " rec" : ""}" aria-pressed="${!!c.sel}" ${can ? `data-act="pick" data-pid="${esc(pid)}" data-date="${esc(date)}" data-k="${c.key}" data-rec="${c.rec ? 1 : 0}"` : "disabled"}>${esc(c.label)}${c.rec ? "<em>권장</em>" : ""}</button>`).join("")}</div>`;
 }
 const hasRun = plan => ["gymA", "gymB", "bwU", "bwL", "act", "recover"].includes(plan.slot);
 function runBtn(p, date, plan, inline) {
@@ -722,7 +723,7 @@ function myStatusHtml(p) {
 }
 function teamStatusHtml() {
   const ps = activePlayers(), t = iso(today()), mon = thisMon();
-  const pending = state.profiles.filter(m => m.role === "pending" && m.id !== state.session.user.id);
+  const pending = can("full") ? state.profiles.filter(m => m.role === "pending" && m.id !== state.session.user.id) : [];
   const loggedToday = ps.filter(p => logsOf(p.id).some(e => e.date === t)).length;
   const recent = iso(addDays(today(), -3));
   const watch = [];
@@ -744,7 +745,7 @@ function teamStatusHtml() {
     <div class="stats">
       <div class="stat"><div class="k">오늘 기록</div><div class="v">${loggedToday} / ${ps.length}</div></div>
       <div class="stat"><div class="k">아침 컨디션</div><div class="v">${ps.filter(p => wellOn(p.id, t)).length} / ${ps.length}</div></div>
-      <div class="stat ${pending.length ? "hot" : ""}"><div class="k">승인 대기</div><div class="v">${pending.length}</div></div>
+      ${can("full") ? `<div class="stat ${pending.length ? "hot" : ""}"><div class="k">승인 대기</div><div class="v">${pending.length}</div></div>` : ""}
       <div class="stat ${watch.length ? "hot" : ""}"><div class="k">확인할 선수</div><div class="v">${watch.length}</div></div>
     </div>
     ${pending.length ? `<button class="btn link" type="button" data-act="view" data-v="intake">승인하러 가기 →</button>` : ""}
@@ -757,8 +758,11 @@ function viewRoster() {
   const ps = sortedPlayers().slice().sort((a, b) => (a.number ?? 999) - (b.number ?? 999) || a.name.localeCompare(b.name, "ko"));
   const staff = ps.filter(p => p.title || p.media);
   return `<section class="sec"><div class="sec-head"><h3>명단 <span class="small muted">${ps.length}명</span></h3>${can("full") ? `<button class="btn link small" type="button" data-act="view" data-v="intake">직책·정보 바꾸기 →</button>` : ""}</div>
-    <ul class="roster-list">${ps.map(p => `<li><span class="r-no num">${p.number ?? ""}</span><span class="r-who"><b>${esc(p.name)}</b><span class="chip pos">${esc(p.pos)}</span>${p.year ? `<span class="small muted">${esc(p.year)}</span>` : ""}${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}${p.military ? `<span class="chip mil">군 복무</span>` : ""}</span>${state.contacts[p.id] ? `<a class="r-tel num" href="tel:${esc(state.contacts[p.id].replace(/[^0-9+]/g, ""))}">${esc(state.contacts[p.id])}</a>` : `<span class="r-tel muted">—</span>`}</li>`).join("")}</ul></section>
-    <section class="sec"><h3>운영진</h3>${staff.length ? `<ul class="watch">${staff.map(p => `<li><b>${esc(p.name)}</b>${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}${p.media ? `<span class="chip">영상 담당</span>` : ""}</li>`).join("")}</ul>` : emptyLine("아직 정해진 직책이 없어요.")}</section>`;
+    ${(() => { const hasT = ps.some(p => p.title || p.military); const tel = p => state.contacts[p.id] ? `<a class="r-tel" href="tel:${esc(state.contacts[p.id].replace(/[^0-9+]/g, ""))}">${esc(state.contacts[p.id])}</a>` : `<span class="muted">—</span>`;
+      return `<div class="tw"><table class="roster"><thead><tr><th class="num">번호</th><th>이름</th><th>포지션</th><th>학년</th>${hasT ? `<th class="c-title">직책</th>` : ""}<th>전화</th></tr></thead><tbody>
+      ${ps.map(p => `<tr><td class="num">${p.number ?? ""}</td><td><b>${esc(p.name)}</b>${p.title ? `<span class="chip t-inline">${esc(TITLES[p.title])}</span>` : ""}${p.military ? `<span class="chip mil t-inline">군</span>` : ""}</td><td><span class="chip pos">${esc(p.pos)}</span></td><td>${esc(String(p.year || "").replace(/학년$/, ""))}</td>${hasT ? `<td class="c-title">${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}${p.military ? `<span class="chip mil">군 복무</span>` : ""}</td>` : ""}<td>${tel(p)}</td></tr>`).join("")}
+      </tbody></table></div>`; })()}</section>
+    <section class="sec"><h3>운영진</h3>${staff.length ? `<ul class="watch">${staff.map(p => `<li><b>${esc(p.name)}</b>${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}${p.media ? `<span class="chip">영상부장</span>` : ""}</li>`).join("")}</ul>` : emptyLine("아직 정해진 직책이 없어요.")}</section>`;
 }
 // 리포트: 지난주 요약 + 선수별 리포트(최근 4주) + 엑셀
 // 시즌 = 3월 → 다음 해 2월. 기록이 있는 첫 시즌부터 이번 시즌까지
@@ -826,7 +830,7 @@ function blockHtml(b, edit) {
     <div class="nm">${esc(x.name)}${x.mod ? ` <span class="mod">${esc(x.mod)}</span>` : ""}</div><div class="rx">${esc(rxMain(x.rx))}</div>${rxRest(x.rx) ? `<div class="sub">${rxRest(x.rx)}</div>` : ""}</li>`; }).join("")}</ul>
     ${b.note ? `<p class="bnote">${esc(b.note).replace(/\n/g, "<br>")}</p>` : ""}</section>`;
 }
-/* ---------- 프로그램 박스 편집 (피지컬 코치) ---------- */
+/* ---------- 프로그램 박스 편집 (피지컬부장) ---------- */
 const SLOT_KO = { gymA: "하체 웨이트 날", gymB: "상체 웨이트 날", bwU: "맨몸 상체 날", bwL: "맨몸 하체 날", act: "활성화 날", team: "정규 훈련 날", recover: "회복 날", prep: "대회 전날" };
 const editCtx = { slot: null, pid: null };
 function editBar(plan, p) {
@@ -1195,7 +1199,7 @@ function viewIntake() {
             <label class="fl">포지션<select id="pf-pos" required>${POS_ORDER.map(k => `<option ${opt(k, p.pos)}>${k}</option>`).join("")}</select></label>
             <label class="fl">등번호<input id="pf-num" type="number" inputmode="numeric" min="0" max="99" value="${esc(p.number ?? "")}"></label>
             <label class="fl">직책<select id="pf-title"><option value="">부원</option>${Object.entries(TITLES).map(([k, l]) => `<option value="${k}" ${p.title === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-            <label class="check"><input type="checkbox" id="pf-media" ${p.media ? "checked" : ""}> 영상 담당</label>
+            <label class="check"><input type="checkbox" id="pf-media" ${p.media ? "checked" : ""}> 영상부장</label>
             <label class="fl">전화번호<input id="pf-phone" type="tel" inputmode="tel" maxlength="20" placeholder="010-0000-0000" value="${esc((state.contacts || {})[pid] || "")}"></label>
             <label class="fl">학년<input id="pf-year" maxlength="10" placeholder="예: 3학년" value="${esc(p.year || "")}"></label>
             <label class="fl">키 (cm)<input id="pf-height" type="number" inputmode="decimal" min="140" max="220" step="0.1" value="${esc(p.height ?? "")}"></label>
@@ -1705,7 +1709,7 @@ function render() {
   header();
   if (state.dirty) return; // 입력 중인 폼은 덮어쓰지 않음
   let html;
-  if (state.booting) html = `<div class="panel empty"><strong>불러오는 중</strong></div>`;
+  if (state.booting) html = loaderHtml();
   else if (state.offline) html = offlineHtml();
   else if (!state.session) html = viewAuth();
   else if (state.recovery) html = viewNewPw();
@@ -1722,14 +1726,25 @@ function render() {
   if (state.view === "video") initLatest();
 }
 // 화면 넘어갈 때 부드럽게: 섹션이 바뀌면 살짝 올라오며, 같은 섹션 안 탭은 옆으로 미끄러지며
+// 화면 넘김: 지원되면 View Transition(이전 화면이 빠지고 새 화면이 미끄러져 들어옴), 아니면 들어오는 쪽만 움직임
+const reduceMotion = () => { try { return matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; } };
+// 불러오는 중: 가운데서 도는 배구공
+const BALL_SVG = '<svg class="ball-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M11.1 7.1a16.55 16.55 0 0 1 10.9 4M12 12a12.6 12.6 0 0 1-8.7 5M16.8 13.6a16.55 16.55 0 0 1-9 7.5M20.7 17a12.8 12.8 0 0 0-8.7-5 13.3 13.3 0 0 1 0-10M6.3 3.8a16.55 16.55 0 0 0 1.9 11.5"/></svg>';
+const loaderHtml = small => `<div class="loader ${small ? "sm" : ""}" role="status" aria-label="불러오는 중">${BALL_SVG}</div>`;
 function go(view) {
   const from = state.view, sameSec = SECTION_OF[from] && SECTION_OF[from] === SECTION_OF[view];
   const order = v => (SECTIONS[SECTION_OF[v]] ? SECTIONS[SECTION_OF[v]].views.findIndex(x => x[0] === v) : 0);
+  const dir = sameSec ? (order(view) > order(from) ? "right" : "left") : "up";
   state.view = view; state.dirty = false; state.armed = null;
   try { history.replaceState(null, "", "#" + view); } catch (e) {}
-  render(); window.scrollTo(0, 0);
+  const swap = () => { render(); window.scrollTo(0, 0); };
+  if (from !== view && document.startViewTransition && !reduceMotion()) {
+    document.documentElement.dataset.nav = dir;
+    try { document.startViewTransition(swap); return; } catch (e) { /* 아래로 */ }
+  }
+  swap();
   if (from === view) return;
-  const m = document.getElementById("main"), cls = sameSec ? (order(view) > order(from) ? "in-right" : "in-left") : "in-up";
+  const m = document.getElementById("main"), cls = "in-" + dir;
   m.classList.remove("in-right", "in-left", "in-up"); void m.offsetWidth; m.classList.add(cls);
 }
 let toastT;
@@ -1766,7 +1781,7 @@ document.addEventListener("click", async ev => {
   if (act === "pick" || act === "unpick") {
     const pid = b.dataset.pid, date = b.dataset.date;
     try {
-      const back = act === "unpick" || b.dataset.rec === "1"; // 권고를 누르면 고른 걸 지우고 흐름대로
+      const back = act === "unpick" || b.dataset.rec === "1"; // 권장를 누르면 고른 걸 지우고 흐름대로
       if (back) ok(await sb.from("day_picks").delete().eq("player_id", pid).eq("date", date));
       else ok(await sb.from("day_picks").upsert({ player_id: pid, date, pick: b.dataset.k }, { onConflict: "player_id,date" }));
       const m = state.picks[pid] = state.picks[pid] || {};
@@ -1866,7 +1881,7 @@ document.addEventListener("click", async ev => {
   if (act === "addform") return openForm(b.dataset.f);
   if (act === "edtest") return openTestEdit(b.dataset.id);
   if (act === "ytlatest") { state.latestId = b.dataset.id; state.dirty = false; return render(); }
-  if (act === "ytorder") { const id = b.dataset.id; try { localStorage.setItem("snuvt-ytx-" + id, latestEnd(id) ? "front" : "end"); } catch (e) {} state.dirty = false; return render(); }
+  if (act === "ytprev" || act === "ytnext") { if (ytPlayer) { act === "ytnext" ? ytPlayer.nextVideo() : ytPlayer.previousVideo(); } else toast("영상을 불러오는 중이에요"); return; }
   if (act === "vidcat") { state.vidCat = b.dataset.c; state.dirty = false; return render(); }
   if (act === "vidopen") { state.vidOpen = state.vidOpen === b.dataset.id ? null : b.dataset.id; state.dirty = false; return render(); }
   if (act === "videdit") return openVidForm(b.dataset.id);
@@ -1977,6 +1992,7 @@ document.addEventListener("click", async ev => {
 document.addEventListener("change", ev => {
   if (ev.target.id === "repSy") { state.repSy = Number(ev.target.value); return; }
   if (ev.target.id === "drViewAs") return setView(ev.target.value);
+  if (ev.target.name === "teamsw") return switchTeam(ev.target.value);
   if (ev.target.classList.contains("inj-part")) {
     const row = ev.target.closest(".inj-row"), t = row.querySelector(".inj-type");
     t.innerHTML = injTypes(ev.target.value).map(x => `<option value="${esc(x)}">${esc(x)}</option>`).join("");
@@ -2154,6 +2170,9 @@ document.addEventListener("submit", async ev => {
       closeSheet();
       if (await boxWrite("insert", { player_id: editCtx.pid, slot: editCtx.slot, block: f.dataset.b, op: "add", name, rx: txt("bx-rx") || null })) toast(`${name} 추가했어요`);
       return;
+    } else if (f.id === "myInjForm") {
+      ok(await sb.rpc("update_my_injuries", { injuries: readInjuries("mi") }));
+      toast("부상 정보를 저장했어요 · 프로그램이 맞춰져요"); state.dirty = false; await loadAll(); return refreshSettings();
     } else if (f.id === "profileForm") {
       const phone = txt("pr-phone");
       if (phone && !/^[0-9+ -]{7,20}$/.test(phone)) { toast("전화번호를 확인해 주세요."); return; }
@@ -2274,6 +2293,7 @@ async function loadProfile() {
   }
   await loadTeam(r.data ? r.data.team_id : "men");
   state.role = r.data ? r.data.role : "pending";
+  state.superAdmin = !!(r.data && r.data.super);
   state.myPid = r.data ? r.data.player_id : null;
   state.coach = state.role === "coach";
   state.staff = state.coach || !!STAFF_PERMS[state.title] || !!state.media;
@@ -2346,6 +2366,16 @@ function withQueued(raw) {
     out[it.table] = [...arr, row];
   });
   return out;
+}
+// 총관리자: 남자부·여자부 오가기 (서버에서 내 팀을 바꾸고 처음부터 다시 불러옴)
+async function switchTeam(t) {
+  if (t === TEAM.id) return;
+  const r = await sb.rpc("switch_team", { t });
+  if (r.error) { toast(r.error.code === "42501" ? r.error.message : failMsg(r.error)); return; }
+  try { lsDel(snapKey()); } catch (e) {}
+  closeSettings(); toast(`${t === "women" ? "여자부" : "남자부"}로 바꿨어요`);
+  state.loaded = false; state.booting = true; render();
+  return loadProfile();
 }
 // 팀 (남자부·여자부): 이름·네트 높이·정규 훈련 요일
 const TEAMS_FALLBACK = { men: { id: "men", label: "남자부", net_cm: 243, swap_days: false }, women: { id: "women", label: "여자부", net_cm: 224, swap_days: true } };
@@ -2436,6 +2466,8 @@ function buildState(raw) {
     name: r.name, pos: r.pos, year: r.year, height: r.height, weight: r.weight, exp: r.exp,
     weightExp: wexpNorm(r.weight_exp), adjust: r.adjust || {}, order: r.sort, title: r.title || null, number: r.number ?? null, media: !!r.media, military: !!r.military,
   }]));
+  // 다른 팀을 보고 있는 총관리자는 그 팀에 내 선수 정보가 없음 → 관리자로만
+  if (state.coach && state.myPid && !state.players[state.myPid]) state.myPid = null;
   // 내 직책 → 맡은 일 (관리자·주장은 role coach)
   const myTitle = (state.players[state.myPid] || {}).title || null, myMedia = !!(state.players[state.myPid] || {}).media;
   if (myTitle !== state.title || myMedia !== !!state.media) {

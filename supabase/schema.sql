@@ -406,3 +406,8 @@ alter table public.logs add constraint logs_pain_area_check
 -- 모든 표에 restrictive 정책 "team scope": 내 팀 행만 (선수 기록 표는 private.player_team(player_id) 로 확인)
 -- 관리 함수(직책·영상·졸업·삭제·탈퇴)는 같은 팀만. 공지 알림은 push_targets_team(kind, team) 으로 같은 팀에만
 -- 여자부 첫 관리자: update public.profiles set role = 'coach' where email = '...' and team_id = 'women';
+
+-- ===== 총관리자·본인 부상 (super_admin_and_my_injuries) =====
+-- profiles.super: 총관리자. switch_team(t) 로 남자부·여자부를 오감
+-- private.my_player_id(): 지금 보고 있는 팀의 선수일 때만 (다른 팀에 들어가면 관리자로만)
+-- update_my_injuries(injuries): 운동하다 다쳤을 때 본인이 부상 이력·지금 상태를 고침

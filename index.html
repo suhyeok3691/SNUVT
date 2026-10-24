@@ -623,13 +623,6 @@ i.dot.k-off { background: none; border: 1px dashed var(--muted); }
 .cal-detail { display: grid; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
 .sm-select { font: inherit; font-size: 14px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); width: auto; }
 /* 명단: 한 줄에 한 명 */
-.roster-list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); }
-.roster-list li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); }
-.roster-list li:first-child { border-top: 0; }
-.r-no { color: var(--muted); font-size: 13px; text-align: right; }
-.r-who { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; min-width: 0; }
-.r-who b { white-space: nowrap; }
-.r-tel { white-space: nowrap; font-size: 13.5px; color: var(--blue); text-decoration: none; }
 /* 아침 컨디션: 접으면 한 줄 */
 .well-card { padding: 10px 14px; }
 .well-card h3 { margin: 0; font-size: 15px; }
@@ -686,6 +679,55 @@ input[type="time"]::-webkit-date-and-time-value { text-align: left; }
 .seg-pick label + label span { border-left: 1px solid var(--line); }
 .seg-pick input:checked + span { background: var(--blue); color: #fff; }
 .seg-pick input:focus-visible + span { outline: 2px solid var(--blue); outline-offset: -2px; }
+/* 명단: 칸 맞춘 표 */
+table.roster { width: 100%; }
+table.roster th, table.roster td { padding: 9px 10px; vertical-align: middle; }
+table.roster td.num, table.roster th.num { text-align: right; width: 36px; color: var(--muted); }
+.r-tel { color: var(--blue); text-decoration: none; font-family: var(--f-data); font-size: 13.5px; }
+/* 오늘 할 것: 권장은 동그란 칸 위에 */
+.picks { margin-top: 12px; }
+.pick { position: relative; }
+.pick em { position: absolute; top: -9px; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 10.5px; font-weight: 800; line-height: 16px; padding: 0 7px; border-radius: 999px; background: var(--yellow); color: var(--on-yellow); white-space: nowrap; box-shadow: 0 0 0 2px var(--surface); }
+.pick[aria-pressed="true"] em { color: var(--on-yellow); opacity: 1; }
+/* 영상 카드: 눌러서 펼침 */
+.vid { gap: 0; padding: 0; overflow: hidden; }
+.vid-head { width: 100%; font: inherit; color: inherit; text-align: left; background: none; border: 0; padding: 12px 14px; cursor: pointer; }
+.vid-chev { flex: none; color: var(--muted); font-size: 22px; line-height: 1; transition: transform .2s ease; }
+.vid.open .vid-chev { transform: rotate(90deg); }
+.vid-body { display: grid; gap: 8px; padding: 0 14px 12px; animation: fade-in .2s ease; }
+/* 불러오는 중: 가운데서 도는 배구공 */
+.loader { display: grid; place-items: center; min-height: 42vh; color: var(--blue); }
+.loader.sm { min-height: 44px; place-items: start; }
+.ball-spin { width: 46px; height: 46px; animation: ball-spin 1.1s cubic-bezier(.45, .05, .55, .95) infinite; }
+.loader.sm .ball-spin { width: 22px; height: 22px; }
+@keyframes ball-spin { 0% { transform: rotate(0) translateY(0); } 50% { transform: rotate(180deg) translateY(-4px); } 100% { transform: rotate(360deg) translateY(0); } }
+@media (prefers-reduced-motion: reduce) { .ball-spin { animation-duration: 3s; } }
+/* 눌렀을 때 남는 네모 잔상 없애기 */
+html { -webkit-tap-highlight-color: transparent; }
+button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
+/* 화면 넘김 (View Transition) */
+#main { view-transition-name: main; }
+::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+::view-transition-group(main) { animation-duration: .28s; }
+::view-transition-old(main) { animation: vt-out .16s ease-in both; }
+::view-transition-new(main) { animation: vt-in-up .28s cubic-bezier(.2, .8, .2, 1) both; }
+html[data-nav="right"]::view-transition-new(main) { animation-name: vt-in-right; }
+html[data-nav="left"]::view-transition-new(main) { animation-name: vt-in-left; }
+@keyframes vt-out { to { opacity: 0; } }
+@keyframes vt-in-up { from { opacity: 0; transform: translateY(14px); } }
+@keyframes vt-in-right { from { opacity: 0; transform: translateX(22px); } }
+@keyframes vt-in-left { from { opacity: 0; transform: translateX(-22px); } }
+.team-switch { width: 170px; }
+.team-switch span { padding: 6px 0; font-size: 14px; }
+.t-inline { display: none; margin-left: 6px; font-size: 11px; padding: 0 6px; }
+@media (max-width: 520px) {
+  table.roster .c-title { display: none; }
+  table.roster .t-inline { display: block; width: max-content; margin: 3px 0 0; border-radius: 999px; }
+  .r-tel { font-family: inherit; font-size: 13px; letter-spacing: -.2px; }
+  table.roster th { white-space: nowrap; }
+  table.roster th, table.roster td { padding: 9px 6px; }
+  table.roster td.num, table.roster th.num { width: 24px; }
+}
 </style>
 </head>
 <body>
@@ -706,9 +748,9 @@ input[type="time"]::-webkit-date-and-time-value { text-align: left; }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=55"></script>
-<script src="guide.js?v=55"></script>
-<script src="library.js?v=55"></script>
-<script src="app.js?v=55"></script>
+<script src="program.js?v=58"></script>
+<script src="guide.js?v=58"></script>
+<script src="library.js?v=58"></script>
+<script src="app.js?v=58"></script>
 </body>
 </html>

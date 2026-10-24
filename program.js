@@ -1102,9 +1102,9 @@ function readiness(well, lastRpe) {
 }
 const TRAIN_SLOTS = ["gymA", "gymB", "bwU", "bwL"];
 /* 고를 수 있는 날: 웨이트·맨몸 날과 정규 훈련 없는 날(관리자 지정).
- * 그날의 '권고'를 보여 주고 선수가 바꿀 수 있다 (예: 헬스장에 못 가면 맨몸). 고른 것에 따라 그 주의 남은 날 권고가 바뀐다.
- * 권고 규칙 (weekFlow)
- *  - 그 주 일정의 웨이트·맨몸 횟수를 목표로, 지금까지 한 것 + 뒤에 남은 일정으로 못 채우는 종류가 있으면 그걸 권고
+ * 그날의 '권장'를 보여 주고 선수가 바꿀 수 있다 (예: 헬스장에 못 가면 맨몸). 고른 것에 따라 그 주의 남은 날 권장가 바뀐다.
+ * 권장 규칙 (weekFlow)
+ *  - 그 주 일정의 웨이트·맨몸 횟수를 목표로, 지금까지 한 것 + 뒤에 남은 일정으로 못 채우는 종류가 있으면 그걸 권장
  *    (하체 웨이트 → 상체 웨이트 → 맨몸 하체 → 맨몸 상체 순, 전날·다음 날과 같은 종류는 피함)
  *  - 정규 훈련 없는 날 기본은 하체 (하체가 가장 중요). 다음 날이 정규 훈련이거나 앞뒤가 하체면 상체 → 맨몸
  *  - 대회 주는 바꾸지 않고, 정규 훈련 없는 날은 회복 */
@@ -1125,7 +1125,7 @@ function resolvePick(pick, base, near) {
   if (base === "gymB" || base === "bwU") return "bwU";
   return (near || []).includes("bwU") ? "bwL" : "bwU";
 }
-// days: 월–일 [{ slot (일정), off (정규 훈련 없음), pick (고른 것), event (대회 주) }] → 날마다 { rec (권고 슬롯), why, slot (실제) }
+// days: 월–일 [{ slot (일정), off (정규 훈련 없음), pick (고른 것), event (대회 주) }] → 날마다 { rec (권장 슬롯), why, slot (실제) }
 function weekFlow(days) {
   const TR = x => TRAIN_SLOTS.includes(x);
   const cnt = arr => arr.reduce((m, x) => (m[x] = (m[x] || 0) + 1, m), {});
@@ -1164,13 +1164,13 @@ const choicesFor = (rec, slot) => Object.entries(PICKS).map(([key, v]) => ({ key
 function planForDay(ctx, info) {
   let i = info;
   const p = ctx.player || {};
-  // 고를 수 있는 날: 권고(그 주 흐름) 또는 선수가 고른 것으로
+  // 고를 수 있는 날: 권장(그 주 흐름) 또는 선수가 고른 것으로
   let flow = null;
   const flex = !!p.pos && (TRAIN_SLOTS.includes(i.slot) || (i.slot === "team" && i.teamOff));
   if (flex || (i.slot === "team" && i.teamOff)) {
     flow = info.flow || { rec: i.teamOff ? (i.w === PH.TAPER || i.light ? "recover" : "gymA") : i.slot, why: "" };
     let rec = flow.rec;
-    // 정규 훈련 없는 날 하체 권고인데 무릎·발목이 많이 아프면 상체로
+    // 정규 훈련 없는 날 하체 권장인데 무릎·발목이 많이 아프면 상체로
     if (i.teamOff && rec === "gymA" && p.pos) { const fx = prepCtx(ctx).fx; if ((fx.knee && fx.knee <= 2) || fx.ankle === 1) rec = "gymB"; }
     const pk = ctx.pick && PICKS[ctx.pick];
     const slot = pk ? resolvePick(ctx.pick, i.teamOff ? rec : i.slot, i.near) : rec;
