@@ -540,8 +540,8 @@ const JP_PREF = { 北海道: ["홋카이도", 0], 青森: ["아오모리", 0], �
   徳島: ["도쿠시마", 6], 香川: ["가가와", 6], 愛媛: ["에히메", 6], 高知: ["고치", 6],
   福岡: ["후쿠오카", 7], 佐賀: ["사가", 7], 長崎: ["나가사키", 7], 熊本: ["구마모토", 7], 大分: ["오이타", 7], 宮崎: ["미야자키", 7], 鹿児島: ["가고시마", 7], 沖縄: ["오키나와", 7] };
 const JP_REGIONS = ["홋카이도·도호쿠", "간토", "호쿠신에쓰", "도카이", "긴키", "주고쿠", "시코쿠", "규슈·오키나와"];
-const JP_TOURN = { haruko: "하루코", ih: "인터하이", kokutai: "국스포", block: "지역 대회", senbatsu: "선발전", shinjin: "신인전", practice: "연습·탐방", univ: "대학", other: "기타" };
-const JP_TOURN_Q = { haruko: "春高バレー", ih: "インターハイ バレー", kokutai: "国スポ バレー 少年", block: "バレー 大会", senbatsu: "選抜 バレー", shinjin: "新人戦 バレー" };
+const JP_TOURN = { haruko: "하루코", ih: "인터하이", kokutai: "국민스포츠대회", sakura: "사쿠라 발리", block: "지역 대회", practice: "연습·탐방", univ: "대학", other: "기타" };
+const JP_TOURN_Q = { haruko: "春高バレー", ih: "インターハイ バレー", kokutai: "国民スポーツ大会 バレー 少年", sakura: "さくらバレー 全国私立高等学校", block: "バレー 大会" };
 // 위계: 전국 본선(결승 → 1회전) 다음에 현 예선. jp-sync 가 전국 대진표(jp_matches)로 나눠 둠
 const JP_RND = [["F", "결승"], ["SF", "준결승 (4강)"], ["3rd", "3위 결정전"], ["QF", "준준결승 (8강)"], ["R5", "5회전"], ["R4", "4회전"], ["R3", "3회전 (16강)"], ["R2", "2회전"], ["R1", "1회전"], ["rep", "패자부활전"], ["group", "예선 리그"], ["", "본선 (라운드 모름)"], ["yosen", "현 예선"]];
 const jpRndKey = v => { const r = (v.rnd || "").split(":"); if (r.includes("yosen")) return "yosen"; const k = JP_RND.find(([kk]) => kk && kk !== "yosen" && r.includes(kk)); return k ? k[0] : ""; };
@@ -551,7 +551,7 @@ function jpRoundSections(l, national) {
   // national=false 면(국스포·지역 대회 등) 라운드만으로
   return JP_RND.map(([k, lab]) => [k === "yosen" ? "현 예선" : k === "" ? (national ? "본선 (라운드 모름)" : "기타") : lab, l.filter(v => jpRndKey(v) === k).sort((a, b) => k === "yosen" ? jpYosenOrder(a) - jpYosenOrder(b) : 0)]).filter(([, x]) => x.length);
 }
-const JP_GLOSS = [["春の高校バレー", "하루코"], ["春高バレー", "하루코"], ["春高", "하루코"], ["インターハイ", "인터하이"], ["インハイ", "인터하이"], ["国民スポーツ大会", "국스포"], ["国スポ", "국스포"], ["国体", "국체"],
+const JP_GLOSS = [["春の高校バレー", "하루코"], ["春高バレー", "하루코"], ["春高", "하루코"], ["インターハイ", "인터하이"], ["インハイ", "인터하이"], ["国民スポーツ大会", "국민스포츠대회"], ["国スポ", "국민스포츠대회"], ["国民体育大会", "국민체육대회"], ["国体", "국민체육대회"], ["さくらバレー", "사쿠라 발리"], ["全国私立高等学校", "전국 사립고"],
   ["準々決勝", "준준결승"], ["準決勝", "준결승"], ["決勝戦", "결승"], ["決勝", "결승"], ["代表決定戦", "대표 결정전"], ["位決定戦", "위 결정전"], ["回戦", "회전"], ["予選", "예선"], ["グループ", "그룹"], ["トーナメント", "토너먼트"],
   ["九州ブロック", "규슈 블록"], ["全九州", "전규슈"], ["九州", "규슈"], ["近畿", "긴키"], ["東北", "도호쿠"], ["関東", "간토"], ["総体", "총체"], ["総合", "종합"], ["選抜", "선발"], ["新人戦", "신인전"], ["大会", "대회"],
   ["少年男子", "소년 남자"], ["成年男子", "성년 남자"], ["男子", "남자"], ["女子", "여자"], ["高校", "고교"], ["バレーボール", "배구"], ["バレー部", "배구부"], ["バレー", "배구"],
@@ -657,7 +657,7 @@ function viewJp() {
         ${r.ps.map(({ pf, l }) => `<div class="jp-pref"><span class="jp-pn">${JP_PREF[pf][0]}<span class="jp-ja">${pf}</span></span><div class="jp-sch">${l.map(chip).join("")}</div></div>`).join("")}</section>`).join("")}</div>
       <p class="small muted">★ 최근 2년 하루코·인터하이 4강 이상 · 강한 지역부터</p>`;
   } else if (J.tab === "tourn") {
-    const T = ["haruko", "ih", "kokutai", "block", "senbatsu", "shinjin"];
+    const T = ["haruko", "ih", "kokutai", "sakura", "block"];
     const inT = J.videos.filter(v => v.tourn === J.tourn && jpG(v) === J.g && !jpIsVisit(v));
     const resY = (J.results || []).filter(r => r.tourn === J.tourn && r.gender === J.g).map(r => r.year);
     const years = [...new Set([...inT.map(v => v.year), ...resY].filter(y => y && y >= JP_RECENT))].sort((a, b) => b - a);
@@ -684,7 +684,7 @@ function jpSchoolPage(s) {
   const J = jp(); if (!s) { J.school = null; return viewJp(); }
   const l = J.videos.filter(v => (v.schools || []).includes(s.id));
   const visit = l.filter(v => (J.sources.find(x => x.id === v.source) || {}).role === "visit"), games = l.filter(v => !visit.includes(v));
-  const order = ["haruko", "ih", "kokutai", "block", "senbatsu", "shinjin", "practice", "univ", "other", null];
+  const order = ["haruko", "ih", "kokutai", "sakura", "block", "practice", "univ", "other", null];
   const isOld = v => v.year && v.year < JP_RECENT;
   const groups = order.map(k => [k, games.filter(v => (v.tourn || null) === k && !isOld(v)).sort((a, b) => (b.year || 0) - (a.year || 0))]).filter(([, x]) => x.length);
   const olds = games.filter(isOld).sort((a, b) => b.year - a.year);
@@ -693,7 +693,7 @@ function jpSchoolPage(s) {
   const sel = groups.some(([k]) => k === J.stourn) ? J.stourn : (groups[0] || [])[0];
   const cur = groups.find(([k]) => k === sel), curL = cur ? cur[1] : [];
   const nat = sel === "haruko" || sel === "ih";
-  const secs = sel === "old" || !nat && !["kokutai", "block"].includes(sel) ? [["", curL]] : jpRoundSections(curL, nat);
+  const secs = sel === "old" || !nat && !["kokutai", "sakura", "block"].includes(sel) ? [["", curL]] : jpRoundSections(curL, nat);
   const q = s.name_ja.replace(/高校$/, "");
   return `<section class="sec"><div class="row"><button class="btn link small" type="button" data-act="jpback">‹ 목록</button></div>
     <div class="jp-head"><h2 class="dyn">${esc(s.name_ko)}</h2><span class="small muted">${esc(s.name_ja)} · ${JP_PREF[s.pref] ? JP_PREF[s.pref][0] : esc(s.pref)}${s.gender === "w" ? " · 여자부" : s.gender === "mw" ? " · 남녀" : ""}</span></div>

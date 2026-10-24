@@ -69,15 +69,16 @@ function tag(title: string) {
   const body = norm(title.split(/[｜|]/)[0].replace(/#[^\s#]+/g, " "));
   let tourn: string | null = null;
   if (/インカレ|大学|大学院/.test(t) && !/高校|高等学校/.test(t)) tourn = "univ";
-  else if (/日本代表|VNL|ネーションズ|アジア(大会|選手権)|SVリーグ|Vリーグ|日本リーグ|天皇杯|オールスター|ドリームマッチ|JOC|JOS|TAURON|Lubin|ハイライト\||ワールドカップ|W杯|五輪|オリンピック|世界選手権|中学|さわやか杯|早慶|代表(MB|WS|OP|L)|全日本(?!高|バレーボール高等|ジュニア)/i.test(t)) tourn = "other";
+  else if (/日本代表|VNL|ネーションズ|アジア(大会|選手権)|SVリーグ|Vリーグ|日本リーグ|天皇杯|オールスター|ドリームマッチ|JOC|JOS|TAURON|Lubin|エキシビション|ハイライト\||ワールドカップ|W杯|五輪|オリンピック|世界選手権|中学|さわやか杯|早慶|代表(MB|WS|OP|L)|全日本(?!高|バレーボール高等|ジュニア)/i.test(t)) tourn = "other";
   else if (/春高|春の高校バレー|高等学校選手権|全日本高校選手権/.test(t)) tourn = "haruko";
   else if (/インターハイ|インハイ|高校総体|総合体育大会/.test(t) || (/近畿総体/.test(t) && /2026/.test(t))) tourn = "ih";
   else if (/国体|国民体育大会|国スポ|国民スポーツ大会/.test(t)) tourn = "kokutai";
+  else if (/さくらバレー|全国私立高等学校|全国私学/.test(t)) tourn = "sakura";
   else if (/練習|潜入|密着/.test(t)) tourn = "practice";
   else if (/(九州|近畿|東北|関東|北信越|東海|中国|四国|北海道|中部日本)(総体|総合|選抜|大会|バレー|ブロック|インターハイ|新人)/.test(t)) tourn = "block";
   else if (/黒鷲旗/.test(t)) tourn = "other";
-  else if (/新人/.test(t)) tourn = "shinjin";
-  else if (/選抜|私学/.test(t)) tourn = "senbatsu";
+  else if (/新人/.test(t)) tourn = "other";
+  else if (/さくらバレー|さくら杯|私学|私立高等学校|私立高校/.test(t)) tourn = "sakura";
   let rnd: string | null = null;
   if (/予選|代表決定|県大会|地区大会|都大会|府大会|道大会/.test(t) && tourn !== "block") rnd = "yosen";
   const add = (x: string) => { rnd = (rnd ? rnd + ":" : "") + x; };
@@ -172,11 +173,45 @@ async function syncSource(src: any, mode: string, deadline: number) {
   return { id: src.id, seen, pages, done };
 }
 
+// ---------- 전국 대진의 결승·4강·8강 영상이 없으면 유튜브 검색으로 채움 (source 'search') ----------
+let CTX: { ver: string; visitor: string; key: string } | null = null;
+async function ytSearch(q: string) {
+  // 검색 페이지는 동의 화면으로 돌려보내는 일이 있어서 innertube 검색 API 사용
+  if (!CTX) { const fp = await firstPage({ id: "kurome", kind: "channel", ref: "@KUROMEvolleyballCH" }); CTX = { ver: fp.ver, visitor: fp.visitor, key: fp.key }; }
+  const out: V[] = [];
+  try {
+    const r = await fetch(`https://www.youtube.com/youtubei/v1/search?key=${CTX.key}&prettyPrint=false`, { method: "POST", headers: { ...UA, "Content-Type": "application/json" },
+      body: JSON.stringify({ context: { client: { clientName: "WEB", clientVersion: CTX.ver, hl: "ja", gl: "JP", visitorData: CTX.visitor } }, query: q, params: "EgIQAQ==" }) });
+    walk(await r.json(), out, { t: null });
+  } catch (_) { /* 이번엔 건너뜀 */ }
+  return out;
+}
+const RND_JA: Record<string, string> = { F: "決勝", SF: "準決勝", QF: "準々決勝" };
+async function fill(deadline: number) {
+  const cy = new Date().getFullYear();
+  const ms = ((await sb.from("jp_matches").select("tourn,year,gender,rnd,a_name,b_name").in("rnd", ["F", "SF", "QF"]).gte("year", cy - 7)).data || []) as any[];
+  const vids: any[] = [];
+  for (let from = 0; ; from += 1000) { const r = await sb.from("jp_videos").select("title,tourn,year,rnd").in("tourn", ["haruko", "ih"]).gte("year", cy - 7).range(from, from + 999); vids.push(...(r.data || [])); if ((r.data || []).length < 1000) break; }
+  let searched = 0, added = 0;
+  for (const m of ms.sort((a, b) => b.year - a.year)) {
+    if (Date.now() > deadline) break;
+    const a = rawOf(m.a_name), b = rawOf(m.b_name);
+    const has = vids.some((v) => v.tourn === m.tourn && v.year === m.year && v.rnd === m.rnd);
+    const hasPair = vids.some((v) => v.tourn === m.tourn && v.year === m.year && norm(v.title).includes(a) && norm(v.title).includes(b));
+    if (hasPair || (has && m.rnd === "F" && vids.filter((v) => v.tourn === m.tourn && v.year === m.year && v.rnd === "F").length >= 2)) continue;
+    const kw = m.tourn === "haruko" ? "春高" : "インターハイ";
+    const items = await ytSearch(`${kw}${m.year} ${m.gender === "w" ? "女子" : "男子"} ${m.a_name} ${m.b_name} ${RND_JA[m.rnd]}`); searched++;
+    const ok = items.filter((x) => { const t = norm(x.title); return t.includes(a) && t.includes(b) && (m.tourn === "haruko" ? /春高|春の高校バレー|高校選手権/.test(t) : /インターハイ|インハイ|総体/.test(t)) && !/予選|代表決定/.test(t); }).slice(0, 6);
+    if (ok.length) { await upsert({ id: "search" }, ok); added += ok.length; ok.forEach((x) => vids.push({ title: x.title, tourn: m.tourn, year: m.year, rnd: m.rnd })); }
+  }
+  return { searched, added };
+}
+
 Deno.serve(async (req) => {
   const { data: kd } = await sb.rpc("push_keys"); const k = (Array.isArray(kd) ? kd[0] : kd) || {};
   if (!k.cron || req.headers.get("x-cron") !== k.cron) return json({ error: "forbidden" }, 403);
   const body = await req.json().catch(() => ({}));
-  const mode = ["new", "full", "retag"].includes(body.mode) ? body.mode : "new";
+  const mode = ["new", "full", "retag", "fill"].includes(body.mode) ? body.mode : "new";
   await loadSchools();
   if (mode === "retag") {
     let n = 0;
@@ -190,7 +225,8 @@ Deno.serve(async (req) => {
     return json({ mode, retagged: n });
   }
   const deadline = Date.now() + 110000;
-  const srcs = (await sb.from("jp_sources").select("*")).data || [];
+  if (mode === "fill") return json({ mode, ...(await fill(deadline)) });
+  const srcs = ((await sb.from("jp_sources").select("*")).data || []).filter((s: any) => s.kind !== "search");
   const res = [];
   for (const s of srcs) {
     if (Date.now() > deadline) break;

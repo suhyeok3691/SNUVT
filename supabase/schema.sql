@@ -463,3 +463,7 @@ alter table public.logs add constraint logs_pain_area_check
 --   ③ 대진이 있는 해인데 대진에 없는 대결 → 현 예선 ④ 대진이 없는 해: 같은 현끼리이거나 결승·4강인데 jp_results 와 안 맞으면 현 예선
 --   令和·平成 연도도 읽음. 매주 월 19:30 UTC 에 다시 분류(jp-retag-weekly)
 -- 앱: 하루코·인터하이는 결승 → 4강 → 8강 → 16강 → 2회전 → 1회전 → 현 예선 순. 학교 페이지도 대회를 고르면 같은 순서
+-- jp_sources.kind 에 'search' 추가 (id 'search' = 유튜브 검색으로 채운 영상). jp-sync mode 'fill': 최근 7년 전국 결승·4강·8강 중
+--   영상이 없는 경기를 「春高2026 男子 A B 準決勝」로 검색해 두 학교 이름이 다 들어간 영상만 추가. 매주 월 19:45 UTC(jp-fill-weekly)
+-- 대회 이름: 선발전 → 사쿠라 발리(さくらバレー, 전국 사립고 대회, tourn 'sakura'), 신인전·시범경기 → 기타, 국스포 → 국민스포츠대회
+-- 채널 추가: gion-romeo
