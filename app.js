@@ -101,16 +101,16 @@ function confirmDel(msg, yes = "네, 삭제") {
   });
 }
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
-const VIEWS = ["home", "practice", "notes", "video", "jp", "scout", "train", "plan", "rec", "season", "comps", "sched", "report", "roster", "intake"];
+const VIEWS = ["home", "practice", "notes", "video", "jp", "scout", "train", "plan", "rec", "season", "comps", "cup", "sched", "report", "roster", "intake"];
 // 섹션: 홈 → Physical(트레이닝) · 일정 · 관리 · 설정. 공지는 홈 맨 위
 const SECTIONS = {
   physical: { label: "피지컬", views: [["train", "오늘"], ["plan", "프로그램"], ["rec", "기록"]] },
-  schedule: { label: "일정", views: [["season", "다가오는"], ["comps", "대회·교류전"], ["sched", "훈련 관리", "attend"]] },
+  schedule: { label: "일정", views: [["season", "다가오는"], ["comps", "전체 일정"], ["cup", "대회"], ["sched", "훈련 관리", "attend"]] },
   scout: { label: "전력분석", views: [["scout", "전력분석"]] },
   admin: { label: "관리", views: [["roster", "명단", "roster"], ["intake", "부원", "full"], ["report", "리포트", "training"]] },
   practice: { label: "훈련", views: [["practice", "훈련 계획"], ["notes", "훈련 노트"], ["video", "영상"], ["jp", "일본 고교"]] },
 };
-const SECTION_OF = { scout: "scout", practice: "practice", notes: "practice", video: "practice", jp: "practice", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
+const SECTION_OF = { scout: "scout", practice: "practice", notes: "practice", video: "practice", jp: "practice", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", cup: "schedule", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
 // 직책: 관리자·주장 = 전체 / 부주장·훈련 담당·총무·피지컬 담당 = 맡은 일만 (서버 규칙 private.can 과 같게)
 const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", treasurer: "총무", ops: "훈련 담당", trainer: "피지컬 담당", analyst: "전력분석 담당" };
 // attend = 정규 훈련 변경(시간·없음) · 자율 훈련 · 불참 확인
@@ -1492,10 +1492,10 @@ function viewComps() {
   const frs = Object.entries(state.friendlies).filter(([d]) => d >= dAdd(t, -30)).sort().flatMap(([d, fs]) => fs.map(f => [d, f]));
   return `<div class="cols">
     <div class="col"><section class="sec"><div class="sec-head"><h3>대회·일정 <span class="small muted">${sy}.3 – ${sy + 1}.2</span></h3>${can("schedule") ? addBtn("event", "일정") : ""}</div>
-      ${list.length ? `<ul class="ev-list">${list.map(e => `<li class="${e.end < t ? "past" : ""}"><span class="num">${range(e)}</span><span class="ev-main"><b>${esc(e.name)}</b> <span class="chip ${e.kind === "major" ? "warn" : ""}">${esc(EVENT_KINDS[e.kind] || e.kind)}</span>${e.note ? `<span class="small muted">${esc(e.note)}</span>` : ""}${e.id && (e.kind === "major" || e.kind === "minor") && e.end >= t ? entryChip("event", e.id) + voteBox("event", e.id) : ""}</span>${can("schedule") && e.id ? `<button class="btn link danger small" type="button" data-act="delevent" data-id="${esc(e.id)}">삭제</button>` : ""}</li>`).join("")}</ul>` : emptyLine("등록된 일정이 없어요.")}
+      ${list.length ? `<ul class="ev-list">${list.map(e => `<li class="${e.end < t ? "past" : ""}"><span class="num">${range(e)}</span><span class="ev-main"><b>${esc(e.name)}</b> <span class="chip ${e.kind === "major" ? "warn" : ""}">${esc(EVENT_KINDS[e.kind] || e.kind)}</span>${e.note ? `<span class="small muted">${esc(e.note)}</span>` : ""}${e.id && (e.kind === "major" || e.kind === "minor") && e.end >= t ? voteBox("event", e.id) : ""}</span>${can("schedule") && e.id ? `<button class="btn link danger small" type="button" data-act="delevent" data-id="${esc(e.id)}">삭제</button>` : ""}</li>`).join("")}</ul>` : emptyLine("등록된 일정이 없어요.")}
     </section></div>
     <div class="col"><section class="sec"><div class="sec-head"><h3>교류전</h3>${can("schedule") ? addBtn("friendly", "교류전") : ""}</div>
-      ${frs.length ? `<ul class="ev-list">${frs.map(([d, f]) => `<li class="${d < t ? "past" : ""}"><span class="num">${md(parseD(d))} (${DOW_KO[parseD(d).getDay()]})</span><span class="ev-main"><b>${esc(frName(f.opponent))}</b> <span class="chip">${fmtKo(f)}</span><span class="small muted">${esc([f.start && f.start + (f.end ? "–" + f.end : ""), f.place, f.note].filter(Boolean).join(" · "))}</span>${d >= t ? entryChip("friendly", f.id) + voteBox("friendly", f.id) : ""}</span>${can("schedule") ? `<button class="btn link danger small" type="button" data-act="delfriendly" data-id="${esc(f.id)}">삭제</button>` : ""}</li>`).join("")}</ul>` : emptyLine("잡힌 교류전이 없어요.")}
+      ${frs.length ? `<ul class="ev-list">${frs.map(([d, f]) => `<li class="${d < t ? "past" : ""}"><span class="num">${md(parseD(d))} (${DOW_KO[parseD(d).getDay()]})</span><span class="ev-main"><b>${esc(frName(f.opponent))}</b> <span class="chip">${fmtKo(f)}</span><span class="small muted">${esc([f.start && f.start + (f.end ? "–" + f.end : ""), f.place, f.note].filter(Boolean).join(" · "))}</span>${d >= t ? voteBox("friendly", f.id) : ""}</span>${can("schedule") ? `<button class="btn link danger small" type="button" data-act="delfriendly" data-id="${esc(f.id)}">삭제</button>` : ""}</li>`).join("")}</ul>` : emptyLine("잡힌 교류전이 없어요.")}
     </section></div>
   </div>`;
 }
@@ -1935,14 +1935,13 @@ function voteItems() {
 }
 function voteBox(kind, id) {
   const vs = evVotesOf(kind, id), ps = sortedPlayers().filter(p => !p.military), mine = state.myPid ? vs[state.myPid] : null;
-  const yes = ps.filter(p => vs[p.id] && vs[p.id].going), no = ps.filter(p => vs[p.id] && !vs[p.id].going);
-  const btns = state.myPid ? voteBtn(kind, id, mine ? (mine.going ? "go" : "no") : "") : "";
-  const sum = `<span class="small muted">참 ${yes.length} · 불참 ${no.length} · 미응답 ${ps.length - yes.length - no.length}</span>`;
-  const detail = can("schedule") && (yes.length || no.length) ? `<details class="ev-who"><summary class="small">명단 보기</summary>
-    ${yes.length ? `<p class="small"><b>참</b> ${yes.map(p => esc(p.name)).join(" · ")}</p>` : ""}
-    ${no.length ? `<ul class="at-list">${no.map(p => `<li><b>${esc(p.name)}</b> <span class="small">${esc(ABS_REASONS[vs[p.id].reason] || "")}${vs[p.id].note ? ` · ${esc(vs[p.id].note)}` : ""}</span></li>`).join("")}</ul>` : ""}
-    ${ps.length - yes.length - no.length ? `<p class="small muted">미응답 ${ps.filter(p => !vs[p.id]).map(p => esc(p.name)).join(" · ")}</p>` : ""}</details>` : "";
-  return `<div class="ev-vote">${btns}${sum}${detail}</div>`;
+  const yes = ps.filter(p => vs[p.id] && vs[p.id].going), no = ps.filter(p => vs[p.id] && !vs[p.id].going), none = ps.filter(p => !vs[p.id]);
+  const btn = state.myPid ? voteBtn(kind, id, mine ? (mine.going ? "go" : "no") : "") : "";
+  // 누가 참·불참인지는 부원 모두, 불참 사유는 일정 담당만
+  const names = `${yes.length ? `<p class="small"><b class="c-go">참</b> ${yes.map(p => esc(p.name)).join(" · ")}</p>` : ""}
+    ${no.length ? (can("schedule") ? `<ul class="at-list">${no.map(p => `<li><b>${esc(p.name)}</b> <span class="small">${esc(ABS_REASONS[vs[p.id].reason] || "")}${vs[p.id].note ? ` · ${esc(vs[p.id].note)}` : ""}</span></li>`).join("")}</ul>` : `<p class="small"><b class="c-no">불참</b> ${no.map(p => esc(p.name)).join(" · ")}</p>`) : ""}
+    ${none.length ? `<p class="small muted">미응답 ${none.map(p => esc(p.name)).join(" · ")}</p>` : ""}`;
+  return `<details class="ev-vote" data-keep="vt-${kind}-${esc(id)}" ${keepOpen(`vt-${kind}-${id}`, false)}><summary>${btn}<span class="ev-cnt">참 ${yes.length} · 불참 ${no.length}</span></summary><div class="ev-who">${names}</div></details>`;
 }
 // 관리자: 승인 대기는 홈 맨 위에 작게
 function pendingHtml() {
@@ -1985,11 +1984,12 @@ function openVote(type, id) {
   const el = document.getElementById("confirmBox") || (() => { const d = document.createElement("div"); d.id = "confirmBox"; d.className = "cf-wrap"; document.body.appendChild(d); return d; })();
   const no = cur && !cur.going;
   el.innerHTML = `<form class="cf-card vote-card" id="voteForm" data-type="${type}" data-id="${esc(id)}" role="dialog" aria-modal="true" aria-labelledby="vfH">
+    <button type="button" class="vote-x" data-cf="0" aria-label="닫기">×</button>
     <p id="vfH" class="cf-h">${esc(title)}</p><p class="cf-b small muted">${esc(when)}</p>
     <div class="vote-pick" role="radiogroup" aria-label="참 · 불참"><label><input type="radio" name="vt-go" value="1" ${cur && cur.going ? "checked" : ""}><span class="go">참</span></label><label><input type="radio" name="vt-go" value="0" ${no ? "checked" : ""}><span class="no">불참</span></label></div>
     ${withReason ? `<div class="vote-why" ${no ? "" : "hidden"}><div class="reasons" role="radiogroup" aria-label="사유">${Object.entries(ABS_REASONS).map(([k, l], n) => `<label class="rsn"><input type="radio" name="vt-r" value="${k}" ${(no ? cur.reason === k : n === 0) ? "checked" : ""}><span>${l}</span></label>`).join("")}</div>
       <label class="fl">메모 (선택)<input id="vt-note" maxlength="100" value="${esc(no ? cur.note || "" : "")}"></label></div>` : ""}
-    <div class="cf-row vote-act"><button type="button" class="btn small" data-cf="0">닫기</button><button type="submit" class="btn small primary">저장</button></div></form>`;
+    <button type="submit" class="btn primary vote-save">저장</button></form>`;
   el.hidden = false;
   const f = el.querySelector("#voteForm");
   f.addEventListener("change", e => { if (e.target.name === "vt-go") { const w = f.querySelector(".vote-why"); if (w) w.hidden = e.target.value !== "0"; } });
@@ -2009,6 +2009,98 @@ function openEntry(kind, id) {
       <div class="row"><button class="btn primary" type="submit">저장</button><span class="small muted" id="en-n">${set.size}명</span></div></form>`
     : set.size ? `<ul class="entry-names">${ps.filter(p => set.has(p.id)).map(p => `<li class="${p.id === state.myPid ? "me" : ""}">${esc(p.name)} <span class="chip pos">${esc(p.pos)}</span></li>`).join("")}</ul>` : emptyLine("아직 엔트리가 없어요.")}`;
   el.hidden = false; document.body.classList.add("noscroll");
+}
+/* ---------- 대회: 대회·교류전마다 엔트리(주전·후보) · 9인제 서브 타순표 ---------- */
+const cupItems = () => {
+  const t = iso(today()), from = dAdd(t, -45), out = [];
+  for (const e of normEvents(events())) if (e.id && (e.kind === "major" || e.kind === "minor") && e.end >= from) out.push({ kind: "event", id: e.id, name: e.name, d: e.start, end: e.end, fmt: e.format || (/9인제/.test(e.name) ? "9" : "6"), fmtSet: !!e.format, when: e.start === e.end ? shortDate(parseD(e.start)) : `${md(parseD(e.start))}–${md(parseD(e.end))}` });
+  for (const [d, fs] of Object.entries(state.friendlies)) if (d >= from) for (const f of fs) out.push({ kind: "friendly", id: f.id, name: frName(f.opponent), d, end: d, fmt: f.format === "9" ? "9" : "6", fmtSet: true, when: shortDate(parseD(d)) + (f.start ? " " + f.start : "") });
+  return out.sort((a, b) => a.d.localeCompare(b.d));
+};
+const startersOf = (kind, id) => (state.starters || {})[kind + ":" + id] || new Set();
+const cupState = () => state.cup || (state.cup = { key: null, set: 1, edit: false, lineups: {} });
+function viewCup() {
+  const C = cupState(), items = cupItems(), t = iso(today());
+  const cur = C.key && items.find(x => x.kind + ":" + x.id === C.key);
+  if (cur) return cupPage(cur);
+  const card = x => { const en = entryOf(x.kind, x.id), st = startersOf(x.kind, x.id), vs = evVotesOf(x.kind, x.id), go = Object.values(vs).filter(v => v.going).length;
+    return `<button type="button" class="panel sc-card cup-card ${x.end < t ? "past" : ""}" data-act="cupopen" data-k="${esc(x.kind + ":" + x.id)}"><b>${esc(x.name)} <span class="chip">${x.fmt === "9" ? "9인제" : "6인제"}</span></b><span class="small muted">${esc(x.when)} · 참 ${go} · 엔트리 ${en.size}${st.size ? ` · 주전 ${st.size}` : ""}</span><span class="go">›</span></button>`; };
+  const ev = items.filter(x => x.kind === "event"), fr = items.filter(x => x.kind === "friendly");
+  return `<div class="cols"><div class="col"><section class="sec"><div class="sec-head"><h3>대회</h3></div>${ev.length ? `<div class="sc-list">${ev.map(card).join("")}</div>` : emptyLine("다가오는 대회가 없어요.")}</section></div>
+    <div class="col"><section class="sec"><div class="sec-head"><h3>교류전</h3></div>${fr.length ? `<div class="sc-list">${fr.map(card).join("")}</div>` : emptyLine("다가오는 교류전이 없어요.")}</section></div></div>`;
+}
+async function cupLoadLineups(kind, id) {
+  const C = cupState(), key = kind + ":" + id;
+  try { const r = await sb.from("lineups").select("set_no,data").eq("kind", kind).eq("ref_id", id); C.lineups[key] = Object.fromEntries((r.data || []).map(x => [x.set_no, x.data || {}])); }
+  catch (e) { C.lineups[key] = C.lineups[key] || {}; }
+  if (state.view === "cup") { state.dirty = false; render(); }
+}
+function cupPage(x) {
+  const C = cupState(), key = x.kind + ":" + x.id, en = entryOf(x.kind, x.id), st = startersOf(x.kind, x.id), vs = evVotesOf(x.kind, x.id);
+  const ps = sortedPlayers().filter(p => !p.military), edit = can("schedule") && C.edit;
+  const mark = p => vs[p.id] ? (vs[p.id].going ? `<span class="chip ok">참</span>` : `<span class="chip warn">불참</span>`) : `<span class="chip">미응답</span>`;
+  const order = p => (st.has(p.id) ? 0 : en.has(p.id) ? 1 : 2) * 10 + (vs[p.id] ? (vs[p.id].going ? 0 : 2) : 1);
+  const sorted = ps.slice().sort((a, b) => order(a) - order(b) || (a.number ?? 999) - (b.number ?? 999));
+  const entry = edit
+    ? `<form class="f" id="cupEntryForm" data-kind="${x.kind}" data-id="${esc(x.id)}"><table class="cup-tbl"><thead><tr><th>엔트리</th><th>주전</th><th>선수</th><th></th></tr></thead><tbody>${sorted.map(p => `<tr><td><input type="checkbox" name="en" value="${esc(p.id)}" ${en.has(p.id) ? "checked" : ""}></td><td><input type="checkbox" name="st" value="${esc(p.id)}" ${st.has(p.id) ? "checked" : ""}></td><td><b>${pNo(p)}${esc(p.name)}</b> <span class="chip pos">${esc(p.pos)}</span></td><td>${mark(p)}</td></tr>`).join("")}</tbody></table>
+      <div class="row"><button class="btn primary" type="submit">저장</button><button class="btn" type="button" data-act="cupedit">취소</button></div></form>`
+    : en.size ? `<div class="cup-en"><p><span class="cup-k">주전</span>${[...st].map(id => playerOf(id)).filter(Boolean).map(p => `<span class="chip cup-p ${p.id === state.myPid ? "me" : ""}">${pNo(p)}${esc(p.name)}</span>`).join("") || `<span class="small muted">아직 안 정했어요</span>`}</p>
+        <p><span class="cup-k">후보</span>${[...en].filter(id => !st.has(id)).map(id => playerOf(id)).filter(Boolean).map(p => `<span class="chip cup-p ${p.id === state.myPid ? "me" : ""}">${pNo(p)}${esc(p.name)}</span>`).join("") || `<span class="small muted">없음</span>`}</p></div>`
+    : emptyLine("아직 엔트리가 없어요.");
+  let serve = "";
+  if (x.fmt === "9") {
+    const L = C.lineups[key];
+    if (!L) { cupLoadLineups(x.kind, x.id); serve = loaderHtml(true); }
+    else serve = `<div class="sc-row">${[1, 2, 3].map(n => `<button type="button" class="chip sc-chip ${C.set === n ? "on" : ""}" data-act="cupset" data-v="${n}">${n}세트</button>`).join("")}<button type="button" class="btn small" data-act="cupprint">인쇄</button></div>${serveSheet(x, L[C.set] || {}, can("schedule"))}`;
+  }
+  return `<section class="sec"><div class="row"><button class="btn link small" type="button" data-act="cupback">‹ 목록</button></div>
+    <div class="jp-head"><h2>${esc(x.name)}</h2><span class="small muted">${esc(x.when)} · ${x.fmt === "9" ? "9인제" : "6인제"}</span></div>
+    ${x.kind === "event" && can("schedule") ? `<div class="sc-row"><span class="sc-k">방식</span>${[["6", "6인제"], ["9", "9인제"]].map(([k, l]) => `<button type="button" class="chip sc-chip ${x.fmt === k ? "on" : ""}" data-act="cupfmt" data-v="${k}">${l}</button>`).join("")}</div>` : ""}
+    ${voteBox(x.kind, x.id)}
+    <section class="sec"><div class="sec-head"><h3>엔트리</h3>${can("schedule") && !C.edit ? `<button class="btn small" type="button" data-act="cupedit">선정</button>` : ""}</div>${entry}</section>
+    ${x.fmt === "9" ? `<section class="sec"><div class="sec-head"><h3>서브 타순</h3></div>${serve}</section>` : ""}</section>`;
+}
+// 서브 타순표: 팀명 · 코트 · 감독 · 코치 · 코치 · 주장 · 1~15번 (등번호 · 선수 · 체크)
+function serveSheet(x, d, canEdit) {
+  const en = entryOf(x.kind, x.id), pool = sortedPlayers().filter(p => en.size ? en.has(p.id) : !p.military).sort((a, b) => (a.number ?? 999) - (b.number ?? 999));
+  const rows = Array.from({ length: 15 }, (_, i) => (d.rows || [])[i] || {});
+  const pname = id => { const p = playerOf(id); return p ? p.name : ""; };
+  if (!canEdit && !rows.some(r => r.pid)) return emptyLine("아직 안 적었어요.");
+  if (!canEdit) return `<table class="ss-tbl"><tbody>
+      <tr><th>팀명</th><td colspan="2">${esc(d.team || "서울대학교")}</td><th>코트</th><td>${esc(d.court || "")}</td></tr>
+      ${[["감독", d.coachHead], ["코치", d.coach1], ["코치", d.coach2], ["주장", pname(d.captain)]].map(([k, v]) => `<tr><th>${k}</th><td colspan="4">${esc(v || "")}</td></tr>`).join("")}
+      <tr class="ss-h"><th></th><th>등번호</th><th colspan="2">선수</th><th>체크</th></tr>
+      ${rows.map((r, i) => { const p = playerOf(r.pid); return `<tr><th>${i + 1}</th><td class="num">${p && p.number != null ? p.number : ""}</td><td colspan="2">${p ? esc(p.name) : ""}</td><td>${r.chk ? "✓" : ""}</td></tr>`; }).join("")}</tbody></table>`;
+  const opt = (cur, blank = "—") => `<option value="">${blank}</option>${pool.map(p => `<option value="${esc(p.id)}" ${cur === p.id ? "selected" : ""}>${pNo(p)}${esc(p.name)}</option>`).join("")}`;
+  return `<form class="f" id="serveForm" data-kind="${x.kind}" data-id="${esc(x.id)}"><table class="ss-tbl"><tbody>
+      <tr><th>팀명</th><td colspan="2"><input id="ss-team" maxlength="30" value="${esc(d.team || "서울대학교")}"></td><th>코트</th><td><input id="ss-court" maxlength="10" value="${esc(d.court || "")}"></td></tr>
+      <tr><th>감독</th><td colspan="4"><input id="ss-head" maxlength="20" value="${esc(d.coachHead || "")}"></td></tr>
+      <tr><th>코치</th><td colspan="4"><input id="ss-c1" maxlength="20" value="${esc(d.coach1 || "")}"></td></tr>
+      <tr><th>코치</th><td colspan="4"><input id="ss-c2" maxlength="20" value="${esc(d.coach2 || "")}"></td></tr>
+      <tr><th>주장</th><td colspan="4"><select id="ss-cap">${opt(d.captain)}</select></td></tr>
+      <tr class="ss-h"><th></th><th>등번호</th><th colspan="2">선수</th><th>체크</th></tr>
+      ${rows.map((r, i) => { const p = playerOf(r.pid); return `<tr><th>${i + 1}</th><td class="num ss-no">${p && p.number != null ? p.number : ""}</td><td colspan="2"><select class="ss-p" data-i="${i}">${opt(r.pid)}</select></td><td><input type="checkbox" class="ss-chk" data-i="${i}" ${r.chk ? "checked" : ""}></td></tr>`; }).join("")}
+    </tbody></table><div class="row"><button class="btn primary" type="submit">${C_SET_LABEL()}</button></div></form>`;
+}
+const C_SET_LABEL = () => `${cupState().set}세트 저장`;
+function cupPrint() {
+  const C = cupState(), x = cupItems().find(y => y.kind + ":" + y.id === C.key); if (!x) return;
+  const d = (C.lineups[C.key] || {})[C.set] || {}, rows = Array.from({ length: 15 }, (_, i) => (d.rows || [])[i] || {});
+  const cap = playerOf(d.captain);
+  const td = v => `<td>${esc(v || "")}</td>`;
+  const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>서브 타순 · ${esc(x.name)} ${C.set}세트</title><style>
+    body{font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;margin:24px;color:#000}
+    h1{font-size:15px;margin:0 0 8px}table{border-collapse:collapse;width:300px}th,td{border:1px solid #000;padding:5px 6px;font-size:13px;height:20px}
+    th{font-weight:600;text-align:center;white-space:nowrap}td.c{text-align:center}.foot td{font-size:11px;color:#333}
+    @media print{body{margin:10mm}}</style></head><body><h1>${esc(x.name)} · ${esc(x.when)} · ${C.set}세트</h1>
+    <table><tr><th>팀명</th><td colspan="2">${esc(d.team || "서울대학교")}</td><th>코트</th><td class="c">${esc(d.court || "")}</td></tr>
+    <tr><th>감독</th><td colspan="4">${esc(d.coachHead || "")}</td></tr><tr><th>코치</th><td colspan="4">${esc(d.coach1 || "")}</td></tr><tr><th>코치</th><td colspan="4">${esc(d.coach2 || "")}</td></tr>
+    <tr><th>주장</th><td colspan="4">${cap ? esc(cap.name) : ""}</td></tr>
+    <tr><th></th><th>등번호</th><th colspan="2">선수명</th><th>체크</th></tr>
+    ${rows.map((r, i) => { const p = playerOf(r.pid); return `<tr><th>${i + 1}</th><td class="c">${p && p.number != null ? p.number : ""}</td><td colspan="2">${p ? esc(p.name) : ""}</td><td class="c">${r.chk ? "✓" : ""}</td></tr>`; }).join("")}
+    <tr class="foot"><td colspan="5">경기부</td></tr></table><script>window.onload=()=>window.print()<\/script></body></html>`;
+  const w = window.open("", "_blank"); if (!w) { toast("팝업이 막혔어요"); return; }
+  w.document.write(html); w.document.close();
 }
 function openAbsent(date) {
   const i = infoOn(date), a = absOf(state.myPid, date), el = document.getElementById("sheet");
@@ -2233,7 +2325,7 @@ function render() {
   else if (needsSelfReg() || (state.coach && state.editingSelf)) html = viewSelfReg();
   else {
     const v = state.view;
-    html = v === "train" ? viewTrain() : v === "comps" ? viewComps() : v === "sched" ? viewSched() : v === "report" ? viewReport() : v === "practice" ? viewPractice() : v === "notes" ? viewNotes() : v === "video" ? viewVideo() : v === "scout" ? viewScout() : v === "jp" ? viewJp() : v === "roster" ? viewRoster() : v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : viewHome();
+    html = v === "train" ? viewTrain() : v === "comps" ? viewComps() : v === "cup" ? viewCup() : v === "sched" ? viewSched() : v === "report" ? viewReport() : v === "practice" ? viewPractice() : v === "notes" ? viewNotes() : v === "video" ? viewVideo() : v === "scout" ? viewScout() : v === "jp" ? viewJp() : v === "roster" ? viewRoster() : v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : viewHome();
   }
   const q = state.session ? queue().length : 0;
   const bar = state.loaded && (state.net === false || q) ? `<div class="netbar">${state.net === false ? "오프라인 · 마지막으로 불러온 내용" : "기록 올리는 중"}${q ? ` · 올라갈 기록 ${q}건` : ""}</div>` : "";
@@ -2385,7 +2477,7 @@ document.addEventListener("click", async ev => {
     state.dirty = false; return render();
   }
   if (act === "absopen") return openAbsent(b.dataset.date);
-  if (act === "voteopen") return openVote(b.dataset.type, b.dataset.id);
+  if (act === "voteopen") { ev.preventDefault(); return openVote(b.dataset.type, b.dataset.id); }
   if (act.startsWith("jp")) {
     const J = jp(), v = b.dataset.v;
     if (act === "jpplay") J.open = J.open === b.dataset.id ? null : b.dataset.id;
@@ -2443,6 +2535,16 @@ document.addEventListener("click", async ev => {
     state.dirty = false; return render();
   }
   if (act === "entry") return openEntry(b.dataset.kind, b.dataset.id);
+  if (act.startsWith("cup")) {
+    const C = cupState();
+    if (act === "cupopen") { C.key = b.dataset.k; C.edit = false; C.set = 1; state.dirty = false; render(); window.scrollTo(0, 0); return; }
+    if (act === "cupback") { C.key = null; C.edit = false; state.dirty = false; render(); window.scrollTo(0, 0); return; }
+    if (act === "cupprint") return cupPrint();
+    if (act === "cupedit") C.edit = !C.edit;
+    else if (act === "cupset") C.set = Number(b.dataset.v);
+    else if (act === "cupfmt") { const id = C.key.split(":")[1]; try { ok(await sb.from("events").update({ format: b.dataset.v }).eq("id", id)); const e = (state.events || []).find(y => y.id === id); if (e) e.format = b.dataset.v; } catch (e) { toast(failMsg(e)); } }
+    state.dirty = false; return render();
+  }
   if (act === "addform") return openForm(b.dataset.f);
   if (act === "edtest") return openTestEdit(b.dataset.id);
   if (act === "vidcat") { state.vidCat = b.dataset.c; state.dirty = false; return render(); }
@@ -2559,6 +2661,7 @@ document.addEventListener("change", ev => {
   if (ev.target.id === "scOpp") { sc().sel.opp = ev.target.value; return; }
   if (ev.target.id === "scSy") { sc().sy = Number(ev.target.value); state.dirty = false; return render(); }
   if (ev.target.id === "scOppSel") { sc().oppSel = ev.target.value; state.dirty = false; return render(); }
+  if (ev.target.classList.contains("ss-p")) { const p = playerOf(ev.target.value), c = ev.target.closest("tr").querySelector(".ss-no"); if (c) c.textContent = p && p.number != null ? p.number : ""; return; }
   if (ev.target.name === "chg-kind") { const off = ev.target.value === "off", w = document.getElementById("chgTimes"); if (w) { w.hidden = off; w.querySelector("#ptd-s").required = !off; } return; }
   if (ev.target.name === "teamsw") return switchTeam(ev.target.value);
   if (ev.target.classList.contains("inj-part")) {
@@ -2800,6 +2903,19 @@ document.addEventListener("submit", async ev => {
     } else if (f.id === "noticeForm") {
       ok(await sb.from("notices").insert({ title: txt("nt-title"), body: document.getElementById("nt-body").value.trim() || null, pinned: document.getElementById("nt-pin").checked, notify: document.getElementById("nt-push").checked }));
       toast(document.getElementById("nt-push").checked ? "공지를 올리고 알림을 보냈어요" : "공지를 올렸어요");
+    } else if (f.id === "cupEntryForm") {
+      const kind = f.dataset.kind, id = f.dataset.id, en = new Set([...f.querySelectorAll('input[name="en"]:checked')].map(x => x.value)), st = [...f.querySelectorAll('input[name="st"]:checked')].map(x => x.value);
+      for (const p of st) en.add(p); // 주전은 엔트리에 자동 포함
+      ok(await sb.from("entries").delete().eq("kind", kind).eq("ref_id", id));
+      if (en.size) ok(await sb.from("entries").insert([...en].map(player_id => ({ kind, ref_id: id, player_id, starter: st.includes(player_id) }))));
+      cupState().edit = false; toast(`엔트리 ${en.size}명 · 주전 ${st.length}명`);
+    } else if (f.id === "serveForm") {
+      const C = cupState(), kind = f.dataset.kind, id = f.dataset.id;
+      const rows = Array.from({ length: 15 }, (_, i) => ({ pid: (f.querySelector(`.ss-p[data-i="${i}"]`) || {}).value || null, chk: !!(f.querySelector(`.ss-chk[data-i="${i}"]`) || {}).checked }));
+      const data = { team: txt("ss-team"), court: txt("ss-court"), coachHead: txt("ss-head"), coach1: txt("ss-c1"), coach2: txt("ss-c2"), captain: document.getElementById("ss-cap").value || null, rows };
+      ok(await sb.from("lineups").upsert({ team_id: TEAM.id, kind, ref_id: id, set_no: C.set, data, updated_at: new Date().toISOString() }));
+      ((C.lineups[kind + ":" + id] = C.lineups[kind + ":" + id] || {}))[C.set] = data;
+      toast(`${C.set}세트 서브 타순을 저장했어요`); state.dirty = false; render(); return;
     } else if (f.id === "entryForm") {
       const kind = f.dataset.kind, id = f.dataset.id, pids = [...f.querySelectorAll('input[type="checkbox"]:checked')].map(x => x.value);
       ok(await sb.from("entries").delete().eq("kind", kind).eq("ref_id", id));
@@ -3052,8 +3168,9 @@ function buildState(raw) {
   state.absences = ab;
   state.notices = (raw.notices || []).map(r => ({ id: r.id, title: r.title, body: r.body || "", pinned: !!r.pinned, created: r.created_at }));
   const en = {};
-  for (const r of raw.entries || []) (en[r.kind + ":" + r.ref_id] = en[r.kind + ":" + r.ref_id] || new Set()).add(r.player_id);
-  state.entries = en;
+  const stt = {};
+  for (const r of raw.entries || []) { (en[r.kind + ":" + r.ref_id] = en[r.kind + ":" + r.ref_id] || new Set()).add(r.player_id); if (r.starter) (stt[r.kind + ":" + r.ref_id] = stt[r.kind + ":" + r.ref_id] || new Set()).add(r.player_id); }
+  state.entries = en; state.starters = stt;
   state.ptimes = Object.fromEntries((raw.practice_times || []).map(r => [r.key, { start: String(r.start_time).slice(0, 5), end: r.end_time ? String(r.end_time).slice(0, 5) : "", note: r.note || "" }]));
   const pk = {};
   for (const r of raw.day_picks || []) (pk[r.player_id] = pk[r.player_id] || {})[r.date] = r.pick;

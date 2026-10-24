@@ -437,3 +437,8 @@ alter table public.logs add constraint logs_pain_area_check
 --   private.jp_sync_call(mode), public.jp_sync_now()(관리자), cron jp-sync-new 05:00 KST · jp-sync-full 05:30 KST
 -- edge function jp-search(로그인): 유튜브 검색 결과만 돌려줌(저장 안 함)
 -- 학교 사전을 고친 뒤에는 select private.jp_sync_call('retag');
+
+-- ===== 대회 엔트리 · 서브 타순 (lineups_starters_event_format) =====
+-- entries.starter: 주전 여부 (엔트리 = 주전 + 후보)
+-- events.format: '6' | '9' (9인제 대회면 서브 타순표)
+-- lineups(team_id, kind event|friendly, ref_id, set_no 1~5, data jsonb {team, court, coachHead, coach1, coach2, captain, rows[15]{pid, chk}}): 9인제 서브 타순표. 읽기 부원, 쓰기 can('schedule')

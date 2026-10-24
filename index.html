@@ -713,9 +713,28 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
   table.roster th, table.roster td { padding: 9px 6px; }
   table.roster td.num, table.roster th.num { width: 24px; }
 }
-.ev-vote { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 6px; width: 100%; }
+.ev-vote { margin-top: 6px; width: 100%; }
+.ev-vote > summary { display: flex; align-items: center; gap: 8px; list-style: none; cursor: pointer; }
+.ev-vote > summary::-webkit-details-marker { display: none; }
+.ev-cnt { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.ev-cnt::after { content: " ›"; color: var(--blue); }
+.ev-vote[open] .ev-cnt::after { content: " ˅"; }
+@media (max-width: 759px) {
+  .ev-list li { grid-template-columns: minmax(0, 1fr) auto; }
+  .ev-list li > .num { grid-column: 1; grid-row: 1; }
+  .ev-list li > .ev-main { grid-column: 1 / -1; grid-row: 2; }
+  .ev-list li > .btn { grid-column: 2; grid-row: 1; }
+}
 .ev-who { width: 100%; }
-.ev-who summary { cursor: pointer; color: var(--blue); font-weight: 600; }
+.ev-vote .vote-btn { flex: none; width: auto; }
+.ev-who p { margin: 4px 0; }
+.c-go { color: var(--blue); } .c-no { color: var(--crit); }
+.vote-card { position: relative; }
+.vote-x { position: absolute; top: 8px; right: 8px; width: 34px; height: 34px; border: 0; border-radius: 50%; background: none; color: var(--muted); font-size: 24px; line-height: 1; cursor: pointer; }
+.vote-x:hover { background: var(--surface-2); color: var(--ink); }
+.vote-card .cf-h { padding-right: 34px; }
+.vote-save { justify-self: end; padding: 8px 26px; margin-top: 2px; }
+
 .vote .btn.on[data-act="evno"] { background: var(--crit); border-color: var(--crit); color: #fff; }
 .vote .btn.on[data-act="evgo"] { background: var(--blue); border-color: var(--blue); color: #fff; }
 .vote-cards { border-color: var(--yellow); box-shadow: inset 4px 0 0 var(--yellow); }
@@ -821,6 +840,27 @@ td.num.good { color: var(--good); font-weight: 700; } td.num.crit { color: var(-
 .jp-head { display: grid; gap: 2px; margin: 6px 0 4px; }
 .jp-head h2 { margin: 0; }
 .jp-search .sc-row .jp-ja { flex-basis: 100%; }
+
+/* 대회: 엔트리 · 서브 타순 */
+.cup-card .chip { font-size: 11.5px; padding: 1px 7px; vertical-align: 1px; }
+.cup-card.past { opacity: .55; }
+.cup-tbl { width: 100%; border-collapse: collapse; }
+.cup-tbl th { font-size: 12px; color: var(--muted); font-weight: 600; text-align: left; padding: 4px 6px; }
+.cup-tbl td { padding: 7px 6px; border-top: 1px solid var(--line); }
+.cup-tbl td:nth-child(-n+2) { width: 48px; text-align: center; }
+.cup-tbl input[type="checkbox"] { width: 20px; height: 20px; }
+.cup-en p { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0; }
+.cup-k { font-weight: 700; font-size: 13px; min-width: 34px; }
+.cup-p.me { background: var(--blue); color: #fff; border-color: var(--blue); }
+.ss-tbl { width: 100%; max-width: 420px; border-collapse: collapse; background: var(--surface); }
+.ss-tbl th, .ss-tbl td { border: 1px solid var(--ink); padding: 4px 6px; font-size: 13.5px; height: 30px; }
+.ss-tbl th { font-weight: 700; text-align: center; white-space: nowrap; width: 44px; background: var(--surface-2); }
+.ss-tbl .ss-h th { font-size: 12px; }
+.ss-tbl td.num { text-align: center; width: 56px; }
+.ss-tbl td:last-child { text-align: center; width: 52px; }
+.ss-tbl input:not([type="checkbox"]), .ss-tbl select { width: 100%; border: 0; background: transparent; font: inherit; color: inherit; padding: 2px 0; min-height: 0; }
+.ss-tbl input[type="checkbox"] { width: 18px; height: 18px; }
+#serveForm .row { margin-top: 10px; }
 </style>
 </head>
 <body>
@@ -841,9 +881,9 @@ td.num.good { color: var(--good); font-weight: 700; } td.num.crit { color: var(-
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=69"></script>
-<script src="guide.js?v=69"></script>
-<script src="library.js?v=69"></script>
-<script src="app.js?v=69"></script>
+<script src="program.js?v=71"></script>
+<script src="guide.js?v=71"></script>
+<script src="library.js?v=71"></script>
+<script src="app.js?v=71"></script>
 </body>
 </html>
