@@ -442,3 +442,5 @@ alter table public.logs add constraint logs_pain_area_check
 -- entries.starter: 주전 여부 (엔트리 = 주전 + 후보)
 -- events.format: '6' | '9' (9인제 대회면 서브 타순표)
 -- lineups(team_id, kind event|friendly, ref_id, set_no 1~5, data jsonb {team, court, coachHead, coach1, coach2, captain, rows[15]{pid, chk}}): 9인제 서브 타순표. 읽기 부원, 쓰기 can('schedule')
+-- jp_sources 추가: mintonette · tmsports · vbharuka · volleyball dreams (경기). 학교 사전 22곳 추가 (간토·도호쿠 등)
+-- jp-sync 태그: 중학·대표팀·리그 영상은 other, 옛 '春の高校バレー 第N回'(N<45)은 1969+N 년

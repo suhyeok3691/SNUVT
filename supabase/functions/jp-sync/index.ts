@@ -63,7 +63,7 @@ function tag(title: string) {
   const body = norm(title.split(/[｜|]/)[0].replace(/#[^\s#]+/g, " "));
   let tourn: string | null = null;
   if (/インカレ|大学|大学院/.test(t) && !/高校|高等学校/.test(t)) tourn = "univ";
-  else if (/日本代表|VNL|ネーションズ|アジア(大会|選手権)|SVリーグ|Vリーグ|天皇杯|オールスター|ドリームマッチ|JOC|JOS|TAURON|Lubin|ハイライト\|/.test(t)) tourn = "other";
+  else if (/日本代表|VNL|ネーションズ|アジア(大会|選手権)|SVリーグ|Vリーグ|日本リーグ|天皇杯|オールスター|ドリームマッチ|JOC|JOS|TAURON|Lubin|ハイライト\||ワールドカップ|W杯|五輪|オリンピック|世界選手権|中学|さわやか杯|早慶|代表(MB|WS|OP|L)|全日本(?!高|バレーボール高等|ジュニア)/i.test(t)) tourn = "other";
   else if (/春高|春の高校バレー|高等学校選手権|全日本高校選手権/.test(t)) tourn = "haruko";
   else if (/インターハイ|インハイ|高校総体|総合体育大会/.test(t) || (/近畿総体/.test(t) && /2026/.test(t))) tourn = "ih";
   else if (/国体|国民体育大会|国スポ|国民スポーツ大会/.test(t)) tourn = "kokutai";
@@ -83,7 +83,7 @@ function tag(title: string) {
   else { const r = t.match(/([1-5一二三四五])回戦/); if (r) add("R" + ("1一".includes(r[1]) ? 1 : "2二".includes(r[1]) ? 2 : "3三".includes(r[1]) ? 3 : "4四".includes(r[1]) ? 4 : 5)); }
   let year: number | null = null;
   const y = t.match(/(20[0-3]\d)/); if (y) year = Number(y[1]);
-  else { const n = t.match(/第(\d{2})回/); if (n && tourn === "haruko") year = Number(n[1]) + 1948; else if (n && tourn === "ih") year = Number(n[1]) + 1953; }
+  else { const n = t.match(/第(\d{1,2})回/); if (n && tourn === "haruko") year = Number(n[1]) + (Number(n[1]) < 45 ? 1969 : 1948); else if (n && tourn === "ih") year = Number(n[1]) + 1953; }
   const gender = /女子|女バレ|ガールズ/.test(t) ? "w" : /男子|男バレ/.test(t) ? "m" : null;
   const hits: { id: string; a: number; b: number }[] = [];
   for (const s of schools) for (const re of s.res) { re.lastIndex = 0; let m; while ((m = re.exec(body))) { hits.push({ id: s.id, a: m.index, b: m.index + m[0].length }); if (!m[0].length) break; } }

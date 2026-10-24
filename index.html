@@ -840,6 +840,11 @@ td.num.good { color: var(--good); font-weight: 700; } td.num.crit { color: var(-
 .jp-head { display: grid; gap: 2px; margin: 6px 0 4px; }
 .jp-head h2 { margin: 0; }
 .jp-search .sc-row .jp-ja { flex-basis: 100%; }
+.jp-parts { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 10px 54px; }
+.jp-chip.star { border-color: var(--yellow); background: color-mix(in srgb, var(--yellow) 18%, var(--surface)); }
+.jp-regs { margin: 2px 0 4px; }
+.jp-reg .jp-pref:first-of-type { border-top: 0; }
+.jp-honor { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 12px; }
 
 /* 대회: 엔트리 · 서브 타순 */
 .cup-card .chip { font-size: 11.5px; padding: 1px 7px; vertical-align: 1px; }
@@ -861,6 +866,14 @@ td.num.good { color: var(--good); font-weight: 700; } td.num.crit { color: var(-
 .ss-tbl input:not([type="checkbox"]), .ss-tbl select { width: 100%; border: 0; background: transparent; font: inherit; color: inherit; padding: 2px 0; min-height: 0; }
 .ss-tbl input[type="checkbox"] { width: 18px; height: 18px; }
 #serveForm .row { margin-top: 10px; }
+
+/* 박스: 항목마다 칸으로 나눔 (기본) */
+.box-cols { display: grid; gap: 16px; }
+@media (min-width: 900px) { .box-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+.boxes { display: grid; gap: 8px; }
+.boxes > .panel, ul.boxes > li { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 0; }
+ul.ev-list.boxes li, ul.ev-list.boxes li:first-child { border-top: 1px solid var(--line); }
+ul.ev-list.boxes { gap: 8px; }
 </style>
 </head>
 <body>
@@ -881,9 +894,9 @@ td.num.good { color: var(--good); font-weight: 700; } td.num.crit { color: var(-
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=71"></script>
-<script src="guide.js?v=71"></script>
-<script src="library.js?v=71"></script>
-<script src="app.js?v=71"></script>
+<script src="program.js?v=72"></script>
+<script src="guide.js?v=72"></script>
+<script src="library.js?v=72"></script>
+<script src="app.js?v=72"></script>
 </body>
 </html>
