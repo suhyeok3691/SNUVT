@@ -111,12 +111,12 @@ const SECTIONS = {
   practice: { label: "훈련", views: [["practice", "훈련 계획"], ["notes", "훈련 노트"], ["video", "영상"]] },
 };
 const SECTION_OF = { scout: "scout", practice: "practice", notes: "practice", video: "practice", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
-// 직책: 관리자·주장 = 전체 / 부주장·훈련부장·총무·피지컬부장 = 맡은 일만 (서버 규칙 private.can 과 같게)
-const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", treasurer: "총무", ops: "훈련부장", trainer: "피지컬부장", analyst: "전력분석부장" };
+// 직책: 관리자·주장 = 전체 / 부주장·훈련 담당·총무·피지컬 담당 = 맡은 일만 (서버 규칙 private.can 과 같게)
+const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", treasurer: "총무", ops: "훈련 담당", trainer: "피지컬 담당", analyst: "전력분석 담당" };
 // attend = 정규 훈련 시간·없는 날 · 자율 훈련 · 불참 확인
 const STAFF_PERMS = { vice: ["schedule", "notice", "roster", "video", "attend"], ops: ["practice", "attend"], treasurer: ["notice", "roster"], trainer: ["training"], analyst: ["analysis"] };
 // 화면 보기(viewAs): 관리자·주장은 모든 직책 화면으로 바꿔 볼 수 있고, 직책이 있으면 '내 직책 ↔ 선수'
-const VIEW_LABEL = k => k === "player" ? "부원" : k === "media" ? "영상부장" : TITLES[k] || k;
+const VIEW_LABEL = k => k === "player" ? "부원" : k === "media" ? "영상 담당" : TITLES[k] || k;
 function viewOptions() {
   const o = state.coach ? ["admin", "captain", "vice", "treasurer", "ops", "trainer", "analyst", "media"] : [...(STAFF_PERMS[state.title] ? [state.title] : []), ...(state.media ? ["media"] : [])];
   return [...o, "player"];
@@ -204,7 +204,8 @@ const selMon = () => state.week ?? thisMon();
 const selDay = () => state.day ?? (selMon() === thisMon() ? dowMon(today()) : 0);
 // 정규 훈련 없는 날(관리자 지정)은 선수가 골라서 하는 날로
 // 정규 훈련 시간: 그날 바뀐 시간 → 학기 기본 → 18:00–21:00
-const teamTimeOn = date => state.ptimes[date] || state.ptimes[seasonDay(date, events()).sem] || { start: "18:00", end: "21:00" };
+// 정규 훈련 시간은 18:00–21:00 고정 (그날만 바꾼 날만 예외)
+const teamTimeOn = date => state.ptimes[date] || { start: "18:00", end: "21:00" };
 const timeTxt = o => o.start + (o.end ? "–" + o.end : "");
 // 교류전(관리자 입력)이 있는 날은 교류전이 그날 훈련 (대회·트라이아웃 날은 그대로)
 const friendlyOn = date => (state.friendlies[date] || [])[0] || null;
@@ -393,7 +394,7 @@ function placeThumb(nav, animate) {
     if (!animate) requestAnimationFrame(() => { th.style.transition = ""; });
   });
 }
-/* ---------- 훈련 계획 (주장·훈련부장이 설계, 모두 봄) ---------- */
+/* ---------- 훈련 계획 (주장·훈련 담당이 설계, 모두 봄) ---------- */
 const prMin = b => (b.groups || []).reduce((mx, g) => Math.max(mx, (g.drills || []).reduce((a, d) => a + (Number(d.m) || 0), 0)), 0);
 function practiceDays() { const t = iso(today()); return teamDays(dAdd(t, -7), 35).filter(x => x.i.slot === "team"); }
 function prDateNow() {
@@ -556,7 +557,7 @@ function viewNotes() {
       ${ta("nt-fix", "고칠 것", cur.fix, "예: 공격 어프로치 마지막 두 걸음이 느림")}
       ${ta("nt-next", "다음 훈련 목표", cur.next, "예: 오픈 스파이크 크로스 코스 5개 중 3개", 1, 300)}
       ${ta("nt-body", "자유 메모", cur.body, "코치·선배 조언, 느낀 점", 3, 2000)}
-      <label class="check"><input type="checkbox" id="nt-share" ${cur.shared ? "checked" : ""}> 주장·훈련부장에게 공유</label>
+      <label class="check"><input type="checkbox" id="nt-share" ${cur.shared ? "checked" : ""}> 주장·훈련 담당에게 공유</label>
       <div class="row"><button class="btn primary" type="submit">${cur.id ? "고치기" : "저장"}</button>${cur.id ? `<button class="btn link small danger" type="button" data-act="notedel" data-d="${d}">지우기</button>` : ""}</div>
     </form>` : ""}
     ${mine.length ? `<h3 class="sub-h">내 노트</h3><div class="notes-list">${mine.slice(0, 30).map(noteCard).join("")}</div>` : ""}
@@ -650,7 +651,7 @@ function viewHome() {
     tile("view", "scout", "chart", "전력분석"),
     adm.length ? tile("view", adm[0][0], "admin", "관리", "", pending) : "",
   ].join("");
-  return `${voteCardsHtml()}${noticesHtml()}${can("full") || can("training") ? teamStatusHtml() : ""}<section class="panel hub"><h3>오늘</h3>${rows}</section>
+  return `${pendingHtml()}${voteCardsHtml()}${todayAbsHtml()}${noticesHtml()}${can("full") || can("training") ? teamStatusHtml() : ""}<section class="panel hub"><h3>오늘</h3>${rows}</section>
     <nav class="tiles-grid" aria-label="기능">${tiles}</nav>`;
 }
 // Physical · 오늘 (예전 홈)
@@ -769,10 +770,8 @@ function teamStatusHtml() {
     <div class="stats">
       <div class="stat"><div class="k">오늘 기록</div><div class="v">${loggedToday} / ${ps.length}</div></div>
       <div class="stat"><div class="k">아침 컨디션</div><div class="v">${ps.filter(p => wellOn(p.id, t)).length} / ${ps.length}</div></div>
-      ${can("full") ? `<div class="stat ${pending.length ? "hot" : ""}"><div class="k">승인 대기</div><div class="v">${pending.length}</div></div>` : ""}
       <div class="stat ${watch.length ? "hot" : ""}"><div class="k">확인할 선수</div><div class="v">${watch.length}</div></div>
     </div>
-    ${pending.length ? `<button class="btn link" type="button" data-act="view" data-v="intake">승인하러 가기 →</button>` : ""}
     ${watch.length ? `<ul class="watch">${watch.map(({ p, why }) => `<li><button type="button" class="btn link" data-act="open" data-pid="${esc(p.id)}">${esc(p.name)}</button>${chipsHtml(why)}</li>`).join("")}</ul>` : ""}
   </section>`;
 }
@@ -786,7 +785,7 @@ function viewRoster() {
       return `<div class="tw"><table class="roster"><thead><tr><th class="num">번호</th><th>이름</th><th>포지션</th><th>학년</th>${hasT ? `<th class="c-title">직책</th>` : ""}<th>전화</th></tr></thead><tbody>
       ${ps.map(p => `<tr><td class="num">${p.number ?? ""}</td><td><b>${esc(p.name)}</b>${p.title ? `<span class="chip t-inline">${esc(TITLES[p.title])}</span>` : ""}${p.military ? `<span class="chip mil t-inline">군</span>` : ""}</td><td><span class="chip pos">${esc(p.pos)}</span></td><td>${esc(String(p.year || "").replace(/학년$/, ""))}</td>${hasT ? `<td class="c-title">${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}${p.military ? `<span class="chip mil">군 복무</span>` : ""}</td>` : ""}<td>${tel(p)}</td></tr>`).join("")}
       </tbody></table></div>`; })()}</section>
-    <section class="sec"><h3>운영진</h3>${staff.length ? `<ul class="watch">${staff.map(p => `<li><b>${esc(p.name)}</b>${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}${p.media ? `<span class="chip">영상부장</span>` : ""}</li>`).join("")}</ul>` : emptyLine("아직 정해진 직책이 없어요.")}</section>`;
+    <section class="sec"><h3>운영진</h3>${staff.length ? `<ul class="watch">${staff.map(p => `<li><b>${esc(p.name)}</b>${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}${p.media ? `<span class="chip">영상 담당</span>` : ""}</li>`).join("")}</ul>` : emptyLine("아직 정해진 직책이 없어요.")}</section>`;
 }
 // 리포트: 지난주 요약 + 선수별 리포트(최근 4주) + 엑셀
 // 시즌 = 3월 → 다음 해 2월. 기록이 있는 첫 시즌부터 이번 시즌까지
@@ -854,7 +853,7 @@ function blockHtml(b, edit) {
     <div class="nm">${esc(x.name)}${x.mod ? ` <span class="mod">${esc(x.mod)}</span>` : ""}</div><div class="rx">${esc(rxMain(x.rx))}</div>${rxRest(x.rx) ? `<div class="sub">${rxRest(x.rx)}</div>` : ""}</li>`; }).join("")}</ul>
     ${b.note ? `<p class="bnote">${esc(b.note).replace(/\n/g, "<br>")}</p>` : ""}</section>`;
 }
-/* ---------- 프로그램 박스 편집 (피지컬부장) ---------- */
+/* ---------- 프로그램 박스 편집 (피지컬 담당) ---------- */
 const SLOT_KO = { gymA: "하체 웨이트 날", gymB: "상체 웨이트 날", bwU: "맨몸 상체 날", bwL: "맨몸 하체 날", act: "활성화 날", team: "정규 훈련 날", recover: "회복 날", prep: "대회 전날" };
 const editCtx = { slot: null, pid: null };
 function editBar(plan, p) {
@@ -1223,7 +1222,7 @@ function viewIntake() {
             <label class="fl">포지션<select id="pf-pos" required>${POS_ORDER.map(k => `<option ${opt(k, p.pos)}>${k}</option>`).join("")}</select></label>
             <label class="fl">등번호<input id="pf-num" type="number" inputmode="numeric" min="0" max="99" value="${esc(p.number ?? "")}"></label>
             <label class="fl">직책<select id="pf-title"><option value="">부원</option>${Object.entries(TITLES).map(([k, l]) => `<option value="${k}" ${p.title === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-            <label class="check"><input type="checkbox" id="pf-media" ${p.media ? "checked" : ""}> 영상부장</label>
+            <label class="check"><input type="checkbox" id="pf-media" ${p.media ? "checked" : ""}> 영상 담당</label>
             <label class="fl">전화번호<input id="pf-phone" type="tel" inputmode="tel" maxlength="20" placeholder="010-0000-0000" value="${esc((state.contacts || {})[pid] || "")}"></label>
             <label class="fl">학년<input id="pf-year" maxlength="10" placeholder="예: 3학년" value="${esc(p.year || "")}"></label>
             <label class="fl">키 (cm)<input id="pf-height" type="number" inputmode="decimal" min="140" max="220" step="0.1" value="${esc(p.height ?? "")}"></label>
@@ -1384,14 +1383,9 @@ function viewComps() {
 function viewSched() {
   if (!can("attend")) return `<div class="panel empty"><strong>관리자 전용이에요</strong></div>`;
   const t = iso(today()), off = Object.entries(state.teamOff).filter(([d]) => d >= dAdd(t, -14)).sort();
-  const pt = k => state.ptimes[k] || { start: "18:00", end: "21:00" };
   const days = Object.entries(state.ptimes).filter(([k]) => /^\d{4}/.test(k) && k >= dAdd(t, -14)).sort();
   return `<div class="cols">
-    <div class="col"><section class="sec"><h3>정규 훈련 시간</h3>
-      <form class="f panel" id="ptForm"><div class="fields">
-        ${["S1", "S2"].map(k => `<div class="pair"><label class="fl">${k === "S1" ? "1학기" : "2학기"} (${teamDaysOf(k)}) 시작<input type="time" id="pt-${k}-s" value="${pt(k).start}" required></label><label class="fl">끝<input type="time" id="pt-${k}-e" value="${pt(k).end}"></label></div>`).join("")}
-      </div><div class="row"><button class="btn primary" type="submit">저장</button></div></form>
-    </section>
+    <div class="col">
     <section class="sec"><div class="sec-head"><h3>그날만 시간 바꾸기</h3>${addBtn("ptday", "추가")}</div>
       ${days.length ? `<ul class="watch">${days.map(([d, o]) => `<li><span class="num">${shortDate(parseD(d))}</span><span>${esc(timeTxt(o))}</span>${o.note ? `<span class="small muted">${esc(o.note)}</span>` : ""}<button class="btn link danger" type="button" data-act="ptdel" data-key="${esc(d)}">취소</button></li>`).join("")}</ul>` : emptyLine("바꾼 날이 없어요.")}
     </section></div>
@@ -1654,6 +1648,29 @@ function voteBox(kind, id) {
     ${no.length ? `<ul class="at-list">${no.map(p => `<li><b>${esc(p.name)}</b> <span class="small">${esc(ABS_REASONS[vs[p.id].reason] || "")}${vs[p.id].note ? ` · ${esc(vs[p.id].note)}` : ""}</span></li>`).join("")}</ul>` : ""}
     ${ps.length - yes.length - no.length ? `<p class="small muted">미응답 ${ps.filter(p => !vs[p.id]).map(p => esc(p.name)).join(" · ")}</p>` : ""}</details>` : "";
   return `<div class="ev-vote">${btns}${sum}${detail}</div>`;
+}
+// 관리자: 승인 대기는 홈 맨 위에 작게
+function pendingHtml() {
+  if (!can("full")) return "";
+  const n = state.profiles.filter(m => m.role === "pending" && m.id !== state.session.user.id).length;
+  return n ? `<button type="button" class="pending-pill" data-act="view" data-v="intake"><span class="chip warn">승인 대기 ${n}</span><span class="small">부원에서 승인하기 ›</span></button>` : "";
+}
+// 주장·훈련 담당: 오늘 훈련 불참자 (정규 훈련·교류전·자율 훈련)
+function todayAbsHtml() {
+  if (!can("attend")) return "";
+  const t = iso(today()), i = infoOn(t), opens = opensOn(t);
+  if (!isTeamDay(i) && !opens.length) return "";
+  const ps = sortedPlayers().filter(p => !p.military);
+  const rows = [];
+  if (isTeamDay(i)) {
+    const abs = ps.map(p => [p, absOf(p.id, t)]).filter(([, a]) => a);
+    rows.push(`<div class="ta-h"><b>${esc(tdLabel(i))}</b><span class="chip ${abs.length ? "warn" : "ok"}">불참 ${abs.length}</span></div>${abs.length ? `<ul class="at-list">${abs.map(([p, a]) => `<li><b>${esc(p.name)}</b> <span class="small">${esc(ABS_REASONS[a.reason] || "")}${a.note ? ` · ${esc(a.note)}` : ""}</span></li>`).join("")}</ul>` : ""}`);
+  }
+  for (const o of opens) {
+    const go = ps.filter(p => o.votes[p.id] === true), no = ps.filter(p => o.votes[p.id] === false);
+    rows.push(`<div class="ta-h"><b>${esc(openLabel(o))}</b><span class="chip ok">참석 ${go.length}</span>${no.length ? `<span class="chip warn">불참 ${no.length}</span>` : ""}</div>${go.length ? `<p class="small">${go.map(p => esc(p.name)).join(" · ")}</p>` : ""}`);
+  }
+  return `<section class="panel today-abs"><h3>오늘 훈련 출석</h3>${rows.join("")}</section>`;
 }
 // 홈 맨 위: 아직 답하지 않은 대회·교류전 (공지처럼)
 function voteCardsHtml() {

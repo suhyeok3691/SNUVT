@@ -21,13 +21,12 @@ const BAND_SHOULDER = [
   { name: "히팅 풀백", rx: "1×5 (좌우 각)", cue: "스파이크 팔 동작을 천천히 거꾸로" },
   { name: "히팅 액셀러레이터", rx: "1×4 (좌우 각)", cue: "스파이크 팔 스윙을 밴드 저항으로 빠르게" },
 ];
+// 워밍업은 짧게 4가지 (하체 날은 코어 하나 더)
 const WARMUP = [
-  { name: "조깅 · 셔플 · 카리오카 · 스킵", rx: "3분", cue: "체온 올리기" },
-  { name: "회전 런지 · 옆 런지 · 다리 스윙", rx: "3분", cue: "정적 스트레칭을 넣는다면 근육당 30초 이내" },
-  { name: "한 발 서기 → 한 발 홉", rx: "2분", cue: "좌·우 모두" },
+  { name: "조깅 · 셔플 · 스킵", rx: "3분", cue: "체온 올리기" },
+  { name: "회전 런지 · 옆 런지", rx: "3분", cue: "정적 스트레칭을 넣는다면 근육당 30초 이내" },
   { name: "스쿼트 점프 착지 고정", rx: "5회", cue: "무릎은 발끝 방향, 착지 소리 작게" },
-  { name: "어깨 밴드 · Y·T · 오픈북", rx: "4분", cue: "어깨 외회전·견갑·흉추" },
-  { name: "어프로치 점프", rx: "3회", cue: "70% → 90%" },
+  { name: "어깨 밴드 · Y·T · 오픈북", rx: "3분", cue: "어깨 외회전·견갑·흉추" },
 ];
 // 핸드스탠드 단계 — 목표는 버티기를 넘어 다 같이 코트를 걸어가는 것 (5단계 핸드스탠드 워크)
 // 1–4단계는 버틴 시간(초), 5단계는 걸은 거리(m)로 기록. 기준을 넘으면 다음 단계로.
@@ -79,8 +78,10 @@ const PLYO_ORDER = ["pogo", "stick", "rebox", "rebox2", "bssj", "lat", "hurdle",
 const MON_STRENGTH = [
   { key: "jsq", name: "덤벨 점프 스쿼트", cue: "가벼운 무게로 최대한 빠르게 · 세트 간 2분",
     rx: [null, "3×4", "2×4", "3×4", "2×3", null] },
+  { key: "sqwu", name: "백스쿼트 워밍업", cue: "빈 바 → 본세트 무게의 절반쯤, 가볍게",
+    rx: ["1세트", "2세트", "2세트", "2세트", "2세트", "2세트"] },
   { key: "squat", name: "백스쿼트", cue: "워밍업 2세트 → 5–6회 가능한 무게로 1세트 → 무게 낮춰 8–10회 2세트 · 세트 간 3분",
-    rx: ["동작 연습 2×8 (가볍게)", "1×5–6 → 2×8–10 (무게 ↓)", "1×5 → 1×8 (가볍게)", "1×5–6 → 2×8–10 (무게 ↓)", "1×5 → 1×8", "2×3 · 지난주 무게 유지"] },
+    rx: ["동작 연습 2×8 (가볍게)", "1×5–6 (가능한 무게) → 2×8–10 (무게 ↓)", "1×5 → 1×8 (가볍게)", "1×5–6 (가능한 무게) → 2×8–10 (무게 ↓)", "1×5 → 1×8", "2×3 · 지난주 무게 유지"] },
   { key: "rdl", name: "데드리프트 (바벨)", cue: "스쿼트보다 가볍게 · 허리 중립 · 세트 간 3분",
     rx: ["동작 연습 2×6", "3×4", "2×4 · 가볍게", "3×4", "2×4", "2×3"] },
   { key: "bss", name: "덤벨 불가리안 스플릿 스쿼트", cue: "앞발 뒤꿈치로 밀기 · 세트 간 90초",
@@ -610,16 +611,12 @@ function slotPlan(ctx, slot, w, o = {}) {
   const add = b => { if (b) out.blocks.push(b); };
   // 하체 날 워밍업에는 간단한 코어를 넣음 (피지컬부장 요청)
   const withCore = b => { if (slot === "gymA" || slot === "bwL") b.items.splice(1, 0, { ...CORE_WARM }); return b; };
-  const warm = () => withCore({ key: "warm", title: "워밍업 15분", items: WARMUP.flatMap((x, i) => {
+  const warm = () => withCore({ key: "warm", title: "워밍업", items: WARMUP.flatMap((x, i) => {
     if (i === 1 && (fx.knee === 1 || fx.ankle === 1)) return [{ name: "다리 스윙 · 엉덩이 돌리기", rx: "3분", cue: "런지 없이, 통증 없는 범위", mod: fx.knee === 1 ? "무릎 통증" : "발목 통증" }];
-    if (i === 2 && fx.ankle === 1) return [{ name: "발목 알파벳 그리기", rx: "2분", cue: "앉아서", mod: "발목 통증" }];
     if (i === 1 && fx.knee === 2) return [{ ...x, cue: "통증 없는 범위로 얕게", mod: "무릎 통증" }];
-    if (i === 2 && fx.noJumps) return [{ name: "한 발 서기 (좌우)", rx: fx.ankleBal ? "3분" : "2분", cue: "좌·우 모두", mod: "무릎 통증" }];
-    if (i === 2 && fx.ankleBal) return [{ ...x, rx: "3분", mod: "발목 +1분" }];
-    if ((i === 3 || i === 5) && slot === "gymB") return []; // 상체 날은 점프 워밍업 없이
-    if (i === 3 && fx.noJumps) return [{ name: "스쿼트 착지 자세 연습 (점프 없이)", rx: "5회", cue: "무릎은 발끝 방향", mod: "통증" }];
-    if (i === 4 && fx.noOverhead) return [{ ...x, name: "어깨 밴드 · Y·T (통증 없는 범위)", mod: "어깨 통증" }];
-    if (i === 5 && (fx.noJumps || fx.tierMax < 3)) return [];
+    if (i === 2 && slot === "gymB") return []; // 상체 날은 점프 워밍업 없이
+    if (i === 2 && fx.noJumps) return [{ name: "스쿼트 착지 자세 연습 (점프 없이)", rx: "5회", cue: "무릎은 발끝 방향", mod: "통증" }];
+    if (i === 3 && fx.noOverhead) return [{ ...x, name: "어깨 밴드 · Y·T (통증 없는 범위)", mod: "어깨 통증" }];
     return [x];
   }) });
   const rehabBlock = (title, filter, cap = REHAB_CAP) => {
@@ -736,6 +733,7 @@ const SLOT_FN = {
       // 무릎 심함: 무릎 쓰는 근력은 빼고 재활 블록(등척성)으로 · 중간: 통증 5 이하 무게로
       if (fx.knee === 1 && ["squat", "bss", "stepup", "jsq"].includes(x.key)) return null;
       if (fx.knee === 2 && ["bss", "stepup"].includes(x.key)) return null; // 재활 블록의 무겁고 느린 근력이 대신
+      if (fx.knee === 2 && x.key === "sqwu") { rx += " · 통증 없는 범위"; mod = "무릎 통증"; }
       if (fx.knee === 2 && x.key === "squat") { rx = rx.replace(/^(\D*)([34])×/, (_, a, n) => `${a}${n - 1}×`) + " · 통증 5 이하 무게로"; mod = "무릎 통증"; }
       // 발목 심함(걸어도 아픔): 한 발로 서는 근력·카프레이즈 빼기
       if (fx.ankle === 1 && ["bss", "stepup", "calf"].includes(x.key)) return null;
@@ -746,6 +744,7 @@ const SLOT_FN = {
     }).filter(Boolean);
     // 1학기: 노르딕을 맨몸 하체(정규 훈련 다음 날)에서 이날로 옮김
     if (o.nordicHere && !novice && !fx.noNordic && w !== PH.TAPER) strength.push({ name: "노르딕 햄스트링", rx: HEAVY(w) ? "2×5" : "2×4", cue: "파트너가 발목 고정, 버틸 수 있는 데까지 천천히" });
+    if (!strength.some(x => x.name.startsWith("백스쿼트") && x.name !== "백스쿼트 워밍업")) { const k = strength.findIndex(x => x.name === "백스쿼트 워밍업"); if (k >= 0) strength.splice(k, 1); }
     h.add({ key: "str", title: "근력", items: strength });
     if (posPlyo.length) h.add({ key: "pos", scope: "me", title: "포지션 플라이오메트릭", items: posPlyo.map(x => ({ name: x.name, rx: plyoRx(x), cue: x.cue })) });
     h.add(prevBlock(c, "gymA"));
@@ -1199,7 +1198,18 @@ function planForDay(ctx, info) {
   // 오늘 컨디션이 낮으면 회복 버전
   const low = ctx.ready ? readiness(ctx.ready.well, ctx.ready.lastRpe) : [];
   if (low.length && TRAIN_SLOTS.includes(i.slot) && i.w !== PH.TAPER) i = { ...i, w: PH.DELOAD, lowReady: true };
-  const out = slotPlan(ctx, i.slot, i.w, i);
+  let out = slotPlan(ctx, i.slot, i.w, i);
+  // 팀 운동이 먼저: 재활·부상 때문에 팀 블록을 바꾸지 않고, 재활은 남는 시간에 개인 칸으로 더함.
+  // 쉴 때도 아픈 가장 심한 단계만 예외로 빼 둠 (그 운동은 '통증 있으면 빼기'로 표시)
+  if (p.pos && !(out.mods || []).some(m => m.stage === 1) && ((out.mods || []).length || (ctx.injuries || []).length || (p.adjust && Object.keys(p.adjust).length))) {
+    const clean = slotPlan({ ...ctx, injuries: [], pain: null, checks: [], rehab: [], player: { ...p, adjust: {} } }, i.slot, i.w, i);
+    const mine = new Map(out.blocks.map(b => [b.key, b]));
+    const teamBlocks = clean.blocks.filter(b => !b.scope).map(b => {
+      const m = mine.get(b.key), have = new Map(((m && m.items) || []).map(x => [x.name, x]));
+      return { ...b, items: b.items.map(x => have.get(x.name) || { ...x, mod: "통증 있으면 빼기" }) };
+    });
+    out = { ...out, blocks: [...teamBlocks, ...out.blocks.filter(b => b.scope)], landings: clean.landings };
+  }
   // 트레이닝 담당이 바꾼 박스 (날 종류 · 블록마다 빼기/추가, 팀 전체 → 그 선수 순서로)
   const eds = (ctx.edits || []).filter(e => e && e.slot === i.slot);
   if (eds.length) {
@@ -1243,7 +1253,6 @@ function planForDay(ctx, info) {
     out.picked = ctx.pick || null;
     if (info.absent) out.title = `불참 · ${out.title}`;
     else if (info.teamOff) { out.title = `정규 훈련 없음 · ${out.title}`; if (info.teamOffNote) out.notes.unshift(`정규 훈련 없음 · ${info.teamOffNote}`); }
-    if (!ctx.pick && flow.why && flow.slot !== info.slot) out.notes.unshift(flow.why);
   }
   if (info.absent && !flow) out.title = `불참 · ${out.title}`;
   // 어깨 밴드 루틴: 화요일, 못 했으면 일요일 쉬는 날에 선택 (어깨 재활 중이면 재활 블록이 대신)
