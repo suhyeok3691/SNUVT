@@ -553,7 +553,6 @@ function loadFor(c, name, rx, w) {
   const kg = Math.round(e / (1 + (Number(m[2]) + rir) / 30) / step) * step;
   return kg > 0 ? ` · 약 ${kg}kg` : "";
 }
-// 측정 안내: 통증·제한이 있으면 그 측정은 뺀다 (아픈 채로 잰 값은 비교가 안 되고 위험)
 // 한 달에 한 번 측정 (트라이아웃식). 아프거나 제한이 있으면 그 측정은 뺀다 (아픈 채로 잰 값은 비교가 안 되고 위험)
 function measureNote(c) {
   const { fx } = c, tests = [], skip = [];
@@ -606,7 +605,7 @@ function dedupe(out) {
   out.blocks = out.blocks.filter(b => b.items.length || b.key === "team");
 }
 function slotPlan(ctx, slot, w, o = {}) {
-  const c = prepCtx(ctx), { p, t, mods, fx } = c;
+  const c = prepCtx(ctx), { mods, fx } = c;
   const out = { blocks: [], notes: [], landings: 0, kind: "", title: "", mods, rel: c.rel, logType: "other", minutes: 30, slot, optional: !!o.optional };
   const add = b => { if (b) out.blocks.push(b); };
   // 하체 날 워밍업에는 간단한 코어를 넣음 (피지컬부장 요청)
@@ -650,7 +649,6 @@ function slotPlan(ctx, slot, w, o = {}) {
   if (!c.team && ADDON_MAX[slot]) capAddons(out, slot);
   return out;
 }
-// 재활 블록 크기: 부위마다 꼭 필요한 것만 (단계 항목의 앞쪽부터)
 // 재활: 부위마다 그 단계의 중요한 것부터 3개까지 (대회 앞뒤는 1개)
 const REHAB_CAP = { per: 3, total: 6 }, REHAB_CAP_LIGHT = { per: 1, total: 2 };
 const ADDON_KEYS = ["prev", "meas"]; // 재활은 따로 (부위마다 3개), 예방·측정 보완만 상한
@@ -753,7 +751,7 @@ const SLOT_FN = {
   },
   // ---- 상체·엉덩이·코어
   gymB(c, w, o, out, h) {
-    const { p, fx, novice } = c;
+    const { fx, novice } = c;
     out.kind = "상체·엉덩이·코어"; out.logType = "B"; out.minutes = 60;
     out.title = "상체 · 코어" + (LIGHT(w) ? " · 가볍게" : "");
     h.add(h.warm());

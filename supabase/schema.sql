@@ -1,198 +1,1107 @@
--- SNUVT 피지컬 보드 — Supabase 스키마
--- Supabase 대시보드 > SQL Editor > New query 에 전체를 붙여넣고 Run 하세요. 한 번만 실행합니다.
+-- SNUVT — Supabase 데이터베이스 구조 (2026-10-25 실제 DB 에서 뽑음)
 --
--- 권한 구조
---   pending : 가입만 한 상태. 아무 데이터도 볼 수 없음 (담당자가 승인해야 함)
---   player  : 선수. 명단·처방·측정값을 보고, 자기 기록만 남기고 볼 수 있음. 자기 부상 정보만 볼 수 있음
---   coach   : 피지컬 담당자. 모든 데이터를 보고 수정함. 팀원 승인과 선수 연결을 함
+-- 이 파일은 "지금 DB 가 어떻게 생겼는지" 의 기준이에요. 표·제약·함수·정책·트리거·예약 작업을 모두 담았어요.
+-- 각 표가 무슨 일을 하는지, 누가 읽고 쓰는지는 README.md 의 '데이터' 를 보세요.
+-- 바뀐 기록은 git 기록과 Supabase 마이그레이션 목록에 있어요.
+--
+-- DB 를 바꾸면: 마이그레이션으로 적용 → 이 파일의 해당 부분도 같이 고치기.
+-- 비밀값(알림 키·x-cron)은 vault 에만 있고 여기에는 없어요. 처음 만드는 DB 라면 vault 에 'push_cron' 을 넣고
+-- edge function push 를 kind 'init' 으로 한 번 부르면 알림 키가 만들어져요.
 
 create extension if not exists pgcrypto;
+create extension if not exists pg_net;
+create extension if not exists pg_cron;
+create schema if not exists private;
+set check_function_bodies = off;  -- 표가 아직 없어도 함수를 먼저 만들 수 있게
+grant usage on schema private to anon, authenticated;
+-- ========== 1. 순서상 먼저 필요한 함수 ==========
+CREATE OR REPLACE FUNCTION private.my_team()
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select team_id from public.profiles where id = auth.uid()
+$function$;
 
--- ---------- 테이블 ----------
+-- ========== 2. 표 ==========
+create sequence public.jp_matches_id_seq;
+create sequence public.jp_results_id_seq;
 
-create table public.settings (
-  id          int  primary key default 1 check (id = 1),
-  name        text not null default '서울대배',
-  block_start date not null,
-  start_date  date not null,
-  end_date    date not null
+create table public.teams (
+  id text not null,
+  name text not null,
+  label text not null,
+  net_cm integer default 243 not null,
+  swap_days boolean default false not null,
+  created_at timestamp with time zone default now() not null,
+  constraint teams_pkey PRIMARY KEY (id)
 );
 
 create table public.players (
-  id         uuid primary key default gen_random_uuid(),
-  name       text not null,
-  pos        text not null check (pos in ('OH','MB','OP','S','Li')),
-  year       text,
-  height     numeric,
-  weight     numeric,
-  exp        numeric,
-  weight_exp text check (weight_exp in ('none','lt6','gte6')),
-  adjust     jsonb not null default '{}'::jsonb,   -- 처방 조정 코드 (이유는 health 에만 있음)
-  sort       int  not null default 99,
-  created_at timestamptz not null default now()
+  id uuid default gen_random_uuid() not null,
+  name text not null,
+  pos text not null,
+  year text,
+  height numeric,
+  weight numeric,
+  exp numeric,
+  weight_exp text,
+  adjust jsonb default '{}'::jsonb not null,
+  sort integer default 99 not null,
+  created_at timestamp with time zone default now() not null,
+  title text,
+  number integer,
+  media boolean default false not null,
+  alumni boolean default false not null,
+  left_on date,
+  military boolean default false not null,
+  team_id text default private.my_team() not null,
+  constraint players_pkey PRIMARY KEY (id),
+  constraint players_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id),
+  constraint players_number_check CHECK (((number >= 0) AND (number <= 99))),
+  constraint players_pos_check CHECK ((pos = ANY (ARRAY['OH'::text, 'MB'::text, 'OP'::text, 'S'::text, 'Li'::text]))),
+  constraint players_title_check CHECK ((title = ANY (ARRAY['admin'::text, 'captain'::text, 'vice'::text, 'ops'::text, 'treasurer'::text, 'trainer'::text, 'analyst'::text]))),
+  constraint players_weight_exp_check CHECK ((weight_exp = ANY (ARRAY['none'::text, 'machine'::text, 'free'::text, 'oly'::text])))
 );
 
 create table public.profiles (
-  id         uuid primary key references auth.users(id) on delete cascade,
-  email      text,
-  role       text not null default 'pending' check (role in ('pending','player','coach')),
-  player_id  uuid references public.players(id) on delete set null,
-  created_at timestamptz not null default now()
+  id uuid not null,
+  email text,
+  role text default 'pending'::text not null,
+  player_id uuid,
+  created_at timestamp with time zone default now() not null,
+  team_id text default 'men'::text not null,
+  super boolean default false not null,
+  constraint profiles_pkey PRIMARY KEY (id),
+  constraint profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE,
+  constraint profiles_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE SET NULL,
+  constraint profiles_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id),
+  constraint profiles_role_check CHECK ((role = ANY (ARRAY['pending'::text, 'player'::text, 'coach'::text])))
+);
+
+create table public.jp_sources (
+  id text not null,
+  kind text not null,
+  ref text not null,
+  label text not null,
+  role text default 'match'::text not null,
+  cursor text,
+  full_done boolean default false not null,
+  synced_at timestamp with time zone,
+  constraint jp_sources_pkey PRIMARY KEY (id),
+  constraint jp_sources_kind_check CHECK ((kind = ANY (ARRAY['channel'::text, 'playlist'::text, 'search'::text]))),
+  constraint jp_sources_role_check CHECK ((role = ANY (ARRAY['match'::text, 'visit'::text])))
+);
+
+create table public.jp_schools (
+  id text not null,
+  name_ja text not null,
+  name_ko text not null,
+  pref text not null,
+  gender text default 'm'::text not null,
+  aliases text[] default '{}'::text[] not null,
+  note text,
+  constraint jp_schools_pkey PRIMARY KEY (id),
+  constraint jp_schools_gender_check CHECK ((gender = ANY (ARRAY['m'::text, 'w'::text, 'mw'::text])))
+);
+
+create table public.absences (
+  id uuid default gen_random_uuid() not null,
+  player_id uuid not null,
+  date date not null,
+  reason text not null,
+  note text,
+  author uuid default auth.uid(),
+  created_at timestamp with time zone default now() not null,
+  constraint absences_player_id_date_key UNIQUE (player_id, date),
+  constraint absences_pkey PRIMARY KEY (id),
+  constraint absences_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  constraint absences_note_check CHECK ((char_length(note) <= 100)),
+  constraint absences_reason_check CHECK ((reason = ANY (ARRAY['class'::text, 'sick'::text, 'personal'::text, 'etc'::text])))
+);
+
+create table public.day_picks (
+  id uuid default gen_random_uuid() not null,
+  player_id uuid not null,
+  date date not null,
+  pick text not null,
+  author uuid default auth.uid(),
+  created_at timestamp with time zone default now() not null,
+  constraint day_picks_player_id_date_key UNIQUE (player_id, date),
+  constraint day_picks_pkey PRIMARY KEY (id),
+  constraint day_picks_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  constraint day_picks_pick_check CHECK ((pick = ANY (ARRAY['lower'::text, 'upper'::text, 'core'::text, 'recover'::text])))
+);
+
+create table public.entries (
+  id uuid default gen_random_uuid() not null,
+  kind text not null,
+  ref_id uuid not null,
+  player_id uuid not null,
+  created_at timestamp with time zone default now() not null,
+  starter boolean default false not null,
+  constraint entries_kind_ref_id_player_id_key UNIQUE (kind, ref_id, player_id),
+  constraint entries_pkey PRIMARY KEY (id),
+  constraint entries_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  constraint entries_kind_check CHECK ((kind = ANY (ARRAY['event'::text, 'friendly'::text])))
+);
+
+create table public.event_votes (
+  kind text not null,
+  ref_id uuid not null,
+  player_id uuid not null,
+  going boolean not null,
+  reason text,
+  note text,
+  updated_at timestamp with time zone default now() not null,
+  constraint event_votes_pkey PRIMARY KEY (kind, ref_id, player_id),
+  constraint event_votes_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  constraint event_votes_kind_check CHECK ((kind = ANY (ARRAY['event'::text, 'friendly'::text]))),
+  constraint event_votes_note_check CHECK (((note IS NULL) OR (length(note) <= 200))),
+  constraint event_votes_reason_check CHECK (((reason IS NULL) OR (reason = ANY (ARRAY['class'::text, 'sick'::text, 'personal'::text, 'etc'::text]))))
+);
+
+create table public.events (
+  id uuid default gen_random_uuid() not null,
+  name text not null,
+  kind text not null,
+  start_date date not null,
+  end_date date not null,
+  note text,
+  created_at timestamp with time zone default now() not null,
+  team_id text default private.my_team() not null,
+  format text,
+  constraint events_pkey PRIMARY KEY (id),
+  constraint events_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id),
+  constraint events_check CHECK ((end_date >= start_date)),
+  constraint events_format_check CHECK (((format IS NULL) OR (format = ANY (ARRAY['6'::text, '9'::text])))),
+  constraint events_kind_check CHECK ((kind = ANY (ARRAY['major'::text, 'minor'::text, 'tryout'::text, 'off'::text, 'termend'::text]))),
+  constraint events_name_check CHECK (((length(name) >= 1) AND (length(name) <= 40)))
+);
+
+create table public.friendlies (
+  id uuid default gen_random_uuid() not null,
+  date date not null,
+  start_time time without time zone,
+  end_time time without time zone,
+  opponent text not null,
+  format text default '6'::text not null,
+  place text,
+  note text,
+  created_at timestamp with time zone default now() not null,
+  team_id text default private.my_team() not null,
+  constraint friendlies_pkey PRIMARY KEY (id),
+  constraint friendlies_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id),
+  constraint friendlies_format_check CHECK ((format = ANY (ARRAY['6'::text, '9'::text]))),
+  constraint friendlies_note_check CHECK ((char_length(note) <= 200)),
+  constraint friendlies_opponent_check CHECK (((char_length(opponent) >= 1) AND (char_length(opponent) <= 60))),
+  constraint friendlies_place_check CHECK ((char_length(place) <= 60))
 );
 
 create table public.health (
-  player_id   uuid primary key references public.players(id) on delete cascade,
-  ankle_l     int  not null default 0,
-  ankle_r     int  not null default 0,
-  ankle_last  text,
-  knee_injury boolean not null default false,
-  pain        jsonb not null default '{}'::jsonb,   -- {"knee":0,"shoulder":0,"ankle":0,"back":0}
-  note        text,
-  consent     boolean not null default false,
-  updated_at  timestamptz not null default now()
+  player_id uuid not null,
+  ankle_l integer default 0 not null,
+  ankle_r integer default 0 not null,
+  ankle_last text,
+  knee_injury boolean default false not null,
+  pain jsonb default '{}'::jsonb not null,
+  note text,
+  consent boolean default false not null,
+  updated_at timestamp with time zone default now() not null,
+  rehab jsonb default '[]'::jsonb not null,
+  injuries jsonb default '[]'::jsonb not null,
+  custom jsonb default '{}'::jsonb not null,
+  constraint health_pkey PRIMARY KEY (player_id),
+  constraint health_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
 );
 
-create table public.tests (
-  id         uuid primary key default gen_random_uuid(),
-  player_id  uuid not null references public.players(id) on delete cascade,
-  date       date not null,
-  reach      numeric,
-  cmj        numeric,
-  block      numeric,
-  approach   numeric,
-  bal_l      boolean,
-  bal_r      boolean,
-  hs_stage   int check (hs_stage between 1 and 4),
-  hs_sec     int,
-  squat      numeric,
-  rdl        numeric,
-  pull       int,
-  created_at timestamptz not null default now()
+create table public.jp_matches (
+  id bigint default nextval('jp_matches_id_seq'::regclass) not null,
+  tourn text not null,
+  gender text not null,
+  year smallint not null,
+  rnd text not null,
+  a_name text not null,
+  a_pref text,
+  b_name text not null,
+  b_pref text,
+  a_sets smallint,
+  b_sets smallint,
+  src text,
+  constraint jp_matches_pkey PRIMARY KEY (id),
+  constraint jp_matches_gender_check CHECK ((gender = ANY (ARRAY['m'::text, 'w'::text]))),
+  constraint jp_matches_tourn_check CHECK ((tourn = ANY (ARRAY['haruko'::text, 'ih'::text, 'kokutai'::text, 'sakura'::text])))
+);
+
+create table public.lift_sets (
+  id uuid default gen_random_uuid() not null,
+  player_id uuid not null,
+  date date not null,
+  name text not null,
+  lift text,
+  kg numeric not null,
+  reps smallint not null,
+  rir smallint not null,
+  author uuid default auth.uid(),
+  created_at timestamp with time zone default now() not null,
+  constraint lift_sets_pkey PRIMARY KEY (id),
+  constraint lift_sets_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  constraint lift_sets_kg_check CHECK (((kg > (0)::numeric) AND (kg <= (400)::numeric))),
+  constraint lift_sets_lift_check CHECK (((lift IS NULL) OR (lift = ANY (ARRAY['squat'::text, 'rdl'::text, 'bench'::text, 'hip'::text, 'clean'::text])))),
+  constraint lift_sets_name_check CHECK (((length(name) >= 1) AND (length(name) <= 80))),
+  constraint lift_sets_reps_check CHECK (((reps >= 1) AND (reps <= 20))),
+  constraint lift_sets_rir_check CHECK (((rir >= 0) AND (rir <= 6)))
+);
+
+create table public.lineups (
+  team_id text default private.my_team() not null,
+  kind text not null,
+  ref_id uuid not null,
+  set_no smallint default 1 not null,
+  data jsonb default '{}'::jsonb not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint lineups_pkey PRIMARY KEY (team_id, kind, ref_id, set_no),
+  constraint lineups_kind_check CHECK ((kind = ANY (ARRAY['event'::text, 'friendly'::text]))),
+  constraint lineups_set_no_check CHECK (((set_no >= 1) AND (set_no <= 5)))
 );
 
 create table public.logs (
-  id         uuid primary key default gen_random_uuid(),
-  player_id  uuid not null references public.players(id) on delete cascade,
-  author     uuid default auth.uid() references auth.users(id) on delete set null,
-  date       date not null,
-  type       text not null check (type in ('A','B','team','act','match','other')),
-  minutes    int  not null check (minutes between 1 and 400),
-  rpe        int  not null check (rpe between 0 and 10),
-  jumps      int  check (jumps between 0 and 2000),
-  pain_area  text check (pain_area in ('knee','shoulder','ankle','back')),
-  pain       int  not null default 0 check (pain between 0 and 10),
-  note       text,
-  created_at timestamptz not null default now()
+  id uuid default gen_random_uuid() not null,
+  player_id uuid not null,
+  author uuid default auth.uid(),
+  date date not null,
+  type text not null,
+  minutes integer not null,
+  rpe integer not null,
+  jumps integer,
+  pain_area text,
+  pain integer default 0 not null,
+  note text,
+  created_at timestamp with time zone default now() not null,
+  completion text,
+  constraint logs_pkey PRIMARY KEY (id),
+  constraint logs_author_fkey FOREIGN KEY (author) REFERENCES auth.users(id) ON DELETE SET NULL,
+  constraint logs_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  constraint logs_completion_check CHECK (((completion IS NULL) OR (completion = ANY (ARRAY['all'::text, 'most'::text, 'part'::text, 'little'::text, 'none'::text])))),
+  constraint logs_jumps_check CHECK (((jumps >= 0) AND (jumps <= 2000))),
+  constraint logs_minutes_check CHECK (((minutes >= 1) AND (minutes <= 400))),
+  constraint logs_pain_area_check CHECK ((pain_area = ANY (ARRAY['knee'::text, 'shoulder'::text, 'ankle'::text, 'back'::text, 'wrist'::text, 'finger'::text]))),
+  constraint logs_pain_check CHECK (((pain >= 0) AND (pain <= 10))),
+  constraint logs_rpe_check CHECK (((rpe >= 0) AND (rpe <= 10))),
+  constraint logs_type_check CHECK ((type = ANY (ARRAY['A'::text, 'B'::text, 'team'::text, 'act'::text, 'match'::text, 'other'::text])))
 );
 
-create index tests_player_idx on public.tests (player_id, date);
-create index logs_player_idx  on public.logs  (player_id, date);
-create index profiles_player_idx on public.profiles (player_id);
-create index logs_author_idx on public.logs (author);
+create table public.notices (
+  id uuid default gen_random_uuid() not null,
+  title text not null,
+  body text,
+  pinned boolean default false not null,
+  notify boolean default true not null,
+  author uuid default auth.uid(),
+  created_at timestamp with time zone default now() not null,
+  team_id text default private.my_team() not null,
+  constraint notices_pkey PRIMARY KEY (id),
+  constraint notices_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id),
+  constraint notices_body_check CHECK ((char_length(body) <= 2000)),
+  constraint notices_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 80)))
+);
 
--- ---------- 권한 확인 함수 ----------
--- REST API(/rpc)로 노출되지 않도록 비공개 스키마에 둔다
-create schema if not exists private;
-grant usage on schema private to anon, authenticated;
+create table public.open_sessions (
+  id uuid default gen_random_uuid() not null,
+  date date not null,
+  start_time text,
+  end_time text,
+  place text,
+  note text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone default now() not null,
+  team_id text default private.my_team() not null,
+  constraint open_sessions_pkey PRIMARY KEY (id),
+  constraint open_sessions_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL,
+  constraint open_sessions_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id)
+);
 
+create table public.pain_checks (
+  id uuid default gen_random_uuid() not null,
+  player_id uuid not null,
+  date date default CURRENT_DATE not null,
+  area text not null,
+  during integer,
+  morning integer,
+  rest boolean default false not null,
+  note text,
+  author uuid default auth.uid(),
+  created_at timestamp with time zone default now() not null,
+  constraint pain_checks_pkey PRIMARY KEY (id),
+  constraint pain_checks_author_fkey FOREIGN KEY (author) REFERENCES auth.users(id) ON DELETE SET NULL,
+  constraint pain_checks_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  constraint pain_checks_area_check CHECK ((area = ANY (ARRAY['knee'::text, 'shoulder'::text, 'ankle'::text, 'back'::text, 'wrist'::text, 'finger'::text]))),
+  constraint pain_checks_during_check CHECK (((during >= 0) AND (during <= 10))),
+  constraint pain_checks_morning_check CHECK (((morning >= 0) AND (morning <= 10)))
+);
 
-create or replace function private.my_role() returns text
-language sql stable security definer set search_path = public as $$
-  select role from public.profiles where id = auth.uid()
-$$;
+create table public.player_contacts (
+  player_id uuid not null,
+  phone text,
+  updated_at timestamp with time zone default now() not null,
+  constraint player_contacts_pkey PRIMARY KEY (player_id),
+  constraint player_contacts_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  constraint player_contacts_phone_check CHECK ((phone ~ '^[0-9+ -]{7,20}$'::text))
+);
 
-create or replace function private.is_coach() returns boolean
-language sql stable security definer set search_path = public as $$
-  select coalesce((select role = 'coach' from public.profiles where id = auth.uid()), false)
-$$;
+create table public.player_private (
+  player_id uuid not null,
+  height numeric,
+  weight numeric,
+  updated_at timestamp with time zone default now() not null,
+  constraint player_private_pkey PRIMARY KEY (player_id),
+  constraint player_private_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  constraint player_private_height_check CHECK (((height >= (140)::numeric) AND (height <= (220)::numeric))),
+  constraint player_private_weight_check CHECK (((weight >= (40)::numeric) AND (weight <= (150)::numeric)))
+);
 
-create or replace function private.is_member() returns boolean
-language sql stable security definer set search_path = public as $$
-  select coalesce((select role in ('player','coach') from public.profiles where id = auth.uid()), false)
-$$;
+create table public.practice_plans (
+  date date not null,
+  title text,
+  goal text,
+  blocks jsonb default '[]'::jsonb not null,
+  published boolean default true not null,
+  author uuid default auth.uid(),
+  updated_at timestamp with time zone default now() not null,
+  team_id text default private.my_team() not null,
+  constraint practice_plans_pkey PRIMARY KEY (team_id, date),
+  constraint practice_plans_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id),
+  constraint practice_plans_blocks_check CHECK (((jsonb_typeof(blocks) = 'array'::text) AND (length((blocks)::text) < 20000))),
+  constraint practice_plans_goal_check CHECK ((char_length(goal) <= 200)),
+  constraint practice_plans_title_check CHECK ((char_length(title) <= 60))
+);
 
-create or replace function private.my_player_id() returns uuid
-language sql stable security definer set search_path = public as $$
-  select player_id from public.profiles where id = auth.uid()
-$$;
+create table public.practice_times (
+  key text not null,
+  start_time time without time zone not null,
+  end_time time without time zone,
+  note text,
+  created_at timestamp with time zone default now() not null,
+  team_id text default private.my_team() not null,
+  constraint practice_times_pkey PRIMARY KEY (team_id, key),
+  constraint practice_times_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id),
+  constraint practice_times_key_check CHECK (((key = ANY (ARRAY['S1'::text, 'S2'::text])) OR (key ~ '^\d{4}-\d{2}-\d{2}$'::text))),
+  constraint practice_times_note_check CHECK ((char_length(note) <= 60))
+);
 
--- 가입하면 profiles 에 'pending' 으로 자동 등록
-create or replace function private.handle_new_user() returns trigger
-language plpgsql security definer set search_path = public as $$
+create table public.program_edits (
+  id uuid default gen_random_uuid() not null,
+  player_id uuid,
+  slot text not null,
+  block text not null,
+  op text not null,
+  name text not null,
+  rx text,
+  cue text,
+  author uuid default auth.uid(),
+  created_at timestamp with time zone default now() not null,
+  team_id text default private.my_team() not null,
+  constraint program_edits_pkey PRIMARY KEY (id),
+  constraint program_edits_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  constraint program_edits_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id),
+  constraint program_edits_block_check CHECK (((char_length(block) >= 1) AND (char_length(block) <= 30))),
+  constraint program_edits_cue_check CHECK ((char_length(cue) <= 100)),
+  constraint program_edits_name_check CHECK (((char_length(name) >= 1) AND (char_length(name) <= 80))),
+  constraint program_edits_op_check CHECK ((op = ANY (ARRAY['add'::text, 'remove'::text]))),
+  constraint program_edits_rx_check CHECK ((char_length(rx) <= 40)),
+  constraint program_edits_slot_check CHECK ((slot = ANY (ARRAY['gymA'::text, 'gymB'::text, 'bwU'::text, 'bwL'::text, 'act'::text, 'team'::text, 'recover'::text, 'prep'::text])))
+);
+
+create table public.push_subs (
+  endpoint text not null,
+  user_id uuid default auth.uid() not null,
+  player_id uuid,
+  p256dh text not null,
+  auth text not null,
+  morning boolean default true not null,
+  evening boolean default true not null,
+  train_days date[] default '{}'::date[] not null,
+  updated_at timestamp with time zone default now() not null,
+  notice boolean default true not null,
+  morning_at smallint default 8 not null,
+  evening_at smallint default 22 not null,
+  constraint push_subs_pkey PRIMARY KEY (endpoint),
+  constraint push_subs_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  constraint push_subs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE,
+  constraint push_subs_evening_at_check CHECK (((evening_at >= 0) AND (evening_at <= 23))),
+  constraint push_subs_morning_at_check CHECK (((morning_at >= 0) AND (morning_at <= 23)))
+);
+
+create table public.scout_matches (
+  id uuid default gen_random_uuid() not null,
+  team_id text default private.my_team() not null,
+  title text not null,
+  date date,
+  opponent text,
+  yt text,
+  note text,
+  created_by uuid default auth.uid(),
+  created_at timestamp with time zone default now() not null,
+  constraint scout_matches_pkey PRIMARY KEY (id),
+  constraint scout_matches_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL,
+  constraint scout_matches_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id),
+  constraint scout_matches_note_check CHECK (((note IS NULL) OR (length(note) <= 300))),
+  constraint scout_matches_opponent_check CHECK (((opponent IS NULL) OR (length(opponent) <= 60))),
+  constraint scout_matches_title_check CHECK (((length(title) >= 1) AND (length(title) <= 80))),
+  constraint scout_matches_yt_check CHECK (((yt IS NULL) OR (length(yt) <= 200)))
+);
+
+create table public.team_off (
+  date date not null,
+  note text,
+  created_at timestamp with time zone default now() not null,
+  team_id text default private.my_team() not null,
+  constraint team_off_pkey PRIMARY KEY (team_id, date),
+  constraint team_off_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id),
+  constraint team_off_note_check CHECK (((note IS NULL) OR (length(note) <= 60)))
+);
+
+create table public.tests (
+  id uuid default gen_random_uuid() not null,
+  player_id uuid not null,
+  date date not null,
+  reach numeric,
+  cmj numeric,
+  block numeric,
+  approach numeric,
+  bal_l boolean,
+  bal_r boolean,
+  hs_stage integer,
+  hs_sec integer,
+  squat numeric,
+  rdl numeric,
+  pull integer,
+  created_at timestamp with time zone default now() not null,
+  side_l integer,
+  side_r integer,
+  sorensen integer,
+  flexor integer,
+  author uuid default auth.uid(),
+  plank integer,
+  hs_walk numeric,
+  vert numeric,
+  max_vert numeric,
+  rsi numeric,
+  ktw_l numeric,
+  ktw_r numeric,
+  ir_d numeric,
+  ir_n numeric,
+  er_d numeric,
+  er_n numeric,
+  hop_l numeric,
+  hop_r numeric,
+  side_step integer,
+  pro_agility numeric,
+  constraint tests_pkey PRIMARY KEY (id),
+  constraint tests_author_fkey FOREIGN KEY (author) REFERENCES auth.users(id) ON DELETE SET NULL,
+  constraint tests_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  constraint tests_er_d_check CHECK (((er_d >= (0)::numeric) AND (er_d <= (160)::numeric))),
+  constraint tests_er_n_check CHECK (((er_n >= (0)::numeric) AND (er_n <= (160)::numeric))),
+  constraint tests_flexor_check CHECK (((flexor >= 0) AND (flexor <= 900))),
+  constraint tests_hop_l_check CHECK (((hop_l >= (0)::numeric) AND (hop_l <= (400)::numeric))),
+  constraint tests_hop_r_check CHECK (((hop_r >= (0)::numeric) AND (hop_r <= (400)::numeric))),
+  constraint tests_hs_stage_check CHECK (((hs_stage >= 1) AND (hs_stage <= 5))),
+  constraint tests_hs_walk_check CHECK (((hs_walk >= (0)::numeric) AND (hs_walk <= (100)::numeric))),
+  constraint tests_ir_d_check CHECK (((ir_d >= (0)::numeric) AND (ir_d <= (120)::numeric))),
+  constraint tests_ir_n_check CHECK (((ir_n >= (0)::numeric) AND (ir_n <= (120)::numeric))),
+  constraint tests_ktw_l_check CHECK (((ktw_l >= (0)::numeric) AND (ktw_l <= (30)::numeric))),
+  constraint tests_ktw_r_check CHECK (((ktw_r >= (0)::numeric) AND (ktw_r <= (30)::numeric))),
+  constraint tests_max_vert_check CHECK (((max_vert >= (0)::numeric) AND (max_vert <= (150)::numeric))),
+  constraint tests_plank_check CHECK (((plank >= 0) AND (plank <= 900))),
+  constraint tests_pro_agility_check CHECK (((pro_agility >= (3)::numeric) AND (pro_agility <= (15)::numeric))),
+  constraint tests_rsi_check CHECK (((rsi >= (0)::numeric) AND (rsi <= (5)::numeric))),
+  constraint tests_side_l_check CHECK (((side_l >= 0) AND (side_l <= 600))),
+  constraint tests_side_r_check CHECK (((side_r >= 0) AND (side_r <= 600))),
+  constraint tests_side_step_check CHECK (((side_step >= 0) AND (side_step <= 120))),
+  constraint tests_sorensen_check CHECK (((sorensen >= 0) AND (sorensen <= 600))),
+  constraint tests_vert_check CHECK (((vert >= (0)::numeric) AND (vert <= (150)::numeric)))
+);
+
+create table public.training_notes (
+  id uuid default gen_random_uuid() not null,
+  player_id uuid not null,
+  date date not null,
+  good text,
+  fix text,
+  next text,
+  body text,
+  shared boolean default false not null,
+  author uuid default auth.uid(),
+  updated_at timestamp with time zone default now() not null,
+  constraint training_notes_player_id_date_key UNIQUE (player_id, date),
+  constraint training_notes_pkey PRIMARY KEY (id),
+  constraint training_notes_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  constraint training_notes_body_check CHECK ((char_length(body) <= 2000)),
+  constraint training_notes_fix_check CHECK ((char_length(fix) <= 500)),
+  constraint training_notes_good_check CHECK ((char_length(good) <= 500)),
+  constraint training_notes_next_check CHECK ((char_length(next) <= 300))
+);
+
+create table public.videos (
+  id uuid default gen_random_uuid() not null,
+  kind text default 'playlist'::text not null,
+  category text default 'practice'::text not null,
+  title text not null,
+  yt text not null,
+  date date,
+  note text,
+  sort integer default 0 not null,
+  author uuid default auth.uid(),
+  created_at timestamp with time zone default now() not null,
+  team_id text default private.my_team() not null,
+  constraint videos_pkey PRIMARY KEY (id),
+  constraint videos_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id),
+  constraint videos_category_check CHECK ((category = ANY (ARRAY['practice'::text, 'friendly'::text, 'camp'::text, 'match'::text, 'etc'::text]))),
+  constraint videos_kind_check CHECK ((kind = ANY (ARRAY['playlist'::text, 'video'::text]))),
+  constraint videos_note_check CHECK ((char_length(note) <= 200)),
+  constraint videos_title_check CHECK (((char_length(title) >= 1) AND (char_length(title) <= 80))),
+  constraint videos_yt_check CHECK ((yt ~ '^[A-Za-z0-9_-]{6,64}$'::text))
+);
+
+create table public.wellness (
+  id uuid default gen_random_uuid() not null,
+  player_id uuid not null,
+  date date not null,
+  sleep smallint not null,
+  fatigue smallint not null,
+  soreness smallint not null,
+  stress smallint not null,
+  mood smallint not null,
+  author uuid default auth.uid(),
+  created_at timestamp with time zone default now() not null,
+  constraint wellness_player_id_date_key UNIQUE (player_id, date),
+  constraint wellness_pkey PRIMARY KEY (id),
+  constraint wellness_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  constraint wellness_fatigue_check CHECK (((fatigue >= 1) AND (fatigue <= 5))),
+  constraint wellness_mood_check CHECK (((mood >= 1) AND (mood <= 5))),
+  constraint wellness_sleep_check CHECK (((sleep >= 1) AND (sleep <= 5))),
+  constraint wellness_soreness_check CHECK (((soreness >= 1) AND (soreness <= 5))),
+  constraint wellness_stress_check CHECK (((stress >= 1) AND (stress <= 5)))
+);
+
+create table public.open_votes (
+  session_id uuid not null,
+  player_id uuid not null,
+  going boolean not null,
+  updated_at timestamp with time zone default now() not null,
+  constraint open_votes_pkey PRIMARY KEY (session_id, player_id),
+  constraint open_votes_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  constraint open_votes_session_id_fkey FOREIGN KEY (session_id) REFERENCES open_sessions(id) ON DELETE CASCADE
+);
+
+create table public.scout_events (
+  id uuid default gen_random_uuid() not null,
+  match_id uuid not null,
+  set_no smallint default 1 not null,
+  side text not null,
+  player_id uuid,
+  opp_no smallint,
+  skill text not null,
+  kind text,
+  len text,
+  zone smallint,
+  grade text not null,
+  t numeric,
+  author uuid default auth.uid(),
+  created_at timestamp with time zone default now() not null,
+  src text,
+  constraint scout_events_pkey PRIMARY KEY (id),
+  constraint scout_events_author_fkey FOREIGN KEY (author) REFERENCES auth.users(id) ON DELETE SET NULL,
+  constraint scout_events_match_id_fkey FOREIGN KEY (match_id) REFERENCES scout_matches(id) ON DELETE CASCADE,
+  constraint scout_events_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE SET NULL,
+  constraint scout_events_grade_check CHECK ((grade = ANY (ARRAY['#'::text, '+'::text, '!'::text, '-'::text, '/'::text, '='::text]))),
+  constraint scout_events_kind_check CHECK (((kind IS NULL) OR (length(kind) <= 20))),
+  constraint scout_events_len_check CHECK (((len IS NULL) OR (len = ANY (ARRAY['short'::text, 'long'::text])))),
+  constraint scout_events_opp_no_check CHECK (((opp_no IS NULL) OR ((opp_no >= 0) AND (opp_no <= 99)))),
+  constraint scout_events_set_no_check CHECK (((set_no >= 1) AND (set_no <= 5))),
+  constraint scout_events_side_check CHECK ((side = ANY (ARRAY['us'::text, 'opp'::text]))),
+  constraint scout_events_skill_check CHECK ((skill = ANY (ARRAY['serve'::text, 'receive'::text, 'attack'::text, 'block'::text, 'dig'::text, 'set'::text]))),
+  constraint scout_events_src_check CHECK (((src IS NULL) OR (src = ANY (ARRAY['L'::text, 'M'::text, 'R'::text, 'P'::text, 'B'::text])))),
+  constraint scout_events_t_check CHECK (((t IS NULL) OR ((t >= (0)::numeric) AND (t < (36000)::numeric)))),
+  constraint scout_events_zone_check CHECK (((zone IS NULL) OR ((zone >= 1) AND (zone <= 9))))
+);
+
+create table public.scout_points (
+  id uuid default gen_random_uuid() not null,
+  match_id uuid not null,
+  set_no smallint default 1 not null,
+  rot smallint not null,
+  serve text not null,
+  won boolean not null,
+  t numeric,
+  author uuid default auth.uid(),
+  created_at timestamp with time zone default now() not null,
+  constraint scout_points_pkey PRIMARY KEY (id),
+  constraint scout_points_author_fkey FOREIGN KEY (author) REFERENCES auth.users(id) ON DELETE SET NULL,
+  constraint scout_points_match_id_fkey FOREIGN KEY (match_id) REFERENCES scout_matches(id) ON DELETE CASCADE,
+  constraint scout_points_rot_check CHECK (((rot >= 1) AND (rot <= 6))),
+  constraint scout_points_serve_check CHECK ((serve = ANY (ARRAY['us'::text, 'opp'::text]))),
+  constraint scout_points_set_no_check CHECK (((set_no >= 1) AND (set_no <= 5))),
+  constraint scout_points_t_check CHECK (((t IS NULL) OR ((t >= (0)::numeric) AND (t < (36000)::numeric))))
+);
+
+create table public.jp_results (
+  id bigint default nextval('jp_results_id_seq'::regclass) not null,
+  tourn text not null,
+  gender text not null,
+  year smallint not null,
+  place smallint not null,
+  school_id text,
+  name_ja text not null,
+  constraint jp_results_pkey PRIMARY KEY (id),
+  constraint jp_results_school_id_fkey FOREIGN KEY (school_id) REFERENCES jp_schools(id) ON DELETE SET NULL,
+  constraint jp_results_gender_check CHECK ((gender = ANY (ARRAY['m'::text, 'w'::text]))),
+  constraint jp_results_place_check CHECK ((place = ANY (ARRAY[1, 2, 3]))),
+  constraint jp_results_tourn_check CHECK ((tourn = ANY (ARRAY['haruko'::text, 'ih'::text, 'kokutai'::text])))
+);
+
+create table public.jp_videos (
+  id text not null,
+  source text not null,
+  title text not null,
+  published text,
+  len text,
+  year smallint,
+  tourn text,
+  gender text,
+  rnd text,
+  schools text[] default '{}'::text[] not null,
+  added_at timestamp with time zone default now() not null,
+  constraint jp_videos_pkey PRIMARY KEY (id),
+  constraint jp_videos_source_fkey FOREIGN KEY (source) REFERENCES jp_sources(id) ON DELETE CASCADE
+);
+
+-- ========== 3. 색인 ==========
+CREATE INDEX absences_date ON public.absences USING btree (date);
+CREATE INDEX entries_player ON public.entries USING btree (player_id);
+CREATE INDEX entries_ref ON public.entries USING btree (kind, ref_id);
+CREATE INDEX event_votes_player ON public.event_votes USING btree (player_id);
+CREATE INDEX events_team ON public.events USING btree (team_id);
+CREATE INDEX friendlies_date ON public.friendlies USING btree (date);
+CREATE INDEX friendlies_team ON public.friendlies USING btree (team_id);
+CREATE INDEX jp_matches_key ON public.jp_matches USING btree (tourn, year);
+CREATE INDEX jp_results_school ON public.jp_results USING btree (school_id);
+CREATE INDEX jp_videos_schools ON public.jp_videos USING gin (schools);
+CREATE INDEX jp_videos_tourn ON public.jp_videos USING btree (tourn, year);
+CREATE INDEX lift_sets_player_date ON public.lift_sets USING btree (player_id, date);
+CREATE INDEX logs_author_idx ON public.logs USING btree (author);
+CREATE INDEX logs_player_idx ON public.logs USING btree (player_id, date);
+CREATE INDEX notices_created ON public.notices USING btree (created_at DESC);
+CREATE INDEX notices_team ON public.notices USING btree (team_id);
+CREATE INDEX open_sessions_created_by ON public.open_sessions USING btree (created_by);
+CREATE INDEX open_sessions_date ON public.open_sessions USING btree (date);
+CREATE INDEX open_sessions_team ON public.open_sessions USING btree (team_id);
+CREATE INDEX open_votes_player ON public.open_votes USING btree (player_id);
+CREATE INDEX pain_checks_author ON public.pain_checks USING btree (author);
+CREATE INDEX pain_checks_player ON public.pain_checks USING btree (player_id);
+CREATE INDEX players_team ON public.players USING btree (team_id);
+CREATE INDEX practice_plans_team ON public.practice_plans USING btree (team_id);
+CREATE INDEX practice_times_team ON public.practice_times USING btree (team_id);
+CREATE INDEX profiles_player_idx ON public.profiles USING btree (player_id);
+CREATE INDEX profiles_team ON public.profiles USING btree (team_id);
+CREATE INDEX program_edits_player ON public.program_edits USING btree (player_id);
+CREATE INDEX program_edits_slot ON public.program_edits USING btree (slot);
+CREATE INDEX program_edits_team ON public.program_edits USING btree (team_id);
+CREATE INDEX push_subs_player ON public.push_subs USING btree (player_id);
+CREATE INDEX push_subs_user ON public.push_subs USING btree (user_id);
+CREATE INDEX scout_events_author ON public.scout_events USING btree (author);
+CREATE INDEX scout_events_match ON public.scout_events USING btree (match_id);
+CREATE INDEX scout_events_player ON public.scout_events USING btree (player_id);
+CREATE INDEX scout_matches_by ON public.scout_matches USING btree (created_by);
+CREATE INDEX scout_matches_team ON public.scout_matches USING btree (team_id);
+CREATE INDEX scout_points_author ON public.scout_points USING btree (author);
+CREATE INDEX scout_points_match ON public.scout_points USING btree (match_id);
+CREATE INDEX team_off_team ON public.team_off USING btree (team_id);
+CREATE INDEX tests_author ON public.tests USING btree (author);
+CREATE INDEX tests_player_idx ON public.tests USING btree (player_id, date);
+CREATE INDEX videos_team ON public.videos USING btree (team_id);
+
+-- ========== 4. 함수 (private = 권한 확인·내부용, public = 앱이 부르는 RPC) ==========
+CREATE OR REPLACE FUNCTION private.can(perm text)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce((
+    select case
+      when p.role = 'coach' then true
+      when p.role <> 'player' then false
+      when perm = 'schedule' then pl.title = 'vice'
+      when perm = 'notice' then pl.title in ('vice', 'treasurer')
+      when perm = 'roster' then pl.title in ('vice', 'treasurer')
+      when perm = 'training' then pl.title = 'trainer'
+      when perm = 'practice' then pl.title = 'ops'
+      when perm = 'attend' then pl.title in ('ops', 'vice')
+      when perm = 'analysis' then pl.title = 'analyst'
+      when perm = 'video' then pl.title = 'vice' or coalesce(pl.media, false)
+      else false end
+    from public.profiles p left join public.players pl on pl.id = p.player_id
+    where p.id = auth.uid()), false)
+$function$;
+
+CREATE OR REPLACE FUNCTION private.guard_health_custom()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public', 'private'
+AS $function$
 begin
-  insert into public.profiles (id, email) values (new.id, new.email);
+  if tg_op = 'UPDATE' and new.custom is distinct from old.custom and not (private.is_coach() or private.can('training')) then
+    new.custom := old.custom;
+  elsif tg_op = 'INSERT' and not (private.is_coach() or private.can('training')) then
+    new.custom := '{}'::jsonb;
+  end if;
   return new;
-end;
-$$;
+end $function$;
 
-create trigger on_auth_user_created
-  after insert on auth.users
-  for each row execute function private.handle_new_user();
+CREATE OR REPLACE FUNCTION private.handle_new_user()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare t text := coalesce(new.raw_user_meta_data->>'team', 'men');
+begin
+  if t not in (select id from public.teams) then t := 'men'; end if;
+  insert into public.profiles (id, email, team_id) values (new.id, new.email, t);
+  return new;
+end $function$;
 
-revoke execute on function private.handle_new_user() from public, anon, authenticated;
+CREATE OR REPLACE FUNCTION private.is_coach()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select coalesce((select role = 'coach' from public.profiles where id = auth.uid()), false)
+$function$;
 
--- ---------- 행 단위 보안 (RLS) ----------
+CREATE OR REPLACE FUNCTION private.is_member()
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select coalesce((select role in ('player','coach') from public.profiles where id = auth.uid()), false)
+$function$;
 
-alter table public.settings enable row level security;
-alter table public.players  enable row level security;
-alter table public.profiles enable row level security;
-alter table public.health   enable row level security;
-alter table public.tests    enable row level security;
-alter table public.logs     enable row level security;
+CREATE OR REPLACE FUNCTION private.jp_nat_call()
+ RETURNS bigint
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select net.http_post(
+    url := 'https://juhcaodotxspzzzfzrnt.supabase.co/functions/v1/jp-nat',
+    body := '{}'::jsonb,
+    headers := jsonb_build_object('Content-Type', 'application/json',
+      'x-cron', (select decrypted_secret from vault.decrypted_secrets where name = 'push_cron')),
+    timeout_milliseconds := 150000)
+$function$;
 
--- 설정, 선수 명단, 측정값: 승인된 팀원은 읽기, 담당자만 쓰기
-create policy "members read settings" on public.settings for select using (private.is_member());
-create policy "coach writes settings" on public.settings for all using (private.is_coach()) with check (private.is_coach());
+CREATE OR REPLACE FUNCTION private.jp_skip_old()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+begin
+  if new.year is not null and new.year < 2010 then return null; end if;
+  return new;
+end $function$;
 
-create policy "members read players" on public.players for select using (private.is_member());
-create policy "coach writes players" on public.players for all using (private.is_coach()) with check (private.is_coach());
+CREATE OR REPLACE FUNCTION private.jp_sync_call(mode text DEFAULT 'new'::text)
+ RETURNS bigint
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select net.http_post(
+    url := 'https://juhcaodotxspzzzfzrnt.supabase.co/functions/v1/jp-sync',
+    body := jsonb_build_object('mode', mode),
+    headers := jsonb_build_object('Content-Type', 'application/json',
+      'x-cron', (select decrypted_secret from vault.decrypted_secrets where name = 'push_cron')),
+    timeout_milliseconds := 150000)
+$function$;
 
-create policy "members read tests" on public.tests for select using (private.is_member());
-create policy "coach writes tests" on public.tests for all using (private.is_coach()) with check (private.is_coach());
+CREATE OR REPLACE FUNCTION private.move_body_private()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  if new.height is not null or new.weight is not null then
+    insert into public.player_private (player_id, height, weight, updated_at) values (new.id, new.height, new.weight, now())
+      on conflict (player_id) do update set height = coalesce(excluded.height, public.player_private.height), weight = coalesce(excluded.weight, public.player_private.weight), updated_at = now();
+    new.height := null; new.weight := null;
+  end if;
+  return new;
+end $function$;
 
--- 계정: 본인과 담당자만 보기, 역할·선수 연결은 담당자만 변경 (본인이 스스로 coach 가 될 수 없음)
-create policy "self or coach reads profile" on public.profiles for select using (id = auth.uid() or private.is_coach());
-create policy "coach updates profiles" on public.profiles for update using (private.is_coach()) with check (private.is_coach());
+CREATE OR REPLACE FUNCTION private.my_player_id()
+ RETURNS uuid
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select p.player_id from public.profiles p join public.players pl on pl.id = p.player_id and pl.team_id = p.team_id where p.id = auth.uid()
+$function$;
 
--- 부상·통증: 담당자는 전체, 선수는 자기 것만 보기. 쓰기는 담당자만
-create policy "coach or self reads health" on public.health for select
-  using (private.is_coach() or (private.is_member() and player_id = private.my_player_id()));
-create policy "coach writes health" on public.health for all using (private.is_coach()) with check (private.is_coach());
+CREATE OR REPLACE FUNCTION private.my_role()
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select role from public.profiles where id = auth.uid()
+$function$;
 
--- 세션 기록: 담당자는 전체, 선수는 자기 기록만 보고 남김. 삭제는 담당자만
-create policy "coach or self reads logs" on public.logs for select
-  using (private.is_coach() or (private.is_member() and player_id = private.my_player_id()));
-create policy "coach or self inserts logs" on public.logs for insert
-  with check (private.is_coach() or (private.my_role() = 'player' and player_id = private.my_player_id() and author = auth.uid()));
-create policy "coach deletes logs" on public.logs for delete using (private.is_coach());
+CREATE OR REPLACE FUNCTION private.notice_push()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  if new.notify then perform private.push_call('notice', jsonb_build_object('title', new.title, 'team', new.team_id)); end if;
+  return new;
+end $function$;
 
--- ---------- 초기 데이터 ----------
+CREATE OR REPLACE FUNCTION private.player_team(pid uuid)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select team_id from public.players where id = pid
+$function$;
 
-insert into public.settings (id, name, block_start, start_date, end_date)
-values (1, '서울대배', '2026-10-26', '2026-11-21', '2026-11-22');
+CREATE OR REPLACE FUNCTION private.push_call(kind text, extra jsonb DEFAULT '{}'::jsonb)
+ RETURNS bigint
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select net.http_post(
+    url := 'https://juhcaodotxspzzzfzrnt.supabase.co/functions/v1/push',
+    body := jsonb_build_object('kind', kind) || extra,
+    headers := jsonb_build_object('Content-Type', 'application/json',
+      'x-cron', (select decrypted_secret from vault.decrypted_secrets where name = 'push_cron')),
+    timeout_milliseconds := 20000)
+$function$;
 
-insert into public.players (name, pos, sort) values
-  ('손수호', 'OH', 1),
-  ('김도현', 'OH', 2),
-  ('최수혁', 'S',  3),
-  ('권병석', 'Li', 4),
-  ('박혁찬', 'Li', 5),
-  ('엄정호', 'OP', 6),
-  ('윤동우', 'OP', 7),
-  ('최지우', 'MB', 8),
-  ('박준서', 'MB', 9);
+CREATE OR REPLACE FUNCTION private.scout_team(mid uuid)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select team_id from public.scout_matches where id = mid
+$function$;
 
--- ---------- 담당자 지정 (사이트에서 처음 가입한 뒤 따로 실행) ----------
--- 아래 두 줄의 이메일을 내 가입 이메일로 바꿔서, 가입 후 SQL Editor 에서 한 번 실행하세요.
---
--- update public.profiles
---   set role = 'coach', player_id = (select id from public.players where name = '최수혁')
---   where email = '내-가입-이메일@example.com';
+CREATE OR REPLACE FUNCTION private.wipe_personal(pid uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  delete from public.player_contacts where player_id = pid;
+  delete from public.player_private where player_id = pid;
+  delete from public.health where player_id = pid;
+  delete from public.training_notes where player_id = pid;
+  delete from public.wellness where player_id = pid;
+  delete from public.pain_checks where player_id = pid;
+  delete from public.absences where player_id = pid;
+  delete from public.program_edits where player_id = pid;
+  delete from public.day_picks where player_id = pid;
+  delete from public.open_votes where player_id = pid;
+  delete from public.event_votes where player_id = pid;
+  delete from public.push_subs where player_id = pid or user_id in (select id from public.profiles where player_id = pid);
+  update public.players set height = null, weight = null, adjust = '{}'::jsonb where id = pid;
+end $function$;
 
--- ---------- 가입한 사람의 자기 정보 제출 (2026-10-22 추가) ----------
--- 승인 대기(pending) 상태에서만 제출·수정할 수 있고, 승인 후 수정은 담당자가 한다.
-create or replace function public.submit_my_info(info jsonb) returns uuid
-language plpgsql security definer set search_path = public as $$
+CREATE OR REPLACE FUNCTION public.jp_sync_now()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  if not private.is_coach() then raise exception 'forbidden'; end if;
+  perform private.jp_sync_call('new');
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.leave_team()
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare pid uuid := private.my_player_id(); me uuid := auth.uid(); tm text := private.my_team();
+begin
+  if me is null then raise exception '로그인이 필요해요' using errcode = '42501'; end if;
+  if private.is_coach() and (select count(*) from public.profiles where role = 'coach' and team_id = tm) <= 1 then
+    raise exception '마지막 관리자는 탈퇴할 수 없어요. 다른 사람을 관리자·주장으로 정한 뒤 해 주세요' using errcode = '42501';
+  end if;
+  if pid is not null then
+    perform private.wipe_personal(pid);
+    if not exists (select 1 from public.profiles where player_id = pid and id <> me) then delete from public.players where id = pid; end if;
+  end if;
+  delete from auth.users where id = me;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.push_gone(ep text)
+ RETURNS void
+ LANGUAGE sql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  delete from public.push_subs where endpoint = ep
+$function$;
+
+CREATE OR REPLACE FUNCTION public.push_keys()
+ RETURNS TABLE(pub text, priv text, cron text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select (select decrypted_secret from vault.decrypted_secrets where name = 'vapid_public'),
+         (select decrypted_secret from vault.decrypted_secrets where name = 'vapid_private'),
+         (select decrypted_secret from vault.decrypted_secrets where name = 'push_cron')
+$function$;
+
+CREATE OR REPLACE FUNCTION public.push_pubkey()
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select decrypted_secret from vault.decrypted_secrets where name = 'vapid_public'
+$function$;
+
+CREATE OR REPLACE FUNCTION public.push_set_vapid(pub text, priv text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  if exists (select 1 from vault.secrets where name = 'vapid_private') then return; end if;
+  perform vault.create_secret(pub, 'vapid_public');
+  perform vault.create_secret(priv, 'vapid_private');
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.push_targets(kind text)
+ RETURNS TABLE(endpoint text, p256dh text, auth text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  with t as (select (now() at time zone 'Asia/Seoul')::date as d, extract(hour from now() at time zone 'Asia/Seoul')::int as h)
+  select s.endpoint, s.p256dh, s.auth from public.push_subs s, t
+  where case kind
+    when 'morning' then s.player_id is not null and s.morning and s.morning_at = t.h
+      and not exists (select 1 from public.wellness w where w.player_id = s.player_id and w.date = t.d)
+    when 'evening' then s.player_id is not null and s.evening and s.evening_at = t.h and t.d = any(s.train_days)
+      and not exists (select 1 from public.logs l where l.player_id = s.player_id and l.date = t.d)
+    when 'notice' then s.notice
+    else false end
+$function$;
+
+CREATE OR REPLACE FUNCTION public.push_targets_team(kind text, team text)
+ RETURNS TABLE(endpoint text, p256dh text, auth text)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select t.endpoint, t.p256dh, t.auth from public.push_targets(kind) t
+  join public.push_subs s on s.endpoint = t.endpoint
+  join public.profiles p on p.id = s.user_id
+  where team is null or p.team_id = team
+$function$;
+
+CREATE OR REPLACE FUNCTION public.remove_member(target uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare t public.profiles%rowtype;
+begin
+  if not private.is_coach() then raise exception '관리자만 할 수 있어요' using errcode = '42501'; end if;
+  if target = auth.uid() then raise exception '내 계정은 여기서 없앨 수 없어요' using errcode = '42501'; end if;
+  select * into t from public.profiles where id = target;
+  if not found then return; end if;
+  if t.team_id is distinct from private.my_team() then raise exception '다른 팀 계정이에요' using errcode = '42501'; end if;
+  if t.role = 'pending' and t.player_id is not null
+     and not exists (select 1 from public.profiles o where o.player_id = t.player_id and o.id <> target) then
+    delete from public.players where id = t.player_id;
+  end if;
+  delete from auth.users where id = target;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.retire_member(target uuid, wipe_all boolean DEFAULT false)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare uids uuid[];
+begin
+  if not private.is_coach() then raise exception '관리자·주장만 할 수 있어요' using errcode = '42501'; end if;
+  if private.player_team(target) is distinct from private.my_team() then raise exception '다른 팀 선수예요' using errcode = '42501'; end if;
+  if target = private.my_player_id() then raise exception '내 계정은 설정 → 탈퇴로 해 주세요' using errcode = '42501'; end if;
+  select array_agg(id) into uids from public.profiles where player_id = target;
+  perform private.wipe_personal(target);
+  if wipe_all then delete from public.players where id = target;
+  else update public.players set alumni = true, left_on = (now() at time zone 'Asia/Seoul')::date, title = null, media = false, number = null, military = false where id = target;
+  end if;
+  if uids is not null then delete from auth.users where id = any(uids); end if;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.set_member_media(target uuid, on_ boolean)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  if not private.is_coach() then raise exception '관리자·주장만 할 수 있어요' using errcode = '42501'; end if;
+  if private.player_team(target) is distinct from private.my_team() then raise exception '다른 팀 선수예요' using errcode = '42501'; end if;
+  update public.players set media = coalesce(on_, false) where id = target;
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.set_member_title(target uuid, new_title text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare v_role text;
+begin
+  if not private.is_coach() then raise exception '관리자·주장만 할 수 있어요' using errcode = '42501'; end if;
+  if private.player_team(target) is distinct from private.my_team() then raise exception '다른 팀 선수예요' using errcode = '42501'; end if;
+  if new_title is not null and new_title not in ('admin', 'captain', 'vice', 'ops', 'treasurer', 'trainer', 'analyst') then raise exception '직책을 확인해 주세요' using errcode = '23514'; end if;
+  v_role := case when new_title in ('admin', 'captain') then 'coach' else 'player' end;
+  if target = private.my_player_id() and v_role <> 'coach' then raise exception '내 관리자 권한은 여기서 내려놓을 수 없어요' using errcode = '42501'; end if;
+  update public.players set title = new_title where id = target;
+  update public.profiles set role = v_role where player_id = target and role in ('player', 'coach');
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.submit_my_info(info jsonb)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
 declare
   me        public.profiles%rowtype;
   pid       uuid;
@@ -202,38 +1111,57 @@ declare
   v_height  numeric := nullif(info->>'height', '')::numeric;
   v_weight  numeric := nullif(info->>'weight', '')::numeric;
   v_exp     numeric := nullif(info->>'exp', '')::numeric;
+  v_number  int := nullif(info->>'number', '')::int;
   a_l int := coalesce(nullif(info->>'ankle_l', '')::int, 0);
   a_r int := coalesce(nullif(info->>'ankle_r', '')::int, 0);
-  p_knee int := coalesce(nullif(info#>>'{pain,knee}', '')::int, 0);
-  p_sh   int := coalesce(nullif(info#>>'{pain,shoulder}', '')::int, 0);
-  p_an   int := coalesce(nullif(info#>>'{pain,ankle}', '')::int, 0);
-  p_bk   int := coalesce(nullif(info#>>'{pain,back}', '')::int, 0);
+  v_inj jsonb := coalesce(info->'injuries', '[]'::jsonb);
+  v_pain jsonb := '{}'::jsonb;
+  mx jsonb := '{}'::jsonb;
+  a text; v jsonb; d int; m int; r boolean; any_flag boolean := false;
   v_adjust jsonb;
 begin
   select * into me from public.profiles where id = auth.uid();
   if not found then raise exception '로그인이 필요해요' using errcode = '42501'; end if;
-  if me.role <> 'pending' then raise exception '승인된 계정의 정보는 담당자가 수정해요' using errcode = '42501'; end if;
+  if not (me.role = 'pending' or me.player_id is null) then
+    raise exception '승인된 계정의 정보는 관리자가 수정해요' using errcode = '42501';
+  end if;
   if coalesce((info->>'consent')::boolean, false) is not true then raise exception '정보 사용 동의가 필요해요' using errcode = '23514'; end if;
   if v_name = '' or length(v_name) > 20 then raise exception '이름을 1–20자로 입력해 주세요' using errcode = '23514'; end if;
   if v_pos is null or v_pos not in ('OH','MB','OP','S','Li') then raise exception '포지션을 골라 주세요' using errcode = '23514'; end if;
-  if v_wexp is not null and v_wexp not in ('none','lt6','gte6') then raise exception '웨이트 경험을 골라 주세요' using errcode = '23514'; end if;
+  if v_wexp is not null and v_wexp not in ('none','machine','free','oly') then raise exception '웨이트 경험을 골라 주세요' using errcode = '23514'; end if;
   if v_height is not null and (v_height < 140 or v_height > 220) then raise exception '키를 확인해 주세요' using errcode = '23514'; end if;
   if v_weight is not null and (v_weight < 40 or v_weight > 150) then raise exception '몸무게를 확인해 주세요' using errcode = '23514'; end if;
   if v_exp is not null and (v_exp < 0 or v_exp > 20) then raise exception '배구 경력을 확인해 주세요' using errcode = '23514'; end if;
-  if least(a_l, a_r) < 0 or greatest(a_l, a_r) > 30 then raise exception '발목 염좌 횟수를 확인해 주세요' using errcode = '23514'; end if;
-  if least(p_knee, p_sh, p_an, p_bk) < 0 or greatest(p_knee, p_sh, p_an, p_bk) > 10 then raise exception '통증은 0–10으로 입력해 주세요' using errcode = '23514'; end if;
+  if v_number is not null and (v_number < 0 or v_number > 99) then raise exception '등번호는 0–99로 입력해 주세요' using errcode = '23514'; end if;
+  if least(a_l, a_r) < 0 or greatest(a_l, a_r) > 30 then raise exception '발목 다친 횟수를 확인해 주세요' using errcode = '23514'; end if;
+  if jsonb_typeof(v_inj) <> 'array' or jsonb_array_length(v_inj) > 20 or length(v_inj::text) > 6000 then
+    raise exception '부상 이력을 확인해 주세요' using errcode = '23514';
+  end if;
+
+  foreach a in array array['knee','shoulder','ankle','back','wrist','finger'] loop
+    v := info->'pain'->a;
+    if v is null or jsonb_typeof(v) = 'null' then d := 0; m := 0; r := false;
+    elsif jsonb_typeof(v) = 'object' then
+      d := coalesce(nullif(v->>'d', '')::int, 0); m := coalesce(nullif(v->>'m', '')::int, 0); r := coalesce((v->>'r')::boolean, false);
+    else d := coalesce(nullif(v#>>'{}', '')::int, 0); m := 0; r := false;
+    end if;
+    if least(d, m) < 0 or greatest(d, m) > 10 then raise exception '통증은 0–10으로 입력해 주세요' using errcode = '23514'; end if;
+    v_pain := v_pain || jsonb_build_object(a, jsonb_build_object('d', d, 'm', m, 'r', r));
+    mx := mx || jsonb_build_object(a, case when r then 10 else greatest(d, m) end);
+    if r or greatest(d, m) >= 3 then any_flag := true; end if;
+  end loop;
 
   v_adjust := jsonb_strip_nulls(jsonb_build_object(
-    'plyo',     case when p_an >= 3 then 'hold' when p_knee >= 3 then 'iso' end,
-    'overhead', case when p_sh >= 3 then true end,
-    'back',     case when p_bk >= 3 then true end,
-    'ankleBal', case when a_l + a_r > 0 then true end,
-    'refer',    case when greatest(p_knee, p_sh, p_an, p_bk) >= 3 then true end
+    'plyo',     case when (mx->>'ankle')::int >= 3 then 'hold' when (mx->>'knee')::int >= 3 then 'iso' end,
+    'overhead', case when (mx->>'shoulder')::int >= 3 then true end,
+    'back',     case when (mx->>'back')::int >= 3 then true end,
+    'ankleBal', case when a_l + a_r > 0 or exists (select 1 from jsonb_array_elements(v_inj) e where e->>'part' = 'ankle') then true end,
+    'refer',    case when any_flag then true end
   ));
 
   if me.player_id is null then
-    insert into public.players (name, pos, year, height, weight, exp, weight_exp, adjust, sort)
-    values (v_name, v_pos, nullif(btrim(coalesce(info->>'year', '')), ''), v_height, v_weight, v_exp, v_wexp, v_adjust,
+    insert into public.players (name, pos, year, height, weight, exp, weight_exp, adjust, number, sort)
+    values (v_name, v_pos, nullif(btrim(coalesce(info->>'year', '')), ''), v_height, v_weight, v_exp, v_wexp, v_adjust, v_number,
             (select coalesce(max(sort), 0) + 1 from public.players))
     returning id into pid;
     update public.profiles set player_id = pid where id = me.id;
@@ -241,238 +1169,485 @@ begin
     pid := me.player_id;
     update public.players
        set name = v_name, pos = v_pos, year = nullif(btrim(coalesce(info->>'year', '')), ''),
-           height = v_height, weight = v_weight, exp = v_exp, weight_exp = v_wexp, adjust = v_adjust
+           height = v_height, weight = v_weight, exp = v_exp, weight_exp = v_wexp, adjust = v_adjust, number = v_number
      where id = pid;
   end if;
 
-  insert into public.health (player_id, ankle_l, ankle_r, ankle_last, knee_injury, pain, note, consent, updated_at)
+  insert into public.health (player_id, ankle_l, ankle_r, ankle_last, knee_injury, pain, injuries, note, consent, updated_at)
   values (pid, a_l, a_r, nullif(btrim(coalesce(info->>'ankle_last', '')), ''),
-          coalesce((info->>'knee_injury')::boolean, false),
-          jsonb_build_object('knee', p_knee, 'shoulder', p_sh, 'ankle', p_an, 'back', p_bk),
-          nullif(btrim(coalesce(info->>'note', '')), ''), true, now())
+          exists (select 1 from jsonb_array_elements(v_inj) e where e->>'part' = 'knee'),
+          v_pain, v_inj, nullif(btrim(coalesce(info->>'note', '')), ''), true, now())
   on conflict (player_id) do update
     set ankle_l = excluded.ankle_l, ankle_r = excluded.ankle_r, ankle_last = excluded.ankle_last,
-        knee_injury = excluded.knee_injury, pain = excluded.pain, note = excluded.note,
+        knee_injury = excluded.knee_injury, pain = excluded.pain, injuries = excluded.injuries, note = excluded.note,
         consent = true, updated_at = now();
   return pid;
 end;
-$$;
+$function$;
 
-revoke execute on function public.submit_my_info(jsonb) from public, anon;
+CREATE OR REPLACE FUNCTION public.switch_team(t text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+begin
+  if not coalesce((select super from public.profiles where id = auth.uid()), false) then raise exception '총관리자만 할 수 있어요' using errcode = '42501'; end if;
+  if not exists (select 1 from public.teams where id = t) then raise exception '팀을 확인해 주세요' using errcode = '23514'; end if;
+  update public.profiles set team_id = t where id = auth.uid();
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.update_my_injuries(injuries jsonb)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare pid uuid := private.my_player_id();
+begin
+  if pid is null or private.my_role() not in ('player', 'coach') then raise exception '권한이 없어요' using errcode = '42501'; end if;
+  if jsonb_typeof(injuries) <> 'array' or jsonb_array_length(injuries) > 20 or length(injuries::text) > 6000 then
+    raise exception '부상 이력을 확인해 주세요' using errcode = '23514';
+  end if;
+  insert into public.health (player_id, injuries, knee_injury, updated_at)
+    values (pid, injuries, exists (select 1 from jsonb_array_elements(injuries) e where e->>'part' = 'knee'), now())
+  on conflict (player_id) do update set injuries = excluded.injuries, knee_injury = excluded.knee_injury, updated_at = now();
+end $function$;
+
+CREATE OR REPLACE FUNCTION public.update_my_profile(info jsonb)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  pid uuid := private.my_player_id();
+  v_height numeric := nullif(info->>'height', '')::numeric;
+  v_weight numeric := nullif(info->>'weight', '')::numeric;
+  v_exp numeric := nullif(info->>'exp', '')::numeric;
+  v_wexp text := nullif(info->>'weight_exp', '');
+  v_year text := nullif(btrim(coalesce(info->>'year', '')), '');
+begin
+  if pid is null or private.my_role() not in ('player', 'coach') then raise exception '권한이 없어요' using errcode = '42501'; end if;
+  if v_height is not null and (v_height < 140 or v_height > 220) then raise exception '키를 확인해 주세요' using errcode = '23514'; end if;
+  if v_weight is not null and (v_weight < 40 or v_weight > 150) then raise exception '몸무게를 확인해 주세요' using errcode = '23514'; end if;
+  if v_exp is not null and (v_exp < 0 or v_exp > 20) then raise exception '배구 경력을 확인해 주세요' using errcode = '23514'; end if;
+  if v_wexp is not null and v_wexp not in ('none', 'machine', 'free', 'oly') then raise exception '웨이트 경험을 골라 주세요' using errcode = '23514'; end if;
+  if v_year is not null and length(v_year) > 10 then raise exception '학년을 확인해 주세요' using errcode = '23514'; end if;
+  update public.players set year = v_year, exp = v_exp, weight_exp = coalesce(v_wexp, weight_exp), height = null, weight = null where id = pid;
+  insert into public.player_private (player_id, height, weight, updated_at) values (pid, v_height, v_weight, now())
+    on conflict (player_id) do update set height = excluded.height, weight = excluded.weight, updated_at = now();
+end $function$
+;
+
+-- 함수 실행 권한: 앱용 RPC 만 로그인 사용자에게, 알림 함수는 service_role 전용
+revoke execute on all functions in schema public from public, anon;
+grant execute on function public.jp_sync_now() to authenticated;
+grant execute on function public.leave_team() to authenticated;
+grant execute on function public.push_pubkey() to authenticated;
+grant execute on function public.remove_member(uuid) to authenticated;
+grant execute on function public.retire_member(uuid, boolean) to authenticated;
+grant execute on function public.set_member_media(uuid, boolean) to authenticated;
+grant execute on function public.set_member_title(uuid, text) to authenticated;
 grant execute on function public.submit_my_info(jsonb) to authenticated;
+grant execute on function public.switch_team(text) to authenticated;
+grant execute on function public.update_my_injuries(jsonb) to authenticated;
+grant execute on function public.update_my_profile(jsonb) to authenticated;
+revoke execute on function public.push_gone(text) from authenticated;
+revoke execute on function public.push_keys() from authenticated;
+revoke execute on function public.push_set_vapid(text, text) from authenticated;
+revoke execute on function public.push_targets(text) from authenticated;
+revoke execute on function public.push_targets_team(text, text) from authenticated;
 
-create policy "self reads own player" on public.players for select using (id = private.my_player_id());
-create policy "pending self reads own health" on public.health for select using (player_id = private.my_player_id());
+-- ========== 5. 트리거 ==========
+CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION private.handle_new_user();
+CREATE TRIGGER health_custom_guard BEFORE INSERT OR UPDATE ON public.health FOR EACH ROW EXECUTE FUNCTION private.guard_health_custom();
+CREATE TRIGGER notices_push AFTER INSERT ON public.notices FOR EACH ROW EXECUTE FUNCTION private.notice_push();
+CREATE TRIGGER players_body_private BEFORE INSERT OR UPDATE OF height, weight ON public.players FOR EACH ROW EXECUTE FUNCTION private.move_body_private();
+CREATE TRIGGER jp_skip_old BEFORE INSERT ON public.jp_videos FOR EACH ROW EXECUTE FUNCTION private.jp_skip_old();
 
--- ---------- 상황별 처방 모듈 · 인바디 (2026-10-22 추가, 이미 적용됨) ----------
-alter table public.health add column if not exists rehab jsonb not null default '[]'::jsonb; -- [{area, stage 1–4, note}]
+-- ========== 6. 행 단위 보안 (RLS) ==========
+-- 팀 표는 restrictive "team scope" 로 내 팀 행만. private.can(x) 은 관리자(coach)에게 항상 true
+alter table public.absences enable row level security;
+alter table public.day_picks enable row level security;
+alter table public.entries enable row level security;
+alter table public.event_votes enable row level security;
+alter table public.events enable row level security;
+alter table public.friendlies enable row level security;
+alter table public.health enable row level security;
+alter table public.jp_matches enable row level security;
+alter table public.jp_results enable row level security;
+alter table public.jp_schools enable row level security;
+alter table public.jp_sources enable row level security;
+alter table public.jp_videos enable row level security;
+alter table public.lift_sets enable row level security;
+alter table public.lineups enable row level security;
+alter table public.logs enable row level security;
+alter table public.notices enable row level security;
+alter table public.open_sessions enable row level security;
+alter table public.open_votes enable row level security;
+alter table public.pain_checks enable row level security;
+alter table public.player_contacts enable row level security;
+alter table public.player_private enable row level security;
+alter table public.players enable row level security;
+alter table public.practice_plans enable row level security;
+alter table public.practice_times enable row level security;
+alter table public.profiles enable row level security;
+alter table public.program_edits enable row level security;
+alter table public.push_subs enable row level security;
+alter table public.scout_events enable row level security;
+alter table public.scout_matches enable row level security;
+alter table public.scout_points enable row level security;
+alter table public.team_off enable row level security;
+alter table public.teams enable row level security;
+alter table public.tests enable row level security;
+alter table public.training_notes enable row level security;
+alter table public.videos enable row level security;
+alter table public.wellness enable row level security;
 
-create table if not exists public.inbody (
-  id uuid primary key default gen_random_uuid(),
-  player_id uuid not null references public.players(id) on delete cascade,
-  date date not null,
-  weight numeric check (weight between 30 and 200),
-  smm numeric check (smm between 10 and 80),
-  fat_mass numeric check (fat_mass between 0 and 100),
-  pbf numeric check (pbf between 1 and 60),
-  leg_r numeric check (leg_r between 1 and 30),
-  leg_l numeric check (leg_l between 1 and 30),
-  standardized boolean not null default false,
-  note text,
-  author uuid default auth.uid() references auth.users(id) on delete set null,
-  created_at timestamptz not null default now()
-);
-alter table public.inbody enable row level security;
-create policy "coach or self reads inbody" on public.inbody for select
-  using (private.is_coach() or (private.is_member() and player_id = private.my_player_id()));
-create policy "coach or self inserts inbody" on public.inbody for insert
-  with check (private.is_coach() or (private.my_role() = 'player' and player_id = private.my_player_id() and author = auth.uid()));
-create policy "coach or self removes inbody" on public.inbody for delete
-  using (private.is_coach() or (private.my_role() = 'player' and player_id = private.my_player_id()));
+create policy "team scope" on public.absences as restrictive
+  using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
+  with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
+create policy "coach or self deletes absences" on public.absences for delete to authenticated
+  using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))));
+create policy "coach or self inserts absences" on public.absences for insert to authenticated
+  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid()))));
+create policy "coach or self reads absences" on public.absences for select to authenticated
+  using ((private.is_coach() OR (private.is_member() AND (player_id = private.my_player_id()))));
+create policy "schedule reads absences" on public.absences for select to authenticated
+  using (private.can('attend'::text));
+create policy "coach or self updates absences" on public.absences for update to authenticated
+  using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))))
+  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))));
+create policy "team scope" on public.day_picks as restrictive
+  using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
+  with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
+create policy "coach or self deletes day_picks" on public.day_picks for delete
+  using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))));
+create policy "coach or self inserts day_picks" on public.day_picks for insert
+  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))));
+create policy "coach or self reads day_picks" on public.day_picks for select
+  using ((private.is_coach() OR (private.is_member() AND (player_id = private.my_player_id()))));
+create policy "coach or self updates day_picks" on public.day_picks for update
+  using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))))
+  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))));
+create policy "coach writes entries" on public.entries to authenticated
+  using (private.is_coach())
+  with check (private.is_coach());
+create policy "schedule writes entries" on public.entries to authenticated
+  using (private.can('schedule'::text))
+  with check (private.can('schedule'::text));
+create policy "team scope" on public.entries as restrictive
+  using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
+  with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
+create policy "members read entries" on public.entries for select to authenticated
+  using ((private.is_member() OR private.is_coach()));
+create policy "team scope" on public.event_votes as restrictive
+  using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
+  with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
+create policy "votes mine" on public.event_votes to authenticated
+  using ((player_id = private.my_player_id()))
+  with check ((player_id = private.my_player_id()));
+create policy "votes read" on public.event_votes for select to authenticated
+  using ((private.is_member() OR private.is_coach()));
+create policy "coach writes events" on public.events
+  using (private.is_coach())
+  with check (private.is_coach());
+create policy "schedule writes events" on public.events to authenticated
+  using (private.can('schedule'::text))
+  with check (private.can('schedule'::text));
+create policy "team scope" on public.events as restrictive
+  using ((team_id = ( SELECT private.my_team() AS my_team)))
+  with check ((team_id = ( SELECT private.my_team() AS my_team)));
+create policy "members read events" on public.events for select
+  using (private.is_member());
+create policy "coach writes friendlies" on public.friendlies to authenticated
+  using (private.is_coach())
+  with check (private.is_coach());
+create policy "schedule writes friendlies" on public.friendlies to authenticated
+  using (private.can('schedule'::text))
+  with check (private.can('schedule'::text));
+create policy "team scope" on public.friendlies as restrictive
+  using ((team_id = ( SELECT private.my_team() AS my_team)))
+  with check ((team_id = ( SELECT private.my_team() AS my_team)));
+create policy "members read friendlies" on public.friendlies for select to authenticated
+  using ((private.is_member() OR private.is_coach()));
+create policy "coach writes health" on public.health
+  using (private.is_coach())
+  with check (private.is_coach());
+create policy "team scope" on public.health as restrictive
+  using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
+  with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
+create policy "coach or self reads health" on public.health for select
+  using ((private.is_coach() OR (private.is_member() AND (player_id = private.my_player_id()))));
+create policy "pending self reads own health" on public.health for select
+  using ((player_id = private.my_player_id()));
+create policy "training reads health" on public.health for select to authenticated
+  using (private.can('training'::text));
+create policy "training writes health" on public.health for update to authenticated
+  using (private.can('training'::text))
+  with check (private.can('training'::text));
+create policy "members read" on public.jp_matches for select to authenticated
+  using ((private.is_member() OR private.is_coach()));
+create policy "members read" on public.jp_results for select to authenticated
+  using ((private.is_member() OR private.is_coach()));
+create policy "members read" on public.jp_schools for select to authenticated
+  using (private.is_member());
+create policy "coach del" on public.jp_sources for delete to authenticated
+  using (private.is_coach());
+create policy "coach add" on public.jp_sources for insert to authenticated
+  with check (private.is_coach());
+create policy "members read" on public.jp_sources for select to authenticated
+  using (private.is_member());
+create policy "members read" on public.jp_videos for select to authenticated
+  using (private.is_member());
+create policy "team scope" on public.lift_sets as restrictive
+  using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
+  with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
+create policy "coach or self deletes lift_sets" on public.lift_sets for delete
+  using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid()))));
+create policy "coach or self inserts lift_sets" on public.lift_sets for insert
+  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid()))));
+create policy "coach or self reads lift_sets" on public.lift_sets for select
+  using ((private.is_coach() OR (private.is_member() AND (player_id = private.my_player_id()))));
+create policy "training reads lift_sets" on public.lift_sets for select to authenticated
+  using (private.can('training'::text));
+create policy "schedule writes lineups" on public.lineups to authenticated
+  using (private.can('schedule'::text))
+  with check (private.can('schedule'::text));
+create policy "team scope" on public.lineups as restrictive to authenticated
+  using ((team_id = ( SELECT private.my_team() AS my_team)))
+  with check ((team_id = ( SELECT private.my_team() AS my_team)));
+create policy "members read lineups" on public.lineups for select to authenticated
+  using ((private.is_member() OR private.is_coach()));
+create policy "team scope" on public.logs as restrictive
+  using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
+  with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
+create policy "coach deletes logs" on public.logs for delete
+  using (private.is_coach());
+create policy "coach or self inserts logs" on public.logs for insert
+  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid()))));
+create policy "coach or self reads logs" on public.logs for select
+  using ((private.is_coach() OR (private.is_member() AND (player_id = private.my_player_id()))));
+create policy "training reads logs" on public.logs for select to authenticated
+  using (private.can('training'::text));
+create policy "coach writes notices" on public.notices to authenticated
+  using (private.is_coach())
+  with check (private.is_coach());
+create policy "notice writes notices" on public.notices to authenticated
+  using (private.can('notice'::text))
+  with check (private.can('notice'::text));
+create policy "team scope" on public.notices as restrictive
+  using ((team_id = ( SELECT private.my_team() AS my_team)))
+  with check ((team_id = ( SELECT private.my_team() AS my_team)));
+create policy "members read notices" on public.notices for select to authenticated
+  using ((private.is_member() OR private.is_coach()));
+create policy "open write" on public.open_sessions to authenticated
+  using (private.can('attend'::text))
+  with check (private.can('attend'::text));
+create policy "team scope" on public.open_sessions as restrictive
+  using ((team_id = ( SELECT private.my_team() AS my_team)))
+  with check ((team_id = ( SELECT private.my_team() AS my_team)));
+create policy "open read" on public.open_sessions for select to authenticated
+  using ((private.is_member() OR private.is_coach()));
+create policy "team scope" on public.open_votes as restrictive
+  using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
+  with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
+create policy "votes mine" on public.open_votes to authenticated
+  using ((player_id = private.my_player_id()))
+  with check ((player_id = private.my_player_id()));
+create policy "votes read" on public.open_votes for select to authenticated
+  using ((private.is_member() OR private.is_coach()));
+create policy "team scope" on public.pain_checks as restrictive
+  using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
+  with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
+create policy "coach or self removes pain checks" on public.pain_checks for delete
+  using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid()))));
+create policy "coach or self inserts pain checks" on public.pain_checks for insert
+  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid()))));
+create policy "coach or self reads pain checks" on public.pain_checks for select
+  using ((private.is_coach() OR (private.is_member() AND (player_id = private.my_player_id()))));
+create policy "training reads pain_checks" on public.pain_checks for select to authenticated
+  using (private.can('training'::text));
+create policy "team scope" on public.player_contacts as restrictive
+  using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
+  with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
+create policy "contacts insert" on public.player_contacts for insert to authenticated
+  with check (((player_id = private.my_player_id()) OR private.is_coach()));
+create policy "contacts read" on public.player_contacts for select to authenticated
+  using (((player_id = private.my_player_id()) OR private.can('roster'::text)));
+create policy "contacts update" on public.player_contacts for update to authenticated
+  using (((player_id = private.my_player_id()) OR private.is_coach()))
+  with check (((player_id = private.my_player_id()) OR private.is_coach()));
+create policy "private write coach" on public.player_private to authenticated
+  using (private.is_coach())
+  with check (private.is_coach());
+create policy "team scope" on public.player_private as restrictive
+  using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
+  with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
+create policy "private read" on public.player_private for select to authenticated
+  using (((player_id = private.my_player_id()) OR private.is_coach() OR private.can('training'::text)));
+create policy "coach writes players" on public.players
+  using (private.is_coach())
+  with check (private.is_coach());
+create policy "team scope" on public.players as restrictive
+  using ((team_id = ( SELECT private.my_team() AS my_team)))
+  with check ((team_id = ( SELECT private.my_team() AS my_team)));
+create policy "members read players" on public.players for select
+  using (private.is_member());
+create policy "self reads own player" on public.players for select
+  using ((id = private.my_player_id()));
+create policy "practice write" on public.practice_plans to authenticated
+  using (private.can('practice'::text))
+  with check (private.can('practice'::text));
+create policy "team scope" on public.practice_plans as restrictive
+  using ((team_id = ( SELECT private.my_team() AS my_team)))
+  with check ((team_id = ( SELECT private.my_team() AS my_team)));
+create policy "practice read" on public.practice_plans for select to authenticated
+  using (((published AND (private.is_member() OR private.is_coach())) OR private.can('practice'::text)));
+create policy "coach writes practice_times" on public.practice_times to authenticated
+  using (private.is_coach())
+  with check (private.is_coach());
+create policy "schedule writes practice_times" on public.practice_times to authenticated
+  using (private.can('attend'::text))
+  with check (private.can('attend'::text));
+create policy "team scope" on public.practice_times as restrictive
+  using ((team_id = ( SELECT private.my_team() AS my_team)))
+  with check ((team_id = ( SELECT private.my_team() AS my_team)));
+create policy "members read practice_times" on public.practice_times for select to authenticated
+  using ((private.is_member() OR private.is_coach()));
+create policy "team scope" on public.profiles as restrictive
+  using ((team_id = ( SELECT private.my_team() AS my_team)))
+  with check ((team_id = ( SELECT private.my_team() AS my_team)));
+create policy "self or coach reads profile" on public.profiles for select
+  using (((id = auth.uid()) OR private.is_coach()));
+create policy "coach updates profiles" on public.profiles for update
+  using (private.is_coach())
+  with check (private.is_coach());
+create policy "program_edits write" on public.program_edits to authenticated
+  using (private.can('training'::text))
+  with check (private.can('training'::text));
+create policy "team scope" on public.program_edits as restrictive
+  using ((team_id = ( SELECT private.my_team() AS my_team)))
+  with check ((team_id = ( SELECT private.my_team() AS my_team)));
+create policy "program_edits read" on public.program_edits for select to authenticated
+  using ((((player_id IS NULL) AND (private.is_member() OR private.is_coach())) OR (player_id = private.my_player_id()) OR private.can('training'::text)));
+create policy "push_subs_del" on public.push_subs for delete to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)));
+create policy "push_subs_ins" on public.push_subs for insert to authenticated
+  with check (((user_id = ( SELECT auth.uid() AS uid)) AND ((player_id IS NULL) OR (player_id = ( SELECT private.my_player_id() AS my_player_id)))));
+create policy "push_subs_sel" on public.push_subs for select to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)));
+create policy "push_subs_upd" on public.push_subs for update to authenticated
+  using ((user_id = ( SELECT auth.uid() AS uid)))
+  with check (((user_id = ( SELECT auth.uid() AS uid)) AND ((player_id IS NULL) OR (player_id = ( SELECT private.my_player_id() AS my_player_id)))));
+create policy "team scope" on public.scout_events as restrictive
+  using ((private.scout_team(match_id) = ( SELECT private.my_team() AS my_team)))
+  with check ((private.scout_team(match_id) = ( SELECT private.my_team() AS my_team)));
+create policy "scout events del" on public.scout_events for delete to authenticated
+  using (((author = ( SELECT auth.uid() AS uid)) OR private.can('analysis'::text)));
+create policy "scout events add" on public.scout_events for insert to authenticated
+  with check (((private.is_member() OR private.is_coach()) AND (author = ( SELECT auth.uid() AS uid))));
+create policy "scout events read" on public.scout_events for select to authenticated
+  using ((private.is_member() OR private.is_coach()));
+create policy "scout events fix" on public.scout_events for update to authenticated
+  using (((author = ( SELECT auth.uid() AS uid)) OR private.can('analysis'::text)))
+  with check (((author = ( SELECT auth.uid() AS uid)) OR private.can('analysis'::text)));
+create policy "scout write" on public.scout_matches to authenticated
+  using (private.can('analysis'::text))
+  with check (private.can('analysis'::text));
+create policy "team scope" on public.scout_matches as restrictive
+  using ((team_id = ( SELECT private.my_team() AS my_team)))
+  with check ((team_id = ( SELECT private.my_team() AS my_team)));
+create policy "scout read" on public.scout_matches for select to authenticated
+  using ((private.is_member() OR private.is_coach()));
+create policy "team scope" on public.scout_points as restrictive
+  using ((private.scout_team(match_id) = ( SELECT private.my_team() AS my_team)))
+  with check ((private.scout_team(match_id) = ( SELECT private.my_team() AS my_team)));
+create policy "points del" on public.scout_points for delete to authenticated
+  using (((author = ( SELECT auth.uid() AS uid)) OR private.can('analysis'::text)));
+create policy "points add" on public.scout_points for insert to authenticated
+  with check (((private.is_member() OR private.is_coach()) AND (author = ( SELECT auth.uid() AS uid))));
+create policy "points read" on public.scout_points for select to authenticated
+  using ((private.is_member() OR private.is_coach()));
+create policy "points fix" on public.scout_points for update to authenticated
+  using (((author = ( SELECT auth.uid() AS uid)) OR private.can('analysis'::text)))
+  with check (((author = ( SELECT auth.uid() AS uid)) OR private.can('analysis'::text)));
+create policy "coach writes team_off" on public.team_off
+  using (private.is_coach())
+  with check (private.is_coach());
+create policy "schedule writes team_off" on public.team_off to authenticated
+  using (private.can('attend'::text))
+  with check (private.can('attend'::text));
+create policy "team scope" on public.team_off as restrictive
+  using ((team_id = ( SELECT private.my_team() AS my_team)))
+  with check ((team_id = ( SELECT private.my_team() AS my_team)));
+create policy "members read team_off" on public.team_off for select
+  using ((private.is_member() OR private.is_coach()));
+create policy "teams read" on public.teams for select to anon,authenticated
+  using (true);
+create policy "coach writes tests" on public.tests
+  using (private.is_coach())
+  with check (private.is_coach());
+create policy "team scope" on public.tests as restrictive
+  using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
+  with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
+create policy "player deletes own core tests" on public.tests for delete
+  using (((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid())));
+create policy "training deletes tests" on public.tests for delete to authenticated
+  using (private.can('training'::text));
+create policy "player inserts own core tests" on public.tests for insert
+  with check (((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid()) AND (reach IS NULL) AND (cmj IS NULL) AND (block IS NULL) AND (approach IS NULL) AND (squat IS NULL) AND (rdl IS NULL) AND (pull IS NULL) AND (bal_l IS NULL) AND (bal_r IS NULL)));
+create policy "player inserts own tests" on public.tests for insert to authenticated
+  with check (((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid())));
+create policy "members read tests" on public.tests for select
+  using (private.is_member());
+create policy "training edits tests" on public.tests for update to authenticated
+  using (private.can('training'::text))
+  with check (private.can('training'::text));
+create policy "notes self" on public.training_notes to authenticated
+  using ((player_id = private.my_player_id()))
+  with check ((player_id = private.my_player_id()));
+create policy "team scope" on public.training_notes as restrictive
+  using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
+  with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
+create policy "notes shared read" on public.training_notes for select to authenticated
+  using ((shared AND private.can('practice'::text)));
+create policy "team scope" on public.videos as restrictive
+  using ((team_id = ( SELECT private.my_team() AS my_team)))
+  with check ((team_id = ( SELECT private.my_team() AS my_team)));
+create policy "videos write" on public.videos to authenticated
+  using (private.can('video'::text))
+  with check (private.can('video'::text));
+create policy "videos read" on public.videos for select to authenticated
+  using ((private.is_member() OR private.is_coach()));
+create policy "team scope" on public.wellness as restrictive
+  using ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)))
+  with check ((private.player_team(player_id) = ( SELECT private.my_team() AS my_team)));
+create policy "coach or self deletes wellness" on public.wellness for delete to authenticated
+  using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))));
+create policy "coach or self inserts wellness" on public.wellness for insert to authenticated
+  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()) AND (author = auth.uid()))));
+create policy "coach or self reads wellness" on public.wellness for select to authenticated
+  using ((private.is_coach() OR (private.is_member() AND (player_id = private.my_player_id()))));
+create policy "training reads wellness" on public.wellness for select to authenticated
+  using (private.can('training'::text));
+create policy "coach or self updates wellness" on public.wellness for update to authenticated
+  using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))))
+  with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))));
 
--- ---------- 손목·손가락 통증 (2026-10-22 추가, 이미 적용됨) ----------
--- logs.pain_area 에 wrist·finger 허용, submit_my_info 가 pain.wrist·pain.finger 도 저장 (마이그레이션 pain_wrist_finger)
-alter table public.logs drop constraint if exists logs_pain_area_check;
-alter table public.logs add constraint logs_pain_area_check
-  check (pain_area = any (array['knee','shoulder','ankle','back','wrist','finger']));
+-- ========== 7. 예약 작업 (UTC) ==========
+-- push-hourly 매시 정각 (사람마다 고른 시각에 아침·저녁 알림)
+-- jp-sync-new 05:00 KST · jp-sync-full 05:30 KST (매일), jp-nat-weekly · jp-retag-weekly · jp-fill-weekly (월 04:00~04:45 KST → 화요일 새벽)
+select cron.schedule('jp-fill-weekly', '45 19 * * 1', 'select private.jp_sync_call(''fill'')');
+select cron.schedule('jp-nat-weekly', '0 19 * * 1', 'select private.jp_nat_call()');
+select cron.schedule('jp-retag-weekly', '30 19 * * 1', 'select private.jp_sync_call(''retag'')');
+select cron.schedule('jp-sync-full', '30 20 * * *', 'select private.jp_sync_call(''full'')');
+select cron.schedule('jp-sync-new', '0 20 * * *', 'select private.jp_sync_call(''new'')');
+select cron.schedule('push-hourly', '0 * * * *', 'select private.push_call(''morning''); select private.push_call(''evening'');');
 
--- ---------- 통증 체크 · 코어 테스트 · 정보 없는 승인 계정 (2026-10-23, 이미 적용됨: 마이그레이션 pain_checks_core_tests_selfreg) ----------
--- tests: side_l, side_r, sorensen, flexor, author 추가. 선수는 코어 항목만 있는 행을 직접 추가·삭제 가능
--- pain_checks: 부위별 운동 중(during) · 다음 날 아침(morning) · 쉴 때(rest) 통증 기록, 본인·관리자만
--- submit_my_info: 승인 대기이거나 player_id 가 없는 계정이면 호출 가능, 통증은 {d, m, r} 형식으로 저장
-
--- ---------- 웨이트 경험 3단계 · 부상 이력 · 풀 플랭크 (2026-10-23, 이미 적용됨: 마이그레이션 weight_levels_injuries_plank) ----------
--- players.weight_exp: none 초보자 · machine 중급자 · free 숙련자 (lt6→machine, gte6→free 로 바꿈)
--- health.injuries jsonb: [{side, part, type, year, surgery}], tests.plank (풀 플랭크 초)
-
--- ---------- 1년 일정 · 물구나무 걷기 (2026-10-23, 이미 적용됨: 마이그레이션 season_events_handstand_walk) ----------
--- events: 대회·트라이아웃·비시즌 일정 (kind: major 주요 대회 · minor 9인제·기타 · tryout · off 비시즌·방학)
---   팀원 모두 읽기, 관리자만 추가·삭제. 프로그램은 이 일정과 날짜(학기)로 자동으로 정해짐 → settings 는 더 안 씀
--- tests.hs_stage 1–5 (5 = 혼자 걷기), tests.hs_walk 물구나무 걷기 거리 (m). 선수도 직접 기록 가능
-
--- ---------- 웨이트 경험 4단계 (2026-10-23, 이미 적용됨: 마이그레이션 weight_exp_four_levels) ----------
--- players.weight_exp: none 아기 · machine 유아 · free 청소년 · oly 성인(파워 클린 등 역도 동작)
--- submit_my_info 도 oly 허용.
--- inbody 테이블은 남겨 두지만 화면에서는 더 쓰지 않음
-
--- ---------- 2학기 종강 (2026-10-23, 이미 적용됨: 마이그레이션 events_term_end) ----------
--- events.kind 에 termend(2학기 종강) 추가. 겨울 방학(비시즌)은 앱이 자동으로 종강일 ~ 2월 말로 넣음. 여름 방학은 비시즌 아님.
-
--- ---------- 버티컬 · 선수 측정 입력 (2026-10-23, 이미 적용됨: 마이그레이션 tests_vertical_player_measure) ----------
--- tests.vert(버티컬, 제자리 점프 높이 cm) · tests.max_vert(맥스 버티컬, 도움닫기 점프 높이 cm) 추가
--- 정책 "player inserts own tests": 선수는 본인 측정 행을 직접 추가 (화면은 측정 주·트라이아웃·첫 측정 때만 입력 칸을 보여 줌)
--- 2학기 종강 = 학사일정의 보강 기간 마지막 날 (2026: 12/21)
-
--- migration: readiness_lifts_practice_media
---   wellness (player_id, date unique; sleep·fatigue·soreness·stress·mood 1–5) — 본인·관리자만
---   practice (date PK; level light|normal|heavy) — 팀원 읽기, 관리자 쓰기
---   lifts (player_id, date, lift squat|rdl|bench|hip|clean, kg, reps 1–20, rir 0–6) — 본인·관리자만
---   media (name PK, https url) — 팀원 읽기, 관리자 쓰기
---   health.custom jsonb {memo, skip[], swap[{from,to}]}
---   tests: rsi, ktw_l, ktw_r, ir_d, ir_n, er_d, er_n, hop_l, hop_r
---   logs.completion all|part|none
-
--- migration: lift_sets_and_custom_guard (2026-10-23)
---   lift_sets (player_id, date, name, lift squat|rdl|bench|hip|clean|null, kg, reps 1–20, rir 0–6) — 운동 창에서 세트마다 기록, 본인·관리자만
---   예전 lifts 행은 lift_sets로 옮김 (lifts·practice·media 테이블은 더 이상 쓰지 않음)
---   trigger health_custom_guard: health.custom(개인 조정)은 관리자만 바꿀 수 있음
---   wellness: 4문항(수면·피로·근육통·기분·스트레스). 기분·스트레스 답은 mood와 stress에 같이 저장
-
--- migration: team_off_and_day_picks (2026-10-23)
---   team_off (date PK, note) — 정규 훈련 없는 날 (체육관 통제 등), 관리자 쓰기·팀원 읽기
---   day_picks (player_id, date unique, pick lower|upper|core|recover) — 그날 선수가 고른 세션, 본인·관리자
-
--- ===== push_notifications (적용됨) =====
--- push_subs: 기기별 알림 구독 (본인만 RLS). train_days = 앱이 하루 한 번 올리는 앞으로 4주 운동 있는 날
--- vault: vapid_public / vapid_private / push_cron — 서버 안에서만 생성·보관 (파일·클라이언트에 없음)
--- push_targets(kind) · push_keys() · push_gone(ep) · push_set_vapid() : service_role 전용
--- push_pubkey(): 로그인한 사용자용 공개 키
--- edge function 'push' (x-cron 비밀값 확인) ← private.push_call(kind) ← pg_cron
---   push-morning '0 23 * * *' (KST 08:00, 컨디션 안 넣은 사람) · push-evening '0 13 * * *' (KST 22:00, 운동 있는 날 기록 없는 사람)
-
--- ===== friendlies_and_absences (적용됨) =====
--- friendlies: 교류전 (date, start_time, end_time, opponent, format '6'|'9', place, note) · 부원 읽기, 관리자 쓰기
---   그날 슬롯 = friendly, 앞뒤 날 하체 웨이트는 weekFlow가 옮김 (base = 원래 일정)
--- absences: 불참 (player_id, date, reason class|sick|personal|etc, note) · unique(player_id, date)
---   본인과 관리자만 읽기·쓰기. 아픔·부상 → 그날 회복, 나머지 → 그날은 골라서 하는 날
-
--- ===== notices_entries_practice_times (적용됨) =====
--- notices: 공지 (title, body, pinned, notify) · 부원 읽기, 관리자 쓰기 · insert 트리거 → 알림(push_subs.notice)
--- entries: 대회(kind 'event')·교류전('friendly')별 엔트리 명단 · 부원 읽기, 관리자 쓰기
--- practice_times: 정규 훈련 시간 key 'S1'|'S2'(학기 기본) 또는 날짜(그날만)
-
--- ===== tests_tryout_battery (적용됨) =====
--- tests.side_step (반복 옆뛰기 20초, 회) · tests.pro_agility (5-10-5, 초) · 블로킹 점프는 tests.block
--- update_my_profile(info): 승인된 부원이 학년·키·몸무게·배구 경력·웨이트 경험을 직접 수정
-
--- ===== staff_titles_roster_program_edits (적용됨) =====
--- players.title: admin 관리자 · captain 주장 (role coach, 전체) / vice 부주장 · ops 훈련부장 · treasurer 총무 · trainer 트레이닝 담당 (role player + 맡은 일)
--- private.can(perm): schedule(부주장·훈련부장) · notice(부주장·훈련부장·총무) · roster(부주장·총무) · training(트레이닝 담당), coach는 모두
--- set_member_title(target, title): 관리자·주장만, 관리자·주장 지정 시 role coach
--- players.number 등번호 · player_contacts(전화, 본인·명단 담당만) · submit_my_info 에 number
--- program_edits: 날 종류(slot)·블록(block)마다 운동 박스 add/remove, player_id 없으면 팀 전체 (트레이닝 담당 쓰기)
-
--- ===== private_body_and_practice_plans (적용됨) =====
--- player_private: 키·몸무게 (본인 · 관리자·주장 · 트레이닝 담당만). players.height/weight 는 비우고 트리거로 옮김
--- private.can('practice'): 관리자·주장 + 훈련부장
--- practice_plans(date pk, title, goal, blocks jsonb[{title, minutes, groups:[{name, pos[], drills:[{n, m, note}]}]}], published)
-
--- ===== videos_notes_push_hours (적용됨) =====
--- players.media: 영상 담당 · private.can('video'): 관리자·주장 · 부주장 · 영상 담당
--- videos(kind playlist|video, category, title, yt, date, note): 부원만 읽기 (재생목록 링크는 DB에만, 코드에 없음)
--- training_notes(player_id, date, good, fix, next, body, shared): 본인만, 공유하면 can('practice')도 읽기
--- push_subs.morning_at/evening_at (KST 시) · cron 'push-hourly' 매시 정각
-
--- ===== 졸업·탈퇴 (alumni_and_leave) =====
--- players.alumni, players.left_on 추가
--- private.wipe_personal(pid): 연락처·키/몸무게·부상·노트·컨디션·통증·불참·인바디·개인 편집·선택·알림 삭제
--- public.retire_member(target, wipe_all): 관리자·주장만. 졸업 = 개인정보·계정 삭제 + 이름/기록만 남김, wipe_all = 선수 행까지 삭제
--- public.leave_team(): 본인 탈퇴(계정·기록 모두 삭제), 마지막 관리자는 불가
-
--- ===== 훈련부장 = 훈련 파트만 · 자율 훈련 (ops_training_only_open_sessions) =====
--- private.can: schedule = vice / notice = vice·treasurer / practice = ops / attend(정규 훈련 시간·없는 날·자율 훈련·불참 확인) = ops·vice
--- practice_times · team_off 쓰기, absences 읽기 → can('attend')
--- open_sessions(date, start_time, end_time, place, note): 읽기 = 부원, 쓰기 = can('attend')
--- open_votes(session_id, player_id, going): 읽기 = 부원, 쓰기 = 본인
-
--- ===== 군 복무 (players_military) =====
--- players.military: 부원과 같은 권한, 상태만 '군 복무'. 리포트·팀 현황에서 제외
-
--- ===== 남자부·여자부 (teams_split) =====
--- teams(id, name, label, net_cm, swap_days): men(남자부, 243, 월·목/수·금) · women(여자부, 224, 학기 요일 반대)
--- profiles.team_id: 가입할 때 고른 팀 (handle_new_user 가 raw_user_meta_data.team 을 읽음)
--- 팀 단위 표(players, events, friendlies, notices, practice_plans, practice_times, team_off, videos, open_sessions, program_edits)에 team_id
---   기본값 private.my_team(), 키는 (team_id, date|key)
--- 모든 표에 restrictive 정책 "team scope": 내 팀 행만 (선수 기록 표는 private.player_team(player_id) 로 확인)
--- 관리 함수(직책·영상·졸업·삭제·탈퇴)는 같은 팀만. 공지 알림은 push_targets_team(kind, team) 으로 같은 팀에만
--- 여자부 첫 관리자: update public.profiles set role = 'coach' where email = '...' and team_id = 'women';
-
--- ===== 총관리자·본인 부상 (super_admin_and_my_injuries) =====
--- profiles.super: 총관리자. switch_team(t) 로 남자부·여자부를 오감
--- private.my_player_id(): 지금 보고 있는 팀의 선수일 때만 (다른 팀에 들어가면 관리자로만)
--- update_my_injuries(injuries): 운동하다 다쳤을 때 본인이 부상 이력·지금 상태를 고침
-
--- ===== 참가 투표 · 전력분석 · 완료율 5단계 (votes_scout_completion) =====
--- logs.completion: all(100) · most(75) · part(50) · little(25) · none(0)
--- event_votes(kind event|friendly, ref_id, player_id, going, reason, note): 대회·교류전 참가 투표, 본인만 씀
--- scout_matches(team_id, title, date, opponent, yt, note): 전력분석 경기, can('analysis') = 전력분석부장·관리자
--- scout_events(match_id, set_no, side us|opp, player_id, opp_no, skill, kind, len, zone, grade #+!-/=, t): 부원 누구나 입력, 본인 것만 지움
--- wipe_personal 에 event_votes 삭제 추가 (졸업·탈퇴 때 참가 투표도 지움)
-
--- ===== 전력분석 토스 위치 · 랠리 결과 (scout_src_points) =====
--- scout_events.src: 공격 토스 위치 L 레프트 · M 속공 · R 라이트 · P 파이프 · B 백라이트 (세터 분배 분석)
--- scout_points(match_id, set_no, rot 1~6, serve us|opp, won, t, author): 랠리 결과 → 로테이션별 사이드아웃·브레이크
---   읽기·입력은 팀 부원, 지우기는 본인 또는 can('analysis'). restrictive "team scope" = private.scout_team(match_id)
-
--- ===== 영상 정렬 (edge function yt-latest) =====
--- 부른 사람 로그인으로 videos(kind=playlist)를 읽고 유튜브 재생목록 페이지의 '마지막 업데이트' 날짜·영상 수를 돌려줌 (유튜브 주소는 안 돌려줌)
--- 일부 공개 영상은 RSS 피드에 안 나와서 페이지를 읽음. 10분 캐시. '가장 최근 영상' 칸은 없애고 최근 업데이트된 재생목록을 위로
--- yt-probe: 테스트용이었고 지금은 410만 돌려줌 (대시보드에서 지워도 됨)
-
--- ===== 일본 고교 배구 영상 (jp_volley_library · jp_sources_manage_cron) =====
--- jp_sources(id, kind channel|playlist, ref @핸들|재생목록ID, label, role match|visit, cursor, full_done): 모으는 유튜브 채널. 추가·삭제는 관리자
--- jp_schools(id, name_ja, name_ko, pref 都道府県, gender m|w|mw, aliases 're:'=정규식): 학교 사전 (남녀부 공통, 부원 읽기만)
--- jp_videos(id 유튜브 영상ID, source, title, published, year, tourn haruko|ih|kokutai|block|senbatsu|shinjin|practice|univ|other, rnd, gender, schools[])
--- edge function jp-sync(x-cron): 채널 영상 목록을 읽고 제목으로 학교·대회·라운드 태그. mode new|full|retag
---   private.jp_sync_call(mode), public.jp_sync_now()(관리자), cron jp-sync-new 05:00 KST · jp-sync-full 05:30 KST
--- edge function jp-search(로그인): 유튜브 검색 결과만 돌려줌(저장 안 함)
--- 학교 사전을 고친 뒤에는 select private.jp_sync_call('retag');
-
--- ===== 대회 엔트리 · 서브 타순 (lineups_starters_event_format) =====
--- entries.starter: 주전 여부 (엔트리 = 주전 + 후보)
--- events.format: '6' | '9' (9인제 대회면 서브 타순표)
--- lineups(team_id, kind event|friendly, ref_id, set_no 1~5, data jsonb {team, court, coachHead, coach1, coach2, captain, rows[15]{pid, chk}}): 9인제 서브 타순표. 읽기 부원, 쓰기 can('schedule')
--- jp_sources 추가: mintonette · tmsports · vbharuka · volleyball dreams (경기). 학교 사전 22곳 추가 (간토·도호쿠 등)
--- jp-sync 태그: 중학·대표팀·리그 영상은 other, 옛 '春の高校バレー 第N回'(N<45)은 1969+N 년
-
--- ===== 일본 고교 대회 성적 (jp_results) =====
--- jp_results(tourn haruko|ih, gender m|w, year, place 1 우승·2 준우승·3 4강, school_id, name_ja): 2010~2026 역대 결과
---   출처: 일본어 위키백과 「全日本バレーボール高等学校選手権大会」「全国高等学校総合体育大会バレーボール競技大会」(2026-10-24 확인)
---   강팀 ★·지역 순서·학교 '대회 성적'은 이 표만 씀 (영상 제목으로 짐작하지 않음). 새 대회 끝나면 여기에 한 줄씩 추가
--- 학교 사전 16곳 추가(여자부 강호 등), 남녀부 표시 수정
-
--- ===== 교류전 세트별 출전 · 일정 방식 · 옛 영상 정리 =====
--- 일정 추가에서 방식(6·9인제) 선택 → events.format. 대회 페이지의 방식 선택은 없앰
--- lineups.data.members: 교류전 세트별 출전 선수 (1~5세트). 9인제는 같은 세트에 서브 타순(rows)도
--- jp_videos: 2010년 이전 영상 지움 + 트리거 jp_skip_old 로 앞으로도 안 쌓음. 채널 추가: H-VB · sebas channel sports
-
--- ===== 전국 본선 / 현 예선 위계 (jp_matches · jp-nat) =====
--- jp_matches(tourn haruko|ih, gender, year, rnd F|SF|QF|R1~R6|rep|group|3rd, a_name, a_pref, b_name, b_pref, 세트 점수, src):
---   전국대회 대진. edge function jp-nat 가 koko-volley.com '日程・結果' 글(+ 春高 연도별 결과 글)에서 모음. 매주 월 19:00 UTC(jp-nat-weekly)
--- jp-sync 태그 순서: ① 그해 전국 대진에 두 학교가 있으면 → 전국(대진의 라운드로) ② 학교 이름을 뺀 제목에 「県男子·県大会·県総体…」 → 현 예선
---   ③ 대진이 있는 해인데 대진에 없는 대결 → 현 예선 ④ 대진이 없는 해: 같은 현끼리이거나 결승·4강인데 jp_results 와 안 맞으면 현 예선
---   令和·平成 연도도 읽음. 매주 월 19:30 UTC 에 다시 분류(jp-retag-weekly)
--- 앱: 하루코·인터하이는 결승 → 4강 → 8강 → 16강 → 2회전 → 1회전 → 현 예선 순. 학교 페이지도 대회를 고르면 같은 순서
--- jp_sources.kind 에 'search' 추가 (id 'search' = 유튜브 검색으로 채운 영상). jp-sync mode 'fill': 최근 7년 전국 결승·4강·8강 중
---   영상이 없는 경기를 「春高2026 男子 A B 準決勝」로 검색해 두 학교 이름이 다 들어간 영상만 추가. 매주 월 19:45 UTC(jp-fill-weekly)
--- 대회 이름: 선발전 → 사쿠라 발리(さくらバレー, 전국 사립고 대회, tourn 'sakura'), 신인전·시범경기 → 기타, 국스포 → 국민스포츠대회
--- 채널 추가: gion-romeo
--- ===== 국민스포츠대회 대진 + 빈 경기 풀영상 검색 (v77) =====
--- jp_matches.tourn check 에 kokutai·sakura 추가. jp-nat 이 zutto-sports.com 국스포 결과 글에서 소년 남녀 대진(1회전~결승·3위전)을 모음.
---   국스포 팀은 현 대표: a_pref=현, a_name=「현(학교)」 (선발팀은 현 이름만)
--- jp-sync 태그: 국민스포츠대회 영상은 제목의 현 이름·학교로 그해 대진을 찾아 라운드·남녀를 붙임.
---   큰 대회 이름(春高·インターハイ·国スポ·さくら)은 해시태그보다 제목 본문을 먼저 보고, 여럿이면 먼저 나온 것.
---   하루코·인터하이에서 학교가 셋 이상 나오는 영상(예고·모음)은 대진으로 라운드를 붙이지 않음.
--- fill: 국민스포츠대회 결승·4강·3위전·8강도 검색. 하이라이트·쇼츠·모음 제외, 길이를 알면 8분 이상(직캠·중계 풀영상),
---   제목 연도가 다르거나 남녀가 반대면 제외. 다른 채널에서 이미 모은 영상은 출처를 바꾸지 않음.
--- 국스포 블록 예선(ブロック·ミニ国体)은 'yosen' → 앱에서 「블록 예선」. 개최지로 연도(とちぎ国体=2022 등). 검색 영상은 같은 대회·같은 해로 읽히는 배구 영상만(성년·다른 종목 제외)
+-- ========== 8. 팀 기본 행 ==========
+insert into public.teams (id, name, label, net_cm, swap_days) values
+  ('men', 'SNUVT', '남자부', 243, false),
+  ('women', 'SNUVT', '여자부', 224, true)
+on conflict (id) do nothing;

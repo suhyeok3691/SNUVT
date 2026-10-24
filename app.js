@@ -102,7 +102,7 @@ function confirmDel(msg, yes = "네, 삭제") {
 }
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
 const VIEWS = ["home", "practice", "notes", "video", "jp", "scout", "train", "plan", "rec", "season", "comps", "cup", "sched", "report", "roster", "intake"];
-// 섹션: 홈 → Physical(트레이닝) · 일정 · 관리 · 설정. 공지는 홈 맨 위
+// 섹션 (위 탭 묶음): 훈련 · 피지컬 · 일정 · 대회 · 관리. 공지는 홈 맨 위, 설정은 오른쪽 위
 const SECTIONS = {
   physical: { label: "피지컬", views: [["train", "오늘"], ["plan", "프로그램"], ["rec", "기록"]] },
   schedule: { label: "일정", views: [["season", "다가오는"], ["comps", "전체 일정"], ["sched", "훈련 관리", "attend"]] },
@@ -203,8 +203,7 @@ const thisMon = () => mondayOf(iso(today()));
 const selMon = () => state.week ?? thisMon();
 const selDay = () => state.day ?? (selMon() === thisMon() ? dowMon(today()) : 0);
 // 정규 훈련 없는 날(관리자 지정)은 선수가 골라서 하는 날로
-// 정규 훈련 시간: 그날 바뀐 시간 → 학기 기본 → 18:00–21:00
-// 정규 훈련 시간은 18:00–21:00 고정 (그날만 바꾼 날만 예외)
+// 정규 훈련 시간: 그날만 바꾼 시간 → 학기 기본 → 18:00–21:00
 const teamTimeOn = date => state.ptimes[date] || { start: "18:00", end: "21:00" };
 const timeTxt = o => o.start + (o.end ? "–" + o.end : "");
 // 교류전(관리자 입력)이 있는 날은 교류전이 그날 훈련 (대회·트라이아웃 날은 그대로)
@@ -354,22 +353,14 @@ function header() {
   if (!state.session || !state.role || state.role === "pending" || state.offline || needsSelfReg()) { setHtml(document.getElementById("tabs"), ""); document.getElementById("tabs")._key = ""; document.getElementById("tabbar").hidden = true; document.body.classList.remove("has-bar"); return; }
   const secKey = SECTION_OF[state.view], sec = SECTIONS[secKey];
   const nav = document.getElementById("tabs"), bar = document.getElementById("tabbar");
-  // 아래 탭 (휴대폰): 홈 · Physical · 일정(가운데) · 공지 · 메뉴
+  // 아래 탭 (휴대폰): 훈련 · 피지컬 · 홈(가운데) · 일정 · 대회. 한 번 만들고, 그다음엔 고른 칸 표시만 바꿈 (깜빡임 없음)
   const onOf = v => (SECTION_OF[state.view] || "home") === (SECTION_OF[v] || "home");
   const bt = (v, k, label, cls = "") => `<button type="button" class="bt ${cls} ${onOf(v) ? "on" : ""}" data-act="view" data-v="${v}" ${onOf(v) ? 'aria-current="page"' : ""}><span class="bi">${svg(k)}</span><span>${label}</span></button>`;
-  // 아래 탭: 홈이 가운데 (왼쪽 트레이닝 · 오른쪽 팀)
-  // 아래 탭 바: 훈련 · Physical · 홈(가운데) · 일정 · 관리(관리 화면) / 영상
-  // 다섯 번째 칸: 관리 화면이 있으면 관리, 없으면 전력분석 (영상은 훈련 안에)
-  const adminV = secViews(SECTIONS.admin)[0];
-  // 관리는 자주 안 들어가니 메뉴·홈 칸으로만, 아래 탭은 모두 같게
-  const fifth = ["cup", "trophy", "대회"];
-  const barKey = fifth.join("|");
-  if (bar._key === barKey) {
-    // 같은 칸들: 다시 만들지 않고 고른 칸 표시만 바꿈 (누른 자국·깜빡임 없음)
+  if (bar._built) {
     for (const b of bar.querySelectorAll(".bt")) { const on = onOf(b.dataset.v); b.classList.toggle("on", on); if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); }
   } else {
-    bar.innerHTML = bt("practice", "ball", "훈련") + bt("train", "physical", "피지컬") + bt("home", "home", "홈", "center") + bt("season", "schedule", "일정") + bt(fifth[0], fifth[1], fifth[2]);
-    bar._key = barKey;
+    bar.innerHTML = bt("practice", "ball", "훈련") + bt("train", "physical", "피지컬") + bt("home", "home", "홈", "center") + bt("season", "schedule", "일정") + bt("cup", "trophy", "대회");
+    bar._built = true;
   }
   bar.hidden = false; document.body.classList.add("has-bar");
   const vs = sec ? secViews(sec) : [];
@@ -772,7 +763,6 @@ function closeDrawer() { const el = document.getElementById("drawer"); if (el &&
 function viewSettings() {
   const me = playerOf(state.myPid), email = (state.session && state.session.user && state.session.user.email) || "";
   const theme = document.documentElement.dataset.theme || "auto";
-  const opt = (v, cur, l) => `<option value="${v}" ${String(cur ?? "") === String(v) ? "selected" : ""}>${l}</option>`;
   return `<div class="set-head"><h2>설정</h2><button class="btn link" type="button" data-act="setclose">닫기</button></div>
     ${me ? `<section class="panel set-sec"><h3>내 정보</h3>
       <div class="kv"><span>이름</span><b>${esc(me.name)}</b></div><div class="kv"><span>포지션</span><b>${esc(POS[me.pos] || me.pos)}</b></div>
@@ -939,7 +929,6 @@ function myStatusHtml(p) {
 }
 function teamStatusHtml() {
   const ps = activePlayers(), t = iso(today()), mon = thisMon();
-  const pending = can("full") ? state.profiles.filter(m => m.role === "pending" && m.id !== state.session.user.id) : [];
   const loggedToday = ps.filter(p => logsOf(p.id).some(e => e.date === t)).length;
   const recent = iso(addDays(today(), -3));
   const watch = [];
@@ -1371,7 +1360,6 @@ function viewSelfReg() {
 
 /* ---------- 등록·측정 (관리자) ---------- */
 function membersHtml() {
-  const ps = sortedPlayers();
   const list = state.profiles.slice().sort((a, b) => (a.role === "pending" ? -1 : 0) - (b.role === "pending" ? -1 : 0));
   if (!list.length) return "";
   const roleOpt = (v, cur, l) => `<option value="${v}" ${v === cur ? "selected" : ""}>${l}</option>`;
@@ -2070,7 +2058,6 @@ function openVote(type, id) {
 }
 /* ---------- 엔트리 (대회·교류전 명단) ---------- */
 const entryOf = (kind, id) => state.entries[kind + ":" + id] || new Set();
-const entryChip = (kind, id) => { const n = entryOf(kind, id).size, mine = state.myPid && entryOf(kind, id).has(state.myPid); return (n || can("schedule")) ? `<button type="button" class="chip entry ${mine ? "me" : ""}" data-act="entry" data-kind="${kind}" data-id="${esc(id)}">엔트리 ${n}${mine ? " · 나" : ""}</button>` : ""; };
 function openEntry(kind, id) {
   let title = "", date = "";
   if (kind === "event") { const e = (state.events || []).find(x => x.id === id); if (e) { title = e.name; date = e.start; } }
@@ -2173,7 +2160,6 @@ function cupPrint() {
   const C = cupState(), x = cupItems().find(y => y.kind + ":" + y.id === C.key); if (!x) return;
   const d = (C.lineups[C.key] || {})[C.set] || {}, rows = Array.from({ length: 15 }, (_, i) => (d.rows || [])[i] || {});
   const cap = playerOf(d.captain);
-  const td = v => `<td>${esc(v || "")}</td>`;
   const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>서브 타순 · ${esc(x.name)} ${C.set}세트</title><style>
     body{font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;margin:24px;color:#000}
     h1{font-size:15px;margin:0 0 8px}table{border-collapse:collapse;width:300px}th,td{border:1px solid #000;padding:5px 6px;font-size:13px;height:20px}
@@ -2464,10 +2450,10 @@ document.addEventListener("click", async ev => {
     return;
   }
   if (act === "tadd") return timerAdd(Number(b.dataset.s));
-  if (act === "pick" || act === "unpick") {
+  if (act === "pick") {
     const pid = b.dataset.pid, date = b.dataset.date;
     try {
-      const back = act === "unpick" || b.dataset.rec === "1"; // 권장를 누르면 고른 걸 지우고 흐름대로
+      const back = b.dataset.rec === "1"; // 권장를 누르면 고른 걸 지우고 흐름대로
       if (back) ok(await sb.from("day_picks").delete().eq("player_id", pid).eq("date", date));
       else ok(await sb.from("day_picks").upsert({ player_id: pid, date, pick: b.dataset.k }, { onConflict: "player_id,date" }));
       const m = state.picks[pid] = state.picks[pid] || {};
@@ -2518,15 +2504,6 @@ document.addEventListener("click", async ev => {
     const r = await sb.rpc("leave_team");
     if (r.error) { toast(r.error.code === "42501" ? r.error.message : failMsg(r.error)); return; }
     closeSettings(); lsDel(snapKey()); try { await sb.auth.signOut({ scope: "local" }); } catch (e) {} toast("탈퇴했어요. 그동안 고마웠어요"); return;
-  }
-  if (act === "vote") {
-    const o = Object.values(state.opens).flat().find(x => x.id === b.dataset.id); if (!o || !state.myPid) return;
-    const go = b.dataset.go === "1", cur = o.votes[state.myPid];
-    try {
-      if (cur === go) { ok(await sb.from("open_votes").delete().eq("session_id", o.id).eq("player_id", state.myPid)); delete o.votes[state.myPid]; }
-      else { ok(await sb.from("open_votes").upsert({ session_id: o.id, player_id: state.myPid, going: go, updated_at: new Date().toISOString() }, { onConflict: "session_id,player_id" })); o.votes[state.myPid] = go; }
-    } catch (e) { toast(failMsg(e)); }
-    state.dirty = false; return render();
   }
   if (act === "delopen") {
     if (!await confirmDel("이 자율 훈련을 취소할까요?")) return;
@@ -2630,7 +2607,6 @@ document.addEventListener("click", async ev => {
     if (act === "cupprint") return cupPrint();
     if (act === "cupedit") C.edit = !C.edit;
     else if (act === "cupset") C.set = Number(b.dataset.v);
-    else if (act === "cupfmt") { const id = C.key.split(":")[1]; try { ok(await sb.from("events").update({ format: b.dataset.v }).eq("id", id)); const e = (state.events || []).find(y => y.id === id); if (e) e.format = b.dataset.v; } catch (e) { toast(failMsg(e)); } }
     state.dirty = false; return render();
   }
   if (act === "addform") return openForm(b.dataset.f);
@@ -3298,7 +3274,7 @@ function buildState(raw) {
   const tests = {};
   for (const r of raw.tests || []) {
     (tests[r.player_id] = tests[r.player_id] || { runs: [] }).runs.push({
-      id: r.id, date: r.date, reach: r.reach, cmj: r.cmj, block: r.block, approach: r.approach,
+      id: r.id, date: r.date, reach: r.reach, cmj: r.cmj, approach: r.approach,
       vert: n(r.vert), maxVert: n(r.max_vert), hsStage: r.hs_stage, hsSec: r.hs_sec, hsWalk: n(r.hs_walk), squat: r.squat, rdl: r.rdl, pull: r.pull,
       sideL: r.side_l, sideR: r.side_r, plank: r.plank, author: r.author, block: n(r.block), sideStep: r.side_step, agility: n(r.pro_agility),
       rsi: n(r.rsi), ktwL: n(r.ktw_l), ktwR: n(r.ktw_r), irD: n(r.ir_d), irN: n(r.ir_n), erD: n(r.er_d), erN: n(r.er_n), hopL: n(r.hop_l), hopR: n(r.hop_r),
