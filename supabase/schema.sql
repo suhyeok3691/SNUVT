@@ -411,3 +411,9 @@ alter table public.logs add constraint logs_pain_area_check
 -- profiles.super: 총관리자. switch_team(t) 로 남자부·여자부를 오감
 -- private.my_player_id(): 지금 보고 있는 팀의 선수일 때만 (다른 팀에 들어가면 관리자로만)
 -- update_my_injuries(injuries): 운동하다 다쳤을 때 본인이 부상 이력·지금 상태를 고침
+
+-- ===== 참가 투표 · 전력분석 · 완료율 5단계 (votes_scout_completion) =====
+-- logs.completion: all(100) · most(75) · part(50) · little(25) · none(0)
+-- event_votes(kind event|friendly, ref_id, player_id, going, reason, note): 대회·교류전 참가 투표, 본인만 씀
+-- scout_matches(team_id, title, date, opponent, yt, note): 전력분석 경기, can('analysis') = 전력분석부장·관리자
+-- scout_events(match_id, set_no, side us|opp, player_id, opp_no, skill, kind, len, zone, grade #+!-/=, t): 부원 누구나 입력, 본인 것만 지움
