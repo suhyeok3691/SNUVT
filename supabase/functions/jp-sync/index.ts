@@ -1,6 +1,6 @@
 // 일본 고교 배구 영상 모으기: 등록한 유튜브 채널·재생목록의 영상 목록을 읽어 jp_videos 에 쌓고,
 // 제목에서 학교(jp_schools 이름·별칭)·대회·연도·라운드·남녀를 찾아 붙임. 서버 예약 작업(x-cron)만 부를 수 있음.
-// mode: new(새 영상만, 기본) · full(처음부터 끝까지, 이어서) · retag(태그만 다시)
+// mode: new(새 영상만, 기본) · full(처음부터 끝까지, 이어서) · retag(태그만 다시) · fill(빈 전국 경기 검색) · schools(학교별 검색)
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
@@ -261,11 +261,44 @@ async function fill(deadline: number) {
   return { searched, added };
 }
 
+// ---------- 학교별 경기 영상 찾기 (mode 'schools'): 현 대회 4강 이상 학교 중 오래 안 찾아본 학교부터 ----------
+// 「현 이름 학교 バレー 男子」로 검색해, 제목을 태그했을 때 그 학교가 나오는 경기 풀영상만 (하이라이트·쇼츠·다른 종목·대학·중학 빼고)
+async function schoolsFill(deadline: number, limit = 60) {
+  const l = ((await sb.from("jp_schools").select("id,name_ja,pref,gender,searched_at").order("searched_at", { ascending: true, nullsFirst: true }).limit(limit)).data || []) as any[];
+  let searched = 0, added = 0; const done: string[] = [];
+  for (const s of l) {
+    if (Date.now() > deadline) break;
+    await sb.from("jp_schools").update({ searched_at: new Date().toISOString() }).eq("id", s.id);
+    const base = s.name_ja.replace(/高校$/, ""), gs = s.gender === "mw" ? ["男子", "女子"] : [s.gender === "w" ? "女子" : "男子"];
+    let ok: V[] = [];
+    for (const g of gs) {
+      const items = await ytSearch(`${s.pref} ${base} 高校 バレー ${g}`); searched++;
+      ok.push(...items.filter((x) => {
+        const t = norm(x.title), sec = secs(x.len), tg = tag(x.title);
+        if (!tg.schools.includes(s.id) || tg.tourn === "univ" || tg.tourn === "other") return false;
+        if (NOT_FULL.test(t) || (sec !== null && sec < 480)) return false;
+        if (/成年|剣道|テニス|バスケ|サッカー|ハンド|ソフトボール|ビーチ|野球|ラグビー|卓球|中学/.test(t)) return false;
+        if (s.gender === "m" && /女子/.test(t)) return false;
+        if (s.gender === "w" && /男子/.test(t)) return false;
+        return true;
+      }));
+    }
+    ok = [...new Map(ok.map((x) => [x.id, x])).values()].slice(0, 10);
+    if (ok.length) {
+      const ex = new Set(((await sb.from("jp_videos").select("id").in("id", ok.map((x) => x.id))).data || []).map((r: any) => r.id));
+      ok = ok.filter((x) => !ex.has(x.id));
+      if (ok.length) { await upsert({ id: "search" }, ok); added += ok.length; }
+    }
+    done.push(s.id);
+  }
+  return { searched, added, schools: done.length };
+}
+
 Deno.serve(async (req) => {
   const { data: kd } = await sb.rpc("push_keys"); const k = (Array.isArray(kd) ? kd[0] : kd) || {};
   if (!k.cron || req.headers.get("x-cron") !== k.cron) return json({ error: "forbidden" }, 403);
   const body = await req.json().catch(() => ({}));
-  const mode = ["new", "full", "retag", "fill"].includes(body.mode) ? body.mode : "new";
+  const mode = ["new", "full", "retag", "fill", "schools"].includes(body.mode) ? body.mode : "new";
   await loadSchools();
   if (mode === "retag") {
     let n = 0;
@@ -280,6 +313,7 @@ Deno.serve(async (req) => {
   }
   const deadline = Date.now() + 110000;
   if (mode === "fill") return json({ mode, ...(await fill(deadline)) });
+  if (mode === "schools") return json({ mode, ...(await schoolsFill(deadline)) });
   const srcs = ((await sb.from("jp_sources").select("*")).data || []).filter((s: any) => s.kind !== "search");
   const res = [];
   for (const s of srcs) {

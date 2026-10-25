@@ -102,6 +102,7 @@ create table public.jp_schools (
   gender text default 'm'::text not null,
   aliases text[] default '{}'::text[] not null,
   note text,
+  searched_at timestamp with time zone,
   constraint jp_schools_pkey PRIMARY KEY (id),
   constraint jp_schools_gender_check CHECK ((gender = ANY (ARRAY['m'::text, 'w'::text, 'mw'::text])))
 );
@@ -1602,10 +1603,61 @@ create policy "coach or self updates wellness" on public.wellness for update to 
   using ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))))
   with check ((private.is_coach() OR ((private.my_role() = 'player'::text) AND (player_id = private.my_player_id()))));
 
+-- ========== 6b. 현 대회 결과 (jp-pref 가 채움) ==========
+create table public.jp_pref_matches (
+  id bigserial primary key,
+  pref text not null, tourn text not null, year smallint not null,
+  gender text not null check (gender in ('m','w')),
+  rnd text, head text,
+  a_name text not null, b_name text not null, a_sets smallint, b_sets smallint,
+  src text not null
+);
+create index jp_pref_matches_pref on public.jp_pref_matches (pref, gender);
+alter table public.jp_pref_matches enable row level security;
+create policy "members read" on public.jp_pref_matches for select to authenticated using (private.is_member());
+
+-- 4강 이상: 결승 승 1 · 패 2, 4강·대표결정전 승자·결승 리그 상위 4팀 3 (결승 없이 리그면 1위 = 1)
+create view public.jp_pref_top with (security_invoker = true) as
+with m as (
+  select pref, gender, tourn, year, src, rnd,
+    case when a_sets > b_sets then a_name else b_name end w,
+    case when a_sets > b_sets then b_name else a_name end l
+  from public.jp_pref_matches where a_sets is distinct from b_sets
+), fl as (
+  select pref, gender, tourn, year, src, name, sum(win) wins from (
+    select pref, gender, tourn, year, src, w name, 1 win from m where rnd = 'FL'
+    union all select pref, gender, tourn, year, src, l, 0 from m where rnd = 'FL') x
+  group by 1,2,3,4,5,6
+), flr as (select *, rank() over (partition by src, gender order by wins desc) rk from fl
+), t as (
+  select pref, gender, tourn, year, src, w name, 1 place from m where rnd = 'F'
+  union all select pref, gender, tourn, year, src, l, 2 from m where rnd = 'F'
+  union all select pref, gender, tourn, year, src, l, 3 from m where rnd = 'SF'
+  union all select pref, gender, tourn, year, src, w, 3 from m where rnd = 'SF'
+  union all select pref, gender, tourn, year, src, w, 3 from m where rnd = 'REP'
+  union all select pref, gender, tourn, year, src, name,
+    case when rk = 1 and not exists (select 1 from m where m.src = flr.src and m.gender = flr.gender and m.rnd = 'F') then 1 else 3 end
+  from flr where rk <= 4
+)
+select pref, gender, tourn, year, src, btrim(regexp_replace(name, '(高等学校|高校|高)$', '')) name, min(place) place
+from t group by 1,2,3,4,5,6;
+
+create or replace function private.jp_pref_call(cats jsonb default null) returns bigint
+language sql security definer set search_path = '' as $$
+  select net.http_post(
+    url := 'https://juhcaodotxspzzzfzrnt.supabase.co/functions/v1/jp-pref',
+    body := case when cats is null then '{}'::jsonb else jsonb_build_object('cats', cats) end,
+    headers := jsonb_build_object('Content-Type', 'application/json',
+      'x-cron', (select decrypted_secret from vault.decrypted_secrets where name = 'push_cron')),
+    timeout_milliseconds := 150000)
+$$;
+
 -- ========== 7. 예약 작업 (UTC) ==========
 -- push-hourly 매시 정각 (사람마다 고른 시각에 아침·저녁 알림)
--- jp-sync-new 05:00 KST · jp-sync-full 05:30 KST (매일), jp-nat-weekly · jp-retag-weekly · jp-fill-weekly (월 04:00~04:45 KST → 화요일 새벽)
+-- jp-sync-new 05:00 KST · jp-sync-full 05:30 KST (매일), jp-nat-weekly · jp-retag-weekly · jp-fill-weekly (월 19:00~19:45 UTC → 화요일 새벽), jp-pref-weekly 화 04:15 KST, jp-schools-daily 06:00 KST (하루 60개교)
 select cron.schedule('jp-fill-weekly', '45 19 * * 1', 'select private.jp_sync_call(''fill'')');
+select cron.schedule('jp-pref-weekly', '15 19 * * 1', 'select private.jp_pref_call()');
+select cron.schedule('jp-schools-daily', '0 21 * * *', 'select private.jp_sync_call(''schools'')');
 select cron.schedule('jp-nat-weekly', '0 19 * * 1', 'select private.jp_nat_call()');
 select cron.schedule('jp-retag-weekly', '30 19 * * 1', 'select private.jp_sync_call(''retag'')');
 select cron.schedule('jp-sync-full', '30 20 * * *', 'select private.jp_sync_call(''full'')');
