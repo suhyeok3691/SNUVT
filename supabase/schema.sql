@@ -1771,6 +1771,7 @@ create table public.jp_stars (
   gender text not null check (gender in ('m','w')),
   name text not null, kana text, pos text, height smallint,
   senior_year smallint, -- 3학년이 되는 학년도
+  name_ko text, roman text, -- 한글 이름 · JVA 로마자 표기
   tags text[] not null default '{}',
   src text,
   unique (school_id, name)

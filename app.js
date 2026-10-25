@@ -560,7 +560,7 @@ const jpSchool = id => jp().schools.find(s => s.id === id);
 async function jpLoad() {
   const J = jp(); if (J.loading) return; J.loading = true;
   try {
-    const [s, src, res, pt, rk, st] = await Promise.all([sb.from("jp_schools").select("*"), sb.from("jp_sources").select("id,kind,ref,label,role,full_done,synced_at"), sb.from("jp_results").select("tourn,gender,year,place,school_id,name_ja"), sb.from("jp_pref_top").select("pref,gender,tourn,year,name,place"), sb.from("jp_rank").select("school_id,gender,pts,rk,best_tourn,best_year,best_lvl,hist"), sb.from("jp_stars").select("school_id,gender,name,pos,height,senior_year,tags")]);
+    const [s, src, res, pt, rk, st] = await Promise.all([sb.from("jp_schools").select("*"), sb.from("jp_sources").select("id,kind,ref,label,role,full_done,synced_at"), sb.from("jp_results").select("tourn,gender,year,place,school_id,name_ja"), sb.from("jp_pref_top").select("pref,gender,tourn,year,name,place"), sb.from("jp_rank").select("school_id,gender,pts,rk,best_tourn,best_year,best_lvl,hist"), sb.from("jp_stars").select("school_id,gender,name,name_ko,roman,pos,height,senior_year,tags")]);
     J.results = (res && res.data) || []; J.prefTop = (pt && pt.data) || [];
     J.rank = {}; for (const r of (rk && rk.data) || []) J.rank[r.school_id + "|" + r.gender] = r;
     J.stars = (st && st.data) || []; J.rosters = {};
@@ -645,11 +645,12 @@ function jpPlayersHtml(s) {
     const byName = Object.fromEntries(((ro && ro.rows) || []).map(r => [r.name, r]));
     const grade = x => x.senior_year ? 3 - (x.senior_year - jpSY()) : byName[x.name] ? byName[x.name].now : null;
     const starBox = stars.sort((a, b) => jpIsRep(b) - jpIsRep(a) || (grade(b) || 0) - (grade(a) || 0)).map(x => { const r = byName[x.name], gr = grade(x), h = x.height || (r && r.height);
-      return `<div class="panel jp-star"><div class="row between"><b>${esc(x.name)}</b><span class="small muted">${[gr ? gr + "학년" : "", x.pos || "", h ? h + "cm" : ""].filter(Boolean).join(" · ")}</span></div><div class="jp-chips">${x.tags.map(t => `<span class="chip ${/대표/.test(t) ? "warn" : ""}">${esc(t)}</span>`).join("")}</div></div>`; }).join("");
-    const starSet = new Set(stars.map(x => x.name));
-    const table = ro === null ? `<p class="small muted">명단 불러오는 중…</p>` : ro.rows.length ? `<div class="tw"><table class="roster jp-ro"><thead><tr><th class="num">번호</th><th>이름</th><th>지금</th><th>키</th></tr></thead><tbody>${ro.rows.map(r => `<tr${starSet.has(r.name) ? ' class="jp-hot"' : ""}><td class="num">${r.no}</td><td><b>${esc(r.name)}</b>${r.cap ? ` <span class="chip t-cap">주장</span>` : ""}${starSet.has(r.name) ? ` <span class="chip warn t-cap">★</span>` : ""}</td><td>${r.now}학년</td><td>${r.height || ""}</td></tr>`).join("")}</tbody></table></div>` : "";
-    if (!starBox && !table) return "";
-    return `<section class="sec"><h3>${two}선수</h3>${starBox ? `<div class="boxes">${starBox}</div>` : ""}
+      return `<div class="panel jp-star"><div class="row between"><span class="jp-st"><b>${esc(x.name_ko || x.name)}</b>${x.name_ko ? `<span class="jp-ja">${esc(x.name)}${x.roman ? " · " + esc(x.roman) : ""}</span>` : ""}</span><span class="small muted">${[gr ? gr + "학년" : "", x.pos || "", h ? h + "cm" : ""].filter(Boolean).join(" · ")}</span></div><div class="jp-chips">${x.tags.map(t => `<span class="chip ${/대표/.test(t) ? "warn" : ""}">${esc(t)}</span>`).join("")}</div></div>`; }).join("");
+    const starSet = new Set(stars.map(x => x.name)), koOf = Object.fromEntries(stars.filter(x => x.name_ko).map(x => [x.name, x.name_ko]));
+    const table = ro === null ? `<p class="small muted">명단 불러오는 중…</p>` : ro.rows.length ? `<div class="tw"><table class="roster jp-ro"><thead><tr><th class="num">번호</th><th>이름</th><th>지금</th><th>키</th></tr></thead><tbody>${ro.rows.map(r => `<tr${starSet.has(r.name) ? ' class="jp-hot"' : ""}><td class="num">${r.no}</td><td><b>${esc(r.name)}</b>${koOf[r.name] ? ` <span class="small muted">${esc(koOf[r.name])}</span>` : ""}${r.cap ? ` <span class="chip t-cap">주장</span>` : ""}${starSet.has(r.name) ? ` <span class="chip warn t-cap">★</span>` : ""}</td><td>${r.now}학년</td><td>${r.height || ""}</td></tr>`).join("")}</tbody></table></div>` : "";
+    if (!starBox && !table && !(jpRank(s.id, g) || {}).best_tourn) return "";
+    const ih = `<a class="btn link small" href="${jpGoogle(`site:getsuvolley.com インターハイ2026 ${g === "w" ? "女子" : "男子"} ${s.name_ja.replace(/高校$/, "")}`)}" target="_blank" rel="noopener noreferrer">인터하이 2026 명단 (월간배구) ↗</a>`;
+    return `<section class="sec"><div class="row between"><h3>${two}선수</h3>${ih}</div>${starBox ? `<div class="boxes">${starBox}</div>` : ""}
       ${ro && ro.rows.length ? `<details class="jp-rod" ${starBox ? "" : "open"}><summary class="small muted">하루코 ${ro.year} 명단 · 지금 학년 기준 ${ro.rows.length}명</summary>${table}</details>` : table}</section>`;
   }).join("");
 }
@@ -693,7 +694,7 @@ function jpSchoolRow(s, cnt) {
 function jpSearchSchools(q) {
   const J = jp(); q = jpNorm(q); if (!q) return "";
   const cnt = jpSchoolCount();
-  const byP = new Set((J.stars || []).filter(x => x.gender === J.g && jpNorm(x.name).includes(q)).map(x => x.school_id));
+  const byP = new Set((J.stars || []).filter(x => x.gender === J.g && [x.name, x.name_ko, x.roman].some(n => n && jpNorm(n).toLowerCase().includes(q.toLowerCase()))).map(x => x.school_id));
   const l = J.schools.filter(s => jpGenderOk(J.g, s.gender) && (byP.has(s.id) || jpNorm(s.name_ko).includes(q) || jpNorm(s.name_ja).includes(q) || (JP_PREF[s.pref] || [""])[0].includes(q) || s.pref.includes(q))).sort(jpByRank(J.g)).slice(0, 40);
   return l.length ? `<div class="boxes">${l.map(s => jpSchoolRow(s, cnt)).join("")}</div>` : emptyLine("찾는 학교가 없어요.");
 }
