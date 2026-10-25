@@ -51,6 +51,7 @@ create table public.players (
   sort integer default 99 not null,
   created_at timestamp with time zone default now() not null,
   title text,
+  titles text[] default '{}'::text[] not null,
   number integer,
   media boolean default false not null,
   alumni boolean default false not null,
@@ -61,6 +62,7 @@ create table public.players (
   constraint players_team_id_fkey FOREIGN KEY (team_id) REFERENCES teams(id),
   constraint players_number_check CHECK (((number >= 0) AND (number <= 99))),
   constraint players_pos_check CHECK ((pos = ANY (ARRAY['OH'::text, 'MB'::text, 'OP'::text, 'S'::text, 'Li'::text]))),
+  constraint players_titles_check CHECK ((titles <@ ARRAY['admin'::text, 'captain'::text, 'vice'::text, 'ops'::text, 'treasurer'::text, 'trainer'::text, 'analyst'::text, 'media'::text])),
   constraint players_title_check CHECK ((title = ANY (ARRAY['admin'::text, 'captain'::text, 'vice'::text, 'ops'::text, 'treasurer'::text, 'trainer'::text, 'analyst'::text]))),
   constraint players_weight_exp_check CHECK ((weight_exp = ANY (ARRAY['none'::text, 'machine'::text, 'free'::text, 'oly'::text])))
 );
@@ -735,14 +737,14 @@ AS $function$
     select case
       when p.role = 'coach' then true
       when p.role <> 'player' then false
-      when perm = 'schedule' then pl.title = 'vice'
-      when perm = 'notice' then pl.title in ('vice', 'treasurer')
-      when perm = 'roster' then pl.title in ('vice', 'treasurer')
-      when perm = 'training' then pl.title = 'trainer'
-      when perm = 'practice' then pl.title = 'ops'
-      when perm = 'attend' then pl.title in ('ops', 'vice')
-      when perm = 'analysis' then pl.title = 'analyst'
-      when perm = 'video' then pl.title = 'vice' or coalesce(pl.media, false)
+      when perm = 'schedule' then pl.titles && array['vice']
+      when perm = 'notice' then pl.titles && array['vice', 'treasurer']
+      when perm = 'roster' then pl.titles && array['vice', 'treasurer']
+      when perm = 'training' then pl.titles && array['trainer']
+      when perm = 'practice' then pl.titles && array['ops']
+      when perm = 'attend' then pl.titles && array['ops', 'vice']
+      when perm = 'analysis' then pl.titles && array['analyst']
+      when perm = 'video' then pl.titles && array['vice', 'media']
       else false end
     from public.profiles p left join public.players pl on pl.id = p.player_id
     where p.id = auth.uid()), false)
@@ -1652,10 +1654,111 @@ language sql security definer set search_path = '' as $$
     timeout_milliseconds := 150000)
 $$;
 
+-- ========== 6c. 고교 랭킹 · 직책 여러 개 ==========
+create or replace function private.jp_norm(t text) returns text language sql immutable set search_path = '' as $$
+  select regexp_replace(regexp_replace(regexp_replace(regexp_replace(regexp_replace(
+    regexp_replace(btrim(coalesce(t, '')), '(高等学校|高校|高)$', ''),
+    '女$', '女子'), '実$', '実業'), '商$', '商業'), '工$', '工業'), '大附$', '大附属')
+$$;
+-- 대회 결과의 학교 이름 → jp_schools.id (같은 현 우선, 현을 모르면 이름이 하나뿐일 때만)
+create or replace function private.jp_sid(n text, p text, g text) returns text language sql stable set search_path = '' as $$
+  with c as (
+    select s.id, s.pref from public.jp_schools s
+    where s.gender in (g, 'mw') and (p is null or s.pref = p)
+      and (private.jp_norm(s.name_ja) = private.jp_norm(n) or n = any(s.aliases)
+        or exists (select 1 from unnest(s.aliases) a where a not like 're:%' and private.jp_norm(a) = private.jp_norm(n))
+        or exists (select 1 from unnest(s.aliases) a where a like 're:%' and n ~ substr(a, 4))))
+  select case when p is not null or (select count(*) from c) = 1 then (select id from c limit 1) end
+$$;
+-- 일본 고교 랭킹: 전국대회(하루코·인터하이·국민스포츠대회)에서 간 곳 + 현 대회 4강 이상, 오래된 결과일수록 덜 셈 (1년에 ×0.7)
+-- 점수: 우승 100 · 준우승 70 · 4강 50 · 8강 32 · 16강 20 · 32강 10 · 출전 5 (국민스포츠대회 ×0.6) / 현 우승 10 · 준우승 6 · 4강 3
+create materialized view public.jp_rank as
+with mt as (
+  select tourn, year, gender, rnd, a_name n, a_pref p, a_sets > b_sets won from public.jp_matches where a_sets is distinct from b_sets
+  union all
+  select tourn, year, gender, rnd, b_name, b_pref, b_sets > a_sets from public.jp_matches where a_sets is distinct from b_sets
+), mt2 as (
+  select tourn, year, gender, rnd, won,
+    case when tourn = 'kokutai' then coalesce(substring(n from '\((.+?)\)'), '') else n end n, p,
+    case rnd when 'group' then 0 when 'R1' then 1 when 'rep' then 1 when 'R2' then 2 when 'R3' then 3 when 'QF' then 4 when 'SF' then 5 when '3rd' then 5 when 'F' then 6 else 0 end
+      + case when tourn = 'kokutai' and rnd in ('R1', 'R2') then 1 else 0 end d
+  from mt
+), st as ( -- 대회마다 학교가 간 곳: 이긴 판이 가장 깊은 판이면 한 단계 위 (빠진 라운드 보정)
+  select tourn, year, gender, sid, max(d + case when won and rnd <> '3rd' then 1 else 0 end) lvl
+  from (select *, private.jp_sid(n, p, gender) sid from mt2 where n <> '') x
+  where sid is not null group by 1, 2, 3, 4
+), nat as (
+  select tourn, year, gender, sid, least(lvl, 7) lvl from st
+  union all -- 대진이 없는 해는 역대 4강 표로
+  select r.tourn, r.year, r.gender, r.school_id, case r.place when 1 then 7 when 2 then 6 else 5 end
+  from public.jp_results r
+  where r.school_id is not null and not exists (select 1 from public.jp_matches m where m.tourn = r.tourn and m.year = r.year and m.gender = r.gender)
+), pts as (
+  select sid, gender,
+    (case lvl when 7 then 100 when 6 then 70 when 5 then 50 when 4 then 32 when 3 then 20 when 2 then 10 else 5 end)
+    * case tourn when 'kokutai' then 0.6 else 1 end
+    * power(0.7, greatest(0, extract(epoch from now() - make_date(year, case tourn when 'haruko' then 1 when 'ih' then 8 when 'kokutai' then 10 else 6 end, 15)) / 31557600)) p
+  from nat
+), pref as (
+  select private.jp_sid(name, pref, gender) sid, gender,
+    (case place when 1 then 10 when 2 then 6 else 3 end)
+    * power(0.7, greatest(0, extract(epoch from now() - make_date(case when tourn = 'haruko' then year - 1 else year end, case tourn when 'haruko' then 11 else 6 end, 1)) / 31557600)) p
+  from public.jp_pref_top
+), allp as (
+  select sid, gender, p from pts union all select sid, gender, p from pref where sid is not null
+), best as ( -- 최근 3년 전국 최고 성적 (하루코·인터하이 먼저, 같으면 최근)
+  select distinct on (sid, gender) sid, gender, tourn, year, lvl from nat
+  where year >= extract(year from now())::int - 2 and lvl >= 3
+  order by sid, gender, lvl - case when tourn = 'kokutai' then 1 else 0 end desc, year desc
+), hist as ( -- 전국대회 기록 전부 (lvl 7 우승 · 6 준우승 · 5 4강 · 4 8강 · 3 16강 · 2 32강 · 그 아래 출전)
+  select sid, gender, jsonb_agg(jsonb_build_object('t', tourn, 'y', year, 'l', lvl) order by year desc, lvl desc) h
+  from (select distinct sid, gender, tourn, year, max(lvl) over (partition by sid, gender, tourn, year) lvl from nat) x group by 1, 2
+), tot as (select sid, gender, sum(p) p from allp group by 1, 2)
+select t.sid school_id, t.gender, round(t.p::numeric, 1) pts,
+  rank() over (partition by t.gender order by t.p desc)::int rk,
+  b.tourn best_tourn, b.year best_year, b.lvl best_lvl, coalesce(h.h, '[]') hist
+from tot t left join best b on b.sid = t.sid and b.gender = t.gender left join hist h on h.sid = t.sid and h.gender = t.gender;
+create unique index jp_rank_pk on public.jp_rank (school_id, gender);
+revoke all on public.jp_rank from public, anon;
+grant select on public.jp_rank to authenticated;
+
+create or replace function private.jp_rank_refresh() returns void language sql security definer set search_path = '' as $$
+  refresh materialized view concurrently public.jp_rank
+$$;
+
+-- 직책 여러 개: titles 가 기준, title(대표 직책)·media 는 따라 만듦
+create or replace function private.players_titles_sync() returns trigger language plpgsql set search_path = '' as $$
+begin
+  if tg_op = 'UPDATE' and new.titles is not distinct from old.titles
+     and (new.title is distinct from old.title or new.media is distinct from old.media) then
+    new.titles := array_remove(array[new.title, case when new.media then 'media' end], null);
+  end if;
+  new.titles := array(select distinct t from unnest(new.titles) t order by t);
+  new.title := (select t from unnest(array['admin','captain','vice','treasurer','ops','trainer','analyst']) with ordinality o(t, i) where t = any(new.titles) order by i limit 1);
+  new.media := 'media' = any(new.titles);
+  return new;
+end $$;
+create trigger players_titles_sync before insert or update on public.players for each row execute function private.players_titles_sync();
+create or replace function public.set_member_titles(target uuid, new_titles text[]) returns void
+language plpgsql security definer set search_path = '' as $$
+declare v_role text; t text[] := coalesce(new_titles, '{}');
+begin
+  if not private.is_coach() then raise exception '관리자·주장만 할 수 있어요' using errcode = '42501'; end if;
+  if private.player_team(target) is distinct from private.my_team() then raise exception '다른 팀 선수예요' using errcode = '42501'; end if;
+  if not t <@ array['admin','captain','vice','ops','treasurer','trainer','analyst','media'] then raise exception '직책을 확인해 주세요' using errcode = '23514'; end if;
+  v_role := case when t && array['admin', 'captain'] then 'coach' else 'player' end;
+  if target = private.my_player_id() and v_role <> 'coach' then raise exception '내 관리자 권한은 여기서 내려놓을 수 없어요' using errcode = '42501'; end if;
+  update public.players set titles = t where id = target;
+  update public.profiles set role = v_role where player_id = target and role in ('player', 'coach');
+end $$;
+revoke all on function public.set_member_titles(uuid, text[]) from public, anon;
+grant execute on function public.set_member_titles(uuid, text[]) to authenticated;
+
 -- ========== 7. 예약 작업 (UTC) ==========
 -- push-hourly 매시 정각 (사람마다 고른 시각에 아침·저녁 알림)
 -- jp-sync-new 05:00 KST · jp-sync-full 05:30 KST (매일), jp-nat-weekly · jp-retag-weekly · jp-fill-weekly (월 19:00~19:45 UTC → 화요일 새벽), jp-pref-weekly 화 04:15 KST, jp-schools-daily 06:00 KST (하루 60개교)
 select cron.schedule('jp-fill-weekly', '45 19 * * 1', 'select private.jp_sync_call(''fill'')');
+select cron.schedule('jp-rank-daily', '50 21 * * *', 'select private.jp_rank_refresh()');
 select cron.schedule('jp-pref-weekly', '15 19 * * 1', 'select private.jp_pref_call()');
 select cron.schedule('jp-schools-daily', '0 21 * * *', 'select private.jp_sync_call(''schools'')');
 select cron.schedule('jp-nat-weekly', '0 19 * * 1', 'select private.jp_nat_call()');

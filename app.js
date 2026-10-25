@@ -112,13 +112,18 @@ const SECTIONS = {
 };
 const SECTION_OF = { scout: "cup", practice: "practice", notes: "practice", video: "practice", jp: "practice", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", cup: "cup", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
 // 직책: 관리자·주장 = 전체 / 부주장·훈련 담당·총무·피지컬 담당 = 맡은 일만 (서버 규칙 private.can 과 같게)
-const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", treasurer: "총무", ops: "훈련 담당", trainer: "피지컬 담당", analyst: "전력분석 담당" };
+const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", treasurer: "총무", ops: "훈련 담당", trainer: "피지컬 담당", analyst: "전력분석 담당", media: "영상 담당" };
+// 한 사람이 직책을 여러 개 맡을 수 있음 (players.titles)
+const titlesOf = p => Object.keys(TITLES).filter(k => ((p && p.titles) || []).includes(k));
+const titlesKo = ks => ks.length > 1 ? ks.map(k => TITLES[k].replace(/ 담당$/, "")).join("·") + (ks.some(k => / 담당$/.test(TITLES[k])) ? " 담당" : "") : ks.length ? TITLES[ks[0]] : "";
+const titleChips = (p, cls = "") => titlesOf(p).map(k => `<span class="chip${cls}">${esc(TITLES[k])}</span>`).join("");
 // attend = 정규 훈련 변경(시간·없음) · 자율 훈련 · 불참 확인
-const STAFF_PERMS = { vice: ["schedule", "notice", "roster", "video", "attend"], ops: ["practice", "attend"], treasurer: ["notice", "roster"], trainer: ["training"], analyst: ["analysis"] };
-// 화면 보기(viewAs): 관리자·주장은 모든 직책 화면으로 바꿔 볼 수 있고, 직책이 있으면 '내 직책 ↔ 선수'
-const VIEW_LABEL = k => k === "player" ? "부원" : k === "media" ? "영상 담당" : TITLES[k] || k;
+const STAFF_PERMS = { vice: ["schedule", "notice", "roster", "video", "attend"], ops: ["practice", "attend"], treasurer: ["notice", "roster"], trainer: ["training"], analyst: ["analysis"], media: ["video"] };
+const myStaff = () => (state.titles || []).filter(k => STAFF_PERMS[k]);
+// 화면 보기(viewAs): 관리자·주장은 모든 직책 화면으로 바꿔 볼 수 있고, 직책이 있으면 '내 직책(맡은 일 모두) ↔ 선수'
+const VIEW_LABEL = k => k === "player" ? "부원" : k === "mine" ? titlesKo(myStaff()) : TITLES[k] || k;
 function viewOptions() {
-  const o = state.coach ? ["admin", "captain", "vice", "treasurer", "ops", "trainer", "analyst", "media"] : [...(STAFF_PERMS[state.title] ? [state.title] : []), ...(state.media ? ["media"] : [])];
+  const o = state.coach ? Object.keys(TITLES) : myStaff().length ? ["mine"] : [];
   return [...o, "player"];
 }
 const can = perm => {
@@ -126,7 +131,7 @@ const can = perm => {
   const v = state.viewAs;
   if (v === "admin" || v === "captain") return !!state.coach;
   if (perm === "full") return false;
-  if (v === "media") return perm === "video";
+  if (v === "mine") return myStaff().some(t => STAFF_PERMS[t].includes(perm));
   return (STAFF_PERMS[v] || []).includes(perm);
 };
 const secViews = sec => sec.views.filter(v => !v[2] || can(v[2]));
@@ -345,7 +350,7 @@ function header() {
   const d = nm ? daysBetween(parseD(nm.start), today()) : null;
   setHtml(document.getElementById("dday"), !nm ? "" : d > 0 ? `${esc(nm.name)} <strong>D-${d}</strong>` : `${esc(nm.name)} <strong>${d === 0 ? "D-DAY" : "대회 중"}</strong>`);
   const who = document.getElementById("who");
-  const roleKo = state.title ? TITLES[state.title] : state.coach ? "관리자" : state.role === "player" ? "선수" : "";
+  const roleKo = (state.titles || []).length ? titlesKo(titlesOf(state)) : state.coach ? "관리자" : state.role === "player" ? "선수" : "";
   const modeBtn = state.staff && state.loaded ? `<button class="btn mode ${state.admin ? "" : "on"}" type="button" data-act="rolepick" title="어느 화면으로 볼지 골라요">${VIEW_LABEL(state.viewAs)} 화면 ▾</button>` : "";
   setHtml(who, state.session ? `<span>${esc(myName())}${roleKo ? " " + roleKo : ""}</span>${modeBtn}<button class="btn link" type="button" data-act="logout">로그아웃</button>` : "");
   const ready = state.session && state.role && state.role !== "pending" && !state.offline && !needsSelfReg();
@@ -555,8 +560,9 @@ const jpSchool = id => jp().schools.find(s => s.id === id);
 async function jpLoad() {
   const J = jp(); if (J.loading) return; J.loading = true;
   try {
-    const [s, src, res, pt] = await Promise.all([sb.from("jp_schools").select("*"), sb.from("jp_sources").select("id,kind,ref,label,role,full_done,synced_at"), sb.from("jp_results").select("tourn,gender,year,place,school_id,name_ja"), sb.from("jp_pref_top").select("pref,gender,tourn,year,name,place")]);
+    const [s, src, res, pt, rk] = await Promise.all([sb.from("jp_schools").select("*"), sb.from("jp_sources").select("id,kind,ref,label,role,full_done,synced_at"), sb.from("jp_results").select("tourn,gender,year,place,school_id,name_ja"), sb.from("jp_pref_top").select("pref,gender,tourn,year,name,place"), sb.from("jp_rank").select("school_id,gender,pts,rk,best_tourn,best_year,best_lvl,hist")]);
     J.results = (res && res.data) || []; J.prefTop = (pt && pt.data) || [];
+    J.rank = {}; for (const r of (rk && rk.data) || []) J.rank[r.school_id + "|" + r.gender] = r;
     const vids = [];
     for (let from = 0; ; from += 1000) { const r = await sb.from("jp_videos").select("id,source,title,published,year,tourn,gender,rnd,schools").order("added_at", { ascending: false }).range(from, from + 999); if (r.error) throw r.error; vids.push(...(r.data || [])); if ((r.data || []).length < 1000) break; }
     J.schools = s.data || []; J.sources = src.data || []; J.videos = vids;
@@ -609,18 +615,11 @@ const jpList = l => l.length ? `<ul class="jp-list">${jpGroups(l).map(jpRow).joi
 // 대회 성적: 위키백과(일본어) 역대 결과표로 만든 jp_results (영상 제목으로 짐작하지 않음)
 const JP_PLACE = { 1: "우승", 2: "준우승", 3: "4강" };
 const JP_RECENT = 2019; // 이 해부터는 연도별로, 그 전은 '그 외'
-function jpStrength(g) {
-  const J = jp(), key = g + (J.results || []).length + "|" + (J.prefTop || []).length; if (J._str && J._strK === key) return J._str;
-  const score = {}, star = {}, cy = new Date().getFullYear();
-  for (const r of J.results || []) {
-    if (r.gender !== g || !r.school_id) continue;
-    const w = { 1: 6, 2: 4, 3: 2 }[r.place] * (r.year >= cy - 2 ? 1 : r.year >= cy - 6 ? 0.5 : 0.15);
-    score[r.school_id] = (score[r.school_id] || 0) + w;
-    if (r.year >= cy - 2) star[r.school_id] = true;
-  }
-  for (const [id, l] of Object.entries(J.prefRes || {})) for (const r of l) if (r.gender === g) score[id] = (score[id] || 0) + ({ 1: 1.2, 2: 0.8, 3: 0.4 }[r.place] || 0) * (r.year >= cy - 1 ? 1 : 0.5);
-  J._str = { score, star }; J._strK = key; return J._str;
-}
+// 고교 랭킹 (jp_rank): 전국대회에서 간 곳(16강·8강 포함) + 현 대회 4강 이상, 최근 결과일수록 크게
+const JP_LVL = { 7: "우승", 6: "준우승", 5: "4강", 4: "8강", 3: "16강", 2: "32강", 1: "출전", 0: "출전" };
+const jpRank = (id, g) => (jp().rank || {})[id + "|" + g] || null;
+const jpLvlTxt = (t, y, l) => `${JP_TOURN[t]} ${y} ${JP_LVL[l]}`;
+const jpByRank = g => (a, b) => ((jpRank(a.id, g) || {}).rk || 1e4) - ((jpRank(b.id, g) || {}).rk || 1e4) || a.name_ko.localeCompare(b.name_ko, "ko");
 // 현 대회(하루코·인터하이·지역대회 현 예선) 4강 이상: koko-volley 결과(jp_pref_top)의 학교 이름을 같은 현의 학교 사전과 맞춤
 const JP_PREF_T = { haruko: "하루코", ih: "인터하이", block: "지역대회" };
 const jpNorm = t => String(t || "").normalize("NFKC").replace(/\s+/g, "");
@@ -651,16 +650,16 @@ function jpSchoolCount() {
   J._cnt = cnt; J._cntK = J.videos.length; return cnt;
 }
 // 학교 한 줄 (박스): 이름 · 일본어 · 가장 좋은 전국/현 성적 · 영상 수
-function jpSchoolRow(s, cnt, star) {
-  const J = jp(), nat = jpResultsOf(s.id).filter(r => r.gender === J.g && r.year >= JP_RECENT)[0], pr = jpPrefOf(s.id, J.g)[0];
-  const badge = nat ? `<span class="chip ${star[s.id] ? "warn" : ""}">${star[s.id] ? "★ " : ""}${esc(jpResTxt(nat))}</span>` : pr ? `<span class="chip">${esc(jpPrefTxt(pr))}</span>` : "";
-  return `<button type="button" class="panel jp-srow" data-act="jpschool" data-id="${esc(s.id)}"><span class="jp-st"><b>${esc(s.name_ko)}</b><span class="jp-ja">${esc(s.name_ja.replace(/高校$/, ""))}${J.pref ? "" : ` · ${JP_PREF[s.pref] ? JP_PREF[s.pref][0] : esc(s.pref)}`}</span></span><span class="jp-sb">${badge}<span class="small muted">영상 ${cnt[s.id] || 0}</span></span></button>`;
+function jpSchoolRow(s, cnt) {
+  const J = jp(), r = jpRank(s.id, J.g), pr = jpPrefOf(s.id, J.g)[0];
+  const badge = r && r.best_tourn ? `<span class="chip ${r.best_lvl >= 6 ? "warn" : ""}">${esc(jpLvlTxt(r.best_tourn, r.best_year, r.best_lvl))}</span>` : pr ? `<span class="chip">${esc(jpPrefTxt(pr))}</span>` : "";
+  return `<button type="button" class="panel jp-srow" data-act="jpschool" data-id="${esc(s.id)}"><span class="jp-rk ${r && r.rk <= 10 ? "top" : ""}">${r ? r.rk : "–"}</span><span class="jp-st"><b>${esc(s.name_ko)}</b><span class="jp-ja">${esc(s.name_ja.replace(/高校$/, ""))}${J.pref ? "" : ` · ${JP_PREF[s.pref] ? JP_PREF[s.pref][0] : esc(s.pref)}`}</span>${badge ? `<span class="jp-bd">${badge}</span>` : ""}</span><span class="small muted jp-vc">영상 ${cnt[s.id] || 0}</span></button>`;
 }
 function jpSearchSchools(q) {
   const J = jp(); q = jpNorm(q); if (!q) return "";
-  const cnt = jpSchoolCount(), { star } = jpStrength(J.g);
-  const l = J.schools.filter(s => jpGenderOk(J.g, s.gender) && (jpNorm(s.name_ko).includes(q) || jpNorm(s.name_ja).includes(q) || (JP_PREF[s.pref] || [""])[0].includes(q) || s.pref.includes(q))).slice(0, 40);
-  return l.length ? `<div class="boxes">${l.map(s => jpSchoolRow(s, cnt, star)).join("")}</div>` : emptyLine("찾는 학교가 없어요.");
+  const cnt = jpSchoolCount();
+  const l = J.schools.filter(s => jpGenderOk(J.g, s.gender) && (jpNorm(s.name_ko).includes(q) || jpNorm(s.name_ja).includes(q) || (JP_PREF[s.pref] || [""])[0].includes(q) || s.pref.includes(q))).sort(jpByRank(J.g)).slice(0, 40);
+  return l.length ? `<div class="boxes">${l.map(s => jpSchoolRow(s, cnt)).join("")}</div>` : emptyLine("찾는 학교가 없어요.");
 }
 function viewJp() {
   const J = jp();
@@ -671,9 +670,8 @@ function viewJp() {
   let body = "";
   if (J.tab === "school") {
     // 지역 → 현 → 학교 순서로 한 단계씩. 이름으로 바로 찾기도
-    const cnt = jpSchoolCount(), { score, star } = jpStrength(J.g);
-    const sc = id => (score[id] || 0) + Math.min(cnt[id] || 0, 40) * 0.01;
-    const list = J.schools.filter(s => jpGenderOk(J.g, s.gender)).sort((a, b) => sc(b.id) - sc(a.id) || a.name_ko.localeCompare(b.name_ko, "ko"));
+    const cnt = jpSchoolCount();
+    const list = J.schools.filter(s => jpGenderOk(J.g, s.gender)).sort(jpByRank(J.g));
     const prefsOf = i => Object.keys(JP_PREF).filter(pf => JP_PREF[pf][1] === i);
     const inPref = pf => list.filter(s => s.pref === pf);
     const top = l => l.slice(0, 3).map(s => esc(s.name_ko)).join(" · ");
@@ -681,14 +679,19 @@ function viewJp() {
     let inner;
     if (J.pref && JP_PREF[J.pref]) {
       const l = inPref(J.pref), reg = JP_PREF[J.pref][1];
-      inner = `<div class="row">${back("jpreg", reg, JP_REGIONS[reg])}</div><div class="jp-head"><h3>${JP_PREF[J.pref][0]} <span class="jp-ja">${J.pref}</span></h3><span class="small muted">${l.length}개교 · 강한 순</span></div>
-        ${l.length ? `<div class="boxes">${l.map(s => jpSchoolRow(s, cnt, star)).join("")}</div>` : emptyLine("이 현의 학교가 아직 없어요.")}`;
+      inner = `<div class="row">${back("jpreg", reg, JP_REGIONS[reg])}</div><div class="jp-head"><h3>${JP_PREF[J.pref][0]} <span class="jp-ja">${J.pref}</span></h3><span class="small muted">${l.length}개교</span></div>
+        ${l.length ? `<div class="boxes box-cols">${l.map(s => jpSchoolRow(s, cnt)).join("")}</div>` : emptyLine("이 현의 학교가 아직 없어요.")}`;
     } else if (J.reg != null && JP_REGIONS[J.reg]) {
       inner = `<div class="row">${back("jpreg", "", "전체 지역")}</div><div class="jp-head"><h3>${JP_REGIONS[J.reg]}</h3></div>
         <div class="boxes box-cols">${prefsOf(J.reg).map(pf => { const l = inPref(pf); return `<button type="button" class="panel jp-box" data-act="jppref" data-v="${pf}"><b>${JP_PREF[pf][0]} <span class="jp-ja">${pf}</span></b><span class="small muted">${l.length ? `${l.length}개교 · ${top(l)}` : "학교 없음"}</span></button>`; }).join("")}</div>`;
     } else {
-      const regs = JP_REGIONS.map((name, i) => { const l = list.filter(s => JP_PREF[s.pref] && JP_PREF[s.pref][1] === i); return { i, name, l, s: l.reduce((t, x) => t + sc(x.id), 0) }; });
-      inner = `<div class="boxes box-cols">${regs.map(r => `<button type="button" class="panel jp-box" data-act="jpreg" data-v="${r.i}"><b>${r.name}</b><span class="small muted">${r.l.length}개교${r.l.length ? " · " + top(r.l) : ""}</span></button>`).join("")}</div>`;
+      const regs = JP_REGIONS.map((name, i) => ({ i, name, l: list.filter(s => JP_PREF[s.pref] && JP_PREF[s.pref][1] === i) }));
+      const ranked = list.filter(s => jpRank(s.id, J.g)), more = J.rankMore ? 100 : 20;
+      inner = `<div class="jp-head"><h3>랭킹</h3><span class="small muted">최근 대회 성적</span></div>
+        <div class="boxes box-cols">${ranked.slice(0, more).map(s => jpSchoolRow(s, cnt)).join("")}</div>
+        ${ranked.length > more ? `<div class="row"><button class="btn small" type="button" data-act="jprankmore">더 보기</button></div>` : ""}
+        <div class="jp-head"><h3>지역별</h3></div>
+        <div class="boxes box-cols">${regs.map(r => `<button type="button" class="panel jp-box" data-act="jpreg" data-v="${r.i}"><b>${r.name}</b><span class="small muted">${r.l.length}개교${r.l.length ? " · " + top(r.l) : ""}</span></button>`).join("")}</div>`;
     }
     body = `<div class="row between">${gsel}</div>
       <label class="fl wide jp-q"><input id="jpq" type="search" placeholder="학교 이름 찾기 (한글·일본어)" value="${esc(J.q || "")}" autocomplete="off"></label>
@@ -734,10 +737,14 @@ function jpSchoolPage(s) {
   const q = s.name_ja.replace(/高校$/, "");
   return `<section class="sec"><div class="row"><button class="btn link small" type="button" data-act="jpback">‹ 목록</button></div>
     <div class="jp-head"><h2 class="dyn">${esc(s.name_ko)}</h2><span class="small muted">${esc(s.name_ja)} · ${JP_PREF[s.pref] ? JP_PREF[s.pref][0] : esc(s.pref)}${s.gender === "w" ? " · 여자부" : s.gender === "mw" ? " · 남녀" : ""}</span></div>
-    ${(() => { const rs = jpResultsOf(s.id), now = rs.filter(r => r.year >= JP_RECENT), old = rs.filter(r => r.year < JP_RECENT);
-      return `<div class="panel jp-honor"><div class="row between"><b>대회 성적</b><a class="btn link small" href="${jpGoogle(`${q} バレー 春高 インターハイ 結果`)}" target="_blank" rel="noopener noreferrer">일본어로 찾기 ↗</a></div>
-        ${now.length ? `<div class="jp-chips">${now.map(r => `<span class="chip ${r.place === 1 ? "warn" : ""}">${esc(jpResTxt(r))}</span>`).join("")}</div>` : `<span class="small muted">${JP_RECENT}년 이후 전국 4강 기록 없음</span>`}
-        ${old.length ? `<details><summary class="small muted">그 외 (${JP_RECENT - 1}년 이전) ${old.length}</summary><div class="jp-chips">${old.map(r => `<span class="chip">${esc(jpResTxt(r))}</span>`).join("")}</div></details>` : ""}
+    ${(() => { const gs = s.gender === "mw" ? ["m", "w"] : [s.gender], two = gs.length > 1;
+      const hs = gs.flatMap(g => ((jpRank(s.id, g) || {}).hist || []).map(h => ({ ...h, g }))).sort((a, b) => b.y - a.y || b.l - a.l);
+      const chip = h => `<span class="chip ${h.l >= 6 ? "warn" : ""}">${two ? (h.g === "w" ? "여 " : "남 ") : ""}${esc(jpLvlTxt(h.t, h.y, h.l))}</span>`;
+      const now = hs.filter(h => h.y >= JP_RECENT), old = hs.filter(h => h.y < JP_RECENT);
+      const rk = gs.map(g => [g, jpRank(s.id, g)]).filter(([, r]) => r).map(([g, r]) => `${two ? (g === "w" ? "여자 " : "남자 ") : ""}${r.rk}위`).join(" · ");
+      return `<div class="panel jp-honor"><div class="row between"><b>대회 성적${rk ? ` <span class="chip on">랭킹 ${rk}</span>` : ""}</b><a class="btn link small" href="${jpGoogle(`${q} バレー 春高 インターハイ 結果`)}" target="_blank" rel="noopener noreferrer">일본어로 찾기 ↗</a></div>
+        ${now.length ? `<div class="jp-chips">${now.map(chip).join("")}</div>` : `<span class="small muted">${JP_RECENT}년 이후 전국대회 기록 없음</span>`}
+        ${old.length ? `<details><summary class="small muted">그 외 (${JP_RECENT - 1}년 이전) ${old.length}</summary><div class="jp-chips">${old.map(chip).join("")}</div></details>` : ""}
         ${(() => { const pr = jpPrefOf(s.id); return pr.length ? `<b class="jp-sub">현 대회</b><div class="jp-chips">${pr.map(r => `<span class="chip ${r.place === 1 ? "warn" : ""}">${s.gender === "mw" ? (r.gender === "w" ? "여 " : "남 ") : ""}${esc(jpPrefTxt(r))}</span>`).join("")}</div>` : ""; })()}</div>`; })()}
     ${visit.length ? `<section class="sec"><h3>학교 탐방 <span class="small muted">${visit.length}</span></h3>${jpList(visit)}</section>` : ""}
     ${groups.length ? `<div class="sc-row jp-regs">${groups.map(([k, x]) => `<button type="button" class="chip sc-chip ${k === sel ? "on" : ""}" data-act="jpstourn" data-v="${k || ""}">${k === "old" ? `그 외 (${JP_RECENT - 1}년 이전)` : k ? JP_TOURN[k] : "기타"} <span class="small">${jpGroups(x).length}</span></button>`).join("")}</div>
@@ -812,7 +819,7 @@ function viewSettings() {
   return `<div class="set-head"><h2>설정</h2><button class="btn link" type="button" data-act="setclose">닫기</button></div>
     ${me ? `<section class="panel set-sec"><h3>내 정보</h3>
       <div class="kv"><span>이름</span><b>${esc(me.name)}</b></div><div class="kv"><span>포지션</span><b>${esc(POS[me.pos] || me.pos)}</b></div>
-      <div class="kv"><span>등번호</span><b>${me.number ?? "—"}</b></div>${me.title ? `<div class="kv"><span>직책</span><b>${esc(TITLES[me.title])}</b></div>` : ""}
+      <div class="kv"><span>등번호</span><b>${me.number ?? "—"}</b></div>${me.titles.length ? `<div class="kv"><span>직책</span><b>${esc(titlesOf(me).map(k => TITLES[k]).join(" · "))}</b></div>` : ""}
       <form class="f" id="profileForm"><div class="fields">
         <label class="fl">전화번호<input id="pr-phone" type="tel" inputmode="tel" maxlength="20" placeholder="010-0000-0000" value="${esc((state.contacts || {})[me.id] || "")}"></label>
         <label class="fl">학년<input id="pr-year" maxlength="10" placeholder="예: 3" value="${esc(me.year || "")}"></label>
@@ -1005,13 +1012,13 @@ function teamStatusHtml() {
 function viewRoster() {
   if (!can("roster")) return `<div class="panel empty"><strong>명단 담당만 볼 수 있어요</strong></div>`;
   const ps = sortedPlayers().slice().sort((a, b) => (a.number ?? 999) - (b.number ?? 999) || a.name.localeCompare(b.name, "ko"));
-  const staff = ps.filter(p => p.title || p.media);
+  const staff = ps.filter(p => p.titles.length);
   return `<section class="sec"><div class="sec-head"><h3>명단 <span class="small muted">${ps.length}명</span></h3>${can("full") ? `<button class="btn link small" type="button" data-act="view" data-v="intake">직책·정보 바꾸기 →</button>` : ""}</div>
-    ${(() => { const hasT = ps.some(p => p.title || p.military); const tel = p => state.contacts[p.id] ? `<a class="r-tel" href="tel:${esc(state.contacts[p.id].replace(/[^0-9+]/g, ""))}">${esc(state.contacts[p.id])}</a>` : `<span class="muted">—</span>`;
+    ${(() => { const hasT = ps.some(p => p.titles.length || p.military); const tel = p => state.contacts[p.id] ? `<a class="r-tel" href="tel:${esc(state.contacts[p.id].replace(/[^0-9+]/g, ""))}">${esc(state.contacts[p.id])}</a>` : `<span class="muted">—</span>`;
       return `<div class="tw"><table class="roster"><thead><tr><th class="num">번호</th><th>이름</th><th>포지션</th><th>학년</th>${hasT ? `<th class="c-title">직책</th>` : ""}<th>전화</th></tr></thead><tbody>
-      ${ps.map(p => `<tr><td class="num">${p.number ?? ""}</td><td><b>${esc(p.name)}</b>${p.title ? `<span class="chip t-inline">${esc(TITLES[p.title])}</span>` : ""}${p.military ? `<span class="chip mil t-inline">군</span>` : ""}</td><td><span class="chip pos">${esc(p.pos)}</span></td><td>${esc(String(p.year || "").replace(/학년$/, ""))}</td>${hasT ? `<td class="c-title">${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}${p.military ? `<span class="chip mil">군 복무</span>` : ""}</td>` : ""}<td>${tel(p)}</td></tr>`).join("")}
+      ${ps.map(p => `<tr><td class="num">${p.number ?? ""}</td><td><b>${esc(p.name)}</b>${titleChips(p, " t-inline")}${p.military ? `<span class="chip mil t-inline">군</span>` : ""}</td><td><span class="chip pos">${esc(p.pos)}</span></td><td>${esc(String(p.year || "").replace(/학년$/, ""))}</td>${hasT ? `<td class="c-title">${titleChips(p)}${p.military ? `<span class="chip mil">군 복무</span>` : ""}</td>` : ""}<td>${tel(p)}</td></tr>`).join("")}
       </tbody></table></div>`; })()}</section>
-    <section class="sec"><h3>운영진</h3>${staff.length ? `<ul class="watch">${staff.map(p => `<li><b>${esc(p.name)}</b>${p.title ? `<span class="chip">${esc(TITLES[p.title])}</span>` : ""}${p.media ? `<span class="chip">영상 담당</span>` : ""}</li>`).join("")}</ul>` : emptyLine("아직 정해진 직책이 없어요.")}</section>`;
+    <section class="sec"><h3>운영진</h3>${staff.length ? `<ul class="watch">${staff.map(p => `<li><b>${esc(p.name)}</b>${titleChips(p)}</li>`).join("")}</ul>` : emptyLine("아직 정해진 직책이 없어요.")}</section>`;
 }
 // 리포트: 지난주 요약 + 선수별 리포트(최근 4주) + 엑셀
 // 시즌 = 3월 → 다음 해 2월. 기록이 있는 첫 시즌부터 이번 시즌까지
@@ -1446,8 +1453,7 @@ function viewIntake() {
             <label class="fl">이름<input id="pf-name" required maxlength="20" value="${esc(p.name || "")}"></label>
             <label class="fl">포지션<select id="pf-pos" required>${POS_ORDER.map(k => `<option ${opt(k, p.pos)}>${k}</option>`).join("")}</select></label>
             <label class="fl">등번호<input id="pf-num" type="number" inputmode="numeric" min="0" max="99" value="${esc(p.number ?? "")}"></label>
-            <label class="fl">직책<select id="pf-title"><option value="">부원</option>${Object.entries(TITLES).map(([k, l]) => `<option value="${k}" ${p.title === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
-            <label class="check"><input type="checkbox" id="pf-media" ${p.media ? "checked" : ""}> 영상 담당</label>
+            <fieldset class="fl wide pf-titles"><legend>직책 (여러 개 가능)</legend><div class="chips">${Object.entries(TITLES).map(([k, l]) => `<label class="check"><input type="checkbox" name="pf-t" value="${k}" ${(p.titles || []).includes(k) ? "checked" : ""}> ${l}</label>`).join("")}</div></fieldset>
             <label class="fl">전화번호<input id="pf-phone" type="tel" inputmode="tel" maxlength="20" placeholder="010-0000-0000" value="${esc((state.contacts || {})[pid] || "")}"></label>
             <label class="fl">학년<input id="pf-year" maxlength="10" placeholder="예: 3학년" value="${esc(p.year || "")}"></label>
             <label class="fl">키 (cm)<input id="pf-height" type="number" inputmode="decimal" min="140" max="220" step="0.1" value="${esc(p.height ?? "")}"></label>
@@ -2418,9 +2424,11 @@ function setView(k) {
 function pickView() {
   const o = viewOptions(), saved = savedMode();
   if (saved && o.includes(saved)) return saved;
-  if (saved === "admin" && o.length > 1) return state.coach ? (state.title === "captain" ? "captain" : "admin") : o[0];
+  const top = state.coach ? ((state.titles || []).includes("captain") && !(state.titles || []).includes("admin") ? "captain" : "admin") : "player";
   if (saved === "player") return "player";
-  return state.coach ? (state.title === "captain" ? "captain" : "admin") : "player";
+  if (saved && o.includes("mine")) return "mine";
+  if (saved === "admin" && o.length > 1) return state.coach ? top : o[0];
+  return top;
 }
 function openRolePick() {
   const el = document.getElementById("sheet");
@@ -2594,6 +2602,7 @@ document.addEventListener("click", async ev => {
     else if (act === "jpg") J.g = v;
     else if (act === "jpreg") { J.reg = v === "" ? null : Number(v); J.pref = null; }
     else if (act === "jppref") J.pref = v;
+    else if (act === "jprankmore") J.rankMore = true;
     else if (act === "jpstourn") J.stourn = v || null;
     else if (act === "jpschool") { J.school = b.dataset.id; J.open = null; J.stourn = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
     else if (act === "jpback") { J.school = null; J.open = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
@@ -2910,10 +2919,8 @@ document.addEventListener("submit", async ev => {
         rehab: [], consent: true, updated_at: new Date().toISOString(),
       }));
       // 직책 (관리자·주장은 전체 권한) · 연락처
-      const title = document.getElementById("pf-title").value || null;
-      if (title !== ((state.players[id] || {}).title || null)) ok(await sb.rpc("set_member_title", { target: id, new_title: title }));
-      const media = document.getElementById("pf-media").checked;
-      if (media !== !!(state.players[id] || {}).media) ok(await sb.rpc("set_member_media", { target: id, on_: media }));
+      const titles = [...document.querySelectorAll('input[name="pf-t"]:checked')].map(x => x.value);
+      if (titles.slice().sort().join() !== titlesOf(state.players[id]).sort().join()) ok(await sb.rpc("set_member_titles", { target: id, new_titles: titles }));
       const phone = txt("pf-phone");
       if (phone !== ((state.contacts || {})[id] || "")) ok(await sb.from("player_contacts").upsert({ player_id: id, phone: phone || null, updated_at: new Date().toISOString() }));
       state.editPid = id;
@@ -3126,7 +3133,7 @@ async function loadProfile() {
   state.superAdmin = !!(r.data && r.data.super);
   state.myPid = r.data ? r.data.player_id : null;
   state.coach = state.role === "coach";
-  state.staff = state.coach || !!STAFF_PERMS[state.title] || !!state.media;
+  state.staff = state.coach || myStaff().length > 0;
   state.viewAs = pickView(); state.admin = state.viewAs !== "player";
   state.canWrite = state.role === "coach" || state.role === "player";
   if (state.canWrite) await loadAll();
@@ -3299,16 +3306,15 @@ function buildState(raw) {
   state.alumni = (raw.players || []).filter(r => r.alumni).map(r => ({ id: r.id, name: r.name, pos: r.pos, left: r.left_on })).sort((a, b) => String(b.left || "").localeCompare(String(a.left || "")));
   state.players = Object.fromEntries((raw.players || []).filter(r => !r.alumni).map(r => [r.id, {
     name: r.name, pos: r.pos, year: r.year, height: r.height, weight: r.weight, exp: r.exp,
-    weightExp: wexpNorm(r.weight_exp), adjust: r.adjust || {}, order: r.sort, title: r.title || null, number: r.number ?? null, media: !!r.media, military: !!r.military,
+    weightExp: wexpNorm(r.weight_exp), adjust: r.adjust || {}, order: r.sort, titles: r.titles || [], number: r.number ?? null, military: !!r.military,
   }]));
   // 다른 팀을 보고 있는 총관리자는 그 팀에 내 선수 정보가 없음 → 관리자로만
   if (state.coach && state.myPid && !state.players[state.myPid]) state.myPid = null;
   // 내 직책 → 맡은 일 (관리자·주장은 role coach)
-  const myTitle = (state.players[state.myPid] || {}).title || null, myMedia = !!(state.players[state.myPid] || {}).media;
-  if (myTitle !== state.title || myMedia !== !!state.media) {
-    state.media = myMedia;
-    state.title = myTitle;
-    state.staff = state.coach || !!STAFF_PERMS[myTitle] || state.media;
+  const myT = titlesOf(state.players[state.myPid]);
+  if (myT.join() !== (state.titles || []).join()) {
+    state.titles = myT;
+    state.staff = state.coach || myStaff().length > 0;
     state.viewAs = pickView();
     state.admin = state.viewAs !== "player";
   }
