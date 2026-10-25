@@ -93,7 +93,8 @@ function tag(title: string) {
   const y = t.match(/(20[0-3]\d)/); if (y) year = Number(y[1]);
   else if (t.match(/令和(元|\d{1,2})年/)) { const n = t.match(/令和(元|\d{1,2})年/)!; year = 2018 + (n[1] === "元" ? 1 : Number(n[1])); }
   else if (t.match(/平成(\d{1,2})年/)) year = 1988 + Number(t.match(/平成(\d{1,2})年/)![1]);
-  else { const n = t.match(/第(\d{1,2})回/); if (n && tourn === "haruko") year = Number(n[1]) + (Number(n[1]) < 45 ? 1969 : 1948); else if (n && tourn === "ih") year = Number(n[1]) + 1953; }
+  // 「第N回」은 전국대회 회차일 때만 연도로 (「第74回長崎県高等学校総合体育大会」 같은 현 대회 회차는 다름)
+  else if (!/[県都府道](高等学校|高校|総合体育|総体|大会|予選)/.test(t)) { const n = t.match(/第(\d{1,2})回/); if (n && tourn === "haruko") year = Number(n[1]) + (Number(n[1]) < 45 ? 1969 : 1948); else if (n && tourn === "ih") year = Number(n[1]) + 1953; }
   // 국민스포츠대회는 개최지로 연도를 앎 (「とちぎ国体」「青森国スポ」「第77回国体」)
   if (!year && tourn === "kokutai") {
     const v = t.match(/(和歌山|岩手|愛媛|福井|茨城|とちぎ|栃木|かごしま|鹿児島|さが|佐賀|SAGA|わたSHIGA|滋賀|SHIGA|青森)[^\s]{0,2}?(国体|国スポ)/i);
@@ -101,11 +102,15 @@ function tag(title: string) {
     const n = t.match(/第(\d{2})回(国体|国民体育大会|国民スポーツ大会|国スポ)/);
     if (v) year = Y[v[1].toLowerCase()] || null; else if (n) year = Number(n[1]) + 1945;
   }
+  // 아직 열리지 않은 대회 연도는 버림 (하루코는 다음 해 대회의 현 예선이 가을에 열려서 +1까지)
+  if (year && year > new Date().getFullYear() + (tourn === "haruko" ? 1 : 0)) year = null;
   let gender: string | null = /女子|女バレ|ガールズ/.test(t) ? "w" : /男子|男バレ/.test(t) ? "m" : null;
   const hits: { id: string; a: number; b: number }[] = [];
   for (const s of schools) for (const re of s.res) { re.lastIndex = 0; let m; while ((m = re.exec(body))) { hits.push({ id: s.id, a: m.index, b: m.index + m[0].length }); if (!m[0].length) break; } }
   const keep = hits.filter((h) => !hits.some((o) => o.id !== h.id && o.a <= h.a && o.b >= h.b && (o.b - o.a) > (h.b - h.a)));
   const ids = [...new Set(keep.map((h) => h.id))];
+  // 지역 대회인데 고교가 하나도 안 나오면 실업·대학 대회(「近畿総合 サントリー vs 堺」)
+  if (tourn === "block" && !ids.length && !/高校|高等学校/.test(t)) tourn = "other";
   // ---- 위계: 전국 본선 vs 현 예선 ----
   // 학교 이름을 뺀 제목에 「鹿児島県男子」「県大会」「県高校総体」 같은 말이 있으면 현 대회
   let rest = body; for (const h of [...keep].sort((x, y) => y.a - x.a)) rest = rest.slice(0, h.a) + " " + rest.slice(h.b);

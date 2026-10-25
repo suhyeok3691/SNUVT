@@ -1772,6 +1772,7 @@ create table public.jp_stars (
   name text not null, kana text, pos text, height smallint,
   senior_year smallint, -- 3학년이 되는 학년도
   name_ko text, roman text, -- 한글 이름 · JVA 로마자 표기
+  team_pos text, -- 팀 포지션이 대표와 다를 때 (예: 팀 S · 대표 L)
   tags text[] not null default '{}',
   src text,
   unique (school_id, name)
@@ -1795,11 +1796,61 @@ create or replace function private.jp_roster_call() returns bigint language sql 
     timeout_milliseconds := 120000)
 $$;
 
+-- 지역 대회 결과 (jp-block 이 채움)
+create table public.jp_block_matches (
+  id bigserial primary key,
+  region text not null, kind text not null, year smallint not null,
+  gender text not null check (gender in ('m','w')),
+  rnd text, head text,
+  a_name text not null, a_pref text, b_name text not null, b_pref text, a_sets smallint, b_sets smallint,
+  src text not null
+);
+create index jp_block_matches_r on public.jp_block_matches (region, year);
+alter table public.jp_block_matches enable row level security;
+create policy "members read" on public.jp_block_matches for select to authenticated using (private.is_member());
+create or replace function private.jp_block_clean() returns trigger language plpgsql set search_path = '' as $$
+begin new.a_pref := nullif(regexp_replace(new.a_pref, '[0-9]+$', ''), ''); new.b_pref := nullif(regexp_replace(new.b_pref, '[0-9]+$', ''), ''); return new; end $$;
+create trigger jp_block_clean before insert on public.jp_block_matches for each row execute function private.jp_block_clean();
+create view public.jp_block_top with (security_invoker = true) as
+with m as (
+  select region, kind, year, gender, src, rnd,
+    case when a_sets > b_sets then a_name else b_name end w, case when a_sets > b_sets then a_pref else b_pref end wp,
+    case when a_sets > b_sets then b_name else a_name end l, case when a_sets > b_sets then b_pref else a_pref end lp
+  from public.jp_block_matches where a_sets is distinct from b_sets
+), fl as (
+  select region, kind, year, gender, src, name, pref, sum(win) wins from (
+    select region, kind, year, gender, src, w name, wp pref, 1 win from m where rnd = 'FL'
+    union all select region, kind, year, gender, src, l, lp, 0 from m where rnd = 'FL') x
+  group by 1,2,3,4,5,6,7
+), flr as (select *, rank() over (partition by src, gender order by wins desc) rk from fl
+), t as (
+  select region, kind, year, gender, src, w name, wp pref, 1 place from m where rnd = 'F'
+  union all select region, kind, year, gender, src, l, lp, 2 from m where rnd = 'F'
+  union all select region, kind, year, gender, src, l, lp, 3 from m where rnd = 'SF'
+  union all select region, kind, year, gender, src, w, wp, 3 from m where rnd = 'SF'
+  union all select region, kind, year, gender, src, name, pref,
+    case when rk = 1 and not exists (select 1 from m where m.src = flr.src and m.gender = flr.gender and m.rnd = 'F') then 1 else 3 end
+  from flr where rk <= 4
+)
+select region, kind, year, gender, src, name, pref, min(place) place, private.jp_sid(name, pref, gender) school_id
+from t group by region, kind, year, gender, src, name, pref;
+grant select on public.jp_block_top to authenticated;
+create or replace function private.jp_block_call() returns bigint language sql security definer set search_path = '' as $$
+  select net.http_post(
+    url := 'https://juhcaodotxspzzzfzrnt.supabase.co/functions/v1/jp-block',
+    body := '{}'::jsonb,
+    headers := jsonb_build_object('Content-Type', 'application/json',
+      'x-cron', (select decrypted_secret from vault.decrypted_secrets where name = 'push_cron')),
+    timeout_milliseconds := 150000)
+$$;
+
 -- ========== 7. 예약 작업 (UTC) ==========
 -- push-hourly 매시 정각 (사람마다 고른 시각에 아침·저녁 알림)
 -- jp-sync-new 05:00 KST · jp-sync-full 05:30 KST (매일), jp-nat-weekly · jp-retag-weekly · jp-fill-weekly (월 19:00~19:45 UTC → 화요일 새벽), jp-pref-weekly 화 04:15 KST, jp-schools-daily 06:00 KST (하루 60개교)
 select cron.schedule('jp-fill-weekly', '45 19 * * 1', 'select private.jp_sync_call(''fill'')');
 select cron.schedule('jp-rank-daily', '50 21 * * *', 'select private.jp_rank_refresh()');
+select cron.schedule('jp-block-weekly', '10 19 * * 1', 'select private.jp_block_call()');
+select cron.schedule('jp-roster-weekly', '20 19 * * 1', 'select private.jp_roster_call()');
 select cron.schedule('jp-pref-weekly', '15 19 * * 1', 'select private.jp_pref_call()');
 select cron.schedule('jp-schools-daily', '0 21 * * *', 'select private.jp_sync_call(''schools'')');
 select cron.schedule('jp-nat-weekly', '0 19 * * 1', 'select private.jp_nat_call()');
