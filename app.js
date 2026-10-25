@@ -729,7 +729,7 @@ function jpSchoolRow(s, cnt) {
   const J = jp(), r = jpRank(s.id, J.g), pr = jpPrefOf(s.id, J.g)[0];
   const badge = r && r.best_tourn ? `<span class="chip ${r.best_lvl >= 6 ? "warn" : ""}">${esc(jpLvlTxt(r.best_tourn, r.best_year, r.best_lvl))}</span>` : pr ? `<span class="chip">${esc(jpPrefTxt(pr))}</span>` : "";
   const reps = jpStarsOf(s.id, J.g).filter(jpIsRep).length;
-  return `<button type="button" class="panel jp-srow" data-act="jpschool" data-id="${esc(s.id)}"><span class="jp-rk ${r && r.rk <= 10 ? "top" : ""}">${r ? r.rk : "–"}</span><span class="jp-st"><b>${esc(s.name_ko)}</b><span class="jp-ja">${esc(s.name_ja.replace(/高校$/, ""))}${J.pref ? "" : ` · ${JP_PREF[s.pref] ? JP_PREF[s.pref][0] : esc(s.pref)}`}</span>${badge || reps ? `<span class="jp-bd">${badge}${reps ? `<span class="chip">대표 ${reps}명</span>` : ""}</span>` : ""}</span><span class="small muted jp-vc">영상 ${cnt[s.id] || 0}</span></button>`;
+  return `<button type="button" class="panel jp-srow" data-act="jpschool" data-id="${esc(s.id)}"><span class="jp-rk ${r && r.rk <= 10 ? "top" : ""}">${r ? r.rk : "–"}</span><span class="jp-st"><b>${esc(s.name_ko)}</b><span class="jp-ja">${esc(s.name_ja.replace(/高校$/, ""))}${J.pref ? "" : ` · ${JP_PREF[s.pref] ? JP_PREF[s.pref][0] : esc(s.pref)}`}</span>${badge || reps ? `<span class="jp-bd">${badge}${reps ? `<span class="chip">대표 ${reps}명</span>` : ""}</span>` : `<span class="jp-bd" aria-hidden="true" style="visibility:hidden"><span class="chip">-</span></span>`}</span><span class="small muted jp-vc">영상 ${cnt[s.id] || 0}</span></button>`;
 }
 function jpSearchSchools(q) {
   const J = jp(); q = jpNorm(q); if (!q) return "";
