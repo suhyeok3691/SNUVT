@@ -359,7 +359,7 @@ create table public.player_private (
   weight numeric,
   updated_at timestamp with time zone default now() not null,
   constraint player_private_pkey PRIMARY KEY (player_id),
-  constraint player_private_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE,
+  constraint player_private_player_id_fkey FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED, -- 새 선수 행 BEFORE 트리거가 먼저 씀
   constraint player_private_height_check CHECK (((height >= (140)::numeric) AND (height <= (220)::numeric))),
   constraint player_private_weight_check CHECK (((weight >= (40)::numeric) AND (weight <= (150)::numeric)))
 );
