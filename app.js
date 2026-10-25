@@ -735,7 +735,7 @@ function jpSearchSchools(q) {
   const J = jp(); q = jpNorm(q); if (!q) return "";
   const cnt = jpSchoolCount();
   const byP = new Set((J.stars || []).filter(x => x.gender === J.g && [x.name, x.name_ko, x.roman].some(n => n && jpNorm(n).toLowerCase().includes(q.toLowerCase()))).map(x => x.school_id));
-  const l = J.schools.filter(s => jpGenderOk(J.g, s.gender) && (byP.has(s.id) || jpNorm(s.name_ko).includes(q) || jpNorm(s.name_ja).includes(q) || (JP_PREF[s.pref] || [""])[0].includes(q) || s.pref.includes(q))).sort(jpByRank(J.g)).slice(0, 40);
+  const l = J.schools.filter(s => jpGenderOk(J.g, s.gender) && (byP.has(s.id) || jpNorm(s.name_ko).includes(q) || jpNorm(s.name_ko_old || "").includes(q) || jpNorm(s.kana || "").includes(q) || jpNorm(s.name_ja).includes(q) || (JP_PREF[s.pref] || [""])[0].includes(q) || s.pref.includes(q))).sort(jpByRank(J.g)).slice(0, 40);
   return l.length ? `<div class="boxes">${l.map(s => jpSchoolRow(s, cnt)).join("")}</div>` : emptyLine("찾는 학교가 없어요.");
 }
 function viewJp() {
