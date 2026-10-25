@@ -560,9 +560,10 @@ const jpSchool = id => jp().schools.find(s => s.id === id);
 async function jpLoad() {
   const J = jp(); if (J.loading) return; J.loading = true;
   try {
-    const [s, src, res, pt, rk] = await Promise.all([sb.from("jp_schools").select("*"), sb.from("jp_sources").select("id,kind,ref,label,role,full_done,synced_at"), sb.from("jp_results").select("tourn,gender,year,place,school_id,name_ja"), sb.from("jp_pref_top").select("pref,gender,tourn,year,name,place"), sb.from("jp_rank").select("school_id,gender,pts,rk,best_tourn,best_year,best_lvl,hist")]);
+    const [s, src, res, pt, rk, st] = await Promise.all([sb.from("jp_schools").select("*"), sb.from("jp_sources").select("id,kind,ref,label,role,full_done,synced_at"), sb.from("jp_results").select("tourn,gender,year,place,school_id,name_ja"), sb.from("jp_pref_top").select("pref,gender,tourn,year,name,place"), sb.from("jp_rank").select("school_id,gender,pts,rk,best_tourn,best_year,best_lvl,hist"), sb.from("jp_stars").select("school_id,gender,name,pos,height,senior_year,tags")]);
     J.results = (res && res.data) || []; J.prefTop = (pt && pt.data) || [];
     J.rank = {}; for (const r of (rk && rk.data) || []) J.rank[r.school_id + "|" + r.gender] = r;
+    J.stars = (st && st.data) || []; J.rosters = {};
     const vids = [];
     for (let from = 0; ; from += 1000) { const r = await sb.from("jp_videos").select("id,source,title,published,year,tourn,gender,rnd,schools").order("added_at", { ascending: false }).range(from, from + 999); if (r.error) throw r.error; vids.push(...(r.data || [])); if ((r.data || []).length < 1000) break; }
     J.schools = s.data || []; J.sources = src.data || []; J.videos = vids;
@@ -618,7 +619,40 @@ const JP_RECENT = 2019; // 이 해부터는 연도별로, 그 전은 '그 외'
 // 고교 랭킹 (jp_rank): 전국대회에서 간 곳(16강·8강 포함) + 현 대회 4강 이상, 최근 결과일수록 크게
 const JP_LVL = { 7: "우승", 6: "준우승", 5: "4강", 4: "8강", 3: "16강", 2: "32강", 1: "출전", 0: "출전" };
 const jpRank = (id, g) => (jp().rank || {})[id + "|" + g] || null;
-const jpLvlTxt = (t, y, l) => `${JP_TOURN[t]} ${y} ${JP_LVL[l]}`;
+// 국민스포츠대회는 현 선발팀이라 랭킹 점수에는 안 넣고 기록에만 (현 대표) 로 표시
+const jpLvlTxt = (t, y, l) => `${JP_TOURN[t]}${t === "kokutai" ? "(현 대표)" : ""} ${y} ${JP_LVL[l]}`;
+// 선수: 학년도는 4월에 바뀜. jp_stars = 대표·수상 선수(손으로 모음), jp_roster = 하루코 출전 명단(학교를 열 때 불러옴)
+const jpSY = () => { const d = new Date(); return d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1; };
+const jpStarsOf = (id, g) => (jp().stars || []).filter(x => x.school_id === id && (!g || x.gender === g) && (!x.senior_year || x.senior_year >= jpSY()));
+const jpIsRep = x => x.tags.some(t => /대표/.test(t));
+async function jpLoadRoster(id) {
+  const J = jp(); if (J.rosters[id]) return; J.rosters[id] = "loading";
+  const r = await sb.from("jp_roster").select("gender,tourn,year,no,name,grade,height,cap").eq("school_id", id);
+  J.rosters[id] = r.error ? [] : r.data || []; if (state.view === "jp" && J.school === id) { state.dirty = false; render(); }
+}
+// 지금 학년 = 그 대회 학년 + 지난 학년도 수 (하루코 Y 는 Y-1 학년도에 열림). 졸업한 선수는 뺌
+function jpRosterNow(id, g) {
+  const l = (jp().rosters[id] || []); if (!Array.isArray(l)) return null;
+  const mine = l.filter(r => r.gender === g); if (!mine.length) return { rows: [], year: 0 };
+  const y = Math.max(...mine.map(r => r.year)), sy = y - 1;
+  return { year: y, rows: mine.filter(r => r.year === y).map(r => ({ ...r, now: r.grade + jpSY() - sy })).filter(r => r.now <= 3).sort((a, b) => b.now - a.now || a.no - b.no) };
+}
+function jpPlayersHtml(s) {
+  const J = jp(), gs = s.gender === "mw" ? ["m", "w"] : [s.gender];
+  if (!J.rosters[s.id]) jpLoadRoster(s.id);
+  return gs.map(g => {
+    const two = gs.length > 1 ? (g === "w" ? "여자 " : "남자 ") : "", stars = jpStarsOf(s.id, g), ro = jpRosterNow(s.id, g);
+    const byName = Object.fromEntries(((ro && ro.rows) || []).map(r => [r.name, r]));
+    const grade = x => x.senior_year ? 3 - (x.senior_year - jpSY()) : byName[x.name] ? byName[x.name].now : null;
+    const starBox = stars.sort((a, b) => jpIsRep(b) - jpIsRep(a) || (grade(b) || 0) - (grade(a) || 0)).map(x => { const r = byName[x.name], gr = grade(x), h = x.height || (r && r.height);
+      return `<div class="panel jp-star"><div class="row between"><b>${esc(x.name)}</b><span class="small muted">${[gr ? gr + "학년" : "", x.pos || "", h ? h + "cm" : ""].filter(Boolean).join(" · ")}</span></div><div class="jp-chips">${x.tags.map(t => `<span class="chip ${/대표/.test(t) ? "warn" : ""}">${esc(t)}</span>`).join("")}</div></div>`; }).join("");
+    const starSet = new Set(stars.map(x => x.name));
+    const table = ro === null ? `<p class="small muted">명단 불러오는 중…</p>` : ro.rows.length ? `<div class="tw"><table class="roster jp-ro"><thead><tr><th class="num">번호</th><th>이름</th><th>지금</th><th>키</th></tr></thead><tbody>${ro.rows.map(r => `<tr${starSet.has(r.name) ? ' class="jp-hot"' : ""}><td class="num">${r.no}</td><td><b>${esc(r.name)}</b>${r.cap ? ` <span class="chip t-cap">주장</span>` : ""}${starSet.has(r.name) ? ` <span class="chip warn t-cap">★</span>` : ""}</td><td>${r.now}학년</td><td>${r.height || ""}</td></tr>`).join("")}</tbody></table></div>` : "";
+    if (!starBox && !table) return "";
+    return `<section class="sec"><h3>${two}선수</h3>${starBox ? `<div class="boxes">${starBox}</div>` : ""}
+      ${ro && ro.rows.length ? `<details class="jp-rod" ${starBox ? "" : "open"}><summary class="small muted">하루코 ${ro.year} 명단 · 지금 학년 기준 ${ro.rows.length}명</summary>${table}</details>` : table}</section>`;
+  }).join("");
+}
 const jpByRank = g => (a, b) => ((jpRank(a.id, g) || {}).rk || 1e4) - ((jpRank(b.id, g) || {}).rk || 1e4) || a.name_ko.localeCompare(b.name_ko, "ko");
 // 현 대회(하루코·인터하이·지역대회 현 예선) 4강 이상: koko-volley 결과(jp_pref_top)의 학교 이름을 같은 현의 학교 사전과 맞춤
 const JP_PREF_T = { haruko: "하루코", ih: "인터하이", block: "지역대회" };
@@ -653,12 +687,14 @@ function jpSchoolCount() {
 function jpSchoolRow(s, cnt) {
   const J = jp(), r = jpRank(s.id, J.g), pr = jpPrefOf(s.id, J.g)[0];
   const badge = r && r.best_tourn ? `<span class="chip ${r.best_lvl >= 6 ? "warn" : ""}">${esc(jpLvlTxt(r.best_tourn, r.best_year, r.best_lvl))}</span>` : pr ? `<span class="chip">${esc(jpPrefTxt(pr))}</span>` : "";
-  return `<button type="button" class="panel jp-srow" data-act="jpschool" data-id="${esc(s.id)}"><span class="jp-rk ${r && r.rk <= 10 ? "top" : ""}">${r ? r.rk : "–"}</span><span class="jp-st"><b>${esc(s.name_ko)}</b><span class="jp-ja">${esc(s.name_ja.replace(/高校$/, ""))}${J.pref ? "" : ` · ${JP_PREF[s.pref] ? JP_PREF[s.pref][0] : esc(s.pref)}`}</span>${badge ? `<span class="jp-bd">${badge}</span>` : ""}</span><span class="small muted jp-vc">영상 ${cnt[s.id] || 0}</span></button>`;
+  const reps = jpStarsOf(s.id, J.g).filter(jpIsRep).length;
+  return `<button type="button" class="panel jp-srow" data-act="jpschool" data-id="${esc(s.id)}"><span class="jp-rk ${r && r.rk <= 10 ? "top" : ""}">${r ? r.rk : "–"}</span><span class="jp-st"><b>${esc(s.name_ko)}</b><span class="jp-ja">${esc(s.name_ja.replace(/高校$/, ""))}${J.pref ? "" : ` · ${JP_PREF[s.pref] ? JP_PREF[s.pref][0] : esc(s.pref)}`}</span>${badge || reps ? `<span class="jp-bd">${badge}${reps ? `<span class="chip">대표 ${reps}명</span>` : ""}</span>` : ""}</span><span class="small muted jp-vc">영상 ${cnt[s.id] || 0}</span></button>`;
 }
 function jpSearchSchools(q) {
   const J = jp(); q = jpNorm(q); if (!q) return "";
   const cnt = jpSchoolCount();
-  const l = J.schools.filter(s => jpGenderOk(J.g, s.gender) && (jpNorm(s.name_ko).includes(q) || jpNorm(s.name_ja).includes(q) || (JP_PREF[s.pref] || [""])[0].includes(q) || s.pref.includes(q))).sort(jpByRank(J.g)).slice(0, 40);
+  const byP = new Set((J.stars || []).filter(x => x.gender === J.g && jpNorm(x.name).includes(q)).map(x => x.school_id));
+  const l = J.schools.filter(s => jpGenderOk(J.g, s.gender) && (byP.has(s.id) || jpNorm(s.name_ko).includes(q) || jpNorm(s.name_ja).includes(q) || (JP_PREF[s.pref] || [""])[0].includes(q) || s.pref.includes(q))).sort(jpByRank(J.g)).slice(0, 40);
   return l.length ? `<div class="boxes">${l.map(s => jpSchoolRow(s, cnt)).join("")}</div>` : emptyLine("찾는 학교가 없어요.");
 }
 function viewJp() {
@@ -694,7 +730,7 @@ function viewJp() {
         <div class="boxes box-cols">${regs.map(r => `<button type="button" class="panel jp-box" data-act="jpreg" data-v="${r.i}"><b>${r.name}</b><span class="small muted">${r.l.length}개교${r.l.length ? " · " + top(r.l) : ""}</span></button>`).join("")}</div>`;
     }
     body = `<div class="row between">${gsel}</div>
-      <label class="fl wide jp-q"><input id="jpq" type="search" placeholder="학교 이름 찾기 (한글·일본어)" value="${esc(J.q || "")}" autocomplete="off"></label>
+      <label class="fl wide jp-q"><input id="jpq" type="search" placeholder="학교·선수 이름 찾기 (한글·일본어)" value="${esc(J.q || "")}" autocomplete="off"></label>
       <div id="jp-sres">${jpSearchSchools(J.q)}</div><div id="jp-browse" ${J.q ? "hidden" : ""}>${inner}</div>`;
   } else if (J.tab === "tourn") {
     const T = ["haruko", "ih", "kokutai", "sakura", "block"];
@@ -746,6 +782,7 @@ function jpSchoolPage(s) {
         ${now.length ? `<div class="jp-chips">${now.map(chip).join("")}</div>` : `<span class="small muted">${JP_RECENT}년 이후 전국대회 기록 없음</span>`}
         ${old.length ? `<details><summary class="small muted">그 외 (${JP_RECENT - 1}년 이전) ${old.length}</summary><div class="jp-chips">${old.map(chip).join("")}</div></details>` : ""}
         ${(() => { const pr = jpPrefOf(s.id); return pr.length ? `<b class="jp-sub">현 대회</b><div class="jp-chips">${pr.map(r => `<span class="chip ${r.place === 1 ? "warn" : ""}">${s.gender === "mw" ? (r.gender === "w" ? "여 " : "남 ") : ""}${esc(jpPrefTxt(r))}</span>`).join("")}</div>` : ""; })()}</div>`; })()}
+    ${jpPlayersHtml(s)}
     ${visit.length ? `<section class="sec"><h3>학교 탐방 <span class="small muted">${visit.length}</span></h3>${jpList(visit)}</section>` : ""}
     ${groups.length ? `<div class="sc-row jp-regs">${groups.map(([k, x]) => `<button type="button" class="chip sc-chip ${k === sel ? "on" : ""}" data-act="jpstourn" data-v="${k || ""}">${k === "old" ? `그 외 (${JP_RECENT - 1}년 이전)` : k ? JP_TOURN[k] : "기타"} <span class="small">${jpGroups(x).length}</span></button>`).join("")}</div>
       ${secs.map(([lab, x]) => `<section class="sec">${lab ? `<h3>${lab} <span class="small muted">${jpGroups(x).length}</span></h3>` : ""}${jpList(x)}</section>`).join("")}` : ""}

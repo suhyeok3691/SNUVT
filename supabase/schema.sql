@@ -1670,8 +1670,8 @@ create or replace function private.jp_sid(n text, p text, g text) returns text l
         or exists (select 1 from unnest(s.aliases) a where a like 're:%' and n ~ substr(a, 4))))
   select case when p is not null or (select count(*) from c) = 1 then (select id from c limit 1) end
 $$;
--- 일본 고교 랭킹: 전국대회(하루코·인터하이·국민스포츠대회)에서 간 곳 + 현 대회 4강 이상, 오래된 결과일수록 덜 셈 (1년에 ×0.7)
--- 점수: 우승 100 · 준우승 70 · 4강 50 · 8강 32 · 16강 20 · 32강 10 · 출전 5 (국민스포츠대회 ×0.6) / 현 우승 10 · 준우승 6 · 4강 3
+-- 일본 고교 랭킹: 전국대회(하루코·인터하이)에서 간 곳 + 현 대회 4강 이상, 오래된 결과일수록 덜 셈 (1년에 ×0.7)
+-- 점수: 우승 100 · 준우승 70 · 4강 50 · 8강 32 · 16강 20 · 32강 10 · 출전 5 (국민스포츠대회는 현 선발팀이라 점수에 안 넣음, 기록만) / 현 우승 10 · 준우승 6 · 4강 3
 create materialized view public.jp_rank as
 with mt as (
   select tourn, year, gender, rnd, a_name n, a_pref p, a_sets > b_sets won from public.jp_matches where a_sets is distinct from b_sets
@@ -1696,9 +1696,8 @@ with mt as (
 ), pts as (
   select sid, gender,
     (case lvl when 7 then 100 when 6 then 70 when 5 then 50 when 4 then 32 when 3 then 20 when 2 then 10 else 5 end)
-    * case tourn when 'kokutai' then 0.6 else 1 end
     * power(0.7, greatest(0, extract(epoch from now() - make_date(year, case tourn when 'haruko' then 1 when 'ih' then 8 when 'kokutai' then 10 else 6 end, 15)) / 31557600)) p
-  from nat
+  from nat where tourn <> 'kokutai'
 ), pref as (
   select private.jp_sid(name, pref, gender) sid, gender,
     (case place when 1 then 10 when 2 then 6 else 3 end)
@@ -1706,10 +1705,10 @@ with mt as (
   from public.jp_pref_top
 ), allp as (
   select sid, gender, p from pts union all select sid, gender, p from pref where sid is not null
-), best as ( -- 최근 3년 전국 최고 성적 (하루코·인터하이 먼저, 같으면 최근)
+), best as ( -- 최근 3년 하루코·인터하이 최고 성적 (같으면 최근)
   select distinct on (sid, gender) sid, gender, tourn, year, lvl from nat
-  where year >= extract(year from now())::int - 2 and lvl >= 3
-  order by sid, gender, lvl - case when tourn = 'kokutai' then 1 else 0 end desc, year desc
+  where year >= extract(year from now())::int - 2 and lvl >= 3 and tourn <> 'kokutai'
+  order by sid, gender, lvl desc, year desc
 ), hist as ( -- 전국대회 기록 전부 (lvl 7 우승 · 6 준우승 · 5 4강 · 4 8강 · 3 16강 · 2 32강 · 그 아래 출전)
   select sid, gender, jsonb_agg(jsonb_build_object('t', tourn, 'y', year, 'l', lvl) order by year desc, lvl desc) h
   from (select distinct sid, gender, tourn, year, max(lvl) over (partition by sid, gender, tourn, year) lvl from nat) x group by 1, 2
@@ -1753,6 +1752,47 @@ begin
 end $$;
 revoke all on function public.set_member_titles(uuid, text[]) from public, anon;
 grant execute on function public.set_member_titles(uuid, text[]) to authenticated;
+
+-- 선수: 하루코 출전 명단(jp-roster 가 채움) · 대표·수상 선수(손으로)
+create table public.jp_roster (
+  id bigserial primary key,
+  school_id text references public.jp_schools(id) on delete set null,
+  team text not null, gender text not null check (gender in ('m','w')),
+  tourn text not null, year smallint not null,
+  no smallint, name text not null, grade smallint check (grade between 1 and 3), height smallint, cap boolean not null default false,
+  src text not null
+);
+create index jp_roster_school on public.jp_roster (school_id);
+alter table public.jp_roster enable row level security;
+create policy "members read" on public.jp_roster for select to authenticated using (private.is_member());
+create table public.jp_stars (
+  id bigserial primary key,
+  school_id text not null references public.jp_schools(id) on delete cascade,
+  gender text not null check (gender in ('m','w')),
+  name text not null, kana text, pos text, height smallint,
+  senior_year smallint, -- 3학년이 되는 학년도
+  tags text[] not null default '{}',
+  src text,
+  unique (school_id, name)
+);
+alter table public.jp_stars enable row level security;
+create policy "members read" on public.jp_stars for select to authenticated using (private.is_member());
+create or replace function public.jp_roster_link() returns int language plpgsql security definer set search_path = '' as $$
+declare n int;
+begin
+  update public.jp_roster r set school_id = private.jp_sid(r.team, null, r.gender) where r.school_id is null;
+  get diagnostics n = row_count; return n;
+end $$;
+revoke all on function public.jp_roster_link() from public, anon, authenticated;
+grant execute on function public.jp_roster_link() to service_role;
+create or replace function private.jp_roster_call() returns bigint language sql security definer set search_path = '' as $$
+  select net.http_post(
+    url := 'https://juhcaodotxspzzzfzrnt.supabase.co/functions/v1/jp-roster',
+    body := '{}'::jsonb,
+    headers := jsonb_build_object('Content-Type', 'application/json',
+      'x-cron', (select decrypted_secret from vault.decrypted_secrets where name = 'push_cron')),
+    timeout_milliseconds := 120000)
+$$;
 
 -- ========== 7. 예약 작업 (UTC) ==========
 -- push-hourly 매시 정각 (사람마다 고른 시각에 아침·저녁 알림)
