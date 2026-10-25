@@ -423,12 +423,12 @@ function viewPractice() {
         ${edit ? `<div class="boxes">${drills}<button type="button" class="box add-box" data-act="prdrill" data-b="${bi}" data-g="${gi}">＋ 드릴 추가</button></div>` : `<ul class="pr-drills">${drills || `<li class="small muted">드릴 없음</li>`}</ul>`}</div>`;
     }).join("");
     return `<section class="pr-blk ${groups.length > 1 ? "split-blk" : ""}">
-      <div class="pr-bh"><span class="pr-no">${bi + 1}</span><b>${esc(b.title)}</b><span class="small muted">${Number(b.minutes) || prMin(b)}분${groups.length > 1 ? " · 포지션별 동시에" : ""}</span>
+      <div class="pr-bh"><span class="pr-no">${bi + 1}</span><b>${esc(b.title)}</b><span class="small muted">${Number(b.minutes) || prMin(b)}분${groups.length > 1 ? (groups.some(g => /코트/.test(g.name)) ? " · 양쪽 코트 동시에" : " · 포지션별 동시에") : ""}</span>
         ${edit ? `<span class="pr-ctl"><button type="button" class="btn link small" data-act="prblk" data-b="${bi}">수정</button><button type="button" class="btn link small" data-act="prmove" data-b="${bi}" data-d="-1" ${bi ? "" : "disabled"} aria-label="위로">↑</button><button type="button" class="btn link small" data-act="prmove" data-b="${bi}" data-d="1" ${bi < plan.blocks.length - 1 ? "" : "disabled"} aria-label="아래로">↓</button><button type="button" class="btn link small danger" data-act="prbdel" data-b="${bi}">삭제</button></span>` : ""}</div>
       <div class="pr-groups">${gHtml}</div></section>`;
   }).join("");
   return `${chips}<section class="sec">${head}
-    ${edit ? `<form class="f panel pr-meta" id="prMetaForm" data-d="${date}"><div class="fields"><label class="fl">제목<input id="pr-title" maxlength="60" value="${esc(plan.title)}" placeholder="예: 리시브 집중"></label><label class="fl wide">목표<input id="pr-goal" maxlength="200" value="${esc(plan.goal)}" placeholder="예: 서브 리시브 A패스 60% 이상"></label></div><div class="row"><button class="btn" type="submit">저장</button><button class="btn link small danger" type="button" data-act="prwipe">계획 지우기</button></div></form>`
+    ${edit ? `<form class="f panel pr-meta" id="prMetaForm" data-d="${date}"><div class="fields"><label class="fl">제목<input id="pr-title" maxlength="60" value="${esc(plan.title)}" placeholder="예: 서브 캐치 집중"></label><label class="fl wide">목표<input id="pr-goal" maxlength="200" value="${esc(plan.goal)}" placeholder="예: 서브 캐치 A패스 60% 이상"></label></div><div class="row"><button class="btn" type="submit">저장</button><button class="btn link small danger" type="button" data-act="prwipe">계획 지우기</button></div></form>`
       : `${plan.title || plan.goal ? `<div class="panel pr-top">${plan.title ? `<b>${esc(plan.title)}</b>` : ""}${plan.goal ? `<span class="small">목표 · ${esc(plan.goal)}</span>` : ""}</div>` : ""}`}
     <p class="small muted">${plan.blocks.length}개 블록 · 약 ${total}분${!plan.published ? " · 선수에게 아직 안 보임" : ""}</p>
     <div class="pr-list">${blocks || emptyLine("블록이 없어요.")}</div>
@@ -447,13 +447,13 @@ async function prSave(date, fn) {
 }
 function openPrBlock(bi) {
   const date = prDateNow(), plan = state.practice[date] || { blocks: [] }, b = bi === "new" ? null : plan.blocks[Number(bi)];
-  const split = b ? (b.groups || []).length > 1 : false;
+  const gs = b ? b.groups || [] : [], split = gs.length > 1 ? (gs.some(g => /코트/.test(g.name)) ? "court" : "pos") : "all";
   const el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${b ? "블록 수정" : "블록 추가"}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="prBlockForm" data-b="${bi}" data-close="1"><div class="fields">
-      <label class="fl wide">이름<input id="pb-title" required maxlength="40" value="${esc(b ? b.title : "")}" placeholder="예: 서브 · 서브 리시브"></label>
+      <label class="fl wide">이름<input id="pb-title" required maxlength="40" value="${esc(b ? b.title : "")}" placeholder="예: 서브 · 서브 캐치"></label>
       <label class="fl">시간 (분)<input id="pb-min" type="number" inputmode="numeric" min="0" max="180" value="${esc(b ? b.minutes ?? "" : "")}"></label>
-      <label class="fl">누가<select id="pb-split"><option value="all" ${split ? "" : "selected"}>공통 (다 같이)</option><option value="pos" ${split ? "selected" : ""}>포지션별 (나눠서 동시에)</option></select></label>
+      <label class="fl">누가<select id="pb-split"><option value="all" ${split === "all" ? "selected" : ""}>공통 (다 같이)</option><option value="court" ${split === "court" ? "selected" : ""}>양쪽 코트 (A·B 동시에)</option><option value="pos" ${split === "pos" ? "selected" : ""}>포지션별 (나눠서 동시에)</option></select></label>
     </div><div class="row"><button class="btn primary" type="submit">${b ? "저장" : "추가"}</button></div>
     </form>`;
   el.hidden = false; document.body.classList.add("noscroll");
@@ -518,7 +518,7 @@ function openVidForm(id) {
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${id ? "영상 수정" : "영상 추가"}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="vidForm" data-id="${esc(id || "")}" data-close="1"><div class="fields">
       <label class="fl wide">유튜브 주소<input id="vd-url" required maxlength="300" value="${v.yt ? esc(ytLink(v)) : ""}" placeholder="재생목록이나 영상 주소를 붙여 넣기"></label>
-      <label class="fl wide">제목<input id="vd-title" required maxlength="80" value="${esc(v.title || "")}" placeholder="예: 11/6 훈련 · 서브 리시브"></label>
+      <label class="fl wide">제목<input id="vd-title" required maxlength="80" value="${esc(v.title || "")}" placeholder="예: 11/6 훈련 · 서브 캐치"></label>
       <label class="fl">분류<select id="vd-cat">${Object.entries(VID_CATS).map(([k, l]) => `<option value="${k}" ${v.cat === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <label class="fl">날짜<input id="vd-date" type="date" value="${esc(v.date || "")}"></label>
       <label class="fl wide">메모<input id="vd-note" maxlength="200" value="${esc(v.note || "")}"></label>
@@ -3037,12 +3037,15 @@ document.addEventListener("submit", async ev => {
       if (await prSave(f.dataset.d, p => { p.title = title; p.goal = goal; })) toast("저장했어요");
       return;
     } else if (f.id === "prBlockForm") {
-      const bi = f.dataset.b, title = txt("pb-title"), minutes = num("pb-min"), split = document.getElementById("pb-split").value === "pos";
+      const bi = f.dataset.b, title = txt("pb-title"), minutes = num("pb-min"), mode = document.getElementById("pb-split").value;
       closeSheet();
       await prSave(prDateNow(), p => {
-        const groupsFor = old => split ? PRACTICE_GROUPS.map(([name, pos]) => (old || []).find(g => g.name === name) || { name, pos, drills: [] }) : [{ name: "공통", pos: [], drills: (old || []).flatMap(g => g.drills || []) }];
+        // 나누는 방식이 바뀌면 드릴은 첫 그룹(공통이면 전부)으로 옮김
+        const modeOf = gs => (gs || []).length > 1 ? ((gs || []).some(g => /코트/.test(g.name)) ? "court" : "pos") : "all";
+        const groupsFor = old => { const all = (old || []).flatMap(g => g.drills || []); if (mode === "all") return [{ name: "공통", pos: [], drills: all }];
+          const l = (mode === "court" ? COURT_GROUPS : PRACTICE_GROUPS).map(([name, pos]) => ({ name, pos, drills: [] })); l[0].drills = all; return l; };
         if (bi === "new") p.blocks.push({ title, minutes, groups: groupsFor(null) });
-        else { const b = p.blocks[Number(bi)]; const was = (b.groups || []).length > 1; b.title = title; b.minutes = minutes; if (was !== split) b.groups = groupsFor(was ? null : b.groups); }
+        else { const b = p.blocks[Number(bi)]; b.title = title; b.minutes = minutes; if (modeOf(b.groups) !== mode) b.groups = groupsFor(b.groups); }
       });
       return;
     } else if (f.id === "prDrillForm") {

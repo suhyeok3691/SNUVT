@@ -72,7 +72,7 @@ const PLYO = [
   { key: "posj", tier: 3, name: "포지션별 점프", cue: "실전 스텝으로, 매번 최대", sets: [0, 0, 0, 3, 3, 2], reps: [3, 3, 3, 3, 3, 2] },
   { key: "drop", tier: 3, name: "드롭 점프 (30cm 벤치)", cue: "떨어지자마자 최대한 빨리·높이", sets: [0, 0, 0, 2, 2, 0], reps: [4, 4, 4, 4, 3, 4] },
 ];
-const PLYO_ORDER = ["pogo", "stick", "rebox", "rebox2", "bssj", "lat", "hurdle", "posj", "step", "drop"];
+const PLYO_ORDER = ["pogo", "stick", "rebox", "rebox2", "bssj", "lat", "hurdle", "lath", "posj", "step", "skate", "drop"];
 
 /* ---------- 근력 라이브러리 (웨이트 A 하체) — 단계별 처방 [적응, 기초, 회복, 근력·파워, 피크, 대회 주] ---------- */
 const MON_STRENGTH = [
@@ -689,8 +689,11 @@ const SLOT_FN = {
     if (p.pos === "Li") {
       plyo = plyo.flatMap(x => {
         if (x.key === "bssj") return [{ ...x, key: "lat", name: "옆으로 한 발 바운드 착지 고정", cue: "바깥발 착지 2초 고정, 좌우", reps: 4, mod: "리베로 대체" }];
-        if (x.key === "drop" || x.key === "hurdle") return [];
-        if (x.key === "posj") return [{ ...x, key: "step", tier: 1, name: "5-10-5 방향 전환", cue: "낮은 무게중심, 회당 완전 휴식", sets: 4, reps: null, fmt: "count", mod: "리베로 대체" }];
+        // 리베로도 좌우로 폭발적으로: 수직 점프 대신 옆으로 튀는 플라이오 (드롭 점프만 뺌)
+        if (x.key === "drop") return [];
+        if (x.key === "hurdle") return [{ ...x, key: "lath", name: "좌우 허들 점프 (낮은 허들 · 연속)", cue: "옆으로 넘자마자 바로 다시 · 지면 접촉 짧게, 상체는 수비 자세", mod: "리베로 대체" }];
+        if (x.key === "posj") return [{ ...x, key: "step", tier: 1, name: "5-10-5 방향 전환", cue: "낮은 무게중심, 회당 완전 휴식", sets: 4, reps: null, fmt: "count", mod: "리베로 대체" },
+          { ...x, key: "skate", name: "스케이터 바운드 연속 (좌우)", cue: "바깥발로 밀어 최대한 멀리 → 착지하자마자 반대로, 3회 왕복", reps: 6, mod: "리베로 대체" }];
         return [x];
       });
     }
@@ -708,15 +711,15 @@ const SLOT_FN = {
       plyo = plyo.filter(x => x.tier <= tierMax);
       if (!plyo.some(x => x.key === "stick")) plyo.push({ ...PLYO[1], sets: LIGHT(w) ? 2 : 3, reps: 5, mod: "고강도 대신" });
     }
-    if (c.kneeRehab) plyo = plyo.filter(x => !["bssj", "lat"].includes(x.key));
+    if (c.kneeRehab) plyo = plyo.filter(x => !["bssj", "lat", "skate"].includes(x.key));
     // 발목 통증 약함: 재활 블록의 한 발 홉이 발목 쪽을 맡으니 팀 플라이오메트릭의 한 발 종목은 빼기 (겹침 방지)
-    if (c.mods.some(m => m.area === "ankle" && m.stage === 3)) plyo = plyo.filter(x => !["bssj", "lat"].includes(x.key));
+    if (c.mods.some(m => m.area === "ankle" && m.stage === 3)) plyo = plyo.filter(x => !["bssj", "lat", "lath", "skate"].includes(x.key));
     if (fx.noJumps) { plyo = []; out.notes.push("통증 · 점프 쉼"); }
     if (o.second) plyo = [];
     plyo.sort((a, b) => PLYO_ORDER.indexOf(a.key) - PLYO_ORDER.indexOf(b.key));
     out.landings = plyo.reduce((s, x) => s + (typeof x.reps === "number" ? x.sets * x.reps * (x.sides || 1) : 0), 0);
     // 포지션별 점프(리베로는 방향 전환)·드롭은 개인, 나머지는 팀 공통 점프
-    const posPlyo = plyo.filter(x => ["posj", "step", "drop"].includes(x.key)), teamPlyo = plyo.filter(x => !posPlyo.includes(x));
+    const posPlyo = plyo.filter(x => ["posj", "step", "skate", "drop"].includes(x.key)), teamPlyo = plyo.filter(x => !posPlyo.includes(x));
     if (teamPlyo.length) h.add({ key: "plyo", title: "플라이오메트릭", items: teamPlyo.map(x => ({ name: x.name, rx: plyoRx(x), cue: x.cue, mod: x.mod })) });
     const strength = MON_STRENGTH.filter(x => x.rx[w]).map(x => {
       let name = x.name, rx = x.rx[w], mod = "";
