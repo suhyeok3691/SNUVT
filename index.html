@@ -663,7 +663,13 @@ input[type="time"]::-webkit-date-and-time-value { text-align: left; }
 table.roster { width: 100%; }
 table.roster th, table.roster td { padding: 9px 10px; vertical-align: middle; }
 table.roster td.num, table.roster th.num { text-align: center; width: 44px; padding-left: 4px; padding-right: 4px; color: var(--muted); }
-.pf-titles .chips { gap: 6px 14px; }
+.pf-tfl { display: grid; gap: 3px; font-size: 12.5px; color: var(--muted); font-weight: 500; min-width: 0; position: relative; }
+.pf-tsel { min-width: 0; width: 100%; }
+.pf-tsel summary { list-style: none; box-sizing: border-box; width: 100%; cursor: pointer; font-size: 15px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 7px; padding: 6px 28px 6px 9px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; }
+.pf-tsel summary::-webkit-details-marker { display: none; }
+.pf-tsel summary::after { content: "▾"; position: absolute; right: 9px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--muted); }
+.pf-tpop { position: absolute; z-index: 30; top: 100%; left: 0; margin-top: 4px; min-width: 180px; display: grid; gap: 8px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+@media (max-width: 760px) { .pf-tsel summary { font-size: 16px; } }
 .r-tel { color: var(--blue); text-decoration: none; font-family: var(--f-data); font-size: 13.5px; }
 /* 오늘 할 것: 권장은 동그란 칸 위에 */
 .picks { margin-top: 12px; }
@@ -903,9 +909,9 @@ ul.ev-list.boxes { gap: 8px; }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=87"></script>
-<script src="guide.js?v=87"></script>
-<script src="library.js?v=87"></script>
-<script src="app.js?v=87"></script>
+<script src="program.js?v=88"></script>
+<script src="guide.js?v=88"></script>
+<script src="library.js?v=88"></script>
+<script src="app.js?v=88"></script>
 </body>
 </html>

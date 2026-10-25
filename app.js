@@ -1535,7 +1535,7 @@ function viewIntake() {
             <label class="fl">이름<input id="pf-name" required maxlength="20" value="${esc(p.name || "")}"></label>
             <label class="fl">포지션<select id="pf-pos" required>${POS_ORDER.map(k => `<option ${opt(k, p.pos)}>${k}</option>`).join("")}</select></label>
             <label class="fl">등번호<input id="pf-num" type="number" inputmode="numeric" min="0" max="99" value="${esc(p.number ?? "")}"></label>
-            <fieldset class="fl wide pf-titles"><legend>직책 (여러 개 가능)</legend><div class="chips">${Object.entries(TITLES).map(([k, l]) => `<label class="check"><input type="checkbox" name="pf-t" value="${k}" ${(p.titles || []).includes(k) ? "checked" : ""}> ${l}</label>`).join("")}</div></fieldset>
+            <div class="fl pf-tfl"><span>직책</span><details class="pf-tsel"><summary id="pf-tsum">${esc(titlesKo(titlesOf(p)) || "부원")}</summary><div class="pf-tpop">${Object.entries(TITLES).map(([k, l]) => `<label class="check"><input type="checkbox" name="pf-t" value="${k}" ${(p.titles || []).includes(k) ? "checked" : ""}> ${l}</label>`).join("")}</div></details></div>
             <label class="fl">전화번호<input id="pf-phone" type="tel" inputmode="tel" maxlength="20" placeholder="010-0000-0000" value="${esc((state.contacts || {})[pid] || "")}"></label>
             <label class="fl">학년<input id="pf-year" maxlength="10" placeholder="예: 3학년" value="${esc(p.year || "")}"></label>
             <label class="fl">키 (cm)<input id="pf-height" type="number" inputmode="decimal" min="140" max="220" step="0.1" value="${esc(p.height ?? "")}"></label>
@@ -2856,8 +2856,11 @@ document.addEventListener("click", async ev => {
     state.dirty = false; return loadAll();
   }
 });
+// 직책 고르기 창: 바깥을 누르면 닫힘
+document.addEventListener("click", ev => { const d = document.querySelector(".pf-tsel[open]"); if (d && !d.contains(ev.target)) d.open = false; });
 document.addEventListener("input", ev => { if (ev.target && ev.target.id === "scOpp") sc().sel.opp = ev.target.value; });
 document.addEventListener("change", ev => {
+  if (ev.target.name === "pf-t") { const sum = document.getElementById("pf-tsum"); if (sum) sum.textContent = titlesKo([...document.querySelectorAll('input[name="pf-t"]:checked')].map(x => x.value).sort((x, y) => Object.keys(TITLES).indexOf(x) - Object.keys(TITLES).indexOf(y))) || "부원"; return; }
   if (ev.target.id === "repSy") { state.repSy = Number(ev.target.value); return; }
   if (ev.target.id === "drViewAs") return setView(ev.target.value);
   if (ev.target.id === "scOpp") { sc().sel.opp = ev.target.value; return; }
