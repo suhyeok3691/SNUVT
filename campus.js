@@ -165,9 +165,27 @@ function bracketHtml(c) {
     return { x: jx, y };
   };
   const tops = trees.map((t, i) => { if (i) row += 0.6; return { t, p: place(t, true) }; });
-  const winX = JX[maxH] + 40, totW = winX + BW + 4, totH = TOP + row * RH;
-  for (const { p } of tops) lines.push(`M${p.x} ${p.y}H${winX}`);
   const tag = m => adm ? `data-act="cmpform" data-f="match" data-id="${m.id}" role="button" tabindex="0"` : "";
+  const winX = JX[maxH] + 40;
+  // 3·4위전: 4강에서 진 두 팀을 오른쪽 아래에 같은 모양으로 (자리 2개 → 선 모음 → 3위)
+  const thirdBits = [];
+  if (third.length) {
+    const x0 = (maxH >= 2 ? OUT[maxH - 1] : LW) + 24, jx = x0 + LW + GAP;
+    let y = TOP + (row + 0.6) * RH;
+    for (const m of third) {
+      const w = winnerOf(c, m), wt = w && cmpTeam(c, w), ys = [y + RH / 2, y + 1.5 * RH], my = y + RH;
+      ["a", "b"].forEach((sd, k) => { const id = sideId(c, m, sd), t = id && cmpTeam(c, id);
+        thirdBits.push(`<div class="tb-leaf ${w && id && w !== id ? "lose" : ""} ${w && id === w ? "win" : ""}" style="left:${x0}px;top:${ys[k] - BH / 2}px;width:${LW}px;height:${BH}px">${t ? esc(t.name) : esc(m[sd + "l"] || "미정")}</div>`);
+        lines.push(`M${x0 + LW} ${ys[k]}H${jx}`); });
+      lines.push(`M${jx} ${ys[0]}V${ys[1]}M${jx} ${my}H${jx + 14}`);
+      thirdBits.push(`<div class="tb-lab" style="left:${jx - GAP + 4}px;top:${my - 17}px;width:${GAP - 10}px" ${tag(m)}><b>${esc(m.label || "3·4위전")}</b><span>${m.start}${m.end ? "–" + m.end : ""}${m.score ? ` · ${esc(m.score)}` : ""}</span></div>`,
+        `<div class="tb-win ${wt ? "on" : ""}" style="left:${jx + 14}px;top:${my - BH / 2}px;width:${BW}px;height:${BH}px">${wt ? esc(wt.name) + " · 3위" : "3위"}</div>`);
+      thirdBits.w = Math.max(thirdBits.w || 0, jx + 14 + BW + 4);
+      y += 2 * RH + 10; row = (y - TOP) / RH;
+    }
+  }
+  const totW = Math.max(winX + BW + 4, thirdBits.w || 0), totH = TOP + row * RH;
+  for (const { p } of tops) lines.push(`M${p.x} ${p.y}H${winX}`);
   const leafHtml = leaves.map(({ n, y }) => { const id = sideId(c, n.m, n.sd), w = winnerOf(c, n.m), t = id && cmpTeam(c, id);
     return `<div class="tb-leaf ${w && id && w !== id ? "lose" : ""} ${w && id === w ? "win" : ""}" style="top:${y - BH / 2}px;width:${LW}px;height:${BH}px" title="${esc(n.m[n.sd + "l"] || "")}">${t ? `${esc(t.name)}${n.m[n.sd + "l"] ? `<small>${esc(n.m[n.sd + "l"])}</small>` : ""}` : esc(n.m[n.sd + "l"] || "미정")}</div>`; }).join("");
   const joinHtml = joins.map(({ n, h, y, jx }) => { const m = n.m, w = winnerOf(c, m), wt = w && cmpTeam(c, w);
@@ -176,10 +194,8 @@ function bracketHtml(c) {
     return lab + (h >= 2 && !isTop ? `<div class="tb-win ${wt ? "on" : ""}" style="left:${jx + 14}px;top:${y - BH / 2}px;width:${BW}px;height:${BH}px">${wt ? esc(wt.name) : esc((m.label || "") + " 승자")}</div>` : ""); }).join("");
   const champ = tops.map(({ t, p }) => { const w = winnerOf(c, t.m), wt = w && cmpTeam(c, w);
     return `<div class="tb-champ ${wt ? "on" : ""}" style="left:${winX}px;top:${p.y - 18}px;width:${BW}px">${svg("trophy")}<span>${wt ? esc(wt.name) : "우승"}</span></div>`; }).join("");
-  const thirdHtml = third.length ? `<ul class="tb-third">${third.map(m => { const w = winnerOf(c, m), nm = sd => { const id = sideId(c, m, sd); return `<span class="${w && id === w ? "win" : ""}">${esc(cmpSide(c, m, sd))}</span>`; };
-    return `<li ${tag(m)}><b>${esc(m.label || "3·4위전")}</b><span class="small muted">${md(parseD(m.date))} ${m.start}${m.score ? ` · ${esc(m.score)}` : ""}</span><span class="tb-vs">${nm("a")} vs ${nm("b")}</span></li>`; }).join("")}</ul>` : "";
   return `<section class="sec"><h3>본선 대진표</h3><div class="bk-wrap"><div class="tb" style="width:${totW}px;height:${totH}px">
-    <svg class="bk-ln" width="${totW}" height="${totH}" aria-hidden="true"><path d="${lines.join("")}"/></svg>${leafHtml}${joinHtml}${champ}</div></div>${thirdHtml}</section>`;
+    <svg class="bk-ln" width="${totW}" height="${totH}" aria-hidden="true"><path d="${lines.join("")}"/></svg>${leafHtml}${joinHtml}${champ}${thirdBits.join("")}</div></div></section>`;
 }
 
 /* ---------- 홈: 내 투표 (한 줄씩, 응답한 건 접어 둠) ---------- */
