@@ -50,7 +50,7 @@ const POSJ = { MB: "슬라이드 스텝 후 블록 점프", OP: "공격 어프�
 const PH = { INTRO: 0, BASE: 1, DELOAD: 2, POWER: 3, PEAK: 4, TAPER: 5 };
 // "국민대와 교류전" — 받침에 따라 와/과
 const josaWa = w => { const c = String(w || "").trim().slice(-1).charCodeAt(0); return c >= 0xAC00 && c <= 0xD7A3 && (c - 0xAC00) % 28 ? "과" : "와"; };
-const frName = opp => opp ? `${opp}${josaWa(opp)} 교류전` : "교류전";
+const frName = opp => opp === "OB전" ? "OB전" : opp ? `${opp}${josaWa(opp)} 교류전` : "교류전";
 const PHASE_NAMES = ["적응", "기초 근력", "회복 주", "근력·파워", "피크", "대회 주"];
 const LIGHT = w => w === PH.INTRO || w === PH.DELOAD || w === PH.TAPER;
 const HEAVY = w => w === PH.POWER || w === PH.PEAK;
@@ -948,7 +948,7 @@ const TEAM_DAYS = { S1: "월·목", S2: "수·금" };
 const flipSem = sem => sem === "S1" ? "S2" : sem === "S2" ? "S1" : sem;
 const weekOf = sem => SLOT_WEEK[TEAM.swap ? flipSem(sem) : sem];
 const teamDaysOf = sem => TEAM_DAYS[TEAM.swap ? flipSem(sem) : sem];
-const EVENT_KINDS = { major: "주요 대회", minor: "9인제·기타 대회", tryout: "트라이아웃", termend: "2학기 종강", off: "비시즌·방학" };
+const EVENT_KINDS = { major: "주요 대회", minor: "9인제·기타 대회", tryout: "트라이아웃", termend: "2학기 종강", off: "비시즌·방학", ob: "OB전" };
 const DAY_MS = 864e5;
 const dParse = s => { const [y, m, d] = String(s).slice(0, 10).split("-").map(Number); return Date.UTC(y, m - 1, d); };
 const dIso = t => new Date(t).toISOString().slice(0, 10);

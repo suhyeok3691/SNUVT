@@ -1953,3 +1953,7 @@ $$;
 revoke all on function public.cup_people() from public, anon;
 grant execute on function public.cup_people() to authenticated;
 alter table public.cups add column if not exists adv int not null default 2 check (adv between 1 and 4); -- 조 n위까지 본선
+-- 2026-10-26: OB전(전원 참, 투표 없음) · 교내 대회 가능일 불참 사유
+alter table public.events drop constraint events_kind_check;
+alter table public.events add constraint events_kind_check check (kind = any (array['major','minor','tryout','off','termend','ob']));
+alter table public.cup_avail add column if not exists reason text check (reason is null or reason = any (array['class','sick','personal','etc']));

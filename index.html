@@ -984,6 +984,25 @@ sub { font-size: 10px; color: var(--muted); }
 .cmp-tabs { margin-top: 10px; }
 .cmp-head .cmp-ttl { align-items: baseline; }
 .bk-l { position: absolute; text-align: left; font-size: 12px; font-weight: 700; color: var(--muted); }
+
+/* 투표 버튼: 투표(파랑) · 참(초록) · 불참(빨강) 색으로 구분 */
+.vote-btn { min-width: 52px; font-weight: 700; border-width: 1.5px; }
+.vote-btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+.vote-btn.voted.go { background: var(--good); border-color: var(--good); color: #fff; }
+.vote-btn.voted.no { background: var(--crit-soft); border-color: var(--crit); color: var(--crit); }
+.vote-pick span.go { color: var(--good); } .vote-pick span.no { color: var(--crit); }
+.vote-pick input:checked + .go { background: var(--good); border-color: var(--good); color: #fff; }
+.vote-pick input:checked + .no { background: var(--crit); border-color: var(--crit); color: #fff; }
+.cmp-day.go { background: var(--good); border-color: var(--good); color: #fff; text-decoration: none; }
+.cmp-day.no { background: var(--crit-soft); border-color: var(--crit); color: var(--crit); text-decoration: none; }
+.cmp-av-btn { margin-left: auto; }
+/* 지우기 · 취소: 빨간 테두리 박스 */
+.btn.danger, .btn.link.danger, .watch .btn.link.danger { border: 1px solid color-mix(in srgb, var(--crit) 45%, transparent); background: color-mix(in srgb, var(--crit) 6%, var(--surface)); color: var(--crit); padding: 4px 11px; border-radius: 8px; }
+.btn.link.small.danger, .watch .btn.link.small.danger { padding: 3px 9px; }
+.btn.danger:hover, .btn.link.danger:hover { border-color: var(--crit); background: var(--crit-soft); }
+/* OB전 */
+.cd.k-ob { background: var(--c-fr); } .cd.k-ob .n, .cd.k-ob .cl { color: var(--surface); }
+i.dot.k-ob { background: var(--c-fr); }
 </style>
 </head>
 <body>
@@ -1004,10 +1023,10 @@ sub { font-size: 10px; color: var(--muted); }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=97"></script>
-<script src="guide.js?v=97"></script>
-<script src="library.js?v=97"></script>
-<script src="campus.js?v=97"></script>
-<script src="app.js?v=97"></script>
+<script src="program.js?v=98"></script>
+<script src="guide.js?v=98"></script>
+<script src="library.js?v=98"></script>
+<script src="campus.js?v=98"></script>
+<script src="app.js?v=98"></script>
 </body>
 </html>

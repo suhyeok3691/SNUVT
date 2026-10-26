@@ -69,7 +69,7 @@ function buildCups(raw) {
     teams: (T[r.id] || []).sort((a, b) => a.grp.localeCompare(b.grp) || a.sort - b.sort || a.name.localeCompare(b.name, "ko")),
     matches: (M[r.id] || []).sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start)) })).sort((a, b) => b.start.localeCompare(a.start));
   const av = {};
-  for (const r of raw.cup_avail || []) ((av[r.cup_id] = av[r.cup_id] || {})[r.date] = av[r.cup_id][r.date] || {})[r.player_id] = { going: !!r.going, name: r.name || "", team: r.team_id || "", note: r.note || "" };
+  for (const r of raw.cup_avail || []) ((av[r.cup_id] = av[r.cup_id] || {})[r.date] = av[r.cup_id][r.date] || {})[r.player_id] = { going: !!r.going, name: r.name || "", team: r.team_id || "", reason: r.reason || "", note: r.note || "" };
   state.cupAvail = av;
 }
 // 보여줄 대회: 고른 것 → 진행 중·다가오는 것 → 가장 최근
@@ -81,12 +81,12 @@ const dayKo = d => `${md(parseD(d))} (${DOW_KO[parseD(d).getDay()]})`;
 const cupRange = c => c.start === c.end ? dayKo(c.start) : `${dayKo(c.start)} – ${dayKo(c.end)}`;
 const teamTag = t => t === "women" ? `<span class="chip cmp-w">여</span>` : t === "men" ? `<span class="chip cmp-m">남</span>` : "";
 
-/* 가능 투표 버튼 (하루) */
+/* 가능일 투표 (하루): 참 · 불참(사유) — 대회·훈련 투표와 같은 창 */
 function availBtns(c, d, compact) {
   if (!state.myPid) return "";
-  const v = availOf(c, d)[state.myPid], g = v ? v.going : null, past = d < iso(today());
-  if (compact) return `<button type="button" class="cmp-day ${g === true ? "go" : g === false ? "no" : ""}" data-act="cmpav" data-c="${c.id}" data-d="${d}" data-v="${g === true ? 0 : 1}" ${past ? "disabled" : ""} aria-label="${dayKo(d)} ${g === true ? "가능" : g === false ? "불가" : "미응답"}">${parseD(d).getDate()}<small>${DOW_KO[parseD(d).getDay()]}</small></button>`;
-  return `<div class="vote-seg" role="group" aria-label="${dayKo(d)}"><button type="button" class="seg-go ${g === true ? "on" : ""}" data-act="cmpav" data-c="${c.id}" data-d="${d}" data-v="1" ${past ? "disabled" : ""}>가능</button><button type="button" class="seg-no ${g === false ? "on" : ""}" data-act="cmpav" data-c="${c.id}" data-d="${d}" data-v="0" ${past ? "disabled" : ""}>불가</button></div>`;
+  const v = availOf(c, d)[state.myPid], cur = v ? (v.going ? "go" : "no") : "", past = d < iso(today()), id = `${c.id}|${d}`;
+  if (compact) return `<button type="button" class="cmp-day ${cur}" data-act="voteopen" data-type="cup" data-id="${id}" ${past ? "disabled" : ""} aria-label="${dayKo(d)} ${cur === "go" ? "참" : cur === "no" ? "불참" : "미응답"}">${parseD(d).getDate()}<small>${DOW_KO[parseD(d).getDay()]}</small></button>`;
+  return past ? (cur ? `<span class="chip ${cur === "go" ? "ok" : "warn"}">${cur === "go" ? "참" : "불참"}</span>` : "") : voteBtn("cup", id, cur);
 }
 
 /* ---------- 화면 ---------- */
@@ -111,13 +111,13 @@ function viewCampus() {
 }
 // 가능일: 날마다 가능 · 불가 (남녀 합쳐서)
 function availHtml(c) {
-  const adm = can("schedule"), cnt = refCounts(c);
+  const adm = can("schedule"), cnt = refCounts(c), me = cmpMe();
+  const nm = v => `<span class="${v.name === me ? "me" : ""}">${teamTag(v.team)}${esc(v.name)}${adm && cnt[v.name] ? `<sub>${cnt[v.name]}</sub>` : ""}</span>`;
   const rows = cupDays(c).map(d => {
-    const av = availOf(c, d), go = Object.entries(av).filter(([, v]) => v.going), no = Object.entries(av).filter(([, v]) => !v.going);
-    const mine = state.myPid && av[state.myPid];
-    const who = go.length ? `<p class="small cmp-who">${go.sort((a, b) => a[1].name.localeCompare(b[1].name, "ko")).map(([, v]) => `<span class="${v.name === cmpMe() ? "me" : ""}">${teamTag(v.team)}${esc(v.name)}${v.note ? `<em>${esc(v.note)}</em>` : ""}${adm && cnt[v.name] ? `<sub>${cnt[v.name]}</sub>` : ""}</span>`).join("")}</p>` : "";
-    return `<li class="${d < iso(today()) ? "past" : ""}"><div class="cmp-av-h"><b>${dayKo(d)}</b><span class="chip ok">가능 ${go.length}</span>${no.length ? `<span class="chip">불가 ${no.length}</span>` : ""}${availBtns(c, d)}</div>
-      ${mine && mine.going ? `<input class="cmp-note" data-c="${c.id}" data-d="${d}" maxlength="60" placeholder="메모 (예: 19시부터)" value="${esc(mine.note)}" aria-label="${dayKo(d)} 메모">` : ""}${who}</li>`;
+    const av = Object.values(availOf(c, d)).sort((a, b) => a.name.localeCompare(b.name, "ko")), go = av.filter(v => v.going), no = av.filter(v => !v.going);
+    return `<li class="${d < iso(today()) ? "past" : ""}"><div class="cmp-av-h"><b>${dayKo(d)}</b><span class="chip ok">참 ${go.length}</span>${no.length ? `<span class="chip warn">불참 ${no.length}</span>` : ""}<span class="cmp-av-btn">${availBtns(c, d)}</span></div>
+      ${go.length ? `<p class="small cmp-who">${go.map(nm).join("")}</p>` : ""}
+      ${no.length ? (adm ? `<ul class="at-list">${no.map(v => `<li><b>${esc(v.name)}</b> <span class="small">${esc(ABS_REASONS[v.reason] || "")}${v.note ? ` · ${esc(v.note)}` : ""}</span></li>`).join("")}</ul>` : `<p class="small cmp-who"><b class="c-no">불참</b>${no.map(nm).join("")}</p>`) : ""}</li>`;
   }).join("");
   return `<section class="sec"><h3>가능일</h3><ul class="boxes cmp-av">${rows}</ul></section>`;
 }
@@ -249,7 +249,7 @@ function refSel(k, l, cur, people, avNames) {
   const known = people.some(p => p.name === cur), og = (lab, l2) => l2.length ? `<optgroup label="${lab}">${l2.map(n => `<option value="${esc(n)}" ${n === cur ? "selected" : ""}>${esc(n)}</option>`).join("")}</optgroup>` : "";
   const av = avNames.filter(n => people.some(p => p.name === n));
   const rest = t => people.filter(p => p.team_id === t && !av.includes(p.name)).map(p => p.name);
-  return `<label class="fl">${l}<select id="cm-r-${k}" class="cmp-ref"><option value="">비움</option>${og("가능", av)}${og("남자부", rest("men"))}${og("여자부", rest("women"))}<option value="__custom" ${cur && !known ? "selected" : ""}>직접 입력</option></select>
+  return `<label class="fl">${l}<select id="cm-r-${k}" class="cmp-ref"><option value="">비움</option>${og("참", av)}${og("남자부", rest("men"))}${og("여자부", rest("women"))}<option value="__custom" ${cur && !known ? "selected" : ""}>직접 입력</option></select>
     <input id="cm-rc-${k}" class="cmp-refc" maxlength="20" placeholder="이름" value="${esc(cur && !known ? cur : "")}" ${cur && !known ? "" : "hidden"} aria-label="${l} 이름"></label>`;
 }
 async function openCmpForm(kind, id) {
@@ -299,7 +299,7 @@ async function openCmpForm(kind, id) {
     </div>
     <h4 class="cmp-sub">심판</h4>
     <div class="fields cmp-refs">${REF_ROLES.map(([k, l]) => refSel(k, l, (s.refs || {})[k] || "", people, pool.map(v => v.name))).join("")}</div>
-    ${pool.length ? `<p class="small muted">${dayKo(d)} 가능 · 누르면 빈 칸에 (숫자 = 맡은 횟수)</p><div class="cmp-pool">${pool.map(v => `<button type="button" class="chip sc-chip" data-act="cmpfill" data-n="${esc(v.name)}">${teamTag(v.team)}${esc(v.name)}${v.note ? ` <em>${esc(v.note)}</em>` : ""}${cnt[v.name] ? ` <sub>${cnt[v.name]}</sub>` : ""}</button>`).join("")}</div>` : `<p class="small muted">${dayKo(d)} 가능 인원 없음</p>`}
+    ${pool.length ? `<p class="small muted">${dayKo(d)} 참 · 누르면 빈 칸에 (숫자 = 맡은 횟수)</p><div class="cmp-pool">${pool.map(v => `<button type="button" class="chip sc-chip" data-act="cmpfill" data-n="${esc(v.name)}">${teamTag(v.team)}${esc(v.name)}${v.note ? ` <em>${esc(v.note)}</em>` : ""}${cnt[v.name] ? ` <sub>${cnt[v.name]}</sub>` : ""}</button>`).join("")}</div>` : `<p class="small muted">${dayKo(d)} 참 인원 없음</p>`}
     <div class="row"><button class="btn primary" type="submit">${x ? "저장" : "추가"}</button>${x ? `<button class="btn link danger" type="button" data-act="cmpdel" data-t="cup_matches" data-id="${x.id}">경기 삭제</button>` : ""}</div></form>`;
   } else return;
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${title}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>${html}`;
@@ -310,12 +310,6 @@ document.addEventListener("focusin", e => { if (e.target.classList && e.target.c
 document.addEventListener("change", async e => {
   const el = e.target;
   if (el.classList && el.classList.contains("cmp-ref")) { const ci = document.getElementById(el.id.replace("cm-r-", "cm-rc-")); if (ci) { ci.hidden = el.value !== "__custom"; if (!ci.hidden) ci.focus(); } return; }
-  if (!el.classList || !el.classList.contains("cmp-note") || !sb) return;
-  try {
-    ok(await sb.from("cup_avail").update({ note: el.value.trim() || null }).eq("cup_id", el.dataset.c).eq("date", el.dataset.d).eq("player_id", state.myPid));
-    const v = availOf(cupById(el.dataset.c), el.dataset.d)[state.myPid]; if (v) v.note = el.value.trim();
-    toast("메모를 저장했어요"); state.dirty = false; render();
-  } catch (err) { toast(failMsg(err)); }
 });
 async function campusClick(b, act) {
   if (act === "cmptab") { state.cmpTab = b.dataset.v; state.dirty = false; return render(); }
@@ -326,19 +320,6 @@ async function campusClick(b, act) {
     if (!tgt) return toast("빈 심판 칸이 없어요");
     const n = b.dataset.n, has = [...tgt.options].some(o => o.value === n), ci = document.getElementById(tgt.id.replace("cm-r-", "cm-rc-"));
     tgt.value = has ? n : "__custom"; if (ci) { ci.hidden = has; ci.value = has ? "" : n; } cmpLastRef = null; return;
-  }
-  if (act === "cmpav") {
-    if (!state.myPid) return;
-    const c = cupById(b.dataset.c), d = b.dataset.d, going = b.dataset.v === "1", cur = availOf(c, d)[state.myPid];
-    try {
-      if (cur && cur.going === going && !b.classList.contains("cmp-day")) { ok(await sb.from("cup_avail").delete().eq("cup_id", c.id).eq("date", d).eq("player_id", state.myPid)); delete state.cupAvail[c.id][d][state.myPid]; }
-      else {
-        ok(await sb.from("cup_avail").upsert({ cup_id: c.id, date: d, player_id: state.myPid, going, note: going && cur ? cur.note || null : null }, { onConflict: "cup_id,date,player_id" }));
-        const p = playerOf(state.myPid);
-        ((state.cupAvail[c.id] = state.cupAvail[c.id] || {})[d] = state.cupAvail[c.id][d] || {})[state.myPid] = { going, name: p.name, team: TEAM.id, note: going && cur ? cur.note : "" };
-      }
-    } catch (e) { toast(failMsg(e)); }
-    state.dirty = false; return render();
   }
   if (act === "cmpdel") {
     if (!await confirmDel(b.dataset.t === "cup_teams" ? "이 팀을 지울까요?" : "이 경기를 지울까요?")) return;
