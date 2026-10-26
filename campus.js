@@ -312,6 +312,7 @@ document.addEventListener("change", async e => {
   if (el.classList && el.classList.contains("cmp-ref")) { const ci = document.getElementById(el.id.replace("cm-r-", "cm-rc-")); if (ci) { ci.hidden = el.value !== "__custom"; if (!ci.hidden) ci.focus(); } return; }
 });
 async function campusClick(b, act) {
+  if (act === "cmpgo") { state.cmpId = b.dataset.id; state.cmpTab = "games"; return go("campus"); }
   if (act === "cmptab") { state.cmpTab = b.dataset.v; state.dirty = false; return render(); }
   if (act === "cmppick") { state.cmpId = b.dataset.id; state.dirty = false; return render(); }
   if (act === "cmpform") return openCmpForm(b.dataset.f, b.dataset.id);
