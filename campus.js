@@ -100,7 +100,7 @@ function viewCampus() {
   const head = `<section class="sec"><div class="sec-head"><h3>교내 대회</h3>${addCup}</div>${pick}
     <div class="panel cmp-head"><div class="cmp-ttl"><h2 class="dyn">${esc(c.name)}</h2><span class="small muted">${cupRange(c)}${c.place ? ` · ${esc(c.place)}` : ""}</span></div>
       ${c.note ? `<p class="small muted">${esc(c.note)}</p>` : ""}
-      <div class="row"><a class="btn small" href="${esc(c.cafe || CAFE_URL)}" target="_blank" rel="noopener">스포츠진흥원 cafe</a>${adm ? `<button class="btn small" type="button" data-act="cmpform" data-f="cup" data-id="${c.id}">수정</button><button class="btn link danger small" type="button" data-act="cmpdelcup" data-id="${c.id}">삭제</button>` : ""}</div></div>
+      <div class="row"><a class="btn small" href="${esc(c.cafe || CAFE_URL)}" target="_blank" rel="noopener">스포츠진흥원 cafe</a>${adm ? `<button class="btn small" type="button" data-act="cmpform" data-f="cup" data-id="${c.id}">수정</button>` : ""}</div></div>
     <div class="seg fill sc-tabs cmp-tabs" role="tablist">${CMP_TABS.map(([k, l]) => `<button type="button" class="seg-tab ${tab === k ? "on solid" : ""}" role="tab" aria-selected="${tab === k}" data-act="cmptab" data-v="${k}">${l}</button>`).join("")}</div></section>`;
   if (tab === "avail") return head + availHtml(c);
   if (tab === "groups") return head + groupsHtml(c);
@@ -268,7 +268,7 @@ async function openCmpForm(kind, id) {
       <label class="fl">장소<input id="cc-place" maxlength="60" value="${esc(s.place || "")}" placeholder="예: 71동 B코트"></label>
       <label class="fl wide">카페 글 주소<input id="cc-cafe" type="url" maxlength="300" value="${esc(s.cafe || CAFE_URL)}"></label>
       <label class="fl wide">메모<input id="cc-note" maxlength="500" value="${esc(s.note || "")}"></label>
-    </div><div class="row"><button class="btn primary" type="submit">${x ? "저장" : "추가"}</button></div></form>`;
+    </div><div class="row"><button class="btn primary" type="submit">${x ? "저장" : "추가"}</button></div></form>${x ? delZone(`data-act="cmpdelcup" data-id="${x.id}"`, "교내 대회 삭제") : ""}`;
   } else if (kind === "draw" && c) {
     const n = c.teams.filter(t => !t.withdrawn).length, cur = new Set(c.teams.map(t => t.grp).filter(Boolean)).size || Math.min(3, Math.max(1, Math.round(n / 3)));
     title = "조 추첨";
@@ -282,7 +282,7 @@ async function openCmpForm(kind, id) {
       <label class="fl">팀 이름<input id="ct-name" required maxlength="40" value="${esc(s.name || "")}"></label>
       <div class="pair"><label class="fl">조<input id="ct-grp" maxlength="4" value="${esc(s.grp || "")}" placeholder="A"></label><label class="fl">조 안 순서<input id="ct-sort" type="number" min="1" max="20" value="${s.sort ?? ""}"></label></div>
       <label class="check"><input type="checkbox" id="ct-wd" ${s.withdrawn ? "checked" : ""}> 기권</label>
-    </div><div class="row"><button class="btn primary" type="submit">${x ? "저장" : "추가"}</button>${x ? `<button class="btn link danger" type="button" data-act="cmpdel" data-t="cup_teams" data-id="${x.id}">팀 삭제</button>` : ""}</div></form>`;
+    </div><div class="row"><button class="btn primary" type="submit">${x ? "저장" : "추가"}</button></div></form>${x ? delZone(`data-act="cmpdel" data-t="cup_teams" data-id="${x.id}"`, "팀 삭제") : ""}`;
   } else if (kind === "match" && c) {
     const x = id ? c.matches.find(m => m.id === id) : null, s = x || { date: c.start, stage: "group", refs: {} };
     const d = s.date, av = availOf(c, d), cnt = refCounts(c);
@@ -300,7 +300,7 @@ async function openCmpForm(kind, id) {
     <h4 class="cmp-sub">심판</h4>
     <div class="fields cmp-refs">${REF_ROLES.map(([k, l]) => refSel(k, l, (s.refs || {})[k] || "", people, pool.map(v => v.name))).join("")}</div>
     ${pool.length ? `<p class="small muted">${dayKo(d)} 참 · 누르면 빈 칸에 (숫자 = 맡은 횟수)</p><div class="cmp-pool">${pool.map(v => `<button type="button" class="chip sc-chip" data-act="cmpfill" data-n="${esc(v.name)}">${teamTag(v.team)}${esc(v.name)}${v.note ? ` <em>${esc(v.note)}</em>` : ""}${cnt[v.name] ? ` <sub>${cnt[v.name]}</sub>` : ""}</button>`).join("")}</div>` : `<p class="small muted">${dayKo(d)} 참 인원 없음</p>`}
-    <div class="row"><button class="btn primary" type="submit">${x ? "저장" : "추가"}</button>${x ? `<button class="btn link danger" type="button" data-act="cmpdel" data-t="cup_matches" data-id="${x.id}">경기 삭제</button>` : ""}</div></form>`;
+    <div class="row"><button class="btn primary" type="submit">${x ? "저장" : "추가"}</button></div></form>${x ? delZone(`data-act="cmpdel" data-t="cup_matches" data-id="${x.id}"`, "경기 삭제") : ""}`;
   } else return;
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${title}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>${html}`;
   el.hidden = false; document.body.classList.add("noscroll");

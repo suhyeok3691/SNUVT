@@ -85,6 +85,9 @@ const readInjuries = prefix => [...document.querySelectorAll(`#${prefix}-inj .in
 }));
 // 학년: 숫자만 적으면 '학년'을 붙여 저장 (3 → 3학년)
 const normYear = v => { const t = String(v || "").trim(); return /^[1-9]$/.test(t) ? t + "학년" : /^[1-9]\s*학년$/.test(t) ? t.replace(/\s+/g, "") : t; };
+// 지우기 버튼은 수정 창 맨 아래 따로 (수정·저장 버튼과 떨어지게)
+const delZone = (attrs, label) => `<div class="del-zone"><button class="btn danger" type="button" ${attrs}>${label}</button></div>`;
+const addDelZone = (attrs, label) => { const b = document.querySelector("#sheet .sheet-body"); if (b) b.insertAdjacentHTML("beforeend", delZone(attrs, label)); };
 // 삭제 확인: 화면 가운데 창 (네 / 아니요)
 function confirmDel(msg, yes = "네, 삭제") {
   return new Promise(res => {
@@ -93,7 +96,7 @@ function confirmDel(msg, yes = "네, 삭제") {
     const [head, ...rest] = String(msg).split("\n");
     el.innerHTML = `<div class="cf-card" role="alertdialog" aria-modal="true" aria-labelledby="cfH"><p id="cfH" class="cf-h">${esc(head)}</p>${rest.length ? `<p class="cf-b small muted">${esc(rest.join(" "))}</p>` : ""}<div class="cf-row"><button type="button" class="btn" data-cf="0">아니요</button><button type="button" class="btn danger-fill" data-cf="1">${esc(yes)}</button></div></div>`;
     el.hidden = false;
-    const done = v => { el.hidden = true; el.onclick = null; document.removeEventListener("keydown", key); res(v); };
+    const done = v => { el.hidden = true; el.onclick = null; document.removeEventListener("keydown", key); if (v && state.delFromSheet) closeSheet(); state.delFromSheet = false; res(v); };
     const key = e => { if (e.key === "Escape") done(false); };
     document.addEventListener("keydown", key);
     el.onclick = e => { e.stopPropagation(); const b = e.target.closest("[data-cf]"); if (b) done(b.dataset.cf === "1"); else if (e.target === el) done(false); };
@@ -431,7 +434,7 @@ function viewPractice() {
     }).join("");
     return `<section class="pr-blk ${groups.length > 1 ? "split-blk" : ""}">
       <div class="pr-bh"><span class="pr-no">${bi + 1}</span><b>${esc(b.title)}</b><span class="small muted">${Number(b.minutes) || prMin(b)}분${groups.length > 1 ? " · 포지션별 동시에" : ""}</span>
-        ${edit ? `<span class="pr-ctl"><button type="button" class="btn link small" data-act="prblk" data-b="${bi}">수정</button><button type="button" class="btn link small" data-act="prmove" data-b="${bi}" data-d="-1" ${bi ? "" : "disabled"} aria-label="위로">↑</button><button type="button" class="btn link small" data-act="prmove" data-b="${bi}" data-d="1" ${bi < plan.blocks.length - 1 ? "" : "disabled"} aria-label="아래로">↓</button><button type="button" class="btn link small danger" data-act="prbdel" data-b="${bi}">삭제</button></span>` : ""}</div>
+        ${edit ? `<span class="pr-ctl"><button type="button" class="btn link small" data-act="prblk" data-b="${bi}">수정</button><button type="button" class="btn link small" data-act="prmove" data-b="${bi}" data-d="-1" ${bi ? "" : "disabled"} aria-label="위로">↑</button><button type="button" class="btn link small" data-act="prmove" data-b="${bi}" data-d="1" ${bi < plan.blocks.length - 1 ? "" : "disabled"} aria-label="아래로">↓</button></span>` : ""}</div>
       <div class="pr-groups">${gHtml}</div></section>`;
   }).join("");
   return `${chips}<section class="sec">${head}
@@ -463,6 +466,7 @@ function openPrBlock(bi) {
       <label class="fl">누가<select id="pb-split"><option value="all" ${split ? "" : "selected"}>공통 (다 같이)</option><option value="pos" ${split ? "selected" : ""}>포지션별 (나눠서 동시에)</option></select></label>
     </div><div class="row"><button class="btn primary" type="submit">${b ? "저장" : "추가"}</button></div>
     </form>`;
+  if (b) addDelZone(`data-act="prbdel" data-b="${esc(bi)}"`, "블록 삭제");
   el.hidden = false; document.body.classList.add("noscroll");
 }
 function openPrDrill(bi, gi) {
@@ -492,7 +496,7 @@ function parseYt(url) {
 const vidCard = (v, open) => `<article class="panel vid ${open ? "open" : ""}">
     <button type="button" class="vid-head" data-act="vidopen" data-id="${esc(v.id)}" aria-expanded="${open}"><span class="vid-ic">${svg("video")}</span><span class="vid-t"><b>${esc(v.title)}</b><span class="small muted">${(() => { const u = (state.ytUpd || {})[v.id]; return `${v.kind === "playlist" ? `재생목록${u && u.count ? " " + u.count + "개" : ""}` : "영상"} · ${VID_CATS[v.cat] || ""}${u && u.updated ? ` · ${md(parseD(u.updated))} 업데이트` : v.date ? ` · ${md(parseD(v.date))}` : ""}`; })()}${v.note ? ` · ${esc(v.note)}` : ""}</span></span><span class="vid-chev" aria-hidden="true">›</span></button>
     ${open ? `<div class="vid-body"><div class="vid-frame"><iframe src="${ytEmbed(v)}" title="${esc(v.title)}" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
-    <div class="row vid-foot"><a class="btn link small" href="${ytLink(v)}" target="_blank" rel="noopener noreferrer">유튜브에서 열기 ↗</a>${can("video") ? `<button class="btn link small" type="button" data-act="videdit" data-id="${esc(v.id)}">수정</button><button class="btn link small danger" type="button" data-act="viddel" data-id="${esc(v.id)}">삭제</button>` : ""}</div></div>` : ""}
+    <div class="row vid-foot"><a class="btn link small" href="${ytLink(v)}" target="_blank" rel="noopener noreferrer">유튜브에서 열기 ↗</a>${can("video") ? `<button class="btn link small" type="button" data-act="videdit" data-id="${esc(v.id)}">수정</button>` : ""}</div></div>` : ""}
   </article>`;
 let ytApi = null;
 function loadYtApi() {
@@ -531,6 +535,7 @@ function openVidForm(id) {
       <label class="fl wide">메모<input id="vd-note" maxlength="200" value="${esc(v.note || "")}"></label>
     </div><div class="row"><button class="btn primary" type="submit">${id ? "저장" : "추가"}</button></div>
     </form>`;
+  if (id) addDelZone(`data-act="viddel" data-id="${esc(id)}"`, "영상 삭제");
   el.hidden = false; document.body.classList.add("noscroll");
 }
 /* ---------- 일본 고교 배구: 채널 영상을 학교(현별)·대회로 모아 보기 (서버 jp-sync 가 매일 모음) ---------- */
@@ -882,7 +887,7 @@ function viewNotes() {
       ${ta("nt-next", "다음 훈련 목표", cur.next, "예: 오픈 스파이크 크로스 코스 5개 중 3개", 1, 300)}
       ${ta("nt-body", "자유 메모", cur.body, "코치·선배 조언, 느낀 점", 3, 2000)}
       <label class="check"><input type="checkbox" id="nt-share" ${cur.shared ? "checked" : ""}> 주장·훈련 담당에게 공유</label>
-      <div class="row"><button class="btn primary" type="submit">${cur.id ? "고치기" : "저장"}</button>${cur.id ? `<button class="btn link small danger" type="button" data-act="notedel" data-d="${d}">지우기</button>` : ""}</div>
+      <div class="row"><button class="btn primary" type="submit">${cur.id ? "고치기" : "저장"}</button></div>${cur.id ? delZone(`data-act="notedel" data-d="${d}"`, "노트 삭제") : ""}
     </form>` : ""}
     ${mine.length ? `<h3 class="sub-h">내 노트</h3><div class="notes-list">${mine.slice(0, 30).map(noteCard).join("")}</div>` : ""}
     ${shared.length ? `<h3 class="sub-h">공유받은 노트</h3><div class="notes-list">${shared.slice(0, 40).map(noteCard).join("")}</div>` : ""}
@@ -1295,7 +1300,7 @@ const measTable = (r, opts = {}) => {
   const sign = v => v == null ? "—" : (v >= 0 ? "+" : "") + v, mine = t => can("training") || t.author === (state.session && state.session.user.id);
   return `<div class="tw"><table><thead><tr><th>날짜</th>${opts.reach ? "<th>리치</th>" : ""}<th>버티컬</th><th>맥스 버티컬</th><th>네트 위</th><th>사이드 스텝</th><th></th></tr></thead><tbody>
     ${r.slice().reverse().map(t => `<tr><td class="num">${md(parseD(t.date))}</td>${opts.reach ? `<td class="num">${t.reach ?? "—"}</td>` : ""}<td class="num">${vertOf(t) ?? "—"}</td><td class="num">${maxVertOf(t) ?? "—"}</td><td class="num">${sign(overNet(t, maxVertOf(t)))}</td><td class="num">${t.sideStep ?? "—"}</td>
-      <td class="acts">${can("training") ? `<button class="btn link small" type="button" data-act="edtest" data-id="${esc(t.id)}">수정</button>` : ""}${mine(t) ? `<button class="btn link danger small" type="button" data-act="deltest" data-id="${esc(t.id)}">삭제</button>` : ""}</td></tr>`).join("")}
+      <td class="acts">${can("training") ? `<button class="btn link small" type="button" data-act="edtest" data-id="${esc(t.id)}">수정</button>` : ""}${mine(t) && !can("training") ? `<button class="btn link danger small" type="button" data-act="deltest" data-id="${esc(t.id)}">삭제</button>` : ""}</td></tr>`).join("")}
     </tbody></table></div>`;
 };
 const isMeas = t => ["reach", "vert", "maxVert", "sideStep"].some(k => t[k] != null);
@@ -1550,8 +1555,8 @@ function viewIntake() {
           </div>
         </fieldset>
         <label class="check"><input type="checkbox" id="hf-consent" ${h.consent ? "checked" : ""} required> 선수가 프로그램 목적의 정보 사용에 동의함</label>
-        <div class="row"><button class="btn primary" type="submit">${pid ? "저장" : "선수 추가"}</button>
-          ${pid && pid !== state.myPid ? `<button class="btn danger" type="button" data-act="retireall" data-pid="${esc(pid)}">삭제</button>` : ""}</div>
+        <div class="row"><button class="btn primary" type="submit">${pid ? "저장" : "선수 추가"}</button></div>
+        ${pid && pid !== state.myPid ? delZone(`data-act="retireall" data-pid="${esc(pid)}"`, "선수 삭제") : ""}
       </form>
       ${pid ? testFormHtml(pid) : ""}
     </div>
@@ -1573,6 +1578,7 @@ function openTestEdit(id) {
       <label class="fl">날짜<input type="date" id="et-date" value="${esc(t.date)}" required></label>
       ${f("reach", "스탠딩 리치 (cm)", t.reach, "0.5", 400)}${f("vert", "버티컬 (cm)", t.vert, "0.5", 150)}${f("maxvert", "맥스 버티컬 (cm)", t.maxVert, "0.5", 150)}${f("side", "사이드 스텝 (회)", t.sideStep, "1", 120)}
     </div><div class="row"><button class="btn primary" type="submit">저장</button></div></form>`;
+  addDelZone(`data-act="deltest" data-id="${esc(id)}"`, "측정 삭제");
   el.hidden = false; document.body.classList.add("noscroll");
 }
 
@@ -1682,13 +1688,13 @@ function viewComps() {
   const frs = Object.entries(state.friendlies).filter(([d]) => d >= dAdd(t, -30)).sort().flatMap(([d, fs]) => fs.map(f => [d, f]));
   return `<div class="box-cols">
     <section class="sec"><div class="sec-head"><h3>대회·일정 <span class="small muted">${sy}.3 – ${sy + 1}.2</span></h3>${can("schedule") ? addBtn("event", "일정") : ""}</div>
-      ${list.length ? `<ul class="ev-list boxes">${list.map(e => `<li class="${e.end < t ? "past" : ""}"><span class="num">${range(e)}</span><span class="ev-main"><b>${esc(e.name)}</b> <span class="chip ${e.kind === "major" ? "warn" : ""}">${esc(EVENT_KINDS[e.kind] || e.kind)}</span>${e.kind === "ob" ? `<span class="small"><span class="chip ok">전원 참</span> <span class="muted">경조사는 개별 연락</span></span>` : ""}${e.note ? `<span class="small muted">${esc(e.note)}</span>` : ""}${e.id && (e.kind === "major" || e.kind === "minor") && e.end >= t ? voteBox("event", e.id) : ""}</span>${can("schedule") && e.id ? `<span class="ev-acts"><button class="btn link small" type="button" data-act="editevent" data-id="${esc(e.id)}">수정</button><button class="btn link danger small" type="button" data-act="delevent" data-id="${esc(e.id)}">삭제</button></span>` : ""}</li>`).join("")}</ul>` : emptyLine("등록된 일정이 없어요.")}
+      ${list.length ? `<ul class="ev-list boxes">${list.map(e => `<li class="${e.end < t ? "past" : ""}"><span class="num">${range(e)}</span><span class="ev-main"><b>${esc(e.name)}</b> <span class="chip ${e.kind === "major" ? "warn" : ""}">${esc(EVENT_KINDS[e.kind] || e.kind)}</span>${e.kind === "ob" ? `<span class="small"><span class="chip ok">전원 참</span> <span class="muted">경조사는 개별 연락</span></span>` : ""}${e.note ? `<span class="small muted">${esc(e.note)}</span>` : ""}${e.id && (e.kind === "major" || e.kind === "minor") && e.end >= t ? voteBox("event", e.id) : ""}</span>${can("schedule") && e.id ? `<span class="ev-acts"><button class="btn link small" type="button" data-act="editevent" data-id="${esc(e.id)}">수정</button></span>` : ""}</li>`).join("")}</ul>` : emptyLine("등록된 일정이 없어요.")}
     </section>
     <section class="sec"><div class="sec-head"><h3>교류전</h3>${can("schedule") ? addBtn("friendly", "교류전") : ""}</div>
-      ${frs.length ? `<ul class="ev-list boxes">${frs.map(([d, f]) => `<li class="${d < t ? "past" : ""}"><span class="num">${md(parseD(d))} (${DOW_KO[parseD(d).getDay()]})</span><span class="ev-main"><b>${esc(frName(f.opponent))}</b> <span class="chip">${fmtKo(f)}</span><span class="small muted">${esc([f.start && f.start + (f.end ? "–" + f.end : ""), f.place, f.note].filter(Boolean).join(" · "))}</span>${d >= t ? voteBox("friendly", f.id) : ""}</span>${can("schedule") ? `<span class="ev-acts"><button class="btn link small" type="button" data-act="editfriendly" data-id="${esc(f.id)}">수정</button><button class="btn link danger small" type="button" data-act="delfriendly" data-id="${esc(f.id)}">삭제</button></span>` : ""}</li>`).join("")}</ul>` : emptyLine("잡힌 교류전이 없어요.")}
+      ${frs.length ? `<ul class="ev-list boxes">${frs.map(([d, f]) => `<li class="${d < t ? "past" : ""}"><span class="num">${md(parseD(d))} (${DOW_KO[parseD(d).getDay()]})</span><span class="ev-main"><b>${esc(frName(f.opponent))}</b> <span class="chip">${fmtKo(f)}</span><span class="small muted">${esc([f.start && f.start + (f.end ? "–" + f.end : ""), f.place, f.note].filter(Boolean).join(" · "))}</span>${d >= t ? voteBox("friendly", f.id) : ""}</span>${can("schedule") ? `<span class="ev-acts"><button class="btn link small" type="button" data-act="editfriendly" data-id="${esc(f.id)}">수정</button></span>` : ""}</li>`).join("")}</ul>` : emptyLine("잡힌 교류전이 없어요.")}
     </section>
     <section class="sec"><div class="sec-head"><h3>교내 대회</h3>${can("schedule") ? `<button class="btn add" type="button" data-act="cmpform" data-f="cup">+ 교내 대회</button>` : ""}</div>
-      ${(state.cups || []).length ? `<ul class="ev-list boxes">${state.cups.slice().sort((a, b) => a.start.localeCompare(b.start)).map(c => `<li class="${c.end < t ? "past" : ""}"><span class="num">${md(parseD(c.start))} – ${md(parseD(c.end))}</span><span class="ev-main"><b>${esc(c.name)}</b> <span class="chip">${esc(CUP_KIND[c.kind] || "")}</span>${c.place ? `<span class="small muted">${esc(c.place)}</span>` : ""}</span><span class="ev-acts"><button class="btn link small" type="button" data-act="cmpgo" data-id="${c.id}">보기</button>${can("schedule") ? `<button class="btn link small" type="button" data-act="cmpform" data-f="cup" data-id="${c.id}">수정</button><button class="btn link danger small" type="button" data-act="cmpdelcup" data-id="${c.id}">삭제</button>` : ""}</span></li>`).join("")}</ul>` : emptyLine("등록된 교내 대회가 없어요.")}
+      ${(state.cups || []).length ? `<ul class="ev-list boxes">${state.cups.slice().sort((a, b) => a.start.localeCompare(b.start)).map(c => `<li class="${c.end < t ? "past" : ""}"><span class="num">${md(parseD(c.start))} – ${md(parseD(c.end))}</span><span class="ev-main"><b>${esc(c.name)}</b> <span class="chip">${esc(CUP_KIND[c.kind] || "")}</span>${c.place ? `<span class="small muted">${esc(c.place)}</span>` : ""}</span><span class="ev-acts"><button class="btn link small" type="button" data-act="cmpgo" data-id="${c.id}">보기</button>${can("schedule") ? `<button class="btn link small" type="button" data-act="cmpform" data-f="cup" data-id="${c.id}">수정</button>` : ""}</span></li>`).join("")}</ul>` : emptyLine("등록된 교내 대회가 없어요.")}
     </section>
   </div>`;
 }
@@ -1752,6 +1758,7 @@ function openEditForm(k, id) {
   else { let fr = null; for (const [d, fs] of Object.entries(state.friendlies)) { const x = fs.find(y => y.id === id); if (x) fr = { ...x, date: d }; } if (!fr) return;
     set("fr-date", fr.date); set("fr-opp", fr.opponent); set("fr-fmt", fr.format === "9" ? "9" : "6"); set("fr-start", fr.start); set("fr-end", fr.end); set("fr-place", fr.place); set("fr-note", fr.note); }
   f.dataset.id = id; el.querySelector("h3").textContent = k === "event" ? "일정 수정" : "교류전 수정"; f.querySelector('button[type="submit"]').textContent = "저장";
+  addDelZone(`data-act="del${k}" data-id="${esc(id)}"`, k === "event" ? "일정 삭제" : "교류전 삭제");
 }
 function openForm(k) {
   const [title, html] = FORMS[k] || []; if (!title) return;
@@ -1813,7 +1820,7 @@ function attendLi({ date, i, open }, me) {
     }
     if (!me) return `<li>${when}</li>`;
     const a = absOf(me.id, date);
-    return `<li>${when}<div class="at-side">${a ? `<span class="chip warn">불참</span><button class="btn link small" type="button" data-act="absopen" data-date="${date}">수정</button><button class="btn link small danger" type="button" data-act="absdel" data-date="${date}">취소</button>`
+    return `<li>${when}<div class="at-side">${a ? `<span class="chip warn">불참</span><button class="btn link small" type="button" data-act="absopen" data-date="${date}">수정</button>`
       : date >= t ? `<button class="btn small vote-btn" type="button" data-act="absopen" data-date="${date}">불참</button>` : ""}</div></li>`;
   })();
 }
@@ -1906,7 +1913,7 @@ function viewScout() {
   const ev = S.events[m.id];
   if (!ev) scoutEvents(m.id);
   return `<section class="sec sc-page"><div class="sc-top"><button class="btn link small" type="button" data-act="scback">‹ 목록</button>
-      <span class="row nowrap"><button class="btn link small" type="button" data-act="scxlsx" data-id="${esc(m.id)}">엑셀</button>${can("analysis") ? `<button class="btn link small" type="button" data-act="scedit" data-id="${esc(m.id)}">수정</button><button class="btn link small danger" type="button" data-act="scdel" data-id="${esc(m.id)}">삭제</button>` : ""}</span></div>
+      <span class="row nowrap"><button class="btn link small" type="button" data-act="scxlsx" data-id="${esc(m.id)}">엑셀</button>${can("analysis") ? `<button class="btn link small" type="button" data-act="scedit" data-id="${esc(m.id)}">수정</button>` : ""}</span></div>
     <div class="sc-title"><b>${esc(m.title)}</b><span class="small muted">${scMeta(m)}</span></div>
     ${m.yt ? "" : `<p class="small muted">영상 링크가 없어요.</p>`}
     ${scSeg("sctab", [["input", "입력"], ["scenes", "장면"], ["stats", "분석"]], S.tab)}
@@ -2142,6 +2149,7 @@ function openScoutForm(id) {
       <label class="fl wide">유튜브 링크<input id="scf-yt" maxlength="200" value="${esc(m.yt || "")}" placeholder="https://youtu.be/..."></label>
       <label class="fl wide">메모<input id="scf-note" maxlength="300" value="${esc(m.note || "")}"></label>
     </div><div class="row"><button class="btn primary" type="submit">${id ? "저장" : "추가"}</button></div></form>`;
+  if (id) addDelZone(`data-act="scdel" data-id="${esc(id)}"`, "경기 삭제");
   el.hidden = false; document.body.classList.add("noscroll");
 }
 /* ---------- 대회·교류전 참가 투표 (불참은 사유) ---------- */
@@ -2270,7 +2278,7 @@ function cupPage(x) {
     }
   }
   return `<section class="sec"><div class="row"><button class="btn link small" type="button" data-act="cupback">‹ 목록</button></div>
-    <div class="jp-head"><h2 class="dyn">${esc(x.name)}</h2><span class="small muted">${esc(x.when)} · ${x.fmt === "9" ? "9인제" : "6인제"}</span>${can("schedule") ? `<span class="ev-acts"><button class="btn link small" type="button" data-act="edit${x.kind}" data-id="${esc(x.id)}">수정</button><button class="btn link danger small" type="button" data-act="del${x.kind}" data-id="${esc(x.id)}">삭제</button></span>` : ""}</div>
+    <div class="jp-head"><h2 class="dyn">${esc(x.name)}</h2><span class="small muted">${esc(x.when)} · ${x.fmt === "9" ? "9인제" : "6인제"}</span>${can("schedule") ? `<span class="ev-acts"><button class="btn link small" type="button" data-act="edit${x.kind}" data-id="${esc(x.id)}">수정</button></span>` : ""}</div>
     <div class="panel">${voteBox(x.kind, x.id)}</div>
     <section class="panel sec"><div class="sec-head"><h3>엔트리</h3>${can("schedule") && !C.edit ? `<button class="btn small" type="button" data-act="cupedit">선정</button>` : ""}</div>${entry}</section>
     ${needSets ? `<section class="panel sec"><div class="sec-head"><h3>세트별 ${x.kind === "friendly" ? "출전" : "서브 타순"}</h3></div>${sets}</section>` : ""}</section>`;
@@ -2334,6 +2342,7 @@ function openAbsent(date) {
       <p class="small muted">관리자만 봐요</p>
       <div class="row"><button class="btn primary" type="submit">${a ? "저장" : "불참 내기"}</button></div>
     </form>`;
+  if (a) addDelZone(`data-act="absdel" data-date="${esc(date)}"`, "불참 취소");
   el.hidden = false; document.body.classList.add("noscroll");
 }
 // 교류전 (관리자가 추가 · 모두 봄)
@@ -2589,6 +2598,7 @@ document.addEventListener("click", async ev => {
   const b = ev.target.closest("[data-act]");
   if (!b || b.tagName === "SELECT") return;
   const act = b.dataset.act;
+  state.delFromSheet = !!b.closest(".del-zone");
   // 지우기·취소는 한 번 더 확인 (안에서 따로 묻는 것 빼고)
   const ASK = { delinj: ["이 부상을 지울까요?", "네, 삭제"], ptdel: ["바꾼 시간을 취소할까요?\n원래 시간으로 돌아가요.", "네, 취소"], absdel: ["불참을 취소할까요?", "네, 취소"], scundo: ["이 플레이를 지울까요?", "네, 삭제"], canceledit: ["수정을 취소할까요?\n바꾼 내용은 저장되지 않아요.", "네, 취소"], cancelpw: ["비밀번호 바꾸기를 취소할까요?", "네, 취소"] };
   if (ASK[act] && !await confirmDel(...ASK[act])) return;
