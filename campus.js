@@ -138,40 +138,48 @@ function groupsHtml(c) {
     return `<div class="panel cmp-grp"><h4>${g === "-" ? "조 없음" : esc(g) + "조"}</h4><ol>${ts.map(t => `<li class="${t.withdrawn ? "wd" : ""}"><span>${esc(t.name)}${t.withdrawn ? ` <span class="chip warn">기권</span>` : ""}</span>${st[t.id].n && !t.withdrawn ? `<span class="num small">${st[t.id].w}승 ${st[t.id].l}패${st[t.id].sw || st[t.id].sl ? ` · ${st[t.id].sw}:${st[t.id].sl}` : ""}</span>` : ""}${adm ? `<button class="btn link small" type="button" data-act="cmpform" data-f="team" data-id="${t.id}">수정</button>` : ""}</li>`).join("")}</ol></div>`; };
   return `<section class="sec"><div class="sec-head"><h3>조편성</h3>${adm ? `<button class="btn add" type="button" data-act="cmpform" data-f="team">+ 팀</button>` : ""}</div>${c.teams.length ? `<div class="cmp-grps">${grps.map(box).join("")}</div>` : emptyLine("아직 참가 팀이 없어요.")}</section>`;
 }
-// 본선 대진표: 라운드별 칸 + 이어지는 선 (6강 → 4강 → 결승, 3·4위전은 결승 아래)
+// 본선 대진표 (토너먼트 나무): 왼쪽에 자리(A1위 · B선택 · C2위 …)를 세로로, 경기마다 선을 모아 오른쪽으로 → 우승
+// 경기의 자리 이름이 "○○ 승자"면 그 경기가 아래 가지. 3·4위전은 아래에 따로
 function bracketHtml(c) {
-  const rounds = BRACKET.filter(x => x !== "f").map(x => c.matches.filter(m => m.stage === x)).filter(l => l.length);
-  const fin = c.matches.filter(m => m.stage === "f"), third = c.matches.filter(m => m.stage === "3rd");
-  if (!rounds.length && !fin.length && !third.length) return "";
-  const adm = can("schedule"), narrow = matchMedia("(max-width: 640px)").matches;
-  const W = narrow ? 150 : 200, BH = 74, G = narrow ? 30 : 56, S = BH + 30, TOP = 30;
-  const no = m => c.matches.indexOf(m) + 1;
-  const cols = [...rounds, fin.length || third.length ? [...fin] : null].filter(Boolean);
-  const maxN = Math.max(1, ...rounds.map(l => l.length), fin.length);
-  let H = maxN * S;
-  const pos = new Map(); // match → {x, y(가운데)}
-  cols.forEach((l, ci) => l.forEach((m, i) => pos.set(m, { x: ci * (W + G), y: TOP + (i + 0.5) * H / l.length })));
-  const lastX = (cols.length - 1) * (W + G);
-  if (fin.length && third.length) { const fy = pos.get(fin[0]).y; third.forEach((m, i) => pos.set(m, { x: lastX, y: fy + BH / 2 + 44 + BH / 2 + i * S })); }
-  else third.forEach((m, i) => pos.set(m, { x: lastX, y: TOP + (i + 0.5) * S }));
-  for (const [, p] of pos) H = Math.max(H, p.y + BH / 2 - TOP + 8);
-  // 선: 자리 이름("○○ 승자")으로 이어진 경기, 없으면 라운드 순서대로 (2:1 · 1:1)
-  const lines = [];
-  cols.forEach((l, ci) => { if (!ci) return; const prev = cols[ci - 1];
-    l.forEach((m, i) => {
-      let src = ["al", "bl"].map(k => /^(.+?)\s*승자$/.exec(m[k] || "")).filter(Boolean).map(x => prev.find(p => p.label === x[1])).filter(Boolean);
-      if (!src.length && !["al", "bl"].some(k => /승자$/.test(m[k] || ""))) src = prev.length === 2 * l.length ? [prev[2 * i], prev[2 * i + 1]] : prev.length === l.length ? [prev[i]] : [];
-      const t = pos.get(m);
-      for (const p of src) { const a = pos.get(p), mx = a.x + W + G / 2; lines.push(`M${a.x + W} ${a.y}H${mx}V${t.y}H${t.x}`); }
-    }); });
-  const row = (m, sd, w, sets, k) => { const id = sideId(c, m, sd), lose = w && id && w !== id; return `<div class="bk-t ${w && id === w ? "win" : ""} ${lose ? "lose" : ""} ${id ? "" : "tbd"}"><span>${esc(cmpSide(c, m, sd))}</span><b>${sets ? sets[k] : ""}</b></div>`; };
-  const box = m => { const p = pos.get(m), w = winnerOf(c, m), sets = cmpSets(m);
-    return `<div class="bk-box" style="left:${p.x}px;top:${p.y - BH / 2}px;width:${W}px;height:${BH}px" ${adm ? `data-act="cmpform" data-f="match" data-id="${m.id}" role="button" tabindex="0"` : ""}><div class="bk-h"><span>${md(parseD(m.date))} ${m.start}</span><span># ${no(m)}</span></div>${row(m, "a", w, sets, 0)}${row(m, "b", w, sets, 1)}</div>`; };
-  const heads = cols.map((l, ci) => `<span class="bk-r" style="left:${ci * (W + G)}px;width:${W}px">${ci === cols.length - 1 && (fin.length || third.length) ? "결승" : STAGE_KO[l[0].stage]}</span>`).join("");
-  const sub = third.length ? `<span class="bk-l" style="left:${lastX}px;top:${pos.get(third[0]).y - BH / 2 - 18}px;width:${W}px">3·4위전</span>` : "";
-  const totW = lastX + W, totH = TOP + H;
-  return `<section class="sec"><h3>대진표</h3><div class="bk-wrap"><div class="bk" style="width:${totW}px;height:${totH}px">
-    <svg class="bk-ln" width="${totW}" height="${totH}" aria-hidden="true"><path d="${lines.join("")}"/></svg>${heads}${sub}${[...pos.keys()].map(box).join("")}</div></div></section>`;
+  const bm = c.matches.filter(m => BRACKET.includes(m.stage)), third = c.matches.filter(m => m.stage === "3rd");
+  if (!bm.length && !third.length) return "";
+  const adm = can("schedule");
+  const ref = (m, sd) => { const x = /^(.+?)\s*승자$/.exec(m[sd + "l"] || ""); return x && !m[sd] ? bm.find(o => o.label === x[1] && o !== m) || null : null; };
+  const used = new Set(); for (const m of bm) for (const sd of ["a", "b"]) { const r = ref(m, sd); if (r) used.add(r); }
+  const roots = bm.filter(m => !used.has(m)).sort((a, b) => BRACKET.indexOf(b.stage) - BRACKET.indexOf(a.stage));
+  const node = (m, d = 0) => ({ m, kids: ["a", "b"].map(sd => { const r = d < 6 && ref(m, sd); return r ? node(r, d + 1) : { leaf: true, m, sd }; }) });
+  const height = n => n.leaf ? 0 : 1 + Math.max(...n.kids.map(height));
+  const trees = roots.map(r => node(r)), maxH = Math.max(1, ...trees.map(height));
+  const nw = matchMedia("(max-width: 640px)").matches, RH = 40, LW = nw ? 84 : 96, GAP = nw ? 84 : 96, BW = nw ? 84 : 96, BH = 30, TOP = 6;
+  // 높이별 선 모이는 x, 그 뒤 승자 칸(4강 이상)
+  const JX = [0, 0], OUT = [LW];
+  for (let h = 1; h <= maxH; h++) { JX[h] = OUT[h - 1] + GAP; OUT[h] = h >= 2 ? JX[h] + 14 + BW : JX[h]; }
+  let row = 0; const leaves = [], joins = [], lines = [];
+  const place = (n, top) => {
+    if (n.leaf) { const y = TOP + (row++ + 0.5) * RH; leaves.push({ n, y }); return { x: LW, y }; }
+    const h = height(n), pts = n.kids.map(k => place(k)), y = (pts[0].y + pts[1].y) / 2, jx = JX[h];
+    for (const p of pts) lines.push(`M${p.x} ${p.y}H${jx}`);
+    lines.push(`M${jx} ${pts[0].y}V${pts[1].y}`);
+    joins.push({ n, h, y, jx });
+    if (h >= 2 && !top) { lines.push(`M${jx} ${y}H${jx + 14}`); return { x: jx + 14 + BW, y }; }
+    return { x: jx, y };
+  };
+  const tops = trees.map((t, i) => { if (i) row += 0.6; return { t, p: place(t, true) }; });
+  const winX = JX[maxH] + 40, totW = winX + BW + 4, totH = TOP + row * RH;
+  for (const { p } of tops) lines.push(`M${p.x} ${p.y}H${winX}`);
+  const tag = m => adm ? `data-act="cmpform" data-f="match" data-id="${m.id}" role="button" tabindex="0"` : "";
+  const leafHtml = leaves.map(({ n, y }) => { const id = sideId(c, n.m, n.sd), w = winnerOf(c, n.m), t = id && cmpTeam(c, id);
+    return `<div class="tb-leaf ${w && id && w !== id ? "lose" : ""} ${w && id === w ? "win" : ""}" style="top:${y - BH / 2}px;width:${LW}px;height:${BH}px" title="${esc(n.m[n.sd + "l"] || "")}">${t ? `${esc(t.name)}${n.m[n.sd + "l"] ? `<small>${esc(n.m[n.sd + "l"])}</small>` : ""}` : esc(n.m[n.sd + "l"] || "미정")}</div>`; }).join("");
+  const joinHtml = joins.map(({ n, h, y, jx }) => { const m = n.m, w = winnerOf(c, m), wt = w && cmpTeam(c, w);
+    const lab = `<div class="tb-lab" style="left:${jx - GAP + 4}px;top:${y - 17}px;width:${GAP - 10}px" ${tag(m)}><b>${esc(m.label || STAGE_KO[m.stage])}</b><span>${m.start}${m.end ? "–" + m.end : ""}${m.score ? ` · ${esc(m.score)}` : ""}</span></div>`;
+    const isTop = tops.some(x => x.t === n);
+    return lab + (h >= 2 && !isTop ? `<div class="tb-win ${wt ? "on" : ""}" style="left:${jx + 14}px;top:${y - BH / 2}px;width:${BW}px;height:${BH}px">${wt ? esc(wt.name) : esc((m.label || "") + " 승자")}</div>` : ""); }).join("");
+  const champ = tops.map(({ t, p }) => { const w = winnerOf(c, t.m), wt = w && cmpTeam(c, w);
+    return `<div class="tb-champ ${wt ? "on" : ""}" style="left:${winX}px;top:${p.y - 18}px;width:${BW}px">${svg("trophy")}<span>${wt ? esc(wt.name) : "우승"}</span></div>`; }).join("");
+  const thirdHtml = third.length ? `<ul class="tb-third">${third.map(m => { const w = winnerOf(c, m), nm = sd => { const id = sideId(c, m, sd); return `<span class="${w && id === w ? "win" : ""}">${esc(cmpSide(c, m, sd))}</span>`; };
+    return `<li ${tag(m)}><b>${esc(m.label || "3·4위전")}</b><span class="small muted">${md(parseD(m.date))} ${m.start}${m.score ? ` · ${esc(m.score)}` : ""}</span><span class="tb-vs">${nm("a")} vs ${nm("b")}</span></li>`; }).join("")}</ul>` : "";
+  return `<section class="sec"><h3>본선 대진표</h3><div class="bk-wrap"><div class="tb" style="width:${totW}px;height:${totH}px">
+    <svg class="bk-ln" width="${totW}" height="${totH}" aria-hidden="true"><path d="${lines.join("")}"/></svg>${leafHtml}${joinHtml}${champ}</div></div>${thirdHtml}</section>`;
 }
 
 /* ---------- 홈: 내 투표 (한 줄씩, 응답한 건 접어 둠) ---------- */
