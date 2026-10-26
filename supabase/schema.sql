@@ -1865,3 +1865,79 @@ insert into public.teams (id, name, label, net_cm, swap_days) values
   ('men', 'SNUVT', '남자부', 243, false),
   ('women', 'SNUVT', '여자부', 224, true)
 on conflict (id) do nothing;
+
+-- ========== 교내 대회 (2026-10-26 추가): 1학기 총장배 · 2학기 종합체육대회, 남녀 함께 쓰는 표 ==========
+create table public.cups (
+  id uuid primary key default gen_random_uuid(),
+  name text not null check (length(name) between 1 and 60),
+  kind text not null check (kind in ('pres', 'gen')),
+  start_date date not null,
+  end_date date not null,
+  place text check (place is null or length(place) <= 60),
+  cafe_url text check (cafe_url is null or (length(cafe_url) <= 300 and cafe_url ~ '^https://')),
+  note text check (note is null or length(note) <= 500),
+  created_at timestamptz not null default now(),
+  check (end_date >= start_date)
+);
+create table public.cup_teams (
+  id uuid primary key default gen_random_uuid(),
+  cup_id uuid not null references public.cups(id) on delete cascade,
+  name text not null check (length(name) between 1 and 40),
+  grp text check (grp is null or length(grp) <= 4),
+  sort int not null default 9,
+  withdrawn boolean not null default false,
+  ours boolean not null default false
+);
+create index cup_teams_cup on public.cup_teams (cup_id);
+create table public.cup_matches (
+  id uuid primary key default gen_random_uuid(),
+  cup_id uuid not null references public.cups(id) on delete cascade,
+  date date not null,
+  start_time time,
+  end_time time,
+  stage text not null default 'group' check (stage in ('group', 'r6', 'qf', 'sf', '3rd', 'f', 'etc')),
+  label text check (label is null or length(label) <= 40),
+  team_a uuid references public.cup_teams(id) on delete set null,
+  team_b uuid references public.cup_teams(id) on delete set null,
+  a_label text check (a_label is null or length(a_label) <= 20),
+  b_label text check (b_label is null or length(b_label) <= 20),
+  score text check (score is null or length(score) <= 40),
+  winner uuid references public.cup_teams(id) on delete set null,
+  refs jsonb not null default '{}'::jsonb -- {ju 주심, bu 부심, s1·s2 선심, rec 기록심} = 이름
+);
+create index cup_matches_cup on public.cup_matches (cup_id, date);
+create table public.cup_avail (
+  cup_id uuid not null references public.cups(id) on delete cascade,
+  date date not null,
+  player_id uuid not null references public.players(id) on delete cascade,
+  name text,
+  team_id text,
+  going boolean not null,
+  note text check (note is null or length(note) <= 60),
+  updated_at timestamptz not null default now(),
+  primary key (cup_id, date, player_id)
+);
+-- 이름·팀은 선수 표에서 채움 (다른 팀 선수 표는 못 읽으므로)
+create or replace function private.cup_avail_fill() returns trigger language plpgsql security definer set search_path to '' as $$
+begin
+  select p.name, p.team_id into new.name, new.team_id from public.players p where p.id = new.player_id;
+  new.updated_at := now();
+  return new;
+end $$;
+create trigger cup_avail_fill before insert or update on public.cup_avail for each row execute function private.cup_avail_fill();
+alter table public.cups enable row level security;
+alter table public.cup_teams enable row level security;
+alter table public.cup_matches enable row level security;
+alter table public.cup_avail enable row level security;
+create policy "members read cups" on public.cups for select to authenticated using (private.is_member());
+create policy "schedule writes cups" on public.cups for all to authenticated using (private.can('schedule')) with check (private.can('schedule'));
+create policy "members read cup_teams" on public.cup_teams for select to authenticated using (private.is_member());
+create policy "schedule writes cup_teams" on public.cup_teams for all to authenticated using (private.can('schedule')) with check (private.can('schedule'));
+create policy "members read cup_matches" on public.cup_matches for select to authenticated using (private.is_member());
+create policy "schedule writes cup_matches" on public.cup_matches for all to authenticated using (private.can('schedule')) with check (private.can('schedule'));
+create policy "members read cup_avail" on public.cup_avail for select to authenticated using (private.is_member());
+create policy "self or schedule writes cup_avail" on public.cup_avail for all to authenticated
+  using ((private.is_member() and player_id = private.my_player_id()) or private.can('schedule'))
+  with check ((private.is_member() and player_id = private.my_player_id()) or private.can('schedule'));
+revoke all on public.cups, public.cup_teams, public.cup_matches, public.cup_avail from anon;
+grant select, insert, update, delete on public.cups, public.cup_teams, public.cup_matches, public.cup_avail to authenticated;

@@ -3,8 +3,8 @@
  * - CDN 스크립트·글꼴은 저장해 둔 것 먼저
  * - Supabase(데이터) 요청은 건드리지 않음 (오프라인 기록은 앱이 따로 모아 뒀다가 올림)
  * - 알림(push) 표시 · 알림을 누르면 앱 열기 */
-const CACHE = "snuvt-v2";
-const SHELL = ["./", "index.html", "app.js", "program.js", "guide.js", "library.js", "config.js", "logo.png", "logo-white.png", "favicon.png", "icon-192.png", "manifest.webmanifest"];
+const CACHE = "snuvt-v3";
+const SHELL = ["./", "index.html", "app.js", "program.js", "guide.js", "library.js", "campus.js", "config.js", "logo.png", "logo-white.png", "favicon.png", "icon-192.png", "manifest.webmanifest"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {}));
   self.skipWaiting();
