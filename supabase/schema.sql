@@ -1952,3 +1952,4 @@ as $$
 $$;
 revoke all on function public.cup_people() from public, anon;
 grant execute on function public.cup_people() to authenticated;
+alter table public.cups add column if not exists adv int not null default 2 check (adv between 1 and 4); -- 조 n위까지 본선
