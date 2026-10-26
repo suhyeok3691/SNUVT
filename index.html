@@ -901,17 +901,6 @@ ul.ev-list.boxes { gap: 8px; }
 .cd.k-cup { background: var(--c-cup); } .cd.k-cup .n { color: var(--surface); }
 i.dot.k-cup { background: var(--c-cup); }
 .home-cal .cal-head h3 { font-size: 16px; }
-.my-votes .boxes { display: grid; gap: 6px; list-style: none; margin: 8px 0 0; padding: 0; }
-.mv-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
-.mv-row.todo { border-color: var(--yellow); background: var(--yellow-soft); }
-.mv-row.wide { flex-wrap: wrap; }
-.mv-t { display: grid; min-width: 0; } .mv-t b { overflow-wrap: anywhere; }
-.cmp-days { display: flex; flex-wrap: wrap; gap: 5px; }
-.cmp-day { display: grid; justify-items: center; min-width: 46px; padding: 4px 6px; font: inherit; font-size: 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); cursor: pointer; }
-.cmp-day b { font-family: var(--f-data); font-size: 12px; } .cmp-day i { font-style: normal; font-weight: 700; color: var(--muted); }
-.cmp-day.go { border-color: var(--good); } .cmp-day.go i { color: var(--good); }
-.cmp-day.no { border-color: var(--crit); } .cmp-day.no i { color: var(--crit); }
-.cmp-day:disabled { opacity: .45; cursor: default; }
 .vote-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; margin-left: auto; }
 .vote-seg button { font: inherit; font-size: 13px; padding: 5px 12px; border: 0; background: var(--surface); color: var(--muted); cursor: pointer; }
 .vote-seg button + button { border-left: 1px solid var(--line); }
@@ -941,16 +930,12 @@ sub { font-size: 10px; color: var(--muted); }
 .cmp-grp h4 { margin: 0 0 6px; } .cmp-grp ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
 .cmp-grp li { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; }
 .cmp-grp li > span:first-child { flex: 1; } .cmp-grp li.wd > span:first-child { color: var(--muted); text-decoration: line-through; }
-.cmp-br { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 4px; }
-.cmp-bc { display: grid; gap: 8px; align-content: center; min-width: 150px; flex: 1; }
-.cmp-bc h4 { margin: 0; text-align: center; font-size: 13px; color: var(--muted); }
-.cmp-bm { display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
-.cmp-bm .win { font-weight: 700; }
 .cmp-cal { display: grid; gap: 6px; } .cmp-cal .row { align-items: center; gap: 8px; flex-wrap: wrap; }
 .cmp-cal-m { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .cmp-cal-m li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; font-size: 13.5px; }
 .cmp-sub { margin: 12px 0 6px; }
-.cmp-refs { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+.cmp-refs { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); align-items: start; }
+.cmp-refc { margin-top: 4px; }
 .cmp-pool { display: flex; flex-wrap: wrap; gap: 5px; margin: 6px 0 10px; }
 .cmp-cards { display: none; list-style: none; margin: 0 0 12px; padding: 0; gap: 6px; }
 .cmp-cards > li:not(.cmp-dh) { padding: 9px 11px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
@@ -965,6 +950,30 @@ sub { font-size: 10px; color: var(--muted); }
 .cmp-tbl { table-layout: fixed; min-width: 720px; }
 .cmp-tbl th:first-child { width: 112px; } .cmp-tbl th:nth-child(n+3) { width: 78px; } .cmp-tbl th:nth-child(8) { width: 64px; }
 .cmp-tbl td { overflow: hidden; text-overflow: ellipsis; } .cmp-tbl td.cmp-vs { white-space: normal; }
+.mv-head { display: flex; align-items: center; gap: 8px; } .mv-head h3 { margin: 0; }
+.mv-list { display: grid; gap: 4px; list-style: none; margin: 8px 0 0; padding: 0; }
+.mv-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding: 4px 6px 4px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.mv-n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.mv-row .vote-btn { min-height: 30px; padding: 3px 12px; font-size: 13px; flex: none; }
+.mv-done { margin-top: 6px; } .mv-done summary { cursor: pointer; padding: 2px 0; }
+.cmp-days { display: flex; gap: 3px; flex: none; }
+.cmp-day { display: grid; place-items: center; width: 32px; height: 34px; padding: 0; font: inherit; font-family: var(--f-data); font-size: 12.5px; font-weight: 700; line-height: 1; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); color: var(--muted); cursor: pointer; }
+.cmp-day small { font-family: var(--f-body); font-size: 9.5px; font-weight: 500; }
+.cmp-day.go { background: var(--good); border-color: var(--good); color: #fff; }
+.cmp-day.no { background: var(--crit-soft); border-color: var(--crit); color: var(--crit); text-decoration: line-through; }
+.cmp-day:disabled { opacity: .4; cursor: default; }
+.bk-wrap { overflow-x: auto; padding-bottom: 6px; }
+.bk { position: relative; }
+.bk-ln { position: absolute; inset: 0; pointer-events: none; } .bk-ln path { fill: none; stroke: var(--muted); stroke-width: 1.2; opacity: .7; }
+.bk-r { position: absolute; top: 0; text-align: center; font-family: var(--f-display); font-size: 15px; letter-spacing: .02em; color: var(--muted); }
+.bk-l { position: absolute; text-align: center; font-size: 12px; font-weight: 700; color: var(--muted); }
+.bk-box { position: absolute; box-sizing: border-box; display: grid; grid-template-rows: auto 1fr 1fr; padding: 5px 10px; border: 1.5px solid var(--line); border-radius: 4px; background: var(--surface); }
+.bk-box[data-act] { cursor: pointer; } .bk-box[data-act]:hover { border-color: var(--blue); }
+.bk-h { display: flex; justify-content: space-between; font-size: 10.5px; font-weight: 700; padding-bottom: 3px; border-bottom: 1px solid var(--line); }
+.bk-t { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 13px; font-weight: 600; min-width: 0; }
+.bk-t span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk-t b { font-family: var(--f-data); font-size: 13px; }
+.bk-t.win { font-weight: 800; } .bk-t.lose, .bk-t.tbd { color: var(--muted); font-weight: 500; }
 </style>
 </head>
 <body>
@@ -985,10 +994,10 @@ sub { font-size: 10px; color: var(--muted); }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=92"></script>
-<script src="guide.js?v=92"></script>
-<script src="library.js?v=92"></script>
-<script src="campus.js?v=92"></script>
-<script src="app.js?v=92"></script>
+<script src="program.js?v=93"></script>
+<script src="guide.js?v=93"></script>
+<script src="library.js?v=93"></script>
+<script src="campus.js?v=93"></script>
+<script src="app.js?v=93"></script>
 </body>
 </html>

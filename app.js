@@ -101,16 +101,16 @@ function confirmDel(msg, yes = "네, 삭제") {
   });
 }
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
-const VIEWS = ["home", "practice", "notes", "video", "jp", "scout", "train", "plan", "rec", "season", "comps", "cup", "campus", "sched", "report", "roster", "intake"];
+const VIEWS = ["home", "practice", "notes", "video", "jp", "scout", "train", "plan", "rec", "season", "comps", "cup", "fr", "campus", "sched", "report", "roster", "intake"];
 // 섹션 (위 탭 묶음): 훈련 · 피지컬 · 일정 · 대회 · 관리. 공지는 홈 맨 위, 설정은 오른쪽 위
 const SECTIONS = {
   physical: { label: "피지컬", views: [["train", "오늘"], ["plan", "프로그램"], ["rec", "기록"]] },
   schedule: { label: "일정", views: [["season", "다가오는"], ["comps", "전체 일정"], ["sched", "훈련 관리", "attend"]] },
-  cup: { label: "대회", views: [["cup", "대회"], ["campus", "교내 대회"], ["scout", "전력분석"]] },
+  cup: { label: "대회", views: [["cup", "대회"], ["fr", "교류전"], ["campus", "교내 대회"], ["scout", "전력분석"]] },
   admin: { label: "관리", views: [["roster", "명단", "roster"], ["intake", "부원", "full"], ["report", "리포트", "training"]] },
   practice: { label: "훈련", views: [["practice", "훈련 계획"], ["notes", "훈련 노트"], ["video", "영상"], ["jp", "일본 고교"]] },
 };
-const SECTION_OF = { scout: "cup", practice: "practice", notes: "practice", video: "practice", jp: "practice", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", cup: "cup", campus: "cup", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
+const SECTION_OF = { scout: "cup", practice: "practice", notes: "practice", video: "practice", jp: "practice", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", cup: "cup", fr: "cup", campus: "cup", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
 // 직책: 관리자·주장 = 전체 / 부주장·훈련 담당·총무·피지컬 담당 = 맡은 일만 (서버 규칙 private.can 과 같게)
 const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", treasurer: "총무", ops: "훈련 담당", trainer: "피지컬 담당", analyst: "전력분석 담당", media: "영상 담당" };
 // 한 사람이 직책을 여러 개 맡을 수 있음 (players.titles)
@@ -2196,21 +2196,20 @@ const cupItems = () => {
 };
 const startersOf = (kind, id) => (state.starters || {})[kind + ":" + id] || new Set();
 const cupState = () => state.cup || (state.cup = { key: null, set: 1, edit: false, lineups: {} });
-function viewCup() {
+function viewCup(kind = "event") {
   const C = cupState(), items = cupItems(), t = iso(today());
-  const cur = C.key && items.find(x => x.kind + ":" + x.id === C.key);
+  const cur = C.key && items.find(x => x.kind === kind && x.kind + ":" + x.id === C.key);
   if (cur) return cupPage(cur);
   const card = x => { const en = entryOf(x.kind, x.id), st = startersOf(x.kind, x.id), vs = evVotesOf(x.kind, x.id), go = Object.values(vs).filter(v => v.going).length;
     return `<button type="button" class="panel sc-card cup-card ${x.end < t ? "past" : ""}" data-act="cupopen" data-k="${esc(x.kind + ":" + x.id)}"><b>${esc(x.name)} <span class="chip">${x.fmt === "9" ? "9인제" : "6인제"}</span></b><span class="small muted">${esc(x.when)} · 참 ${go} · 엔트리 ${en.size}${st.size ? ` · 주전 ${st.size}` : ""}</span><span class="go">›</span></button>`; };
-  const ev = items.filter(x => x.kind === "event"), fr = items.filter(x => x.kind === "friendly");
-  return `<div class="box-cols"><section class="sec"><div class="sec-head"><h3>대회</h3></div>${ev.length ? `<div class="boxes">${ev.map(card).join("")}</div>` : emptyLine("다가오는 대회가 없어요.")}</section>
-    <section class="sec"><div class="sec-head"><h3>교류전</h3></div>${fr.length ? `<div class="boxes">${fr.map(card).join("")}</div>` : emptyLine("다가오는 교류전이 없어요.")}</section></div>`;
+  const l = items.filter(x => x.kind === kind), fr = kind === "friendly";
+  return `<section class="sec"><div class="sec-head"><h3>${fr ? "교류전" : "대회"}</h3>${can("schedule") ? addBtn(fr ? "friendly" : "event", fr ? "교류전" : "일정") : ""}</div>${l.length ? `<div class="boxes">${l.map(card).join("")}</div>` : emptyLine(fr ? "다가오는 교류전이 없어요." : "다가오는 대회가 없어요.")}</section>`;
 }
 async function cupLoadLineups(kind, id) {
   const C = cupState(), key = kind + ":" + id;
   try { const r = await sb.from("lineups").select("set_no,data").eq("kind", kind).eq("ref_id", id); C.lineups[key] = Object.fromEntries((r.data || []).map(x => [x.set_no, x.data || {}])); }
   catch (e) { C.lineups[key] = C.lineups[key] || {}; }
-  if (state.view === "cup") { state.dirty = false; render(); }
+  if ((state.view === "cup" || state.view === "fr")) { state.dirty = false; render(); }
 }
 function cupPage(x) {
   const C = cupState(), key = x.kind + ":" + x.id, en = entryOf(x.kind, x.id), st = startersOf(x.kind, x.id), vs = evVotesOf(x.kind, x.id);
@@ -2516,7 +2515,7 @@ function render() {
   else if (needsSelfReg() || (state.coach && state.editingSelf)) html = viewSelfReg();
   else {
     const v = state.view;
-    html = v === "train" ? viewTrain() : v === "comps" ? viewComps() : v === "cup" ? viewCup() : v === "campus" ? viewCampus() : v === "sched" ? viewSched() : v === "report" ? viewReport() : v === "practice" ? viewPractice() : v === "notes" ? viewNotes() : v === "video" ? viewVideo() : v === "scout" ? viewScout() : v === "jp" ? viewJp() : v === "roster" ? viewRoster() : v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : viewHome();
+    html = v === "train" ? viewTrain() : v === "comps" ? viewComps() : v === "cup" ? viewCup("event") : v === "fr" ? viewCup("friendly") : v === "campus" ? viewCampus() : v === "sched" ? viewSched() : v === "report" ? viewReport() : v === "practice" ? viewPractice() : v === "notes" ? viewNotes() : v === "video" ? viewVideo() : v === "scout" ? viewScout() : v === "jp" ? viewJp() : v === "roster" ? viewRoster() : v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : viewHome();
   }
   const q = state.session ? queue().length : 0;
   const bar = state.loaded && (state.net === false || q) ? `<div class="netbar">${state.net === false ? "오프라인 · 마지막으로 불러온 내용" : "기록 올리는 중"}${q ? ` · 올라갈 기록 ${q}건` : ""}</div>` : "";

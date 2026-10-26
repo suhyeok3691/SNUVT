@@ -1941,3 +1941,14 @@ create policy "self or schedule writes cup_avail" on public.cup_avail for all to
   with check ((private.is_member() and player_id = private.my_player_id()) or private.can('schedule'));
 revoke all on public.cups, public.cup_teams, public.cup_matches, public.cup_avail from anon;
 grant select, insert, update, delete on public.cups, public.cup_teams, public.cup_matches, public.cup_avail to authenticated;
+-- 심판 배정용 남녀 명단 (이름·팀만, 부원만)
+create or replace function public.cup_people()
+ returns table (id uuid, name text, team_id text)
+ language sql stable security definer set search_path to ''
+as $$
+  select p.id, p.name, p.team_id from public.players p
+  where private.is_member() and not coalesce(p.alumni, false)
+  order by p.team_id, p.name
+$$;
+revoke all on function public.cup_people() from public, anon;
+grant execute on function public.cup_people() to authenticated;
