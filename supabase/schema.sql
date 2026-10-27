@@ -1957,3 +1957,24 @@ alter table public.cups add column if not exists adv int not null default 2 chec
 alter table public.events drop constraint events_kind_check;
 alter table public.events add constraint events_kind_check check (kind = any (array['major','minor','tryout','off','termend','ob']));
 alter table public.cup_avail add column if not exists reason text check (reason is null or reason = any (array['class','sick','personal','etc']));
+-- 2026-10-27: 경기 기록 (세트 점수) — 일정 담당·관리자 또는 그 경기 주심·부심·기록심
+alter table public.cup_matches add column if not exists sets jsonb;
+create or replace function public.cup_score(mid uuid, new_sets jsonb, new_score text, new_winner uuid)
+ returns void language plpgsql security definer set search_path to ''
+as $$
+declare m public.cup_matches; me text;
+begin
+  select * into m from public.cup_matches where id = mid;
+  if m.id is null then raise exception '경기를 찾을 수 없어요'; end if;
+  select name into me from public.players where id = private.my_player_id();
+  if not (private.can('schedule') or (private.is_member() and me is not null and me in (m.refs->>'ju', m.refs->>'bu', m.refs->>'rec'))) then
+    raise exception '권한이 없어요' using errcode = '42501';
+  end if;
+  if new_winner is not null and not exists (select 1 from public.cup_teams t where t.id = new_winner and t.cup_id = m.cup_id) then
+    raise exception '잘못된 팀이에요' using errcode = '23514';
+  end if;
+  if new_score is not null and length(new_score) > 40 then raise exception '점수가 너무 길어요' using errcode = '23514'; end if;
+  update public.cup_matches set sets = new_sets, score = new_score, winner = new_winner where id = mid;
+end $$;
+revoke all on function public.cup_score(uuid, jsonb, text, uuid) from public, anon;
+grant execute on function public.cup_score(uuid, jsonb, text, uuid) to authenticated;

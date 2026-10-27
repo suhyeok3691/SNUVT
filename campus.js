@@ -15,8 +15,9 @@ const cmpMe = () => { const p = playerOf(state.myPid); return p ? p.name : ""; }
 const availOf = (c, d) => ((state.cupAvail || {})[c.id] || {})[d] || {};
 const cmpTeam = (c, id) => c.teams.find(t => t.id === id) || null;
 // 자리 이름으로 팀 찾기: "A1위"(조 경기가 다 끝나면) · "6강 1경기 승자/패자"(그 경기가 끝나면)
+// 본선 자리 팀이 기권하면(자리 이름이 "A1위" 같은 순위일 때) 그 아래 순위 팀이 올라감
 function sideId(c, m, s, depth = 0) {
-  if (m[s]) return m[s];
+  if (m[s]) { const t = cmpTeam(c, m[s]); if (!(t && t.withdrawn && /위$/.test(m[s + "l"] || ""))) return m[s]; }
   const lab = m[s + "l"] || ""; if (depth > 6 || !lab) return null;
   const g = /^([A-Za-z])조?\s*([1-9])위$/.exec(lab);
   if (g) { const gs = groupStand(c), k = g[1].toUpperCase(); return gs.done[k] ? gs.order[k][Number(g[2]) - 1] || null : null; }
@@ -26,6 +27,11 @@ function sideId(c, m, s, depth = 0) {
 }
 const cmpSide = (c, m, s) => { const id = sideId(c, m, s), t = id && cmpTeam(c, id); return t ? t.name : m[s + "l"] || "미정"; };
 const hm = s => s ? String(s).slice(0, 5) : "";
+// 점수 보기: 세트 "2-1" + 세트별 점수
+const scoreHtml = m => { if (!m.score) return ""; const x = /^(\d+\s*[-:]\s*\d+)\s*(?:\((.*)\))?$/.exec(m.score); return x ? `<span class="chip sc-res">${esc(x[1])}</span>${x[2] ? `<span class="small muted sc-sets">${esc(x[2].replace(/,\s*/g, " · "))}</span>` : ""}` : `<span class="chip sc-res">${esc(m.score)}</span>`; };
+// 경기 기록 입력: 일정 담당·관리자 + 그 경기 주심·부심·기록심
+const canScore = m => can("schedule") || (!!cmpMe() && ["ju", "bu", "rec"].some(k => (m.refs || {})[k] === cmpMe()));
+const scoreBtn = m => canScore(m) ? `<button class="btn link small sc-rec" type="button" data-act="cmpform" data-f="score" data-id="${m.id}">기록</button>` : "";
 const cmpSets = m => { const x = /(\d+)\s*[-:]\s*(\d+)/.exec(m.score || ""); return x ? [Number(x[1]), Number(x[2])] : null; };
 function winnerOf(c, m, depth = 0) {
   if (m.winner) return m.winner;
@@ -36,7 +42,9 @@ function winnerOf(c, m, depth = 0) {
 function groupStand(c) {
   const st = {}, order = {}, done = {};
   for (const t of c.teams) st[t.id] = { w: 0, l: 0, sw: 0, sl: 0, n: 0 };
-  for (const m of c.matches) if (m.stage === "group" && m.a && m.b && st[m.a] && st[m.b]) {
+  const wd = id => (cmpTeam(c, id) || {}).withdrawn;
+  // 기권 팀 경기는 순위 계산에서 뺌 (조 경기가 끝났는지 볼 때도)
+  for (const m of c.matches) if (m.stage === "group" && m.a && m.b && st[m.a] && st[m.b] && !wd(m.a) && !wd(m.b)) {
     const s = cmpSets(m), w = m.winner || (s && s[0] !== s[1] ? (s[0] > s[1] ? m.a : m.b) : null);
     const g = (cmpTeam(c, m.a) || {}).grp || "-"; if (done[g] === undefined) done[g] = true;
     if (!s && !w) { done[g] = false; continue; }
@@ -64,7 +72,7 @@ function refCounts(c) {
 function buildCups(raw) {
   const T = {}, M = {};
   for (const r of raw.cup_teams || []) (T[r.cup_id] = T[r.cup_id] || []).push({ id: r.id, name: r.name, grp: r.grp || "", sort: r.sort ?? 9, withdrawn: !!r.withdrawn });
-  for (const r of raw.cup_matches || []) (M[r.cup_id] = M[r.cup_id] || []).push({ id: r.id, date: r.date, start: hm(r.start_time), end: hm(r.end_time), stage: r.stage, label: r.label || "", a: r.team_a, b: r.team_b, al: r.a_label || "", bl: r.b_label || "", score: r.score || "", winner: r.winner, refs: r.refs || {} });
+  for (const r of raw.cup_matches || []) (M[r.cup_id] = M[r.cup_id] || []).push({ id: r.id, date: r.date, start: hm(r.start_time), end: hm(r.end_time), stage: r.stage, label: r.label || "", a: r.team_a, b: r.team_b, al: r.a_label || "", bl: r.b_label || "", score: r.score || "", sets: r.sets || null, winner: r.winner, refs: r.refs || {} });
   state.cups = (raw.cups || []).map(r => ({ id: r.id, name: r.name, kind: r.kind, start: r.start_date, end: r.end_date, place: r.place || "", cafe: r.cafe_url || "", adv: r.adv || 2, note: r.note || "",
     teams: (T[r.id] || []).sort((a, b) => a.grp.localeCompare(b.grp) || a.sort - b.sort || a.name.localeCompare(b.name, "ko")),
     matches: (M[r.id] || []).sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start)) })).sort((a, b) => b.start.localeCompare(a.start));
@@ -126,12 +134,12 @@ function matchesHtml(c) {
   const adm = can("schedule"), me = cmpMe(), byD = {};
   for (const m of c.matches) (byD[m.date] = byD[m.date] || []).push(m);
   const cell = v => `<td class="${v && v === me ? "me" : ""}">${esc(v || "")}</td>`;
-  const days = Object.keys(byD).sort().map(d => `<div class="tw cmp-tw"><table class="cmp-tbl"><thead><tr><th>${dayKo(d)}</th><th>경기</th>${REF_ROLES.map(([, l]) => `<th>${l}</th>`).join("")}${adm ? "<th></th>" : ""}</tr></thead><tbody>
+  const days = Object.keys(byD).sort().map(d => `<div class="tw cmp-tw"><table class="cmp-tbl"><thead><tr><th>${dayKo(d)}</th><th>경기</th>${REF_ROLES.map(([, l]) => `<th>${l}</th>`).join("")}<th></th></tr></thead><tbody>
     ${byD[d].map(m => { const w = winnerOf(c, m), nm = s => { const id = sideId(c, m, s), n = esc(cmpSide(c, m, s)); return id && w === id ? `<b>${n}</b>` : n; };
-      return `<tr><td class="num">${m.start}${m.end ? "–" + m.end : ""}</td><td class="cmp-vs">${m.stage !== "group" || m.label ? `<span class="small muted">${esc(m.label || STAGE_KO[m.stage])}</span>` : ""}${nm("a")} <span class="muted">vs</span> ${nm("b")}${m.score ? ` <span class="chip">${esc(m.score)}</span>` : ""}</td>${REF_ROLES.map(([k]) => cell((m.refs || {})[k])).join("")}${adm ? `<td><button class="btn link small" type="button" data-act="cmpform" data-f="match" data-id="${m.id}">수정</button></td>` : ""}</tr>`; }).join("")}
+      return `<tr><td class="num">${m.start}${m.end ? "–" + m.end : ""}</td><td class="cmp-vs">${m.stage !== "group" || m.label ? `<span class="small muted">${esc(m.label || STAGE_KO[m.stage])}</span>` : ""}${nm("a")} <span class="muted">vs</span> ${nm("b")} ${scoreHtml(m)}</td>${REF_ROLES.map(([k]) => cell((m.refs || {})[k])).join("")}<td class="cmp-acts">${scoreBtn(m)}${adm ? `<button class="btn link small" type="button" data-act="cmpform" data-f="match" data-id="${m.id}">수정</button>` : ""}</td></tr>`; }).join("")}
     </tbody></table></div>
     <ul class="cmp-cards"><li class="cmp-dh">${dayKo(d)}</li>${byD[d].map(m => { const w = winnerOf(c, m), nm = sd => { const id = sideId(c, m, sd), n = esc(cmpSide(c, m, sd)); return id && w === id ? `<b>${n}</b>` : n; };
-      return `<li><div class="cmp-mh"><span class="num">${m.start}</span>${m.stage !== "group" || m.label ? `<span class="small muted">${esc(m.label || STAGE_KO[m.stage])}</span>` : ""}${m.score ? `<span class="chip">${esc(m.score)}</span>` : ""}${adm ? `<button class="btn link small" type="button" data-act="cmpform" data-f="match" data-id="${m.id}">수정</button>` : ""}</div>
+      return `<li><div class="cmp-mh"><span class="num">${m.start}</span>${m.stage !== "group" || m.label ? `<span class="small muted">${esc(m.label || STAGE_KO[m.stage])}</span>` : ""}${scoreHtml(m)}<span class="cmp-acts">${scoreBtn(m)}${adm ? `<button class="btn link small" type="button" data-act="cmpform" data-f="match" data-id="${m.id}">수정</button>` : ""}</span></div>
         <p class="cmp-mv">${nm("a")} <span class="muted">vs</span> ${nm("b")}</p>${Object.keys(m.refs || {}).length ? `<div class="cmp-rf">${REF_ROLES.map(([k, l]) => (m.refs || {})[k] ? `<span class="${m.refs[k] === me ? "me" : ""}"><em>${l}</em>${esc(m.refs[k])}</span>` : "").join("")}</div>` : ""}</li>`; }).join("")}</ul>`).join("");
   return `<section class="sec"><div class="sec-head"><h3>경기 · 심판</h3>${adm ? `<button class="btn add" type="button" data-act="cmpform" data-f="match">+ 경기</button>` : ""}</div>${days || emptyLine("아직 경기 일정이 없어요.")}</section>`;
 }
@@ -269,6 +277,18 @@ async function openCmpForm(kind, id) {
       <label class="fl wide">카페 글 주소<input id="cc-cafe" type="url" maxlength="300" value="${esc(s.cafe || CAFE_URL)}"></label>
       <label class="fl wide">메모<input id="cc-note" maxlength="500" value="${esc(s.note || "")}"></label>
     </div><div class="row"><button class="btn primary" type="submit">${x ? "저장" : "추가"}</button></div></form>${x ? delZone(`data-act="cmpdelcup" data-id="${x.id}"`, "교내 대회 삭제") : ""}`;
+  } else if (kind === "score" && c) {
+    const m = c.matches.find(x => x.id === id); if (!m) return;
+    const A = cmpSide(c, m, "a"), B = cmpSide(c, m, "b"), sets = Array.isArray(m.sets) ? m.sets : [], ff = m.score === "기권승" ? (m.winner === sideId(c, m, "a") ? "b" : "a") : "";
+    const pts = (i, k) => `<input type="number" inputmode="numeric" min="0" max="60" id="sc-${i}-${k}" value="${sets[i] && sets[i][k] != null ? sets[i][k] : ""}" aria-label="${i + 1}세트 ${k ? B : A}">`;
+    title = "경기 기록";
+    html = `<form class="f" id="cmpScoreForm" data-c="${c.id}" data-id="${m.id}" data-close="1">
+      <p class="small muted">${dayKo(m.date)} ${m.start}${m.label ? " · " + esc(m.label) : ""}</p>
+      <table class="sc-tbl"><thead><tr><th></th><th>${esc(A)}</th><th>${esc(B)}</th></tr></thead><tbody>
+        ${[0, 1, 2].map(i => `<tr><th>${i + 1}세트${i === 2 ? ` <span class="small muted">(15점)</span>` : ""}</th><td>${pts(i, 0)}</td><td>${pts(i, 1)}</td></tr>`).join("")}
+      </tbody></table>
+      <label class="fl">기권<select id="sc-ff"><option value="">없음</option><option value="a" ${ff === "a" ? "selected" : ""}>${esc(A)} 기권</option><option value="b" ${ff === "b" ? "selected" : ""}>${esc(B)} 기권</option></select></label>
+      <div class="row"><button class="btn primary" type="submit">저장</button></div></form>${m.score ? delZone(`data-act="cmpscoredel" data-id="${m.id}"`, "기록 지우기") : ""}`;
   } else if (kind === "draw" && c) {
     const n = c.teams.filter(t => !t.withdrawn).length, cur = new Set(c.teams.map(t => t.grp).filter(Boolean)).size || Math.min(3, Math.max(1, Math.round(n / 3)));
     title = "조 추첨";
@@ -295,7 +315,6 @@ async function openCmpForm(kind, id) {
       <label class="fl">단계<select id="cm-stage">${Object.entries(STAGE_KO).map(([k, l]) => opt(k, l, s.stage)).join("")}</select></label>
       <label class="fl">경기 이름<input id="cm-label" maxlength="40" value="${esc(s.label || "")}" placeholder="예: 6강 1경기"></label>
       ${teamSel("a", s.a, s.al)}${teamSel("b", s.b, s.bl)}
-      <label class="fl">점수 (세트)<input id="cm-score" maxlength="40" value="${esc(s.score || "")}" placeholder="예: 2-1 (21-18, 19-21, 15-12)"></label>
     </div>
     <h4 class="cmp-sub">심판</h4>
     <div class="fields cmp-refs">${REF_ROLES.map(([k, l]) => refSel(k, l, (s.refs || {})[k] || "", people, pool.map(v => v.name))).join("")}</div>
@@ -322,6 +341,11 @@ async function campusClick(b, act) {
     const n = b.dataset.n, has = [...tgt.options].some(o => o.value === n), ci = document.getElementById(tgt.id.replace("cm-r-", "cm-rc-"));
     tgt.value = has ? n : "__custom"; if (ci) { ci.hidden = has; ci.value = has ? "" : n; } cmpLastRef = null; return;
   }
+  if (act === "cmpscoredel") {
+    if (!await confirmDel("이 경기 기록을 지울까요?")) return;
+    try { ok(await sb.rpc("cup_score", { mid: b.dataset.id, new_sets: null, new_score: null, new_winner: null })); toast("지웠어요"); await loadAll(); } catch (e) { toast(failMsg(e)); }
+    return;
+  }
   if (act === "cmpdel") {
     if (!await confirmDel(b.dataset.t === "cup_teams" ? "이 팀을 지울까요?" : "이 경기를 지울까요?")) return;
     try { ok(await sb.from(b.dataset.t).delete().eq("id", b.dataset.id)); closeSheet(); await loadAll(); if (b.dataset.t === "cup_teams" && await syncCup(curCup())) await loadAll(); toast("지웠어요"); } catch (e) { toast(failMsg(e)); }
@@ -346,6 +370,21 @@ async function campusSubmit(f) {
     ok(f.dataset.id ? await sb.from("cup_teams").update(row).eq("id", f.dataset.id) : await sb.from("cup_teams").insert(row));
     await loadAll(); const n = await syncCup(cupById(f.dataset.c));
     toast(n ? `저장했어요 · 경기 ${n}개 맞춤` : "저장했어요");
+  } else if (f.id === "cmpScoreForm") {
+    const c = cupById(f.dataset.c), m = c.matches.find(x => x.id === f.dataset.id), ff = v("sc-ff");
+    const a = sideId(c, m, "a"), b = sideId(c, m, "b");
+    let sets = null, score, winner;
+    if (ff) { winner = ff === "a" ? b : a; score = "기권승"; if (!winner) { toast("상대 팀이 아직 정해지지 않았어요"); return false; } }
+    else {
+      sets = [0, 1, 2].map(i => [v(`sc-${i}-0`), v(`sc-${i}-1`)]).filter(([x, y]) => x !== "" || y !== "").map(([x, y]) => [Number(x) || 0, Number(y) || 0]);
+      if (!sets.length) { toast("세트 점수를 넣어 주세요"); return false; }
+      if (sets.some(([x, y]) => x === y)) { toast("세트 점수가 같아요"); return false; }
+      const wa = sets.filter(([x, y]) => x > y).length, wb = sets.length - wa;
+      if (wa === wb) { toast("세트 수가 같아요. 3세트까지 넣어 주세요"); return false; }
+      score = `${wa}-${wb} (${sets.map(([x, y]) => `${x}-${y}`).join(", ")})`; winner = wa > wb ? a : b;
+    }
+    ok(await sb.rpc("cup_score", { mid: m.id, new_sets: sets, new_score: score, new_winner: winner || null }));
+    toast("기록했어요");
   } else if (f.id === "cmpDrawForm") {
     const c = cupById(f.dataset.c), k = Number(v("cd-n")) || 1, ts = c.teams.filter(t => !t.withdrawn);
     for (let i = ts.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [ts[i], ts[j]] = [ts[j], ts[i]]; }
@@ -359,7 +398,7 @@ async function campusSubmit(f) {
     const refs = {}; for (const [k] of REF_ROLES) { const sel = v("cm-r-" + k), n = sel === "__custom" ? v("cm-rc-" + k) : sel; if (n) refs[k] = n; }
     const a = v("cm-a") || null, b = v("cm-b") || null;
     if (a && a === b) { toast("같은 팀끼리는 경기할 수 없어요."); return false; }
-    const row = { cup_id: f.dataset.c, date: v("cm-date"), start_time: s, end_time: e, stage: v("cm-stage"), label: v("cm-label") || null, team_a: a, team_b: b, a_label: v("cm-al") || null, b_label: v("cm-bl") || null, score: v("cm-score") || null, refs };
+    const row = { cup_id: f.dataset.c, date: v("cm-date"), start_time: s, end_time: e, stage: v("cm-stage"), label: v("cm-label") || null, team_a: a, team_b: b, a_label: v("cm-al") || null, b_label: v("cm-bl") || null, refs };
     ok(f.dataset.id ? await sb.from("cup_matches").update(row).eq("id", f.dataset.id) : await sb.from("cup_matches").insert(row));
     toast("저장했어요");
   }
