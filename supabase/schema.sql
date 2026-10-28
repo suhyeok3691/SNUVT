@@ -2093,3 +2093,9 @@ end $$;
 -- 전력분석 코트 입력: 교체 기록 (skill 'sub', zone = 바뀐 자리 1~6, detail = 나간 선수)
 alter table public.scout_events drop constraint scout_events_skill_check;
 alter table public.scout_events add constraint scout_events_skill_check check (skill = any (array['serve','receive','attack','block','dig','set','free','fault','sub']));
+
+-- 전력분석 = 예전 프로그램: 6/9인제, 랠리, Settings 기록
+alter table public.scout_matches add column if not exists division text not null default '6' check (division in ('6','9'));
+alter table public.scout_events add column if not exists rally smallint check (rally is null or (rally >= 1 and rally <= 200));
+alter table public.scout_events drop constraint scout_events_skill_check;
+alter table public.scout_events add constraint scout_events_skill_check check (skill = any (array['serve','receive','attack','block','dig','set','free','fault','sub','cfg']));

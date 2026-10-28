@@ -1932,7 +1932,7 @@ async function scoutAll() {
 }
 const pNo = p => p.number != null ? `${p.number} ` : "";
 const scTime = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
-const scMeta = x => [x.date ? shortDate(parseD(x.date)) : "", x.opponent ? "상대 " + x.opponent : ""].filter(Boolean).map(esc).join(" · ");
+const scMeta = x => [x.date ? shortDate(parseD(x.date)) : "", x.stage || "", x.opponent ? "vs " + x.opponent : "", x.division === "9" ? "9인제" : ""].filter(Boolean).map(esc).join(" · ");
 function scLbl(e) {
   const p = e.side === "us" ? playerOf(e.player_id) : null, g = (SC_GRADES[e.skill] || []).find(y => y[0] === e.grade), src = SC_SRC.find(y => y[0] === e.src);
   return `${e.side === "us" ? (p ? `${pNo(p)}${esc(p.name)}` : "우리") : `상대 #${e.opp_no ?? "?"}`} · ${(SC_SKILLS.find(y => y[0] === e.skill) || ["", ""])[1]}${e.kind ? " " + esc(e.kind) : ""}${src ? " " + src[1] : ""}${e.len ? " " + (e.len === "long" ? "길게" : "짧게") : ""}${e.zone ? " → " + e.zone : ""} · <b>${g ? g[1] : esc(e.grade)}</b>`;
@@ -1949,7 +1949,7 @@ function viewScout() {
   const ev = S.events[m.id];
   if (!ev) scoutEvents(m.id);
   return `<section class="sec sc-page"><div class="sc-top"><button class="btn link small" type="button" data-act="scback">‹ 목록</button>
-      <span class="row nowrap"><button class="btn link small" type="button" data-act="scxlsx" data-id="${esc(m.id)}">엑셀</button>${can("analysis") ? `<button class="btn link small" type="button" data-act="scedit" data-id="${esc(m.id)}">수정</button>` : ""}</span></div>
+      <span class="row nowrap">${can("analysis") ? `<button class="btn link small" type="button" data-act="scedit" data-id="${esc(m.id)}">경기 정보</button>` : ""}</span></div>
     <div class="sc-title"><b>${esc(m.title)}</b><span class="small muted">${scMeta(m)}</span></div>
     ${m.yt || m.vod ? "" : `<p class="small muted">영상 링크가 없어요.</p>`}${scVodHtml(m)}
     ${scSeg("sctab", [["court", "코트"], ["stats", "분석"]], S.tab)}
@@ -2023,18 +2023,12 @@ function scRotTable(pts) {
   }).join("")}</tbody></table></div>`;
 }
 function scoutStats(ev, pts) {
-  const S = sc(), all = S.fset ? ev.filter(e => e.set_no === S.fset) : ev, pl = S.fset ? pts.filter(p => p.set_no === S.fset) : pts;
-  const us = all.filter(e => e.side === "us"), opp = all.filter(e => e.side === "opp");
-  const ps = sortedPlayers().filter(p => us.some(e => e.player_id === p.id));
-  const rowOf = p => { const s = scPlayerSum(us.filter(e => e.player_id === p.id));
-    return `<tr><td><b>${pNo(p)}${esc(p.name)}</b></td><td class="num">${s.sv ? `${s.sv} · ${s.sa}/${s.se}` : "—"}</td><td class="num">${s.rc ? `${s.rc} · ${scPct(s.rg, s.rc)}` : "—"}</td><td class="num">${s.at ? `${s.at} · ${scPct(s.ak, s.at)}` : "—"}</td><td class="num">${s.at ? scPct(s.ak - s.ae, s.at) : "—"}</td><td class="num">${s.bk || "—"}</td><td class="num">${s.dg ? scPct(s.dok, s.dg) : "—"}</td></tr>`; };
+  const S = sc(), m = scMatch(), all = S.fset ? ev.filter(e => e.set_no === S.fset) : ev, pl = S.fset ? pts.filter(p => p.set_no === S.fset) : pts;
   return `<div class="sc-row"><span class="sc-k">세트</span>${[0, 1, 2, 3, 4, 5].map(n => scChip("scfset", n, S.fset, n || "전체")).join("")}</div>
-    <section class="sec"><h3>기록지 · 우리</h3>${ctSheetTable(all, "us")}</section>
-    <section class="sec"><h3>기록지 · 상대</h3>${ctSheetTable(all, "opp")}</section>
-    <p class="small muted">공격 득점/시도 · 성공률 25% 이상 노란색 · 효율 (득점−범실)/시도 · 점유율 = 팀 공격 중 비율 · 서브 점수 (Ace 4 · 3-serve 3 · 2-serve 2 · 1-serve 1) · 리시브·세트 점수 (3 · 2 · 1)</p>
-    <section class="sec"><h3>로테이션별 득실 · 우리</h3>${scRotTable(pl)}</section>
-    <section class="sec"><h3>로테이션별 득실 · 상대</h3>${ctOppRotTable(pl)}</section>
-`;
+    <section class="sec"><h3>SNU</h3>${ctSheetTable(all, "us")}</section>
+    <section class="sec"><h3>${esc((m && m.opponent) || "상대")}</h3>${ctSheetTable(all, "opp")}</section>
+    ${ctNine(m) ? "" : `<section class="sec"><h3>로테이션별 득실 · SNU</h3>${scRotTable(pl)}</section>
+    <section class="sec"><h3>로테이션별 득실 · ${esc((m && m.opponent) || "상대")}</h3>${ctOppRotTable(pl)}</section>`}`;
 }
 /* ---- 시즌 누적 · 경기별 ---- */
 const SC_METRICS = [
@@ -2078,29 +2072,73 @@ function scoutOpp() {
       <div class="col"><section class="sec"><h3>서브 코스</h3>${scZoneMap(opp.filter(e => e.skill === "serve"))}</section></div></div>
     <section class="sec"><h3>경기</h3><div class="sc-list">${ms.map(x => `<button type="button" class="panel sc-card" data-act="scopen" data-id="${esc(x.id)}"><b>${esc(x.title)}</b><span class="small muted">${scMeta(x)}</span><span class="go">›</span></button>`).join("")}</div></section>`;
 }
-/* ---- 엑셀 ---- */
+/* ---- 엑셀 (예전 프로그램 Export Excel 그대로: Logs + 팀별 기록지, 색 · 0은 "-") ---- */
+const SC_T1 = "SNU";
+function scLogRows(m) {
+  const ev = (sc().events[m.id] || []).slice().sort((a, b) => a.set_no - b.set_no || String(a.created_at).localeCompare(String(b.created_at)));
+  const t2 = m.opponent || "Opponent", nine = ctNine(m), L = ctLu(m), rows = [];
+  const tm = x => x === "us" ? SC_T1 : t2, hms = t => { try { return new Date(t).toLocaleTimeString("en-GB", { hour12: false }); } catch (e) { return ""; } };
+  for (const set of [...new Set(ev.map(e => e.set_no))]) {
+    const l = ev.filter(e => e.set_no === set);
+    l.forEach((e, k) => {
+      const a = CT_ACT[e.action]; if (!a) return; // 플레이만 (교체 · Settings 제외)
+      const pre = ctState(m, l.slice(0, k), set), post = ctState(m, l.slice(0, k + 1), set);
+      const us = e.side === "us", v = us ? e.player_id : e.opp_no, slots = us ? pre.usSlots : pre.opSlots, i = slots.findIndex(x => ctSame(x, v));
+      const pos = i >= 0 ? (us ? pre.usPos : pre.opPos)[i] : ctIsLib(L, v, e.side) ? "Li" : "";
+      const p = us ? playerOf(e.player_id) : null;
+      rows.push({ Division: nine ? "9-people" : "6-people", Date: m.date || String(e.created_at || "").slice(0, 10), Timestamp: hms(e.created_at), Tournament: m.title || "", Stage: m.stage || "", "Set Number": set,
+        Rotation: nine ? "10:10" : `${post.rot}:${post.orot}`, "Rally Count": e.rally || "", "Serving Team": tm(post.serve), "Player No": us ? (p && p.number != null ? String(p.number) : "") : String(e.opp_no ?? ""), "Player Name": us ? (p ? p.name : "") : "", Position: pos,
+        Category: (CT_MENU.find(x => x[0] === a.skill) || ["", ""])[1], Action: a.name, "Action Type": a.res === "earned" ? "earned" : a.res === "error" ? "error" : "in_rally", Detail: e.detail || "N/A", Score: e.score || "",
+        "Point To": e.point ? tm(e.point) : "None", "Did Rotate": !nine && e.point && e.serve && e.serve !== e.point ? 1 : 0, Recorder: m.recorder || "" });
+    });
+  }
+  return rows;
+}
+// 팀 기록지: 라인업 선수 + 기록에 나온 선수 (배번 순)
+function scTeamRows(ms, side) {
+  const ev = ms.flatMap(m => sc().events[m.id] || []), keys = new Map();
+  if (side === "us") { for (const m of ms) { const U = ctLu(m).us || {}; for (const id of [...(U.slots || []), ...(U.libero || [])]) if (id) keys.set(id, 1); }
+    for (const e of ev) if (e.side === "us" && e.player_id && CT_ACT[e.action]) keys.set(e.player_id, 1); }
+  else { for (const m of ms) { const O = ctLu(m).opp || {}; for (const n of [...(O.slots || []), ...(O.libero || [])]) if (n !== "" && n != null) keys.set(Number(n), 1); }
+    for (const e of ev) if (e.side === "opp" && e.opp_no != null && CT_ACT[e.action]) keys.set(e.opp_no, 1); }
+  const list = [...keys.keys()].map(k => side === "us" ? (p => [k, p && p.number != null ? String(p.number) : "", p ? p.name : ""])(playerOf(k)) : [k, String(k), ""])
+    .sort((a, b) => (Number(a[1]) || 999) - (Number(b[1]) || 999));
+  return ctStatRows(ev, side, list).map(x => ({ 배번: x.no, 선수명: x.name, 득점: x.득점, 공격: x.공격, "공격 성공률": x.성공률 ?? "-", "공격 효율": x.효율 ?? "-", "공격 점유율": x.s.at && x.점유율 != null ? x.점유율 : "-",
+    서브: x.서브, "서브 점수": x.서브점수 == null ? "-" : Math.round(x.서브점수 * 100) / 100, 블로킹: x.블로킹, 디그: x.디그, 리시브: x.리시브, "리시브 점수": x.리시브점수 == null ? "-" : Math.round(x.리시브점수 * 100) / 100,
+    세트: x.세트, "세트 점수": x.세트점수 == null ? "-" : Math.round(x.세트점수 * 100) / 100, 범실: x.범실 }));
+}
 async function scoutXlsx(mid) {
   const S = sc();
   toast("엑셀 만드는 중…");
   try {
-    if (!window.XLSX) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");
+    if (!window.ExcelJS) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js");
     if (mid) { if (!S.events[mid] || !S.points[mid]) await scoutEvents(mid); } else if (S.all !== true) { await scoutAll(); if (S.all !== true) return; }
     const ms = mid ? S.matches.filter(m => m.id === mid) : S.matches.slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
-    const many = ms.length > 1, gName = m => `${m.date || ""} ${m.opponent || m.title}`.trim();
-    const pname = id => { const p = playerOf(id); return p ? `${p.number != null ? p.number + " " : ""}${p.name}` : ""; };
-    const plays = [], points = [], sums = [];
-    for (const m of ms) {
-      for (const e of S.events[m.id] || []) plays.push({ ...(many ? { 경기: gName(m) } : {}), 세트: e.set_no, 시간: e.t != null ? scTime(e.t) : "", 팀: e.side === "us" ? "우리" : "상대", 선수: e.side === "us" ? pname(e.player_id) : (e.opp_no != null ? "#" + e.opp_no : ""),
-        기술: (SC_SKILLS.find(y => y[0] === e.skill) || ["", e.skill === "sub" ? "교체" : e.skill])[1], 종류: e.kind || "", 토스: (SC_SRC.find(y => y[0] === e.src) || ["", ""])[1], 길이: e.len ? (e.len === "long" ? "길게" : "짧게") : "", 코스: e.zone || "", 결과: ((SC_GRADES[e.skill] || []).find(y => y[0] === e.grade) || ["", e.grade])[1], 기호: e.grade, 동작: e.action ? (CT_ACT[e.action] || { name: e.action === "pt" ? "점수만" : e.action === "sub" ? "교체" : e.action }).name : "", 이유: e.detail || "", "우리 로테": e.rot ? "R" + e.rot : "", "상대 로테": e.opp_rot ? "R" + e.opp_rot : "", 서브권: e.serve ? (e.serve === "us" ? "우리" : "상대") : "", 점수: e.score || "", 득점팀: e.point ? (e.point === "us" ? "우리" : "상대") : "" });
-      for (const p of S.points[m.id] || []) points.push({ ...(many ? { 경기: gName(m) } : {}), 세트: p.set_no, 로테이션: "R" + p.rot, 서브: p.serve === "us" ? "우리" : "상대", 결과: p.won ? "득점" : "실점", "상대 로테": p.opp_rot ? "R" + p.opp_rot : "", 시간: p.t != null ? scTime(p.t) : "" });
+    const logs = ms.flatMap(scLogRows);
+    if (!logs.length) { toast("내보낼 기록이 없어요"); return; }
+    const wb = new ExcelJS.Workbook();
+    const sheet = (name, rows) => { const ws = wb.addWorksheet(name.replace(/[\\/?*[\]:]/g, "").slice(0, 31) || "Sheet");
+      const cols = Object.keys(rows[0] || { "": "" }); ws.columns = cols.map(k => ({ header: k, key: k, width: Math.max(8, Math.min(28, k.length + 4)) }));
+      rows.forEach(r => ws.addRow(r)); ws.getRow(1).font = { bold: true }; return ws; };
+    sheet("Logs", logs);
+    const t2 = mid ? (ms[0].opponent || "Opponent") : "Opponents";
+    let n1 = SC_T1, n2 = t2.slice(0, 31); if (n1 === n2) { n1 += "_1"; n2 += "_2"; }
+    const teams = [[n1, scTeamRows(ms, "us")]]; if (mid) teams.push([n2, scTeamRows(ms, "opp")]);
+    const red = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFCCCC" } }, green = { type: "pattern", pattern: "solid", fgColor: { argb: "FFCCFFCC" } }, yellow = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFCC" } };
+    for (const [name, rows] of teams) {
+      const ws = sheet(name, rows);
+      ws.eachRow((row, i) => { if (i === 1) return;
+        const succ = row.getCell(5), eff = row.getCell(6);
+        if (typeof eff.value === "number") { if (eff.value < 0) eff.fill = red; else if (eff.value > 0) eff.fill = green; }
+        if (typeof succ.value === "number" && succ.value >= 25) succ.fill = yellow;
+        row.eachCell(c => { if (typeof c.value === "number") c.numFmt = Number.isInteger(c.value) ? '0;-0;"-"' : '0.00;-0.00;"-"'; }); });
     }
-    const us = ms.flatMap(m => (S.events[m.id] || []).filter(e => e.side === "us"));
-    for (const p of sortedPlayers()) { const l = us.filter(e => e.player_id === p.id); if (!l.length) continue; const s = scPlayerSum(l);
-      sums.push({ 선수: pname(p.id), 서브: s.sv, 에이스: s.sa, 서브범실: s.se, 리시브: s.rc, "리시브 좋음%": s.rc ? Math.round(100 * s.rg / s.rc) : "", 공격: s.at, 득점: s.ak, "범실·막힘": s.ae, "공격 효율%": s.at ? Math.round(100 * (s.ak - s.ae) / s.at) : "", 블록득점: s.bk, 디그: s.dg, "디그 성공%": s.dg ? Math.round(100 * s.dok / s.dg) : "" }); }
-    const wb = XLSX.utils.book_new(), add = (rows, name, empty) => XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.length ? rows : [{ [empty]: "기록 없음" }]), name);
-    add(sums, "선수 요약", "선수"); add(plays, "플레이", "세트"); add(points, "랠리", "세트");
-    const safe = s => s.replace(/[\\/:*?"<>|]/g, "").slice(0, 40);
-    XLSX.writeFile(wb, mid ? `SNUVT_전력분석_${safe(gName(ms[0]) || "경기")}.xlsx` : `SNUVT_전력분석_전체_${iso(today())}.xlsx`);
+    const m0 = ms[0], ymd = (mid ? (m0.date || iso(today())) : iso(today())).replace(/-/g, "");
+    const raw = mid ? `${ymd}_${m0.title || "Tournament"}_${m0.stage || "Stage"}_${SC_T1} vs ${t2}` : `${ymd}_SNUVT 전력분석 전체`;
+    const fname = raw.replace(/[\\/:*?"<>|]/g, "").slice(0, 120) + ".xlsx";
+    const buf = await wb.xlsx.writeBuffer(), url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    const a = document.createElement("a"); a.href = url; a.download = fname; document.body.appendChild(a); a.click(); setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 4000);
+    toast(`Saved: ${fname}`);
   } catch (e) { toast(failMsg(e)); }
 }
 // 경기 영상: #main 밖(위)의 고정 칸에 둬서 버튼을 눌러 화면을 다시 그려도 끊기지 않음
@@ -2120,16 +2158,21 @@ async function scoutDock() {
     events: { onReady: e => { if (dock.dataset.mid === m.id) scPlayer = e.target; } } });
 }
 function openScoutForm(id) {
-  const m = sc().matches.find(x => x.id === id) || {}, el = document.getElementById("sheet");
-  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${id ? "경기 수정" : "경기 추가"}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+  const m = sc().matches.find(x => x.id === id) || {}, el = document.getElementById("sheet"), me = playerOf(state.myPid);
+  const div = m.division || "6";
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${id ? "경기 수정" : "Match Setup"}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="scForm" data-id="${esc(id || "")}"><div class="fields">
-      <label class="fl wide">제목<input id="scf-title" required maxlength="80" value="${esc(m.title || "")}" placeholder="예: 서울대배 8강 vs 고려대"></label>
-      <label class="fl">날짜<input type="date" id="scf-date" value="${esc(m.date || "")}"></label>
-      <label class="fl">상대<input id="scf-opp" maxlength="60" value="${esc(m.opponent || "")}"></label>
-      <label class="fl wide">유튜브 링크<input id="scf-yt" maxlength="200" value="${esc(m.yt || "")}" placeholder="https://youtu.be/..."></label>
-      <label class="fl wide">치지직 다시보기 (KUSF 대학스포츠)<input id="scf-vod" maxlength="200" value="${esc(m.vod || "")}" placeholder="chzzk.naver.com/video/… 또는 naver.me/…"></label>
-      <label class="fl wide">메모<input id="scf-note" maxlength="300" value="${esc(m.note || "")}"></label>
-    </div><div class="row"><button class="btn primary" type="submit">${id ? "저장" : "추가"}</button></div></form>`;
+      <label class="fl wide">대회명<input id="scf-title" required maxlength="80" value="${esc(m.title || "")}" placeholder="대회명 / 친선전"></label>
+      <label class="fl">스테이지<input id="scf-stage" maxlength="30" value="${esc(m.stage || "")}" placeholder="예선 · 16강 · 8강 · 4강 · 결승"></label>
+      <label class="fl">상대 팀<input id="scf-opp" maxlength="60" value="${esc(m.opponent || "")}"></label>
+      <label class="fl">날짜<input type="date" id="scf-date" value="${esc(m.date || iso(today()))}"></label>
+      <label class="fl">기록자<input id="scf-rec" maxlength="30" value="${esc(m.recorder || (me ? me.name : ""))}"></label>
+      <div class="fl wide"><span>인원</span><div class="seg">${[["6", "6인제"], ["9", "9인제"]].map(([v, l]) => `<label class="seg-tab ${div === v ? "on solid" : ""}"><input type="radio" name="scf-div" value="${v}" ${div === v ? "checked" : ""} hidden>${l}</label>`).join("")}</div></div>
+      <label class="fl wide">유튜브<input id="scf-yt" maxlength="200" value="${esc(m.yt || "")}" placeholder="https://youtu.be/..."></label>
+      <label class="fl wide">치지직 다시보기<input id="scf-vod" maxlength="200" value="${esc(m.vod || "")}" placeholder="chzzk.naver.com/video/… 또는 naver.me/…"></label>
+    </div><div class="row"><button class="btn primary" type="submit">${id ? "저장" : "다음: 라인업"}</button></div></form>`;
+  const divs = [...el.querySelectorAll('input[name="scf-div"]')];
+  divs.forEach(r => r.addEventListener("change", () => divs.forEach(x => { x.parentElement.classList.toggle("on", x.checked); x.parentElement.classList.toggle("solid", x.checked); })));
   if (id) addDelZone(`data-act="scdel" data-id="${esc(id)}"`, "경기 삭제");
   el.hidden = false; document.body.classList.add("noscroll");
 }
@@ -3247,6 +3290,8 @@ document.addEventListener("submit", async ev => {
       if (st && en && en <= st) { toast("종강이 개강보다 앞이에요."); return; }
       ok(await sb.from("terms").upsert({ id: f.dataset.id, start_date: st, end_date: en, updated_at: new Date().toISOString() }));
       toast("학사일정을 저장했어요 · 프로그램이 맞춰졌어요");
+    } else if (f.id === "ctCfgForm") {
+      ctCfgSave(); return;
     } else if (f.id === "ctLineupForm") {
       await ctLineupSave(f); return;
     } else if (f.id === "scForm") {
@@ -3259,9 +3304,12 @@ document.addEventListener("submit", async ev => {
         vodIn = data.url; }
       const vod = vodIn ? parseVod(vodIn) : null;
       if (vodIn && !vod) { toast("치지직 다시보기 주소를 확인해 주세요"); return; }
-      const row = { title: txt("scf-title"), date: txt("scf-date") || null, opponent: txt("scf-opp") || null, yt: yt || null, vod, note: txt("scf-note") || null };
-      ok(f.dataset.id ? await sb.from("scout_matches").update(row).eq("id", f.dataset.id) : await sb.from("scout_matches").insert(row));
-      closeSheet(); toast("저장했어요"); await scoutLoad(); return;
+      const dv = f.querySelector('input[name="scf-div"]:checked');
+      const row = { title: txt("scf-title"), stage: txt("scf-stage") || null, date: txt("scf-date") || null, opponent: txt("scf-opp") || null, recorder: txt("scf-rec") || null, division: dv ? dv.value : "6", yt: yt || null, vod };
+      const r = f.dataset.id ? await sb.from("scout_matches").update(row).eq("id", f.dataset.id).select().maybeSingle() : await sb.from("scout_matches").insert(row).select().maybeSingle(); ok(r);
+      closeSheet(); toast("저장했어요"); await scoutLoad();
+      if (!f.dataset.id && r.data && r.data.id) { pushInner(); state.scoutId = r.data.id; sc().tab = "court"; sc().sel.set = 1; state.dirty = false; render(); if (can("analysis")) ctLineupForm(); } // Next: Lineup Setup
+      return;
     } else if (f.id.startsWith("cmp")) {
       if (await campusSubmit(f) === false) return;
     } else if (f.id === "voteForm") {

@@ -215,23 +215,27 @@
 - 카페 글: 교내 대회 화면 "카페 글" → 경기 결과(날짜별, 카페에 올리던 모양: "A조 1경기 / 팀 VS 팀 / 1세트 21:12 … / 팀 2:0 승리", 팀이 2개뿐인 조는 "C조 예선 순위 결정전", 그날 끝난 조는 "조별 최종 순위", 끝에 "수고하셨습니다." · 팀 사진 자리 표시 켜고 끄기) / 경기 일정·심판 / 예선 결과·본선 대진 / 최종 결과 글을 만들어 제목·본문 복사(표 포함) → 카페 글쓰기에 붙여 넣기. 카페 자동 올리기는 네이버 개발자 앱·로그인 연결이 필요해 아직 안 함
 - 요강·공지에 있는 계좌번호·전화번호는 저장하지 않음
 
-## 6-2. 전력분석 코트 입력 (`court.js`)
-예전 전력분석 담당이 쓰던 PC 프로그램(VolleyballLogger, Kivy)의 방식을 앱에 옮김.
-- 경기마다 라인업(우리 선발 6명 + 자리별 포지션 OH·MB·OP·S(명단 포지션으로 채워지고 바꿀 수 있음) · 리베로 1·2, 상대 등번호 6개 + 포지션 · 리베로 1·2, 라인업 용지처럼 앞줄 4·3·2 / 뒷줄 5·6·1 순서로 입력)과 세트마다 시작 로테·첫 서브를 넣으면(`scout_matches.lineup`: us/opp = {slots, pos, libero}, 전력분석 담당) 코트에 두 팀이 서 있음
-- 선수를 누르면 동작 고르기 — 이름·순서는 예전 프로그램 그대로: Serve(Ace · 1/2/3-serve · Serve Error(Net·Out·Blocked) · Foot Fault) · Receive(Receive Error · Over Pass (Play) · 1/2/3-Receive) · Attack(Spike/Tip/Dump/Down Ball/Over Pass Kill · Hit In Play · Spike/Tip/Dump/Down Ball Error(Into Net·Blocked·Out) · Back Row Fault) · Set(1/2/3-Set (In)·(Out) · Set Error) · Block(Block · Block Assist · Block In Play · half block · Block Error(Into Net·Out)) · Dig(Tip/Dump/Down Ball/Spike/block Dig · 각 Error) · Pass(F.B. Return In Play · Over Pass In Play · 1/2/3-Free Ball Pass) · Fault & Error(???? · Ball Handling · Net Fault · Under Net · Over Net · Whose Ball? · Ball Return Err · Free Ball Recv Err · Out of Rotation · Outside Court). 숫자는 3이 가장 좋음. 공격 범실 이유 Blocked는 "막힘"으로 셈. 서브·공격은 코스(선택)
-- 득점·실점 동작이면 점수가 오르고, 서브권이 넘어오면 그 팀 로테이션이 자동으로 돎(우리·상대 둘 다). 한 랠리에 점수는 한 번만(블로킹 당함 + 블로킹 득점 같이 눌러도 1점). 서브·리시브를 누르면 새 랠리
-- 되돌리기는 마지막 기록을 지우고 세트를 처음부터 다시 따라가 점수·로테를 맞춤
-- 분석: 기록지(우리·상대 선수별 득점 · 공격 성공률/효율/점유율 · 서브 점수 · 블로킹 · 디그 · 리시브 점수 · 세트 점수 · 범실, 예전 프로그램 엑셀 요약과 같은 항목) · 로테이션별 득실 우리·상대(상대가 가장 강한/약한 로테) · 엑셀에 동작·이유·로테·점수
-- 경기 화면은 코트 · 분석 두 탭만(예전 "목록" 입력 · "장면" 모아보기는 원래 프로그램에 없어서 뺌). 코트 버튼마다 자리 번호(왼쪽 위) · 포지션(오른쪽 위, 리베로는 L). 9인제 코트는 아직 없음
-- 영상: 유튜브(앱 안에서 재생 · 기록마다 영상 시간 자동) 또는 치지직 다시보기(KUSF 대학스포츠, `scout_matches.vod`). 치지직은 앱 안에 안 열려서(앱 안 보기 없앰) "치지직" 버튼으로 따로 열고 폰·TV·노트북으로 보면서 입력. 공유 단축 주소(`naver.me/…`)는 저장할 때 Edge Function `resolve-link`가 치지직 주소로 풀어 줌(naver.me만 받음). 영상 시간 칸에 지금 시간을 넣고 "시계 시작"(±5초로 맞춤)하면 기록마다 그 시간이 붙고, 장면의 시간을 누르면 그 시간(?currentTime=)으로 치지직을 엶
-- 예전 프로그램을 그대로 옮기고 화면만 정리 (추가 기능은 나중에)
-  - 선수를 누르면 Serve·Receive·Attack·Set·Block·Dig·Pass·Fault & Error(4+4) → 결과 → 세부(범실 이유) 순서로 고름. "‹ 뒤로"로 한 단계 뒤로
-  - 위쪽: 세트 · 우리/상대 로테 · Rally · 점수, Undo(마지막 기록 지우기) · Change Court(코트 위아래 바꾸기) · 라인업(라인업·세트 시작 로테·첫 서브)
-  - 컴퓨터: 숫자 키 1~9로 바로 고르기, Backspace = 창에선 한 단계 뒤로 · 코트에선 Undo
+## 6-2. 전력분석 (`court.js`)
+예전 전력분석 담당이 쓰던 PC 프로그램(VolleyballLogger, Kivy · SNU.py) 기능을 그대로 옮기고 화면만 정리. 원래 프로그램에 없던 것 중 남긴 것: 선수가 로테대로 실제 자리로 움직이는 코트, 리베로 자동 교대·교체 기록(요청), 영상(유튜브·치지직), 분석 탭(기록지 · 로테이션별 득실) · 목록 화면의 시즌·상대 탭.
+- Match Setup(`+ 경기`): 대회명(`title`) · 스테이지(`stage`) · 상대 팀 · 날짜 · 기록자(`recorder`) · 6인제/9인제(`division`) · 유튜브 · 치지직 → "다음: 라인업"으로 바로 Edit Lineup
+- Edit Lineup(`scout_matches.lineup`): 6인제는 SNU 6명(라인업 용지처럼 앞줄 4·3·2 / 뒷줄 5·6·1, 자리별 포지션 OH·MB·OP·S) · 리베로 1·2, 상대 등번호 6개 + 포지션 · 리베로 1·2, 세트 시작 로테·첫 서브. 9인제는 자리 고정 C·S / L·FS·BS·R / LB·CB·RB(로테·리베로 없음), 첫 서브
+- 기록 화면: 점수 · Set · Rot(우리:상대) · Rally, 버튼 Undo · Settings · Change Court · Edit Lineup · Export Excel · RESET
+  - 선수를 누르면 Serve·Receive·Attack·Set·Block·Dig·Pass·Fault & Error(4+4) → 결과 → 세부(범실 이유). "‹ 뒤로"로 한 단계 뒤로
+  - 동작 — 이름·순서는 예전 프로그램 그대로: Serve(Ace · 1/2/3-serve · Serve Error(Net·Out·Blocked) · Foot Fault) · Receive(Receive Error · Over Pass (Play) · 1/2/3-Receive) · Attack(Spike/Tip/Dump/Down Ball/Over Pass Kill · Hit In Play · Spike/Tip/Dump/Down Ball Error(Into Net·Blocked·Out) · Back Row Fault) · Set(1/2/3-Set (In)·(Out) · Set Error) · Block(Block · Block Assist · Block In Play · half block · Block Error(Into Net·Out)) · Dig(Tip/Dump/Down Ball/Spike/block Dig · 각 Error) · Pass(F.B. Return In Play · Over Pass In Play · 1/2/3-Free Ball Pass) · Fault & Error(???? · Ball Handling · Net Fault · Under Net · Over Net · Whose Ball? · Ball Return Err · Free Ball Recv Err · Out of Rotation · Outside Court). 숫자는 3이 가장 좋음. 공격 범실 이유 Blocked는 "막힘"으로 셈. 서브·공격은 코스(선택)
+  - 득점·실점이면 점수·서브권·로테(6인제, 우리·상대)·Rally가 자동. 한 랠리에 점수는 한 번만(예: 서브 Ace 뒤 Block을 눌러도 1점)
+  - Settings(예전 Game Settings): Set · Our Rot · Opp Rot · Serving · Rally를 언제든 맞춤(기록으로 남아 Undo 가능, `action = 'cfg'`)
+  - RESET: 이 세트 기록 모두 지우기(확인 후), 선수는 그대로
+  - Undo: 마지막 기록 지우고 세트를 처음부터 다시 따라가 점수·로테를 맞춤
+  - 코트 버튼: 등번호 · 이름 · 자리 번호(왼쪽 위) · 포지션(오른쪽 위, 리베로 L)
+  - 컴퓨터: 방향키로 선수 이동 · Enter로 기록 · 숫자 키 1~9로 바로 고르기 · Backspace(창에선 한 단계 뒤로, 코트에선 Undo)
   - 저장은 화면에 먼저 넣고 서버로 차례대로 보냄(체육관 인터넷이 끊겨도 폰에 남았다가 연결되면 올림, "대기 N")
   - 리베로 (우리·상대 둘 다): 라인업 포지션이 MB인 자리가 뒷줄(5·6번)에 오면 그 자리에 리베로(우리 초록 · 상대 주황, L)가 자동으로 섬. 1번 자리 MB는 그 팀 서브 차례면 직접 서브하고, 서브권을 잃으면 바로 리베로로. 앞줄로 가면 MB가 돌아옴 → 코트에 리베로는 늘 한 명. 상대도 라인업에 포지션(MB)과 리베로 번호를 넣어야 자동. 리베로로 뛰는 선수를 누르면 Serve·Attack·Block 없이 나머지 동작만
   - 명단에 L로 넣은 선수도 언제든 다른 포지션(OH 등)으로 투입 가능: 선발 6명에 넣거나, 경기 중 "교체"로 들어감(예: 수비 약한 OH 대신 L 선수). 들어올 선수 목록에 L 선수도 나오고(· L 표시), 교체 창 "들어옴"에서 고르고 포지션(OH 등)을 정함. 일반 선수로 들어가면 모든 동작(서브 포함) 기록, 리베로 자리는 다른 리베로가 맡고(없으면 리베로 없이) 리베로 줄에서 빠짐. 선발 6명과 리베로 칸에 같은 사람을 같이 넣을 순 없음
   - 교체: 코트 아래 "교체"(우리·상대 따로) 또는 벤치·안 뛰는 리베로를 누르면 교체 창 → 나감(코트 6명, 자리·포지션) · 들어옴(우리는 벤치·리베로, 상대는 번호) · 포지션(나간 선수 포지션으로 미리 골라 둠) → "교체". 리베로가 2명이면 같은 창 위쪽 "코트 리베로"에서 바꿈. 이후 코트·로테·리베로 자동에 반영(`skill = 'sub'`, kind = 포지션, 분석 숫자엔 안 들어감)
+- Export Excel(예전 프로그램과 같은 파일): 파일 이름 `날짜_대회명_스테이지_SNU vs 상대.xlsx`, 시트 Logs(Division · Date · Timestamp · Tournament · Stage · Set Number · Rotation(득점 뒤 우리:상대) · Rally Count · Serving Team · Player No · Player Name · Position · Category · Action · Action Type · Detail · Score · Point To · Did Rotate · Recorder) + 팀별 기록지 시트 SNU · 상대(배번 · 선수명 · 득점 · 공격 · 공격 성공률 · 공격 효율 · 공격 점유율 · 서브 · 서브 점수 · 블로킹 · 디그 · 리시브 · 리시브 점수 · 세트 · 세트 점수 · 범실, 성공률 25% 이상 노랑 · 효율 + 초록 / − 빨강 · 0은 "-"). ExcelJS(cdnjs) 사용. 목록 화면 엑셀은 전체 경기 Logs + SNU 기록지
+- 분석 탭: 같은 기록지(SNU · 상대) + 로테이션별 득실(6인제)
+- 영상: 유튜브(앱 안에서 재생 · 기록마다 영상 시간 자동) 또는 치지직 다시보기(앱 안에 안 열려서 "치지직" 버튼으로 따로 열기, `naver.me` 공유 주소는 Edge Function `resolve-link`가 풀어 줌). 영상 시간 칸 + "시계 시작"(±5초)으로 기록마다 시간이 붙음
+- DB: `scout_events`(action · detail · kind(교체 포지션) · zone(교체 자리) · rot · opp_rot · rally · serve · point · score), 점수가 난 랠리는 `scout_points`(6인제만, 로테이션별 득실용)
 
 ## 7. 고칠 때
 
