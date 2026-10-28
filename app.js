@@ -431,7 +431,7 @@ function viewPractice() {
       const mine = me && g.pos && g.pos.length && g.pos.includes(me.pos);
       const drills = (g.drills || []).map((d, di) => edit
         ? `<div class="box"><span class="bn">${esc(d.n)}</span><span class="br">${d.m ? d.m + "분" : ""}</span><button type="button" class="bx" data-act="prdrop" data-b="${bi}" data-g="${gi}" data-i="${di}" aria-label="${esc(d.n)} 제외">✕</button></div>`
-        : `<li><span class="nm">${esc(d.n)}${d.note ? `<span class="small muted"> · ${esc(d.note)}</span>` : ""}</span><span class="rx">${d.m ? d.m + "분" : ""}</span></li>`).join("");
+        : `<li ${drillOf(d.n) ? `class="tap" data-act="drinfo" data-n="${esc(d.n)}" role="button" tabindex="0"` : ""}><span class="nm">${esc(d.n)}${d.note ? `<span class="small muted"> · ${esc(d.note)}</span>` : ""}</span><span class="rx">${d.m ? d.m + "분" : ""}</span></li>`).join("");
       return `<div class="pr-grp ${mine ? "mine" : ""}">${groups.length > 1 || (g.pos && g.pos.length) ? `<div class="pr-gname">${esc(g.name || "그룹")}${mine ? ` <span class="tag-in">내 포지션</span>` : ""}</div>` : ""}
         ${edit ? `<div class="boxes">${drills}<button type="button" class="box add-box" data-act="prdrill" data-b="${bi}" data-g="${gi}">＋ 드릴 추가</button></div>` : `<ul class="pr-drills">${drills || `<li class="small muted">드릴 없음</li>`}</ul>`}</div>`;
     }).join("");
@@ -477,14 +477,23 @@ function openPrDrill(bi, gi) {
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>드릴 추가</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="prDrillForm" data-b="${bi}" data-g="${gi}" data-close="1">
       <div class="fields"><label class="fl wide">드릴<input id="pd-name" required maxlength="60" placeholder="목록에서 고르거나 직접 쓰기"></label><label class="fl">시간 (분)<input id="pd-min" type="number" inputmode="numeric" min="0" max="120"></label><label class="fl wide">메모<input id="pd-note" maxlength="80" placeholder="예: 리시브 A패스만 카운트"></label></div>
+      <div id="pd-info"></div>
       <div class="row"><button class="btn primary" type="submit">추가</button></div>
     </form>
-    <input id="pd-q" class="bx-q" placeholder="찾기 (예: 리시브, 토스, 게임)" autocomplete="off">
+    <input id="pd-q" class="bx-q" placeholder="찾기 (예: 리시브, 対人, 게임)" autocomplete="off">
     <div class="lib-cats">${cats.map((c, i) => `<button type="button" class="chip ${i ? "" : "on"}" data-act="drcat" data-c="${esc(c)}">${esc(c)}</button>`).join("")}</div>
     <div class="lib" id="dlib">${drillList(cats[0], "")}</div>`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
-const drillList = (cat, q) => DRILL_LIB.filter(x => q ? x.n.includes(q) : x.c === cat).map(x => `<button type="button" class="box lib-box" data-act="drpick" data-n="${esc(x.n)}" data-m="${x.m}"><span class="bn">${esc(x.n)}</span><span class="br">${x.m}분</span></button>`).join("") || `<p class="small muted">없어요</p>`;
+// 드릴 설명 (방법 · 포인트 · 출처)
+const drillInfoHtml = x => `<div class="dr-info"><span class="small muted">${esc(x.jp || "")}${x.jp ? " · " : ""}${x.m}분</span>${x.how ? `<p><b>방법</b> ${esc(x.how)}</p>` : ""}${x.pt ? `<p><b>포인트</b> ${esc(x.pt)}</p>` : ""}${x.src && DRILL_SRC[x.src] ? `<p class="small muted">출처 · ${esc(DRILL_SRC[x.src])}</p>` : ""}</div>`;
+function openDrillInfo(n) {
+  const x = drillOf(n); if (!x) return;
+  const el = document.getElementById("sheet");
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${esc(x.n)}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>${drillInfoHtml(x)}`;
+  el.hidden = false; document.body.classList.add("noscroll");
+}
+const drillList = (cat, q) => DRILL_LIB.filter(x => q ? (x.n + " " + (x.jp || "")).includes(q) : x.c === cat).map(x => `<button type="button" class="box lib-box" data-act="drpick" data-n="${esc(x.n)}" data-m="${x.m}"><span class="bn">${esc(x.n)}${x.jp ? `<small>${esc(x.jp)}</small>` : ""}</span><span class="br">${x.m}분</span></button>`).join("") || `<p class="small muted">없어요</p>`;
 /* ---------- 영상 (유튜브 재생목록·영상, 부원만) ---------- */
 const VID_CATS = { practice: "훈련", friendly: "교류전", camp: "전지훈련", match: "대회", etc: "기타" };
 const ytEmbed = v => v.kind === "playlist" ? `https://www.youtube-nocookie.com/embed/videoseries?list=${encodeURIComponent(v.yt)}` : `https://www.youtube-nocookie.com/embed/${encodeURIComponent(v.yt)}`;
@@ -2891,7 +2900,9 @@ document.addEventListener("click", async ev => {
   if (act === "prdrill") return openPrDrill(b.dataset.b, b.dataset.g);
   if (act === "prdrop") { const [bi, gi, di] = [b.dataset.b, b.dataset.g, b.dataset.i].map(Number); return prSave(prDateNow(), p => { p.blocks[bi].groups[gi].drills.splice(di, 1); }); }
   if (act === "drcat") { document.querySelectorAll(".lib-cats .chip").forEach(x => x.classList.toggle("on", x === b)); document.getElementById("pd-q").value = ""; document.getElementById("dlib").innerHTML = drillList(b.dataset.c, ""); return; }
-  if (act === "drpick") { document.getElementById("pd-name").value = b.dataset.n; document.getElementById("pd-min").value = b.dataset.m || ""; document.querySelectorAll(".lib-box").forEach(x => x.classList.toggle("on", x === b)); return; }
+  if (act === "drpick") { document.getElementById("pd-name").value = b.dataset.n; document.getElementById("pd-min").value = b.dataset.m || ""; document.querySelectorAll(".lib-box").forEach(x => x.classList.toggle("on", x === b));
+    const x = drillOf(b.dataset.n), box = document.getElementById("pd-info"); if (box) box.innerHTML = x ? drillInfoHtml(x) : ""; return; }
+  if (act === "drinfo") return openDrillInfo(b.dataset.n);
   if (act === "boxedit") { state.boxEdit = !state.boxEdit; if (state.boxEdit && !state.editScope) state.editScope = "team"; state.dirty = false; return render(); }
   if (act === "boxscope") { state.editScope = b.dataset.s; state.dirty = false; return render(); }
   if (act === "boxadd") return openBoxLib(b.dataset.b);
