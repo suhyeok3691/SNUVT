@@ -1096,10 +1096,26 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 .lv-t1.srv::after { content: " ●"; color: var(--yellow); } .lv-t2.srv::before { content: "● "; color: var(--yellow); }
 .lv-run { grid-column: 1 / -1; justify-self: center; }
 .lv-pad { display: grid; gap: 8px; padding: 10px 12px; }
-.lv-ps { display: flex; flex-wrap: wrap; gap: 5px; } .lv-ps .chip { font-size: 12.5px; padding: 4px 9px; }
-.lv-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; } .lv-grid > div { display: grid; gap: 6px; align-content: start; }
-.lv-k { margin: 0; font-size: 12px; font-weight: 700; text-align: center; } .lv-k.us { color: var(--blue); } .lv-k.opp { color: #c0392b; }
-.lv-h { min-height: 50px; font-weight: 700; color: #fff; border: 0; } .lv-h.us { background: var(--blue); } .lv-h.opp { background: #c0392b; }
+.lv-pg { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+@media (max-width: 420px) { .lv-pg { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.lv-p { position: relative; display: grid; justify-items: center; gap: 1px; padding: 8px 2px; min-height: 58px; font: inherit; color: #fff; background: var(--blue); border: 0; border-radius: 10px; cursor: pointer; }
+.lv-p:not(.st) { background: color-mix(in srgb, var(--blue) 62%, #6b7280); } .lv-p.li { background: #0f8a78; }
+.lv-p b { font: 800 19px var(--f-data); line-height: 1; } .lv-p span { font-size: 11.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lv-p i { position: absolute; top: 3px; right: 6px; font-style: normal; font-size: 10px; font-weight: 700; opacity: .85; }
+.lv-q { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; } .lv-o { min-height: 44px; font-weight: 700; color: #fff; border: 0; } .lv-o.us { background: var(--blue); } .lv-o.opp { background: #c0392b; } .lv-o small { font-weight: 500; opacity: .8; margin-left: 4px; }
+.lv-acts { margin-bottom: 8px; }
+.lv-bs { display: grid; gap: 6px; margin: 6px 0; } .lv-bs.four { grid-template-columns: repeat(4, minmax(0, 1fr)); } .lv-bs.three { grid-template-columns: repeat(3, minmax(0, 1fr)); } .lv-bs.one { grid-template-columns: 1fr; }
+.lv-b { min-height: 56px; font-weight: 700; font-size: 15px; border: 0; color: #fff; }
+.lv-b.best { background: #1e8e4e; } .lv-b.good { background: #4caf73; } .lv-b.ok { background: #6b7280; } .lv-b.bad { background: #c0392b; } .lv-b.zone { background: #c0392b; font: 800 20px var(--f-data); }
+.lv-b:not(.best):not(.good):not(.ok):not(.bad):not(.zone) { background: var(--surface-2); color: var(--ink); border: 1.5px solid var(--line); } .lv-b.on { background: var(--blue) !important; color: #fff !important; }
+.lv-court { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 8px; border-radius: 10px; background: color-mix(in srgb, #c0392b 10%, var(--surface)); max-width: 320px; }
+.lv-net { grid-column: 1 / -1; text-align: center; font-size: 11px; color: var(--muted); border-bottom: 3px solid var(--ink); line-height: 1.2; order: 2; }
+.lv-court .lv-b:nth-of-type(n+4) { order: 3; }
+.lv-no { width: 80px; font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--ink); }
+.lv-zmap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; max-width: 260px; }
+.lv-zmap span { position: relative; display: grid; place-items: center; height: 42px; border-radius: 6px; font: 700 15px var(--f-data); background: color-mix(in srgb, #c0392b calc(var(--a) * 70%), var(--surface-2)); }
+.lv-zmap i { position: absolute; top: 2px; left: 5px; font-style: normal; font-size: 10px; color: var(--muted); }
+.lv-net2 { max-width: 260px; text-align: center; border-top: 3px solid var(--ink); margin: 2px 0 0; }
 .lv-end { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; background: var(--warn-soft); }
 .lv-kpi { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 8px 0; }
 .lv-kpi > div { display: grid; justify-items: center; gap: 1px; padding: 8px 4px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); text-align: center; }
@@ -1159,12 +1175,12 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=136"></script>
-<script src="guide.js?v=136"></script>
-<script src="library.js?v=136"></script>
-<script src="campus.js?v=136"></script>
-<script src="court.js?v=136"></script>
-<script src="live.js?v=136"></script>
-<script src="app.js?v=136"></script>
+<script src="program.js?v=137"></script>
+<script src="guide.js?v=137"></script>
+<script src="library.js?v=137"></script>
+<script src="campus.js?v=137"></script>
+<script src="court.js?v=137"></script>
+<script src="live.js?v=137"></script>
+<script src="app.js?v=137"></script>
 </body>
 </html>

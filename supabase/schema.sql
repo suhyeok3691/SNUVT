@@ -2138,3 +2138,12 @@ create policy "rally read" on public.live_rallies for select using (private.is_m
 create policy "rally add" on public.live_rallies for insert with check ((private.can('analysis') or private.can('schedule')) and author = (select auth.uid()));
 create policy "rally del" on public.live_rallies for delete using (author = (select auth.uid()) or private.can('analysis') or private.can('schedule'));
 grant select, insert, update, delete on public.live_games, public.live_rallies to authenticated;
+
+-- 실시간 기록을 우리 선수 플레이 단위로
+alter table public.live_rallies alter column won drop not null;
+alter table public.live_rallies add column if not exists kind text check (kind is null or kind in ('rcv','atk','blk','srv','set','err','opt','oer'));
+alter table public.live_rallies add column if not exists res text check (res is null or char_length(res) <= 8);
+alter table public.live_rallies add column if not exists zone smallint check (zone is null or zone between 1 and 6);
+alter table public.live_rallies add column if not exists opp_no smallint check (opp_no is null or opp_no between 0 and 99);
+alter table public.live_rallies add column if not exists blockers smallint check (blockers is null or blockers between 1 and 3);
+alter table public.live_rallies add column if not exists point text check (point is null or point in ('us','opp'));
