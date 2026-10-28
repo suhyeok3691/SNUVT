@@ -1053,11 +1053,24 @@ i.dot.k-ob { background: var(--c-fr); }
 .ct-p.us { background: var(--blue); } .ct-p.opp { background: #c0392b; }
 .ct-p b { font-family: var(--f-data); font-size: 20px; line-height: 1; } .ct-p span { font-size: 11.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ct-p i { position: absolute; top: 3px; left: 6px; font-style: normal; font-size: 10px; opacity: .75; }
-.ct-p.us.lib { background: #0f8a78; } .ct-extra .ct-p.us.lib { box-shadow: 0 0 0 2px #0f8a78, 0 0 0 4px var(--surface); }
+.ct-p.us.lib { background: #0f8a78; } .ct-p.opp.lib { background: #d9822b; }
 .ct-court .ct-p.lib::after { content: "L"; position: absolute; top: 3px; right: 6px; font-size: 10px; font-weight: 700; opacity: .85; }
+.ct-extra { display: grid; gap: 6px; margin: 2px 0 6px; }
+.ct-lrow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; } .ct-lrow .sc-k { min-width: 30px; }
+.ct-lk { font: 700 11px var(--f-data); color: var(--muted); }
+.ct-subbtn { margin-left: auto; }
+.ct-p.mini { min-height: 0; padding: 3px 9px; border-radius: 8px; grid-auto-flow: column; gap: 5px; align-items: baseline; }
+.ct-p.mini b { font-size: 14px; } .ct-p.mini span { font-size: 11px; }
+.ct-p.mini:not(.lib) { background: transparent; color: var(--ink); border: 1.5px solid var(--line); }
+.ct-subg { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0; } .ct-subg .sc-k { margin: 0 0 4px; }
+.ct-subl { display: grid; gap: 5px; max-height: 46vh; overflow-y: auto; align-content: start; }
+.ct-sb { display: flex; align-items: center; gap: 6px; text-align: left; font: inherit; padding: 9px 8px; border-radius: 9px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; min-width: 0; }
+.ct-sb i { font-style: normal; font: 600 11px var(--f-data); color: var(--muted); flex: none; min-width: 10px; }
+.ct-sb b { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ct-sb small { flex: none; font-size: 11px; color: var(--muted); }
+.ct-sb.on { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, var(--surface)); }
+.ct-lu-n { font-size: 12px; color: var(--muted); } .ct-lu-c select, .ct-lu-c input { width: 100%; min-width: 0; } .ct-lu-c .ct-pos { font-size: 13px; padding-top: 4px; padding-bottom: 4px; }
 .ct-lu-c { display: grid; gap: 2px; min-width: 0; } .ct-lf { display: flex; align-items: center; justify-content: flex-start; gap: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; } .ct-lf input { margin: 0; width: auto; flex: none; }
 .ct-p.srv { border-color: var(--yellow); box-shadow: 0 0 0 2px var(--yellow); }
-.ct-extra .ct-p { min-height: 44px; min-width: 56px; padding: 4px 8px; }
 .ct-extra details { margin-top: 6px; } .ct-extra summary { cursor: pointer; padding: 4px 0; }
 .ct-empty { display: grid; gap: 8px; justify-items: start; }
 .ct-cats { margin-bottom: 8px; }
@@ -1131,11 +1144,11 @@ body.ct-focus #main { padding-top: 6px; } body.ct-focus .sc-page { margin-top: 0
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=126"></script>
-<script src="guide.js?v=126"></script>
-<script src="library.js?v=126"></script>
-<script src="campus.js?v=126"></script>
-<script src="court.js?v=126"></script>
-<script src="app.js?v=126"></script>
+<script src="program.js?v=128"></script>
+<script src="guide.js?v=128"></script>
+<script src="library.js?v=128"></script>
+<script src="campus.js?v=128"></script>
+<script src="court.js?v=128"></script>
+<script src="app.js?v=128"></script>
 </body>
 </html>
