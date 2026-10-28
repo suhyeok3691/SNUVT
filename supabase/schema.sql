@@ -2089,3 +2089,7 @@ begin
   if new_score is not null and length(new_score) > 40 then raise exception '점수가 너무 길어요' using errcode = '23514'; end if;
   update public.cup_matches set sets = new_sets, score = new_score, winner = new_winner where id = mid;
 end $$;
+
+-- 전력분석 코트 입력: 교체 기록 (skill 'sub', zone = 바뀐 자리 1~6, detail = 나간 선수)
+alter table public.scout_events drop constraint scout_events_skill_check;
+alter table public.scout_events add constraint scout_events_skill_check check (skill = any (array['serve','receive','attack','block','dig','set','free','fault','sub']));

@@ -1067,6 +1067,31 @@ i.dot.k-ob { background: var(--c-fr); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ct-sheet td.ct-hi { background: #4a4214; } :root:not([data-theme="light"]) .ct-sheet td.ct-up { background: #173d22; } :root:not([data-theme="light"]) .ct-sheet td.ct-dn { background: #4a1d1d; } }
 :root[data-theme="dark"] .ct-sheet td.ct-hi { background: #4a4214; } :root[data-theme="dark"] .ct-sheet td.ct-up { background: #173d22; } :root[data-theme="dark"] .ct-sheet td.ct-dn { background: #4a1d1d; }
 tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: color-mix(in srgb, var(--good) 14%, var(--surface)); }
+.ct-tools { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
+.ct-srv { display: grid; gap: 6px; padding: 8px; border-radius: 10px; background: color-mix(in srgb, var(--blue) 10%, var(--surface)); }
+.ct-srv.opp { background: color-mix(in srgb, #c0392b 10%, var(--surface)); }
+.ct-srvw { font-size: 13px; } .ct-srvw b { font-family: var(--f-data); font-size: 16px; }
+.ct-srvb { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; } .ct-srvb .sc-g { min-height: 46px; padding: 4px 2px; font-size: 13.5px; }
+.ct-end { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 10px; background: var(--warn-soft); }
+.ct-quick .ct-undo { justify-self: center; }
+.ct-pend { opacity: .6; }
+.sc-g kbd { display: none; font: 600 10px var(--f-data); margin-right: 5px; padding: 0 4px; border: 1px solid currentColor; border-radius: 4px; opacity: .7; }
+@media (hover: hover) and (pointer: fine) { .sc-g kbd { display: inline-block; } }
+@media (orientation: landscape) and (max-height: 520px) {
+  .sc-page .ct-bar { padding: 6px 10px; gap: 5px; } .ct-score b { font-size: 22px; }
+  .ct-court { max-width: 560px; } .ct-p { min-height: 44px; padding: 3px 2px; } .ct-p b { font-size: 17px; }
+}
+.ct-wrap { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "clock" "bar" "court" "extra" "rec"; }
+.ct-clock { grid-area: clock; } .ct-wrap > .ct-bar { grid-area: bar; } .ct-wrap > .ct-court { grid-area: court; } .ct-wrap > .ct-extra { grid-area: extra; } .ct-wrap > .ct-recs { grid-area: rec; }
+.ct-clock .sc-vod { margin: 0 0 6px; padding: 6px 10px; }
+body.ct-focus header.top, body.ct-focus .netbar, body.ct-focus .sc-top, body.ct-focus .sc-title, body.ct-focus .sc-tabs, body.ct-focus .sc-page > p.small { display: none !important; }
+body.ct-focus #main { padding-top: 6px; } body.ct-focus .sc-page { margin-top: 0; }
+@media (orientation: landscape) and (max-height: 560px) {
+  body.ct-focus .ct-wrap { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); grid-template-areas: "court clock" "court bar" "court extra" "court rec"; gap: 0 12px; align-items: start; }
+  body.ct-focus .ct-wrap > .ct-court { margin: 0; max-width: none; position: sticky; top: 6px; }
+  body.ct-focus .ct-court .ct-p { min-height: calc((100vh - 70px) / 4 - 6px); }
+  body.ct-focus .ct-recs .sc-recent li:nth-child(n+4) { display: none; }
+}
 .ct-rec li .ct-l { flex: 1; text-align: left; } .ct-rec li .num { min-width: 34px; flex: none; }
 /* 참·불참: 목록엔 숫자만, 명단은 투표 창에서 */
 .ev-vote { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -1081,8 +1106,8 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 .terms-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 14px 0 4px; }
 .cmp-mact { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; } .cmp-mact .btn { padding: 2px 10px; font-size: 12px; }
 .cmp-tbl td { vertical-align: top; }
-.sc-vod { display: grid; gap: 6px; padding: 10px 12px; margin: 8px 0; } .sc-vod .sc-row { gap: 8px; }
-.vod-t { width: 84px; font: inherit; font-family: var(--f-data); font-size: 15px; text-align: center; padding: 5px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--ink); }
+.sc-vod { display: grid; gap: 6px; padding: 8px 10px; margin: 8px 0; } .sc-vod .sc-row { gap: 6px; flex-wrap: nowrap; } .sc-vod .sc-row .btn { flex: none; }
+.vod-t { width: 72px; min-width: 0; font: inherit; font-family: var(--f-data); font-size: 15px; text-align: center; padding: 5px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--ink); }
 </style>
 </head>
 <body>
@@ -1103,11 +1128,11 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=121"></script>
-<script src="guide.js?v=121"></script>
-<script src="library.js?v=121"></script>
-<script src="campus.js?v=121"></script>
-<script src="court.js?v=121"></script>
-<script src="app.js?v=121"></script>
+<script src="program.js?v=122"></script>
+<script src="guide.js?v=122"></script>
+<script src="library.js?v=122"></script>
+<script src="campus.js?v=122"></script>
+<script src="court.js?v=122"></script>
+<script src="app.js?v=122"></script>
 </body>
 </html>

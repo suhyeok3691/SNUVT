@@ -15,87 +15,176 @@ const CT_MENU = [
 ];
 const CT_ACT = Object.fromEntries(CT_MENU.flatMap(([sk, , l]) => l.map(a => [a[0], { skill: sk, code: a[0], name: a[1], grade: a[2], res: a[3] || "", det: a[4] || null }])));
 const CT_PT = "pt"; // 누가 땄는지만 (선수 없이)
+const CT_SUB = "sub"; // 교체 (zone = 바뀐 자리 1~6, detail = 나간 선수)
 const ctOther = s => s === "us" ? "opp" : "us";
 const ctLu = m => m.lineup || {};
 const ctReady = m => { const L = ctLu(m); return L.us && (L.us.slots || []).filter(Boolean).length === 6 && L.opp && (L.opp.slots || []).filter(x => x !== "" && x != null).length === 6; };
 // 로테이션 r에서 자리 z(1~6)에 선 선수 = 처음(R1) 자리 ((z-1)+(r-1))%6 +1 의 선수 (로테이션은 2→1, 1→6 … 시계 방향)
 const ctAt = (slots, r, z) => slots[((z - 1) + (r - 1)) % 6];
+const ctZoneOf = (slots, r, i) => ((i - (r - 1)) % 6 + 6) % 6 + 1; // 처음 자리 i(0~5)가 지금 서 있는 자리
 // 세트 하나를 처음부터 다시 따라가며 지금 상태 계산 (되돌리기도 이걸로 맞음)
 function ctState(m, ev, setNo) {
-  const L = ctLu(m), st = (L.sets || {})[setNo] || {}, s = { rot: st.rot || 1, orot: st.opp_rot || 1, serve: st.serve || "us", us: 0, op: 0, done: false, list: [] };
+  const L = ctLu(m), st = (L.sets || {})[setNo] || {};
+  const s = { rot: st.rot || 1, orot: st.opp_rot || 1, serve: st.serve || "us", us: 0, op: 0, done: false, last: null, list: [],
+    usSlots: [...((L.us || {}).slots || [])], opSlots: [...((L.opp || {}).slots || [])] };
   for (const e of ev) {
     if (e.set_no !== setNo || !e.action) continue;
     s.list.push(e);
-    if (e.skill === "serve") { s.serve = e.side; s.done = false; }
-    else if (e.skill === "receive") { s.serve = ctOther(e.side); s.done = false; } // 리시브 = 새 랠리 (서브 기록을 빼먹어도)
+    if (e.action === CT_SUB) { const i = (e.zone || 0) - 1; if (i >= 0 && i < 6) { if (e.side === "us") s.usSlots[i] = e.player_id; else s.opSlots[i] = e.opp_no; } continue; }
+    if (e.skill === "serve") { s.serve = e.side; s.done = false; s.last = null; }
+    else if (e.skill === "receive") { s.serve = ctOther(e.side); s.done = false; s.last = null; } // 리시브 = 새 랠리 (서브 기록을 빼먹어도)
     if (e.point) {
       if (e.point === "us") { s.us++; if (s.serve === "opp") s.rot = s.rot % 6 + 1; s.serve = "us"; }
       else { s.op++; if (s.serve === "us") s.orot = s.orot % 6 + 1; s.serve = "opp"; }
-      s.done = true;
-    }
+      s.done = true; s.last = null;
+    } else if (e.action !== CT_PT && !s.done) s.last = e;
   }
   return s;
+}
+// 세트 끝: 25점(5세트 15점) 넘고 2점 차
+const ctSetEnd = (s, setNo) => { const t = setNo === 5 ? 15 : 25; return Math.max(s.us, s.op) >= t && Math.abs(s.us - s.op) >= 2 ? (s.us > s.op ? "us" : "opp") : null; };
+// 다음에 나올 동작 짐작: 랠리 흐름(서브 → 리시브 → 토스 → 공격 → 블로킹/디그 …)
+function ctGuess(s, side, z) {
+  const front = [2, 3, 4].includes(Number(z)), l = s.last;
+  if (!l) return side === s.serve ? "serve" : "receive";
+  if (side === l.side) return { serve: front ? "block" : "dig", receive: "set", dig: "set", free: "set", set: "attack", attack: "dig", block: "dig" }[l.skill] || "set";
+  if (l.skill === "attack" || l.skill === "set") return front ? "block" : "dig";
+  if (l.skill === "serve") return "receive";
+  if (l.action === "rover") return front ? "attack" : "free";
+  return front && l.skill !== "block" ? "block" : "dig";
 }
 const ctName = (side, v) => { if (side === "us") { const p = playerOf(v); return p ? { no: p.number != null ? String(p.number) : "", nm: p.name } : { no: "", nm: "?" }; } return { no: String(v ?? ""), nm: "" }; };
 function ctBtn(side, v, z, serving) {
   const n = ctName(side, v);
   return `<button type="button" class="ct-p ${side} ${serving ? "srv" : ""}" data-act="ctpick" data-side="${side}" data-v="${esc(v)}" ${z ? `data-z="${z}"` : ""}><b>${esc(n.no || "–")}</b>${n.nm ? `<span>${esc(n.nm)}</span>` : ""}${z ? `<i>${z}</i>` : ""}</button>`;
 }
+const ctFlip = () => { try { return localStorage.getItem("snuvt-ctflip") === "1"; } catch (e) { return false; } };
 // 코트 화면
 function ctPad(m, ev) {
   const S = sc(), L = ctLu(m), setNo = S.sel.set || 1;
-  if (!ctReady(m)) return `<div class="panel ct-empty"><b>라인업이 아직 없어요</b><span class="small muted">우리 선발 6명과 상대 등번호 6개를 넣으면 코트에서 바로 기록해요.</span>${can("analysis") ? `<button class="btn primary" type="button" data-act="ctlineup">라인업 넣기</button>` : `<span class="small muted">전력분석 담당이 넣을 수 있어요.</span>`}</div>`;
-  const s = ctState(m, ev, setNo), us = L.us.slots, op = L.opp.slots;
-  const half = (side, slots, r) => { const srv = s.serve === side;
-    // 우리: 네트 쪽 4·3·2, 뒤 5·6·1 / 상대(위, 우리 쪽에서 본 모양): 뒤 1·6·5, 네트 쪽 2·3·4
-    const rows = side === "us" ? [[4, 3, 2], [5, 6, 1]] : [[1, 6, 5], [2, 3, 4]];
+  if (!ctReady(m)) return `<div class="panel ct-empty"><b>라인업이 아직 없어요</b>${can("analysis") ? `<button class="btn primary" type="button" data-act="ctlineup">라인업 넣기</button>` : `<span class="small muted">전력분석 담당이 넣을 수 있어요.</span>`}</div>`;
+  ctWake(true);
+  const s = ctState(m, ev, setNo), flip = ctFlip(), end = ctSetEnd(s, setNo);
+  // 아래 칸: 앞줄(네트) 4·3·2, 뒷줄 5·6·1 / 위 칸: 뒷줄 1·6·5, 앞줄 2·3·4 (영상 방향에 맞게 뒤집기)
+  const half = (side, slots, r, top) => { const srv = s.serve === side && !s.last;
+    const rows = top ? [[1, 6, 5], [2, 3, 4]] : [[4, 3, 2], [5, 6, 1]];
     return `<div class="ct-half ${side}">${rows.map(row => `<div class="ct-row">${row.map(z => ctBtn(side, ctAt(slots, r, z), z, srv && z === 1)).join("")}</div>`).join("")}</div>`; };
   const lib = (side, l) => (l || []).filter(x => x !== "" && x != null).map(v => ctBtn(side, v, 0, false)).join("");
-  const onCourt = new Set(us), bench = sortedPlayers().filter(p => !p.military && !onCourt.has(p.id) && !(L.us.libero || []).includes(p.id));
-  const recent = s.list.slice(-6).reverse();
-  return `<div class="panel ct-bar">
-      <div class="sc-row"><span class="sc-k">세트</span>${[1, 2, 3, 4, 5].map(n => scChip("scset", n, setNo, n)).join("")}${can("analysis") ? `<button class="btn link small" type="button" data-act="ctlineup" style="margin-left:auto">라인업 · 시작 로테</button>` : ""}</div>
+  const onCourt = new Set(s.usSlots), bench = sortedPlayers().filter(p => !p.military && !onCourt.has(p.id) && !(L.us.libero || []).includes(p.id));
+  const recent = s.list.slice(-6).reverse(), q = ctQ.list.length;
+  // 랠리 시작이면 서버 한 번에 기록
+  const server = s.serve === "us" ? ctAt(s.usSlots, s.rot, 1) : ctAt(s.opSlots, s.orot, 1), sn = ctName(s.serve, server);
+  const srvRow = !s.last && !end ? `<div class="ct-srv ${s.serve}"><span class="ct-srvw">서브 <b>${esc(sn.no ? "#" + sn.no : "")}</b> ${esc(sn.nm)}</span><div class="ct-srvb">${CT_MENU[0][2].filter(a => a[0] !== "foot").map(a => `<button type="button" class="btn sc-g ${a[3] === "earned" ? "g-best" : a[3] === "error" ? "g-err" : a[2] === "+" ? "g-good" : "g-ok"}" data-act="ctsrv" data-a="${a[0]}">${a[0] === "serr" ? "범실" : esc(a[1])}</button>`).join("")}</div></div>` : "";
+  const endRow = end ? `<div class="ct-end"><b>${setNo}세트 ${end === "us" ? "우리" : esc(m.opponent || "상대")} 승 · ${s.us}:${s.op}</b>${setNo < 5 ? `<button class="btn primary small" type="button" data-act="ctnextset">${setNo + 1}세트 시작</button>` : ""}</div>` : "";
+  const court = flip ? `${half("us", s.usSlots, s.rot, true)}<div class="ct-net"><span>네트</span></div>${half("opp", s.opSlots, s.orot, false)}` : `${half("opp", s.opSlots, s.orot, true)}<div class="ct-net"><span>네트</span></div>${half("us", s.usSlots, s.rot, false)}`;
+  return `<div class="ct-wrap">${state.ctFocus ? `<div class="ct-clock">${scVodHtml(m)}</div>` : ""}<div class="panel ct-bar">
+      <div class="sc-row"><span class="sc-k">세트</span>${[1, 2, 3, 4, 5].map(n => scChip("scset", n, setNo, n)).join("")}<span class="ct-tools">${q ? `<span class="chip warn" title="인터넷이 되면 저장돼요">대기 ${q}</span>` : ""}<button class="btn link small" type="button" data-act="ctflip">뒤집기</button><button class="btn small ${state.ctFocus ? "" : "primary"}" type="button" data-act="ctfocus">${state.ctFocus ? "나가기" : "기록 화면"}</button>${can("analysis") ? `<button class="btn link small" type="button" data-act="ctlineup">라인업</button>` : ""}</span></div>
       <div class="ct-score"><span class="ct-t us ${s.serve === "us" ? "srv" : ""}">우리 <small>R${s.rot}</small></span><b class="num">${s.us} : ${s.op}</b><span class="ct-t opp ${s.serve === "opp" ? "srv" : ""}"><small>R${s.orot}</small> ${esc(m.opponent || "상대")}</span></div>
-      <div class="ct-quick"><button class="btn small" type="button" data-act="ctpt" data-w="us">우리 +1</button><span class="small muted">${s.serve === "us" ? "우리 서브" : "상대 서브"}</span><button class="btn small" type="button" data-act="ctpt" data-w="opp">상대 +1</button></div>
+      ${endRow || srvRow}
+      <div class="ct-quick"><button class="btn small" type="button" data-act="ctpt" data-w="us">우리 +1</button>${s.list.length ? `<button class="btn small ct-undo" type="button" data-act="ctundo">↶ 되돌리기</button>` : "<span></span>"}<button class="btn small" type="button" data-act="ctpt" data-w="opp">상대 +1</button></div>
     </div>
-    <div class="ct-court">${half("opp", op, s.orot)}<div class="ct-net"><span>네트</span></div>${half("us", us, s.rot)}</div>
+    <div class="ct-court">${court}</div>
     <div class="ct-extra">
       ${(L.opp.libero || []).length ? `<div class="sc-row"><span class="sc-k">상대 리베로</span>${lib("opp", L.opp.libero)}</div>` : ""}
       ${(L.us.libero || []).length ? `<div class="sc-row"><span class="sc-k">리베로</span>${lib("us", L.us.libero)}</div>` : ""}
-      <details data-keep="ct-bench" ${keepOpen("ct-bench", false)}><summary class="small">교체 선수 · 상대 다른 번호</summary>
+      <details data-keep="ct-bench" ${keepOpen("ct-bench", false)}><summary class="small">교체</summary>
         <div class="sc-row">${bench.map(p => ctBtn("us", p.id, 0, false)).join("")}</div>
-        <div class="sc-row"><label class="fl sc-opp">상대 번호<input id="ctOppNo" type="number" inputmode="numeric" min="0" max="99" placeholder="번호"></label><button class="btn small" type="button" data-act="ctpickno">기록</button></div>
+        <div class="sc-row"><label class="fl sc-opp">상대 번호<input id="ctOppNo" type="number" inputmode="numeric" min="0" max="99" placeholder="번호"></label><button class="btn small" type="button" data-act="ctpickno">선택</button></div>
       </details>
     </div>
-    <section class="sec"><div class="sec-head"><h3>방금 기록 <span class="small muted">${s.list.length}개</span></h3>${s.list.length ? `<button class="btn link small danger" type="button" data-act="ctundo">하나 되돌리기</button>` : ""}</div>
-      ${recent.length ? `<ul class="watch sc-recent ct-rec">${recent.map(e => `<li><span class="num small">${esc(e.score || "")}</span><span class="small ct-l">${ctLabel(e)}</span>${e.point ? `<span class="chip ${e.point === "us" ? "ok" : "warn"}">${e.point === "us" ? "우리" : "상대"} 점수</span>` : ""}</li>`).join("")}</ul>` : emptyLine("선수를 눌러 기록을 시작해요.")}
-    </section>`;
+    <section class="sec ct-recs"><div class="sec-head"><h3>방금 기록 <span class="small muted">${s.list.length}개</span></h3></div>
+      ${recent.length ? `<ul class="watch sc-recent ct-rec">${recent.map(e => `<li class="${e._pending ? "ct-pend" : ""}"><span class="num small">${esc(e.score || "")}</span><span class="small ct-l">${ctLabel(e)}</span>${e.point ? `<span class="chip ${e.point === "us" ? "ok" : "warn"}">${e.point === "us" ? "우리" : "상대"} 점수</span>` : ""}</li>`).join("")}</ul>` : emptyLine("선수를 눌러 기록을 시작해요.")}
+    </section></div>`;
 }
 function ctLabel(e) {
   const a = CT_ACT[e.action], who = e.side === "us" ? (() => { const p = playerOf(e.player_id); return p ? `${pNo(p)}${esc(p.name)}` : "우리"; })() : `상대 #${e.opp_no ?? "?"}`;
   if (e.action === CT_PT) return `${e.side === "us" ? "우리" : "상대"} 점수`;
+  if (e.action === CT_SUB) return `교체 · ${who} 들어감${e.detail ? ` ↔ ${esc(e.detail)}` : ""}`;
   return `${who} · ${a ? esc(a.name) : esc(e.action)}${e.detail ? ` (${esc(e.detail)})` : ""}${e.zone ? ` → ${e.zone}` : ""}`;
 }
-// 선수를 누르면: 동작 고르기 창
-function ctOpen(side, v) {
-  const S = sc(); S.ct = { side, v, cat: S.ct && S.ct.side === side ? S.ct.cat : (side === "us" ? "receive" : "serve"), zone: null, act: null };
+// 선수를 누르면: 동작 고르기 창 (다음 동작을 미리 골라 둠)
+function ctOpen(side, v, z) {
+  const S = sc(), m = scMatch(), s = ctState(m, S.events[m.id] || [], S.sel.set || 1);
+  const onCourt = (side === "us" ? s.usSlots : s.opSlots).some(x => String(x) === String(v));
+  const lib = ((ctLu(m)[side] || {}).libero || []).some(x => String(x) === String(v));
+  S.ct = { side, v, z: z || null, cat: !onCourt && !lib ? "sub" : ctGuess(s, side, z), zone: null, act: null };
   ctSheet();
 }
 function ctSheet() {
-  const c = sc().ct; if (!c) return;
-  const n = ctName(c.side, c.v), cat = CT_MENU.find(x => x[0] === c.cat) || CT_MENU[0], el = document.getElementById("sheet");
+  const S = sc(), c = S.ct; if (!c) return;
+  const m = scMatch(), n = ctName(c.side, c.v), el = document.getElementById("sheet");
   const zoned = ["serve", "attack"].includes(c.cat);
-  const btn = a => { const cls = a[3] === "earned" ? "g-best" : a[3] === "error" ? (a[2] === "/" ? "g-blk" : "g-err") : a[2] === "#" || a[2] === "+" ? "g-good" : "g-ok";
-    return `<button type="button" class="btn sc-g ${cls}" data-act="ctact" data-a="${a[0]}">${esc(a[1])}</button>`; };
+  const btn = (a, i) => { const cls = a[3] === "earned" ? "g-best" : a[3] === "error" ? (a[2] === "/" ? "g-blk" : "g-err") : a[2] === "#" || a[2] === "+" ? "g-good" : "g-ok";
+    return `<button type="button" class="btn sc-g ${cls}" data-act="ctact" data-a="${a[0]}">${i < 9 ? `<kbd>${i + 1}</kbd>` : ""}${esc(a[1])}</button>`; };
   const det = c.act && CT_ACT[c.act].det;
-  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${c.side === "us" ? "우리" : "상대"} ${esc(n.no ? "#" + n.no : "")} ${esc(n.nm)}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
-    <div class="sc-row ct-cats">${CT_MENU.map(([k, l]) => `<button type="button" class="chip sc-chip ${k === c.cat ? "on" : ""}" data-act="ctcat" data-v="${k}">${l}</button>`).join("")}</div>
-    ${zoned ? `<div class="sc-row"><span class="sc-k">코스</span><div class="sc-court">${ZONES.map(z => `<button type="button" class="sc-z ${c.zone === z ? "on" : ""}" data-act="ctzone" data-v="${z}">${z}</button>`).join("")}</div><span class="small muted">골라도 되고 안 골라도 돼요</span></div>` : ""}
-    ${det ? `<p class="small">${esc(CT_ACT[c.act].name)} · 이유</p><div class="ct-acts">${det.map(d => `<button type="button" class="btn sc-g g-err" data-act="ctdet" data-v="${esc(d)}">${esc(d)}</button>`).join("")}<button type="button" class="btn sc-g g-ok" data-act="ctdet" data-v="">모름</button></div>`
+  let body;
+  if (c.cat === "sub") {
+    const s = ctState(m, S.events[m.id] || [], S.sel.set || 1), L = ctLu(m), slots = c.side === "us" ? s.usSlots : s.opSlots, r = c.side === "us" ? s.rot : s.orot;
+    const i = slots.findIndex(x => String(x) === String(c.v));
+    if (i >= 0) { // 코트에 있는 선수 → 누가 들어오나
+      body = c.side === "us"
+        ? `<p class="small">들어올 선수</p><div class="ct-acts">${sortedPlayers().filter(p => !p.military && !slots.includes(p.id) && !(L.us.libero || []).includes(p.id)).map(p => `<button type="button" class="btn sc-g g-ok" data-act="ctsub" data-in="${esc(p.id)}" data-i="${i}">${esc(pNo(p) + p.name)}</button>`).join("")}</div>`
+        : `<div class="sc-row"><label class="fl sc-opp">들어올 번호<input id="ctSubNo" type="number" inputmode="numeric" min="0" max="99"></label><button class="btn primary small" type="button" data-act="ctsub" data-i="${i}">교체</button></div>`;
+    } else body = `<p class="small">누구 대신?</p><div class="ct-acts">${slots.map((x, k) => { const nn = ctName(c.side, x); return `<button type="button" class="btn sc-g g-ok" data-act="ctsub" data-in="${esc(c.v)}" data-i="${k}"><kbd>${ctZoneOf(slots, r, k)}</kbd>${esc(nn.no ? "#" + nn.no : "")} ${esc(nn.nm)}</button>`; }).join("")}</div>`;
+  } else {
+    const cat = CT_MENU.find(x => x[0] === c.cat) || CT_MENU[0];
+    body = `${zoned ? `<div class="sc-row"><span class="sc-k">코스</span><div class="sc-court">${ZONES.map(z => `<button type="button" class="sc-z ${c.zone === z ? "on" : ""}" data-act="ctzone" data-v="${z}">${z}</button>`).join("")}</div></div>` : ""}
+    ${det ? `<p class="small">${esc(CT_ACT[c.act].name)} · 이유</p><div class="ct-acts">${det.map((d, i) => `<button type="button" class="btn sc-g g-err" data-act="ctdet" data-v="${esc(d)}"><kbd>${i + 1}</kbd>${esc(d)}</button>`).join("")}<button type="button" class="btn sc-g g-ok" data-act="ctdet" data-v=""><kbd>${det.length + 1}</kbd>모름</button></div>`
       : `<div class="ct-acts">${cat[2].map(btn).join("")}</div>`}`;
+  }
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${c.side === "us" ? "우리" : "상대"} ${esc(n.no ? "#" + n.no : "")} ${esc(n.nm)}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <div class="sc-row ct-cats">${CT_MENU.map(([k, l]) => `<button type="button" class="chip sc-chip ${k === c.cat ? "on" : ""}" data-act="ctcat" data-v="${k}">${l}</button>`).join("")}<button type="button" class="chip sc-chip ${c.cat === "sub" ? "on" : ""}" data-act="ctcat" data-v="sub">교체</button></div>
+    ${body}`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
-async function ctSave(code, detail) {
+/* 저장: 화면에 먼저 넣고(바로 다음 입력) 서버에는 차례대로 보냄. 인터넷이 끊겨도 대기열에 남았다가 다시 보냄 */
+const ctQ = { list: [], busy: false, timer: null };
+const ctQKey = "snuvt-ctq";
+const ctQSave = () => { try { localStorage.setItem(ctQKey, JSON.stringify(ctQ.list.map(x => ({ ev: x.ev, pt: x.pt })))); } catch (e) {} };
+try { ctQ.list = (JSON.parse(localStorage.getItem(ctQKey) || "[]") || []).filter(x => x && x.ev); } catch (e) { ctQ.list = []; }
+const ctRetry = err => !err || !err.code || /fetch|network|timeout|JWT|PGRST301/i.test(`${err.message || ""} ${err.code || ""}`);
+const ctClean = r => { const o = { ...r }; delete o.id; delete o._pending; delete o._done; delete o.created_at; return o; };
+async function ctFlush() {
+  if (ctQ.busy || !ctQ.list.length) return;
+  if (!uid() || (typeof navigator !== "undefined" && navigator.onLine === false)) { clearTimeout(ctQ.timer); ctQ.timer = setTimeout(ctFlush, 4000); return; }
+  ctQ.busy = true; let changed = false;
+  try {
+    while (ctQ.list.length) {
+      const it = ctQ.list[0];
+      if (!it.ev._done) {
+        const r = await sb.from("scout_events").insert(ctClean(it.ev)).select("id,created_at").maybeSingle();
+        if (r.error) { if (ctRetry(r.error)) { clearTimeout(ctQ.timer); ctQ.timer = setTimeout(ctFlush, 4000); break; }
+          toast(failMsg(r.error)); ctQ.list.shift(); ctDrop(it); changed = true; continue; }
+        it.ev._done = true; ctQSave(); ctFix(it.ev, r.data && r.data.id, r.data && r.data.created_at); if (it.pt) it.pt.event_id = it.ev.id;
+      }
+      if (it.pt) {
+        const q = await sb.from("scout_points").insert({ ...ctClean(it.pt), event_id: it.ev.id }).select("id").maybeSingle();
+        if (q.error && ctRetry(q.error)) { clearTimeout(ctQ.timer); ctQ.timer = setTimeout(ctFlush, 4000); break; }
+        if (!q.error) ctFixPt(it.pt, q.data && q.data.id);
+      }
+      ctQ.list.shift(); ctQSave(); changed = true;
+    }
+  } finally { ctQ.busy = false; }
+  if (changed && state.view === "scout" && sc().tab === "court" && document.getElementById("sheet").hidden) { state.dirty = false; render(); }
+}
+// 서버 번호로 바꿔 끼움 (화면 기록 · 대기열 모두)
+function ctFix(ev, id, at) { const tmp = ev.id; if (!id) return; for (const l of Object.values(sc().events)) for (const e of l) if (e.id === tmp) { e.id = id; delete e._pending; if (at) e.created_at = at; } ev.id = id; }
+function ctFixPt(pt, id) { if (!id) return; for (const l of Object.values(sc().points)) for (const p of l) if (p.id === pt.id) p.id = id; pt.id = id; }
+function ctDrop(it) { const S = sc(), mid = it.ev.match_id; if (S.events[mid]) S.events[mid] = S.events[mid].filter(e => e.id !== it.ev.id); if (it.pt && S.points[mid]) S.points[mid] = S.points[mid].filter(p => p.id !== it.pt.id); }
+window.addEventListener("online", () => ctFlush());
+window.addEventListener("beforeunload", e => { if (ctQ.list.length) { ctQSave(); e.preventDefault(); e.returnValue = ""; } });
+setTimeout(ctFlush, 3000);
+function ctPush(row, pr) {
+  const S = sc(), now = new Date().toISOString(), tmp = "tmp" + Date.now() + Math.random().toString(36).slice(2, 6);
+  const ev = { ...row, id: tmp, _pending: true, created_at: now };
+  (S.events[row.match_id] = S.events[row.match_id] || []).push(ev);
+  let pt = null;
+  if (pr) { pt = { ...pr, id: "tp" + tmp, event_id: null }; (S.points[row.match_id] = S.points[row.match_id] || []).push(pt); }
+  ctQ.list.push({ ev: { ...row, id: tmp }, pt }); ctQSave();
+  try { navigator.vibrate && navigator.vibrate(12); } catch (e) {}
+  ctFlush();
+}
+function ctSave(code, detail) {
   const S = sc(), m = scMatch(), c = S.ct || {}; if (!m) return;
   const a = code === CT_PT ? { skill: "fault", grade: "#", res: "earned" } : CT_ACT[code];
   const ev = S.events[m.id] || [], setNo = S.sel.set || 1, s = ctState(m, ev, setNo);
@@ -103,35 +192,62 @@ async function ctSave(code, detail) {
   const serveBefore = a.skill === "serve" ? c.side : a.skill === "receive" ? ctOther(c.side) : s.serve;
   const fresh = code === CT_PT || a.skill === "serve" || a.skill === "receive" || !s.done;
   const point = fresh && a.res ? (a.res === "earned" ? c.side : ctOther(c.side)) : null;
-  let rot = s.rot, orot = s.orot, us = s.us, op = s.op;
-  if (point === "us") { us++; } else if (point === "opp") { op++; }
+  const rot = s.rot, orot = s.orot; let us = s.us, op = s.op;
+  if (point === "us") us++; else if (point === "opp") op++;
   const row = { match_id: m.id, set_no: setNo, side: c.side, player_id: c.side === "us" && code !== CT_PT ? c.v : null, opp_no: c.side === "opp" && code !== CT_PT && c.v !== "" && c.v != null ? Number(c.v) : null,
     skill: a.skill, grade: a.grade, action: code, detail: detail || null, zone: c.zone || null, rot, opp_rot: orot, serve: serveBefore, point, score: `${us}:${op}`, t: scNow(), author: uid() };
-  const r = await sb.from("scout_events").insert(row).select().maybeSingle();
-  if (r.error) { toast(failMsg(r.error)); return; }
-  const saved = { ...row, id: (r.data && r.data.id) || "tmp" + Date.now(), created_at: (r.data && r.data.created_at) || new Date().toISOString() };
-  (S.events[m.id] = S.events[m.id] || []).push(saved);
-  if (point) {
-    const pr = { match_id: m.id, set_no: setNo, rot, opp_rot: orot, serve: serveBefore, won: point === "us", t: row.t, author: uid(), event_id: r.data ? r.data.id : null };
-    const q = await sb.from("scout_points").insert(pr).select().maybeSingle();
-    if (!q.error) (S.points[m.id] = S.points[m.id] || []).push({ ...pr, id: (q.data && q.data.id) || "tmp" + Date.now() });
-  }
-  S.ct = { side: c.side, cat: c.cat }; closeSheet(); state.dirty = false; render();
+  ctPush(row, point ? { match_id: m.id, set_no: setNo, rot, opp_rot: orot, serve: serveBefore, won: point === "us", t: row.t, author: uid() } : null);
+  S.ct = null; closeSheet(); state.dirty = false; render();
+}
+function ctSubSave(inV, i) {
+  const S = sc(), m = scMatch(), c = S.ct || {}, setNo = S.sel.set || 1, s = ctState(m, S.events[m.id] || [], setNo);
+  const slots = c.side === "us" ? s.usSlots : s.opSlots, out = slots[i];
+  if (inV === "" || inV == null) return toast("들어올 번호를 넣어 주세요");
+  if (slots.some(x => String(x) === String(inV))) return toast("이미 코트에 있어요");
+  const on = ctName(c.side, out);
+  ctPush({ match_id: m.id, set_no: setNo, side: c.side, player_id: c.side === "us" ? inV : null, opp_no: c.side === "opp" ? Number(inV) : null, skill: "sub", grade: "!", action: CT_SUB,
+    detail: `${on.no ? "#" + on.no + " " : ""}${on.nm}`.trim().slice(0, 30) || null, zone: i + 1, rot: s.rot, opp_rot: s.orot, serve: s.serve, point: null, score: `${s.us}:${s.op}`, t: scNow(), author: uid() }, null);
+  S.ct = null; closeSheet(); state.dirty = false; render();
 }
 async function ctUndo() {
   const S = sc(), m = scMatch(); if (!m) return;
   const l = (S.events[m.id] || []).filter(e => e.action && e.set_no === (S.sel.set || 1)), e = l[l.length - 1]; if (!e) return;
   if (!await confirmDel(`방금 기록을 지울까요?\n${ctLabel(e).replace(/<[^>]+>/g, "")}`)) return;
+  const qi = ctQ.list.findIndex(x => x.ev.id === e.id);
+  if (qi >= 0) { // 아직 서버에 안 간 것
+    if (qi === 0 && ctQ.busy) { toast("저장 중이에요. 잠깐 뒤에 다시 눌러 주세요"); return; }
+    const it = ctQ.list.splice(qi, 1)[0]; ctQSave(); ctDrop(it); state.dirty = false; return render();
+  }
   try {
     ok(await sb.from("scout_events").delete().eq("id", e.id)); // 랠리 점수(scout_points)는 같이 지워짐
     S.events[m.id] = S.events[m.id].filter(x => x.id !== e.id); S.points[m.id] = (S.points[m.id] || []).filter(p => p.event_id !== e.id);
   } catch (err) { toast(failMsg(err)); }
   state.dirty = false; render();
 }
+// 기록 화면: 머리말·메뉴를 숨기고 점수·코트만 (가로로 돌리면 코트 옆에 점수)
+function ctFocus(on, quiet) {
+  state.ctFocus = !!on;
+  try {
+    if (on && document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+    else if (!on && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+  } catch (e) {}
+  if (on) { pushInner(); window.scrollTo(0, 0); }
+  if (!quiet) { state.dirty = false; render(); }
+}
+// 화면 꺼짐 막기 (코트 입력 중에만)
+let ctLock = null;
+async function ctWake(on) {
+  try {
+    if (on && !ctLock && navigator.wakeLock && document.visibilityState === "visible") { ctLock = await navigator.wakeLock.request("screen"); ctLock.addEventListener("release", () => { ctLock = null; }); }
+    else if (!on && ctLock) { const l = ctLock; ctLock = null; await l.release(); }
+  } catch (e) { ctLock = null; }
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && state.view === "scout" && sc().tab === "court" && scMatch()) ctWake(true); });
 // 라인업 · 세트 시작 로테 (전력분석 담당). 라인업 용지처럼 앞줄 4·3·2, 뒷줄 5·6·1 순서로 입력 (저장은 자리 1~6)
 const CT_SHEET = [3, 2, 1, 4, 5, 0];
 function ctLineupForm() {
-  const S = sc(), m = scMatch(), L = ctLu(m), setNo = S.sel.set || 1, st = (L.sets || {})[setNo] || {};
+  const S = sc(), m = scMatch(), L = ctLu(m), setNo = S.sel.set || 1, prev = (L.sets || {})[setNo - 1];
+  const st = (L.sets || {})[setNo] || (prev ? { rot: prev.rot, opp_rot: prev.opp_rot, serve: prev.serve === "opp" ? "us" : "opp" } : {});
   const ps = sortedPlayers().filter(p => !p.military), us = (L.us && L.us.slots) || [], op = (L.opp && L.opp.slots) || [];
   const sel = (i, cur) => `<label class="fl">${i + 1}${i === 0 ? " 서브" : ""}<select id="ctu-${i}"><option value="">선택</option>${ps.map(p => `<option value="${p.id}" ${cur === p.id ? "selected" : ""}>${esc(pNo(p) + p.name)} · ${esc(p.pos || "")}</option>`).join("")}</select></label>`;
   const num = (id, v, l) => `<label class="fl">${l}<input id="${id}" type="number" inputmode="numeric" min="0" max="99" value="${esc(v ?? "")}"></label>`;
@@ -165,19 +281,34 @@ async function ctLineupSave(f) {
 }
 function courtClick(b, act) {
   const S = sc();
-  if (act === "ctpick") return ctOpen(b.dataset.side, b.dataset.side === "us" ? b.dataset.v : b.dataset.v);
+  if (act === "ctpick") return ctOpen(b.dataset.side, b.dataset.v, b.dataset.z);
   if (act === "ctpickno") { const n = (document.getElementById("ctOppNo") || {}).value; if (n === "" || n == null) return toast("상대 번호를 넣어 주세요"); return ctOpen("opp", n); }
   if (act === "ctcat") { S.ct.cat = b.dataset.v; S.ct.act = null; return ctSheet(); }
   if (act === "ctzone") { const z = Number(b.dataset.v); S.ct.zone = S.ct.zone === z ? null : z; return ctSheet(); }
   if (act === "ctact") { const a = CT_ACT[b.dataset.a]; if (a.det) { S.ct.act = a.code; return ctSheet(); } return ctSave(a.code, null); }
   if (act === "ctdet") return ctSave(S.ct.act, b.dataset.v || null);
+  if (act === "ctsrv") { const m = scMatch(), s = ctState(m, S.events[m.id] || [], S.sel.set || 1);
+    S.ct = { side: s.serve, v: String(s.serve === "us" ? ctAt(s.usSlots, s.rot, 1) : ctAt(s.opSlots, s.orot, 1)), z: 1, cat: "serve", zone: null, act: null };
+    const a = CT_ACT[b.dataset.a]; if (a.det) { S.ct.act = a.code; return ctSheet(); } return ctSave(a.code, null); }
+  if (act === "ctsub") return ctSubSave(b.dataset.in != null ? b.dataset.in : (document.getElementById("ctSubNo") || {}).value, Number(b.dataset.i));
   if (act === "ctpt") { S.ct = { side: b.dataset.w, v: null }; return ctSave(CT_PT, null); }
   if (act === "ctundo") return ctUndo();
   if (act === "ctlineup") return ctLineupForm();
+  if (act === "ctfocus") { if (state.ctFocus) { try { history.back(); } catch (e) { ctFocus(false); } return; } return ctFocus(true); }
+  if (act === "ctflip") { try { localStorage.setItem("snuvt-ctflip", ctFlip() ? "0" : "1"); } catch (e) {} state.dirty = false; return render(); }
+  if (act === "ctnextset") { const m = scMatch(), n = (S.sel.set || 1) + 1; S.sel.set = n; state.dirty = false; render(); if (!(ctLu(m).sets || {})[n] && can("analysis")) ctLineupForm(); return; }
 }
+// 컴퓨터: 창이 열려 있으면 숫자 키로 바로 고르기 (예전 프로그램처럼) · 코트에서 Backspace = 되돌리기
+document.addEventListener("keydown", ev => {
+  if (state.view !== "scout" || sc().tab !== "court" || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  const t = ev.target; if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
+  const sh = document.getElementById("sheet");
+  if (sh && !sh.hidden && sc().ct && /^[1-9]$/.test(ev.key)) { const bs = sh.querySelectorAll(".ct-acts .btn"), x = bs[Number(ev.key) - 1]; if (x) { ev.preventDefault(); x.click(); } }
+  else if (sh && sh.hidden && ev.key === "Backspace") { ev.preventDefault(); ctUndo(); }
+});
 
 /* ---------- 분석: 기록지 (예전 프로그램 엑셀 요약과 같은 항목) · 상대 로테이션별 ---------- */
-const ctReal = l => l.filter(e => e.action !== CT_PT);
+const ctReal = l => l.filter(e => e.action !== CT_PT && e.action !== CT_SUB);
 function ctSum(l) {
   const c = (sk, g) => l.filter(e => e.skill === sk && (!g || g.includes(e.grade))).length;
   const at = c("attack"), ak = c("attack", "#"), ae = c("attack", "=/");
