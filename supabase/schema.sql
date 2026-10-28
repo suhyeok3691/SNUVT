@@ -2022,3 +2022,18 @@ alter table public.scout_events drop constraint if exists scout_events_skill_che
 alter table public.scout_events add constraint scout_events_skill_check check (skill = any (array['serve', 'receive', 'attack', 'block', 'dig', 'set', 'free', 'fault']));
 alter table public.scout_points add column if not exists opp_rot smallint check (opp_rot is null or opp_rot between 1 and 6);
 alter table public.scout_points add column if not exists event_id uuid references public.scout_events(id) on delete cascade;
+-- 2026-10-29: 학사일정 (남녀 함께) · 일정 종류 '개강'
+alter table public.events drop constraint events_kind_check;
+alter table public.events add constraint events_kind_check check (kind = any (array['major','minor','tryout','off','termend','ob','semstart']));
+create table public.terms (
+  id text primary key check (id ~ '^\d{4}-[12]$'),
+  start_date date,
+  end_date date,
+  updated_at timestamptz not null default now(),
+  check (end_date is null or start_date is null or end_date > start_date)
+);
+alter table public.terms enable row level security;
+create policy "members read terms" on public.terms for select to authenticated using (private.is_member());
+create policy "schedule writes terms" on public.terms for all to authenticated using (private.can('schedule')) with check (private.can('schedule'));
+revoke all on public.terms from anon;
+grant select, insert, update, delete on public.terms to authenticated;

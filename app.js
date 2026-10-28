@@ -164,7 +164,10 @@ const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); r
 const md = d => `${d.getMonth() + 1}/${d.getDate()}`;
 const today = () => parseD(iso(new Date()));
 const daysBetween = (a, b) => Math.round((parseD(iso(a)) - parseD(iso(b))) / 86400000);
-const events = () => state.events || DEFAULT_EVENTS;
+// 일정 = 팀 일정 + 학사일정(남녀 함께 쓰는 terms: 개강 · 종강(보강 끝))
+const termEvents = () => (state.terms || []).flatMap(t => { const [y, n] = t.id.split("-"), lab = `${y} ${n}학기`;
+  return [t.start ? { id: null, term: t.id, name: `${lab} 개강`, kind: "semstart", start: t.start, end: t.start } : null, t.end ? { id: null, term: t.id, name: `${lab} 종강 (보강 끝)`, kind: "termend", start: t.end, end: t.end } : null].filter(Boolean); });
+const events = () => { const base = state.events || DEFAULT_EVENTS; return [...base, ...termEvents().filter(x => !base.some(e => e.kind === x.kind && e.start === x.start))]; };
 const dowMon = date => (date.getDay() + 6) % 7; // 월요일 = 0
 const shortDate = d => `${d.getMonth() + 1}/${d.getDate()} (${DOW_KO[d.getDay()]})`;
 const longDate = d => `${d.getMonth() + 1}월 ${d.getDate()}일 (${DOW_KO[d.getDay()]})`;
@@ -966,7 +969,9 @@ function viewHome() {
     tile("view", "cup", "trophy", "대회"),
     adm.length ? tile("view", adm[0][0], "admin", "관리", "", pending).replace('class="tile-btn"', 'class="tile-btn wide"') : "",
   ].join("");
-  return `${pendingHtml()}${noticesHtml()}${myVotesHtml()}<section class="panel home-cal">${calHtml(me)}</section>${todayAbsHtml()}${can("full") || can("training") ? teamStatusHtml() : ""}
+  const tm = can("schedule") ? termsMissing() : [];
+  const termPill = tm.length ? `<button type="button" class="pending-pill" data-act="termedit" data-id="${tm[0]}"><span class="chip warn">학사일정</span><span class="small">${termLab(tm[0])} 개강·종강 넣기 ›</span></button>` : "";
+  return `${pendingHtml()}${termPill}${noticesHtml()}${myVotesHtml()}<section class="panel home-cal">${calHtml(me)}</section>${todayAbsHtml()}${can("full") || can("training") ? teamStatusHtml() : ""}
     <nav class="tiles-grid" aria-label="기능">${tiles}</nav>`;
 }
 // 피지컬 · 오늘
@@ -1703,7 +1708,7 @@ function viewSched() {
   const t = iso(today()), off = Object.entries(state.teamOff).filter(([d]) => d >= dAdd(t, -14)).sort();
   const days = Object.entries(state.ptimes).filter(([k]) => /^\d{4}/.test(k) && k >= dAdd(t, -14));
   const chg = [...days.map(([d, o]) => [d, o, false]), ...off.map(([d, o]) => [d, o, true])].sort((x, y) => x[0].localeCompare(y[0]));
-  return `<div class="cols">
+  return `${termsHtml()}<div class="cols">
     <div class="col">
     <section class="sec"><div class="sec-head"><h3>정규 훈련 변경</h3>${addBtn("ptday", "추가")}</div>
       ${chg.length ? `<ul class="watch">${chg.map(([d, o, off]) => `<li><span class="num">${shortDate(parseD(d))}</span>${off ? `<span class="chip warn">훈련 없음</span>` : `<span>${esc(timeTxt(o))}</span>`}${o.note ? `<span class="small muted">${esc(o.note)}</span>` : ""}<button class="btn link danger" type="button" ${off ? `data-act="teamoff" data-date="${esc(d)}"` : `data-act="ptdel" data-key="${esc(d)}"`}>취소</button></li>`).join("")}</ul>` : emptyLine("바꾼 날이 없어요.")}
@@ -1713,11 +1718,41 @@ function viewSched() {
     </section></div>
   </div>`;
 }
+/* ---------- 학사일정 (남녀 함께): 학기마다 개강 · 종강(보강 마지막 날) ----------
+   서울대 학사일정 페이지는 자동 수집이 막혀 있어(robots) 1년에 한 번 보고 넣음. 비어 있으면 일정 담당에게 알림 */
+const SNU_CAL = "https://www.snu.ac.kr/academics/resources/calendar";
+const termIdOf = d => { const y = Number(d.slice(0, 4)), m = Number(d.slice(5, 7)); return m >= 3 && m <= 8 ? `${y}-1` : m >= 9 ? `${y}-2` : `${y - 1}-2`; };
+const nextTermId = id => { const [y, n] = id.split("-").map(Number); return n === 1 ? `${y}-2` : `${y + 1}-1`; };
+const termOf = id => (state.terms || []).find(t => t.id === id) || { id, start: "", end: "" };
+const termLab = id => { const [y, n] = id.split("-"); return `${y} ${n}학기`; };
+// 일정 담당: 이번·다음 학기 개강·종강 중 빈 게 있으면 (다음 학기는 시작 두 달 전부터)
+function termsMissing() {
+  const t = iso(today()), cur = termIdOf(t), nx = nextTermId(cur), [ny, nn] = nx.split("-").map(Number);
+  const nStart = nn === 1 ? `${ny}-03-01` : `${ny}-09-01`, out = [];
+  for (const id of [cur, ...(dDiff(nStart, t) <= 60 ? [nx] : [])]) { const x = termOf(id); if (!x.start || !x.end) out.push(id); }
+  return out;
+}
+function termsHtml() {
+  const t = iso(today()), cur = termIdOf(t), ids = [cur, nextTermId(cur)], miss = termsMissing(), adm = can("schedule");
+  return `<section class="sec"><div class="sec-head"><h3>학사일정 <span class="small muted">남녀 함께</span></h3><a class="btn link small" href="${SNU_CAL}" target="_blank" rel="noopener">서울대 학사일정</a></div>
+    <ul class="boxes terms">${ids.map(id => { const x = termOf(id); return `<li class="${miss.includes(id) ? "todo" : ""}"><b>${termLab(id)}</b><span class="small">개강 ${x.start ? shortDate(parseD(x.start)) : "—"} · 종강(보강 끝) ${x.end ? shortDate(parseD(x.end)) : "—"}</span>${adm ? `<button class="btn link small" type="button" data-act="termedit" data-id="${id}">${x.start || x.end ? "수정" : "넣기"}</button>` : ""}</li>`; }).join("")}</ul>
+    <p class="small muted">개강 주에 피지컬 흐름이 새로 시작하고, 2학기 종강(보강 끝) 다음 날부터 겨울 방학(비시즌)이 돼요.</p></section>`;
+}
+function openTermForm(id) {
+  const x = termOf(id), el = document.getElementById("sheet");
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${termLab(id)} 학사일정</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <form class="f" id="termForm" data-id="${id}" data-close="1"><div class="fields">
+      <label class="fl">개강<input type="date" id="tm-s" value="${esc(x.start)}"></label>
+      <label class="fl">종강 (보강 기간 마지막 날)<input type="date" id="tm-e" value="${esc(x.end)}"></label>
+    </div><p class="small"><a href="${SNU_CAL}" target="_blank" rel="noopener">서울대 학사일정 보기</a></p>
+    <div class="row"><button class="btn primary" type="submit">저장</button></div></form>`;
+  el.hidden = false; document.body.classList.add("noscroll");
+}
 // 추가 창 (아래에서 올라옴)
 const FORMS = {
   event: ["일정 추가", `<form class="f" id="eventForm" data-close="1"><div class="fields">
       <label class="fl">이름<input id="ev-name" required maxlength="40" placeholder="예: KUSF 중부 예선"></label>
-      <label class="fl">종류<select id="ev-kind">${Object.entries(EVENT_KINDS).map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
+      <label class="fl">종류<select id="ev-kind">${Object.entries(EVENT_KINDS).filter(([k]) => k !== "semstart" && k !== "termend").map(([k, l]) => `<option value="${k}">${l}</option>`).join("")}</select></label>
       <label class="fl">방식<select id="ev-fmt"><option value="6">6인제</option><option value="9">9인제</option></select></label>
       <div class="pair"><label class="fl">시작<input type="date" id="ev-start" required></label><label class="fl">끝<input type="date" id="ev-end"></label></div>
       <label class="fl wide">메모<input id="ev-note" maxlength="100" placeholder="예: 본선 진출 시에만"></label>
@@ -2165,13 +2200,23 @@ function voteItems() {
 }
 function voteBox(kind, id) {
   const vs = evVotesOf(kind, id), ps = sortedPlayers().filter(p => !p.military), mine = state.myPid ? vs[state.myPid] : null;
-  const yes = ps.filter(p => vs[p.id] && vs[p.id].going), no = ps.filter(p => vs[p.id] && !vs[p.id].going), none = ps.filter(p => !vs[p.id]);
-  const btn = state.myPid ? voteBtn(kind, id, mine ? (mine.going ? "go" : "no") : "") : "";
-  // 누가 참·불참인지는 부원 모두, 불참 사유는 일정 담당만
-  const names = `${yes.length ? `<p class="small"><b class="c-go">참</b> ${yes.map(p => esc(p.name)).join(" · ")}</p>` : ""}
-    ${no.length ? (can("schedule") ? `<ul class="at-list">${no.map(p => `<li><b>${esc(p.name)}</b> <span class="small">${esc(ABS_REASONS[vs[p.id].reason] || "")}${vs[p.id].note ? ` · ${esc(vs[p.id].note)}` : ""}</span></li>`).join("")}</ul>` : `<p class="small"><b class="c-no">불참</b> ${no.map(p => esc(p.name)).join(" · ")}</p>`) : ""}
-    ${none.length ? `<p class="small muted">미응답 ${none.map(p => esc(p.name)).join(" · ")}</p>` : ""}`;
-  return `<details class="ev-vote" data-keep="vt-${kind}-${esc(id)}" ${keepOpen(`vt-${kind}-${id}`, false)}><summary>${btn}<span class="ev-cnt">참 ${yes.length} · 불참 ${no.length}</span></summary><div class="ev-who">${names}</div></details>`;
+  const yes = ps.filter(p => vs[p.id] && vs[p.id].going).length, no = ps.filter(p => vs[p.id] && !vs[p.id].going).length, none = ps.length - yes - no;
+  // 명단은 투표 창에서 (목록에는 숫자만)
+  return `<div class="ev-vote">${state.myPid ? voteBtn(kind, id, mine ? (mine.going ? "go" : "no") : "") : ""}<button type="button" class="ev-cnt" data-act="voteopen" data-type="${kind}" data-id="${esc(id)}"><span class="c-go">참 ${yes}</span><span class="c-no">불참 ${no}</span><span class="muted">미응답 ${none}</span></button></div>`;
+}
+// 투표 창 아래 명단: 참 · 불참(사유는 일정 담당만) · 미응답
+function voteWhoHtml(type, id) {
+  let go = [], no = [], none = [];
+  const rs = v => can("schedule") || can("attend") ? `${ABS_REASONS[v.reason] || ""}${v.note ? ` · ${v.note}` : ""}` : "";
+  if (type === "cup") { const [cid, d] = id.split("|"), c = cupById(cid); if (!c) return "";
+    const av = Object.values(availOf(c, d)).sort((a, b) => a.name.localeCompare(b.name, "ko")); go = av.filter(v => v.going).map(v => ({ n: v.name, t: v.team })); no = av.filter(v => !v.going).map(v => ({ n: v.name, t: v.team, r: rs(v) })); }
+  else { const ps = sortedPlayers().filter(p => !p.military);
+    if (type === "open") { const o = Object.values(state.opens).flat().find(x => x.id === id) || { votes: {} }; go = ps.filter(p => o.votes[p.id] === true).map(p => ({ n: p.name })); no = ps.filter(p => o.votes[p.id] === false).map(p => ({ n: p.name })); none = ps.filter(p => o.votes[p.id] === undefined).map(p => ({ n: p.name })); }
+    else { const vs = evVotesOf(type, id); go = ps.filter(p => vs[p.id] && vs[p.id].going).map(p => ({ n: p.name })); no = ps.filter(p => vs[p.id] && !vs[p.id].going).map(p => ({ n: p.name, r: rs(vs[p.id]) })); none = ps.filter(p => !vs[p.id]).map(p => ({ n: p.name })); } }
+  const me = (playerOf(state.myPid) || {}).name;
+  const chip = x => `<span class="who-c ${x.n === me ? "me" : ""}">${x.t === "women" ? "<em>여</em>" : x.t === "men" && type === "cup" ? "<em>남</em>" : ""}${esc(x.n)}${x.r ? `<small>${esc(x.r)}</small>` : ""}</span>`;
+  const grp = (cls, lab, l) => l.length ? `<div class="who-g ${cls}"><b>${lab} ${l.length}</b><div>${l.map(chip).join("")}</div></div>` : "";
+  return `<div class="vote-who">${grp("go", "참", go)}${grp("no", "불참", no)}${grp("none", "미응답", none)}${!go.length && !no.length && !none.length ? `<p class="small muted">아직 투표가 없어요</p>` : ""}</div>`;
 }
 // 관리자: 승인 대기는 홈 맨 위에 작게
 function pendingHtml() {
@@ -2209,10 +2254,11 @@ function openVote(type, id) {
   el.innerHTML = `<form class="cf-card vote-card" id="voteForm" data-type="${type}" data-id="${esc(id)}" role="dialog" aria-modal="true" aria-labelledby="vfH">
     <button type="button" class="vote-x" data-cf="0" aria-label="닫기">×</button>
     <p id="vfH" class="cf-h">${esc(title)}</p><p class="cf-b small muted">${esc(when)}</p>
+    ${state.myPid ? "" : `<style>#voteForm .vote-pick, #voteForm .vote-acts { display: none; }</style>`}
     <div class="vote-pick" role="radiogroup" aria-label="참 · 불참"><label><input type="radio" name="vt-go" value="1" ${cur && cur.going ? "checked" : ""}><span class="go">참</span></label><label><input type="radio" name="vt-go" value="0" ${no ? "checked" : ""}><span class="no">불참</span></label></div>
     ${withReason ? `<div class="vote-why" ${no ? "" : "hidden"}><div class="reasons" role="radiogroup" aria-label="사유">${Object.entries(ABS_REASONS).map(([k, l], n) => `<label class="rsn"><input type="radio" name="vt-r" value="${k}" ${(no ? cur.reason === k : n === 0) ? "checked" : ""}><span>${l}</span></label>`).join("")}</div>
       <label class="fl">메모 (선택)<input id="vt-note" maxlength="100" value="${esc(no ? cur.note || "" : "")}"></label></div>` : ""}
-    <div class="vote-acts">${cur ? `<button type="button" class="btn danger" data-act="votedel" data-type="${type}" data-id="${esc(id)}">투표 취소</button>` : ""}<button type="submit" class="btn primary vote-save">저장</button></div></form>`;
+    <div class="vote-acts">${cur ? `<button type="button" class="btn danger" data-act="votedel" data-type="${type}" data-id="${esc(id)}">투표 취소</button>` : ""}<button type="submit" class="btn primary vote-save">저장</button></div>${voteWhoHtml(type, id)}</form>`;
   el.hidden = false;
   const f = el.querySelector("#voteForm");
   f.addEventListener("change", e => { if (e.target.name === "vt-go") { const w = f.querySelector(".vote-why"); if (w) w.hidden = e.target.value !== "0"; } });
@@ -2831,6 +2877,7 @@ document.addEventListener("click", async ev => {
     state.dirty = false; return render();
   }
   if (act === "addform") return openForm(b.dataset.f);
+  if (act === "termedit") return openTermForm(b.dataset.id);
   if (act === "editevent" || act === "editfriendly") return openEditForm(act === "editevent" ? "event" : "friendly", b.dataset.id);
   if (act === "votedel") {
     const type = b.dataset.type, id = b.dataset.id;
@@ -3261,6 +3308,11 @@ document.addEventListener("submit", async ev => {
       if (st && en && en <= st) { toast("끝 시간이 시작보다 앞이에요."); return; }
       ok(await sb.from("open_sessions").insert({ date: txt("op-date"), start_time: st, end_time: en, place: txt("op-place") || null, note: txt("op-note") || null }));
       toast("자율 훈련을 넣었어요");
+    } else if (f.id === "termForm") {
+      const st = txt("tm-s") || null, en = txt("tm-e") || null;
+      if (st && en && en <= st) { toast("종강이 개강보다 앞이에요."); return; }
+      ok(await sb.from("terms").upsert({ id: f.dataset.id, start_date: st, end_date: en, updated_at: new Date().toISOString() }));
+      toast("학사일정을 저장했어요 · 프로그램이 맞춰졌어요");
     } else if (f.id === "ctLineupForm") {
       await ctLineupSave(f); return;
     } else if (f.id === "scForm") {
@@ -3443,14 +3495,15 @@ async function loadAll() {
       sb.from("cup_matches").select("*"),
       sb.from("cup_avail").select("*"),
       sb.from("cup_photos").select("*"),
+      sb.from("terms").select("*"),
     ];
     if (state.coach) q.push(sb.from("profiles").select("*").order("created_at"));
     const res = await Promise.all(q);
-    const [pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq, frq, abq, nq, enq, ptq, ctq, peq, pvq, ppq, vdq, tnq, osq, ovq, vtq, cuq, ctmq, cmq, caq, cpq] = res, pr = state.coach ? res[29] : null;
+    const [pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq, frq, abq, nq, enq, ptq, ctq, peq, pvq, ppq, vdq, tnq, osq, ovq, vtq, cuq, ctmq, cmq, caq, cpq, tmq] = res, pr = state.coach ? res[30] : null;
     for (const r of [pl, ts, hl, lg]) if (r.error) throw r.error;
     const rows = r => r && !r.error && Array.isArray(r.data) ? r.data : [];
     raw = { players: pl.data, tests: ts.data, health: hl.data, logs: lg.data, pain_checks: rows(pcs), events: evq && !evq.error ? evq.data : null,
-      wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), notices: rows(nq), entries: rows(enq), practice_times: rows(ptq), player_contacts: rows(ctq), program_edits: rows(peq), player_private: rows(pvq), practice_plans: rows(ppq), videos: rows(vdq), training_notes: rows(tnq), open_sessions: rows(osq), open_votes: rows(ovq), event_votes: rows(vtq), cups: rows(cuq), cup_teams: rows(ctmq), cup_matches: rows(cmq), cup_avail: rows(caq), cup_photos: rows(cpq), profiles: pr && !pr.error ? pr.data : [],
+      wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), notices: rows(nq), entries: rows(enq), practice_times: rows(ptq), player_contacts: rows(ctq), program_edits: rows(peq), player_private: rows(pvq), practice_plans: rows(ppq), videos: rows(vdq), training_notes: rows(tnq), open_sessions: rows(osq), open_votes: rows(ovq), event_votes: rows(vtq), cups: rows(cuq), cup_teams: rows(ctmq), cup_matches: rows(cmq), cup_avail: rows(caq), cup_photos: rows(cpq), terms: rows(tmq), profiles: pr && !pr.error ? pr.data : [],
       me: { role: state.role, player_id: state.myPid, team: TEAM.id } };
     // 기기에 남기는 사본에는 연락처와 다른 사람 키·몸무게를 넣지 않음
     lsSet(snapKey(), { ...raw, training_notes: (raw.training_notes || []).filter(r => r.player_id === state.myPid), player_contacts: (raw.player_contacts || []).filter(r => r.player_id === state.myPid), player_private: (raw.player_private || []).filter(r => r.player_id === state.myPid) }); state.net = true;
@@ -3484,6 +3537,7 @@ function buildState(raw) {
   for (const r of raw.event_votes || []) (ev[r.kind + ":" + r.ref_id] = ev[r.kind + ":" + r.ref_id] || {})[r.player_id] = { going: !!r.going, reason: r.reason || "", note: r.note || "" };
   state.evVotes = ev;
   buildCups(raw);
+  state.terms = (raw.terms || []).map(r => ({ id: r.id, start: r.start_date || "", end: r.end_date || "" })).sort((a, b) => a.id.localeCompare(b.id));
   const ab = {};
   for (const r of raw.absences || []) (ab[r.player_id] = ab[r.player_id] || {})[r.date] = { id: r.id, reason: r.reason, note: r.note || "" };
   state.absences = ab;

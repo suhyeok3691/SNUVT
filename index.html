@@ -1066,6 +1066,18 @@ i.dot.k-ob { background: var(--c-fr); }
 :root[data-theme="dark"] .ct-sheet td.ct-hi { background: #4a4214; } :root[data-theme="dark"] .ct-sheet td.ct-up { background: #173d22; } :root[data-theme="dark"] .ct-sheet td.ct-dn { background: #4a1d1d; }
 tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: color-mix(in srgb, var(--good) 14%, var(--surface)); }
 .ct-rec li .ct-l { flex: 1; text-align: left; } .ct-rec li .num { min-width: 34px; flex: none; }
+/* 참·불참: 목록엔 숫자만, 명단은 투표 창에서 */
+.ev-vote { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ev-cnt { display: inline-flex; gap: 8px; align-items: center; font: inherit; font-size: 13px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.ev-cnt .c-go { color: var(--good); font-weight: 700; } .ev-cnt .c-no { color: var(--crit); font-weight: 700; }
+.vote-who { display: grid; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); max-height: 38vh; overflow: auto; }
+.who-g > b { display: block; font-size: 12.5px; margin-bottom: 4px; } .who-g.go > b { color: var(--good); } .who-g.no > b { color: var(--crit); } .who-g.none > b { color: var(--muted); }
+.who-g > div { display: flex; flex-wrap: wrap; gap: 4px; }
+.who-c { display: inline-flex; align-items: baseline; gap: 4px; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); font-size: 13px; }
+.who-g.go .who-c { background: color-mix(in srgb, var(--good) 12%, var(--surface)); } .who-g.no .who-c { background: var(--crit-soft); }
+.who-c.me { font-weight: 800; } .who-c small { color: var(--muted); font-size: 11px; } .who-c em { font-style: normal; font-size: 10px; color: var(--muted); }
+ul.terms li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; } ul.terms li .btn { margin-left: auto; }
+ul.terms li.todo { border-color: var(--yellow); background: var(--yellow-soft); }
 </style>
 </head>
 <body>
@@ -1086,11 +1098,11 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=113"></script>
-<script src="guide.js?v=113"></script>
-<script src="library.js?v=113"></script>
-<script src="campus.js?v=113"></script>
-<script src="court.js?v=113"></script>
-<script src="app.js?v=113"></script>
+<script src="program.js?v=114"></script>
+<script src="guide.js?v=114"></script>
+<script src="library.js?v=114"></script>
+<script src="campus.js?v=114"></script>
+<script src="court.js?v=114"></script>
+<script src="app.js?v=114"></script>
 </body>
 </html>

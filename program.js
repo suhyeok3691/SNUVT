@@ -948,7 +948,7 @@ const TEAM_DAYS = { S1: "월·목", S2: "수·금" };
 const flipSem = sem => sem === "S1" ? "S2" : sem === "S2" ? "S1" : sem;
 const weekOf = sem => SLOT_WEEK[TEAM.swap ? flipSem(sem) : sem];
 const teamDaysOf = sem => TEAM_DAYS[TEAM.swap ? flipSem(sem) : sem];
-const EVENT_KINDS = { major: "주요 대회", minor: "9인제·기타 대회", tryout: "트라이아웃", termend: "2학기 종강", off: "비시즌·방학", ob: "OB전" };
+const EVENT_KINDS = { major: "주요 대회", minor: "9인제·기타 대회", tryout: "트라이아웃", termend: "종강 (보강 끝)", off: "비시즌·방학", ob: "OB전", semstart: "개강" };
 const DAY_MS = 864e5;
 const dParse = s => { const [y, m, d] = String(s).slice(0, 10).split("-").map(Number); return Date.UTC(y, m - 1, d); };
 const dIso = t => new Date(t).toISOString().slice(0, 10);
@@ -956,9 +956,11 @@ const dAdd = (s, n) => dIso(dParse(s) + n * DAY_MS);
 const dDiff = (a, b) => Math.round((dParse(a) - dParse(b)) / DAY_MS); // a − b (일)
 const mondayOf = s => dAdd(s, -((new Date(dParse(s)).getUTCDay() + 6) % 7));
 const semesterOf = mon => { const m = Number(dAdd(mon, 3).slice(5, 7)); return m >= 3 && m <= 8 ? "S1" : "S2"; };
-function semesterStart(mon) {
+// 학기 시작 주: 학사일정의 개강(semstart)이 있으면 그 주, 없으면 3/1 · 9/1 무렵
+function semesterStart(mon, evs) {
   const th = dAdd(mon, 3), y = Number(th.slice(0, 4)), m = Number(th.slice(5, 7));
-  return mondayOf(dAdd(m >= 3 && m <= 8 ? `${y}-03-01` : m >= 9 ? `${y}-09-01` : `${y - 1}-09-01`, 3));
+  const real = (evs || []).filter(e => e.kind === "semstart" && e.start <= th && dDiff(th, e.start) < 200).map(e => mondayOf(e.start)).sort().at(-1);
+  return real || mondayOf(dAdd(m >= 3 && m <= 8 ? `${y}-03-01` : m >= 9 ? `${y}-09-01` : `${y - 1}-09-01`, 3));
 }
 // 겨울 방학(비시즌)은 자동: 2학기 종강일(일정의 '2학기 종강' = 학사일정의 보강 기간 마지막 날) ~ 2월 말. 없으면 12/21부터.
 // 여름 방학은 대회가 많아 비시즌으로 두지 않는다 (1학기 흐름을 그대로 이어감).
@@ -984,7 +986,7 @@ function weekPhase(mon, evs) {
   const sun = dAdd(mon, 6), th = dAdd(mon, 3);
   const comp = evs.some(e => (e.kind === "major" || e.kind === "minor") && e.start <= sun && e.end >= mon);
   const resets = evs.filter(e => (e.kind === "off" || e.kind === "major") && e.end < mon).map(e => mondayOf(dAdd(e.end, 1)));
-  const reset = [semesterStart(mon), ...resets].filter(x => x <= mon).sort().at(-1);
+  const reset = [semesterStart(mon, evs), ...resets].filter(x => x <= mon).sort().at(-1);
   const since = Math.floor(dDiff(mon, reset) / 7);
   const nm = evs.find(e => e.kind === "major" && e.end >= mon) || null;
   const k = nm ? Math.floor(dDiff(mondayOf(nm.start), mon) / 7) : null;
