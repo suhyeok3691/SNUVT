@@ -342,6 +342,7 @@ async function openCmpForm(kind, id) {
   el.hidden = false; document.body.classList.add("noscroll");
 }
 let cmpLastRef = null;
+document.addEventListener("change", e => { if (e.target && e.target.id === "cp-photo") { state.cmpPhoto = e.target.checked; openCmpPost("result", e.target.dataset.d); } });
 document.addEventListener("focusin", e => { if (e.target.classList && e.target.classList.contains("cmp-ref")) cmpLastRef = e.target; });
 document.addEventListener("change", async e => {
   const el = e.target;
@@ -496,7 +497,7 @@ async function syncCup(c) {
 
 /* ---------- 카페 글 만들기: 일정·심판 안내 / 예선 결과·본선 대진 / 최종 결과 → 복사해서 카페에 붙여 넣기 ---------- */
 const iga = w => { const ch = String(w).trim().slice(-1).charCodeAt(0); return ch >= 0xac00 && ch <= 0xd7a3 && (ch - 0xac00) % 28 ? "이" : "가"; };
-const POST_KINDS = [["sched", "경기 일정 · 심판"], ["prelim", "예선 결과 · 본선 대진"], ["final", "최종 결과"]];
+const POST_KINDS = [["result", "경기 결과"], ["sched", "경기 일정 · 심판"], ["prelim", "예선 결과 · 본선 대진"], ["final", "최종 결과"]];
 function cmpPost(c, kind, day) {
   const td = "border:1px solid #999;padding:6px 10px;text-align:center", th = td + ";background:#dbe3ef;font-weight:bold";
   const tbl = (head, rows) => `<table style="border-collapse:collapse;margin:6px 0 14px"><tr>${head.map(h => { const [x, n] = h.split("|"); return `<th style="${th}" ${n ? `colspan="${n}"` : ""}>${esc(x)}</th>`; }).join("")}</tr>${rows.map(r => `<tr>${r.map(x => `<td style="${td}">${esc(x)}</td>`).join("")}</tr>`).join("")}</table>`;
@@ -507,6 +508,7 @@ function cmpPost(c, kind, day) {
   const P = (h, t) => { html.push(h); text.push(t); };
   const short = CUP_KIND[c.kind] || c.name;
   let title = "";
+  if (kind === "result") return cmpResultPost(c, day);
   P(`<p>안녕하세요, 서울대학교 배구부입니다.</p>`, "안녕하세요, 서울대학교 배구부입니다.\n");
   if (kind === "sched") {
     const ds = day ? [day] : [...new Set(c.matches.map(m => m.date))].sort();
@@ -548,16 +550,47 @@ function cmpPost(c, kind, day) {
   return { title, html: html.join(""), text: text.join("\n") };
 }
 let cmpPostCur = null;
+// 경기 결과 글 (카페에 올리던 모양 그대로): 경기마다 "A조 1경기 / 팀 VS 팀 / (팀 사진) / 1세트 21:12 … / 팀 2:0 승리", 끝나면 조별 최종 순위
+function cmpResultPost(c, day) {
+  const html = [], text = [], photo = state.cmpPhoto !== false;
+  const P = (h, t) => { html.push(h); text.push(t); };
+  const grpOf = m => ((cmpTeam(c, m.a) || {}).grp || "").toUpperCase();
+  const gm = g => c.matches.filter(m => m.stage === "group" && grpOf(m) === g);
+  const label = m => { if (m.stage !== "group") return m.label || STAGE_KO[m.stage]; const g = grpOf(m), l = gm(g); return l.length === 1 ? `${g}조 예선 순위 결정전` : `${g}조 ${l.indexOf(m) + 1}경기`; };
+  const ms = c.matches.filter(m => m.date === day);
+  for (const m of ms) {
+    const [a, b] = [cmpSide(c, m, "a"), cmpSide(c, m, "b")], w = winnerOf(c, m), wn = w && (cmpTeam(c, w) || {}).name;
+    const sets = Array.isArray(m.sets) ? m.sets : [], ss = cmpSets(m);
+    const lines = [`${a} VS ${b}`];
+    const ph = photo ? [`[사진] ${a}`, `[사진] ${b}`] : [];
+    const st = sets.map(([x, y], i) => `${i + 1}세트 ${x}:${y}`);
+    const res = m.score === "기권승" ? (wn ? `${wn} 기권승` : "") : wn && ss ? `${wn} ${Math.max(...ss)}:${Math.min(...ss)} 승리` : "";
+    P(`<p><b>${esc(label(m))}</b><br>${esc(lines[0])}</p>${ph.map(x => `<p style="color:#888">${esc(x)}</p>`).join("")}${st.length ? `<p>${st.map(esc).join("<br>")}</p>` : ""}${res ? `<p><b>${esc(res)}</b></p>` : m.score ? "" : `<p style="color:#888">(경기 전)</p>`}<p><br></p>`,
+      [label(m), lines[0], ...ph, ...st, "", res || (m.score ? "" : "(경기 전)"), ""].join("\n"));
+  }
+  // 그날 경기로 조 경기가 모두 끝난 조: 최종 순위
+  const { st } = groupStand(c), wd = id => (cmpTeam(c, id) || {}).withdrawn;
+  const doneG = [...new Set(ms.filter(m => m.stage === "group").map(grpOf))].filter(g => gm(g).filter(m => !wd(m.a) && !wd(m.b)).every(m => m.score || m.winner)).sort();
+  if (doneG.length) {
+    const rows = doneG.map(g => { const ts = c.teams.filter(t => (t.grp || "").toUpperCase() === g && !t.withdrawn).sort((x, y) => (st[y.id].w - st[x.id].w) || ((st[y.id].sw - st[y.id].sl) - (st[x.id].sw - st[x.id].sl)) || x.sort - y.sort); return [g, ts]; });
+    P(`<p><b>조별 최종 순위</b></p>` + rows.map(([g, ts]) => `<p><b>${esc(g)}조</b><br>${ts.map((t, i) => `${i + 1}위: ${esc(t.name)}`).join("<br>")}</p>`).join(""),
+      "조별 최종 순위\n\n" + rows.map(([g, ts]) => `${g}조\n${ts.map((t, i) => `${i + 1}위: ${t.name}`).join("\n")}`).join("\n\n") + "\n");
+  }
+  P(`<p>수고하셨습니다.</p>`, "수고하셨습니다.");
+  return { title: `[${c.name}] ${dayKo(day)} 경기 결과`, html: html.join(""), text: text.join("\n") };
+}
 function openCmpPost(kind, day) {
   const c = curCup(); if (!c) return;
-  kind = kind || state.cmpPostKind || "sched"; state.cmpPostKind = kind;
+  kind = kind || state.cmpPostKind || "result"; state.cmpPostKind = kind;
   const t = iso(today()), days = [...new Set(c.matches.map(m => m.date))].sort();
   if (kind === "sched" && day === undefined) day = days.find(d => d >= t) || "";
+  if (kind === "result" && !day) day = days.filter(d => d <= t && c.matches.some(m => m.date === d && m.score)).pop() || days[0] || "";
   const p = cmpPostCur = cmpPost(c, kind, day || "");
   const el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>카페 글</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <div class="sc-row">${POST_KINDS.map(([k, l]) => `<button type="button" class="chip sc-chip ${k === kind ? "on" : ""}" data-act="cmppost" data-k="${k}">${l}</button>`).join("")}</div>
-    ${kind === "sched" ? `<div class="sc-row">${[["", "전체"], ...days.map(d => [d, dayKo(d)])].map(([d, l]) => `<button type="button" class="chip sc-chip ${d === (day || "") ? "on" : ""}" data-act="cmppost" data-k="sched" data-d="${d}">${l}</button>`).join("")}</div>` : ""}
+    ${kind === "sched" || kind === "result" ? `<div class="sc-row">${[...(kind === "sched" ? [["", "전체"]] : []), ...days.map(d => [d, dayKo(d)])].map(([d, l]) => `<button type="button" class="chip sc-chip ${d === (day || "") ? "on" : ""}" data-act="cmppost" data-k="${kind}" data-d="${d}">${l}</button>`).join("")}</div>` : ""}
+    ${kind === "result" ? `<label class="check"><input type="checkbox" id="cp-photo" ${state.cmpPhoto !== false ? "checked" : ""} data-d="${esc(day)}"> 팀 사진 자리 표시</label>` : ""}
     <label class="fl">제목<input id="cp-title" value="${esc(p.title)}"></label>
     <div class="cp-prev">${p.html}</div>
     <div class="row cp-acts"><button class="btn" type="button" data-act="cmpcopy" data-w="title">제목 복사</button><button class="btn primary" type="button" data-act="cmpcopy" data-w="body">본문 복사</button><a class="btn" href="${esc(c.cafe || CAFE_URL)}" target="_blank" rel="noopener">카페 열기</a></div>`;
