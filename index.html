@@ -1038,6 +1038,34 @@ i.dot.k-ob { background: var(--c-fr); }
 .cmp-tbl td.cmp-vs { text-align: left; padding-left: 8px; }
 .cmp-tbl td.cmp-acts { display: table-cell; white-space: normal; } .cmp-tbl td.cmp-acts .btn { display: block; width: 100%; margin: 2px 0; padding: 3px 0; font-size: 12px; }
 @media (max-width: 760px) { .cmp-tw { display: none; } .cmp-cards { display: grid; } }
+/* 전력분석 코트 입력 */
+.ct-bar { display: grid; gap: 8px; padding: 10px 12px; }
+.ct-score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.ct-score b { font-size: 26px; font-weight: 800; }
+.ct-t { font-weight: 700; font-size: 14px; } .ct-t.opp { text-align: right; } .ct-t small { color: var(--muted); font-weight: 600; }
+.ct-t.srv::after { content: " ●"; color: var(--yellow); } .ct-t.opp.srv::after { content: ""; } .ct-t.opp.srv::before { content: "● "; color: var(--yellow); }
+.ct-quick { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; text-align: center; }
+.ct-court { margin: 10px auto; width: 100%; max-width: 420px; box-sizing: border-box; display: grid; gap: 4px; padding: 8px; border-radius: 10px; background: color-mix(in srgb, var(--c-match) 12%, var(--surface)); border: 2px solid color-mix(in srgb, var(--c-match) 40%, var(--line)); }
+.ct-half { display: grid; gap: 6px; } .ct-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.ct-net { position: relative; height: 14px; display: grid; place-items: center; } .ct-net::before { content: ""; position: absolute; left: -8px; right: -8px; top: 6px; border-top: 3px solid var(--ink); }
+.ct-net span { position: relative; font-size: 10px; background: color-mix(in srgb, var(--c-match) 12%, var(--surface)); padding: 0 6px; color: var(--muted); }
+.ct-p { position: relative; display: grid; justify-items: center; align-content: center; gap: 1px; min-height: 62px; padding: 6px 2px; font: inherit; border-radius: 10px; border: 2px solid transparent; cursor: pointer; color: #fff; }
+.ct-p.us { background: var(--blue); } .ct-p.opp { background: #c0392b; }
+.ct-p b { font-family: var(--f-data); font-size: 20px; line-height: 1; } .ct-p span { font-size: 11.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct-p i { position: absolute; top: 3px; left: 6px; font-style: normal; font-size: 10px; opacity: .75; }
+.ct-p.srv { border-color: var(--yellow); box-shadow: 0 0 0 2px var(--yellow); }
+.ct-extra .ct-p { min-height: 44px; min-width: 56px; padding: 4px 8px; }
+.ct-extra details { margin-top: 6px; } .ct-extra summary { cursor: pointer; padding: 4px 0; }
+.ct-empty { display: grid; gap: 8px; justify-items: start; }
+.ct-cats { margin-bottom: 8px; }
+.ct-acts { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; margin-top: 8px; }
+.ct-acts .sc-g { min-height: 48px; }
+.ct-lu { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.ct-sheet td.ct-hi { background: #fff6c8; } .ct-sheet td.ct-up { background: #d8f5dc; } .ct-sheet td.ct-dn { background: #fbdada; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ct-sheet td.ct-hi { background: #4a4214; } :root:not([data-theme="light"]) .ct-sheet td.ct-up { background: #173d22; } :root:not([data-theme="light"]) .ct-sheet td.ct-dn { background: #4a1d1d; } }
+:root[data-theme="dark"] .ct-sheet td.ct-hi { background: #4a4214; } :root[data-theme="dark"] .ct-sheet td.ct-up { background: #173d22; } :root[data-theme="dark"] .ct-sheet td.ct-dn { background: #4a1d1d; }
+tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: color-mix(in srgb, var(--good) 14%, var(--surface)); }
+.ct-rec li .ct-l { flex: 1; text-align: left; } .ct-rec li .num { min-width: 34px; flex: none; }
 </style>
 </head>
 <body>
@@ -1058,10 +1086,11 @@ i.dot.k-ob { background: var(--c-fr); }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=112"></script>
-<script src="guide.js?v=112"></script>
-<script src="library.js?v=112"></script>
-<script src="campus.js?v=112"></script>
-<script src="app.js?v=112"></script>
+<script src="program.js?v=113"></script>
+<script src="guide.js?v=113"></script>
+<script src="library.js?v=113"></script>
+<script src="campus.js?v=113"></script>
+<script src="court.js?v=113"></script>
+<script src="app.js?v=113"></script>
 </body>
 </html>

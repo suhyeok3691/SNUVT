@@ -2007,3 +2007,18 @@ create policy "owner or schedule delete cup_photos" on public.cup_photos for del
 revoke all on public.cup_photos from anon;
 grant select, insert, delete on public.cup_photos to authenticated;
 alter table public.cups add column if not exists notice text check (notice is null or length(notice) <= 2000);
+-- 2026-10-29: 전력분석 코트 입력 (예전 VolleyballLogger 방식) — 라인업 · 동작 · 우리/상대 로테 · 점수
+alter table public.scout_matches add column if not exists lineup jsonb not null default '{}'::jsonb;
+alter table public.scout_matches add column if not exists stage text check (stage is null or length(stage) <= 30);
+alter table public.scout_matches add column if not exists recorder text check (recorder is null or length(recorder) <= 30);
+alter table public.scout_events add column if not exists action text check (action is null or length(action) <= 30);
+alter table public.scout_events add column if not exists detail text check (detail is null or length(detail) <= 30);
+alter table public.scout_events add column if not exists rot smallint check (rot is null or rot between 1 and 6);
+alter table public.scout_events add column if not exists opp_rot smallint check (opp_rot is null or opp_rot between 1 and 6);
+alter table public.scout_events add column if not exists serve text check (serve is null or serve in ('us', 'opp'));
+alter table public.scout_events add column if not exists point text check (point is null or point in ('us', 'opp'));
+alter table public.scout_events add column if not exists score text check (score is null or length(score) <= 10);
+alter table public.scout_events drop constraint if exists scout_events_skill_check;
+alter table public.scout_events add constraint scout_events_skill_check check (skill = any (array['serve', 'receive', 'attack', 'block', 'dig', 'set', 'free', 'fault']));
+alter table public.scout_points add column if not exists opp_rot smallint check (opp_rot is null or opp_rot between 1 and 6);
+alter table public.scout_points add column if not exists event_id uuid references public.scout_events(id) on delete cascade;
