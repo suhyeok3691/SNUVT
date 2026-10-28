@@ -2099,3 +2099,42 @@ alter table public.scout_matches add column if not exists division text not null
 alter table public.scout_events add column if not exists rally smallint check (rally is null or (rally >= 1 and rally <= 200));
 alter table public.scout_events drop constraint scout_events_skill_check;
 alter table public.scout_events add constraint scout_events_skill_check check (skill = any (array['serve','receive','attack','block','dig','set','free','fault','sub','cfg']));
+
+-- 대회 실시간 기록 (live.js): 경기마다 랠리 결과만
+create table public.live_games (
+  id uuid primary key default gen_random_uuid(),
+  team_id text not null default private.my_team(),
+  ref_kind text not null check (ref_kind in ('event','friendly')),
+  ref_id text not null check (char_length(ref_id) <= 64),
+  label text check (label is null or char_length(label) <= 40),
+  opponent text not null check (char_length(opponent) between 1 and 60),
+  sets jsonb not null default '{}'::jsonb,
+  created_by uuid default auth.uid() references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index live_games_ref on public.live_games (ref_kind, ref_id);
+create table public.live_rallies (
+  id uuid primary key default gen_random_uuid(),
+  game_id uuid not null references public.live_games(id) on delete cascade,
+  set_no smallint not null check (set_no between 1 and 5),
+  rot smallint check (rot is null or rot between 1 and 6),
+  serve text not null check (serve in ('us','opp')),
+  won boolean not null,
+  how text check (how is null or char_length(how) <= 12),
+  player_id uuid references public.players(id) on delete set null,
+  pass text check (pass is null or pass in ('A','B','C')),
+  author uuid default auth.uid() references auth.users(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+create index live_rallies_game on public.live_rallies (game_id, set_no, created_at);
+create or replace function private.live_team(g uuid) returns text language sql stable security definer set search_path = '' as $$ select team_id from public.live_games where id = g $$;
+alter table public.live_games enable row level security;
+alter table public.live_rallies enable row level security;
+create policy "team scope" on public.live_games as restrictive for all using (team_id = (select private.my_team())) with check (team_id = (select private.my_team()));
+create policy "live read" on public.live_games for select using (private.is_member());
+create policy "live write" on public.live_games for all using (private.can('analysis') or private.can('schedule')) with check (private.can('analysis') or private.can('schedule'));
+create policy "team scope" on public.live_rallies as restrictive for all using (private.live_team(game_id) = (select private.my_team())) with check (private.live_team(game_id) = (select private.my_team()));
+create policy "rally read" on public.live_rallies for select using (private.is_member());
+create policy "rally add" on public.live_rallies for insert with check ((private.can('analysis') or private.can('schedule')) and author = (select auth.uid()));
+create policy "rally del" on public.live_rallies for delete using (author = (select auth.uid()) or private.can('analysis') or private.can('schedule'));
+grant select, insert, update, delete on public.live_games, public.live_rallies to authenticated;

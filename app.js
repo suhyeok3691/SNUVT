@@ -109,7 +109,7 @@ const VIEWS = ["home", "practice", "notes", "video", "jp", "scout", "train", "pl
 const SECTIONS = {
   physical: { label: "피지컬", views: [["train", "오늘"], ["plan", "프로그램"], ["rec", "기록"]] },
   schedule: { label: "일정", views: [["season", "다가오는"], ["comps", "전체 일정"], ["sched", "훈련 관리", "attend"]] },
-  cup: { label: "대회", views: [["cup", "대회"], ["fr", "교류전"], ["campus", "교내 대회"], ["scout", "전력분석"]] },
+  cup: { label: "대회", views: [["cup", "대회"], ["fr", "교류전"], ["scout", "전력분석"], ["campus", "교내 대회"]] },
   admin: { label: "관리", views: [["roster", "명단", "roster"], ["intake", "부원", "full"], ["report", "리포트", "training"]] },
   practice: { label: "훈련", views: [["practice", "훈련 계획"], ["notes", "훈련 노트"], ["video", "영상"], ["jp", "일본 고교"]] },
 };
@@ -2301,6 +2301,7 @@ async function cupLoadLineups(kind, id) {
   if ((state.view === "cup" || state.view === "fr")) { state.dirty = false; render(); }
 }
 function cupPage(x) {
+  if (lv().open) return lvPage(x); // 실시간 기록 중인 경기
   const C = cupState(), key = x.kind + ":" + x.id, en = entryOf(x.kind, x.id), st = startersOf(x.kind, x.id), vs = evVotesOf(x.kind, x.id);
   const ps = sortedPlayers().filter(p => !p.military), edit = can("schedule") && C.edit;
   const mark = p => vs[p.id] ? (vs[p.id].going ? `<span class="chip ok">참</span>` : `<span class="chip warn">불참</span>`) : `<span class="chip">미응답</span>`;
@@ -2328,6 +2329,7 @@ function cupPage(x) {
     <div class="jp-head"><h2 class="dyn">${esc(x.name)}</h2><span class="small muted">${esc(x.when)} · ${x.fmt === "9" ? "9인제" : "6인제"}</span>${can("schedule") ? `<span class="ev-acts"><button class="btn link small" type="button" data-act="edit${x.kind}" data-id="${esc(x.id)}">수정</button></span>` : ""}</div>
     <div class="panel">${voteBox(x.kind, x.id)}</div>
     <section class="panel sec"><div class="sec-head"><h3>엔트리</h3>${can("schedule") && !C.edit ? `<button class="btn small" type="button" data-act="cupedit">선정</button>` : ""}</div>${entry}</section>
+    ${lvSection(x)}
     ${needSets ? `<section class="panel sec"><div class="sec-head"><h3>세트별 ${x.kind === "friendly" ? "출전" : "서브 타순"}</h3></div>${sets}</section>` : ""}</section>`;
 }
 // 교류전 세트별 출전: 6인제 6명 · 9인제 9명 (엔트리가 있으면 엔트리 안에서)
@@ -2632,6 +2634,7 @@ function go(view) {
 const pushInner = () => { try { history.pushState({ inner: 1 }, "", "#" + state.view); } catch (e) {} };
 function innerBack() {
   const v = state.view, C = state.cup;
+  if ((v === "cup" || v === "fr") && state.live && state.live.open) { state.live.open = null; return true; }
   if ((v === "cup" || v === "fr") && C && C.key) { C.key = null; C.edit = false; return true; }
   if (v === "jp") { const J = jp(); if (J.school) { J.school = null; J.open = null; return true; } }
   if (v === "scout" && state.scoutId) { state.scoutId = null; return true; }
@@ -2825,6 +2828,7 @@ document.addEventListener("click", async ev => {
     state.dirty = false; return render();
   }
   if (act.startsWith("ct")) return courtClick(b, act);
+  if (act.startsWith("lv")) return liveClick(b, act);
   if (act.startsWith("sc")) {
     const S = sc(), x = S.sel, v = b.dataset.v;
     if (act === "scnew") return openScoutForm("");
@@ -2855,7 +2859,7 @@ document.addEventListener("click", async ev => {
   if (act === "entry") return openEntry(b.dataset.kind, b.dataset.id);
   if (act.startsWith("cup")) {
     const C = cupState();
-    if (act === "cupopen") { C.key = b.dataset.k; C.edit = false; C.set = 1; pushInner(); state.dirty = false; render(); window.scrollTo(0, 0); return; }
+    if (act === "cupopen") { if (state.live) state.live.open = null; C.key = b.dataset.k; C.edit = false; C.set = 1; pushInner(); state.dirty = false; render(); window.scrollTo(0, 0); return; }
     if (act === "cupback") { if (history.state && history.state.inner) return history.back(); C.key = null; C.edit = false; state.dirty = false; render(); window.scrollTo(0, 0); return; }
     if (act === "cupprint") return cupPrint();
     if (act === "cupedit") C.edit = !C.edit;
@@ -3301,6 +3305,8 @@ document.addEventListener("submit", async ev => {
       if (st && en && en <= st) { toast("종강이 개강보다 앞이에요."); return; }
       ok(await sb.from("terms").upsert({ id: f.dataset.id, start_date: st, end_date: en, updated_at: new Date().toISOString() }));
       toast("학사일정을 저장했어요 · 프로그램이 맞춰졌어요");
+    } else if (f.id === "lvForm" || f.id === "lvSetForm") {
+      await lvSubmit(f); return;
     } else if (f.id === "ctCfgForm") {
       ctCfgSave(); return;
     } else if (f.id === "ctLineupForm") {
