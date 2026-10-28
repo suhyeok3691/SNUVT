@@ -1672,7 +1672,7 @@ create or replace function private.jp_sid(n text, p text, g text) returns text l
 $$;
 -- 일본 고교 랭킹: 전국대회(하루코·인터하이·국민스포츠대회 단독 학교 대표)에서 간 곳 + 현 대회 4강 이상
 -- 최근 가중 = 선수 겹침 기준 (2026-10-28): 학년도(4월~3월, 1월 하루코는 지난 학년도) 이번 ×1 · 1년 전 ×2/3 · 2년 전 ×1/3 · 그 전 0
--- 점수: 우승 100 · 준우승 70 · 4강 50 · 8강 32 · 16강 20 · 32강 10 · 출전 5 (국민스포츠대회는 한 학교가 현 대표로 나간 경우만 ×0.8) / 현 우승 10 · 준우승 6 · 4강 3
+-- 점수: 우승 100 · 준우승 70 · 4강 50 · 8강 32 · 16강 20 · 32강 10 · 출전 5 (국민스포츠대회는 한 학교가 현 대표로 나간 경우만 ×0.8) / 지역대회 15·10·6 · 현 대회 3·2·1
 create materialized view public.jp_rank as
 with mt as (
   select tourn, year, gender, rnd, a_name n, a_pref p, a_sets > b_sets won from public.jp_matches where a_sets is distinct from b_sets
@@ -1704,7 +1704,8 @@ with mt as (
   from nat, cur
 ), pref as (
   select private.jp_sid(name, pref, gender) sid, gender,
-    (case place when 1 then 10 when 2 then 6 else 3 end)
+    -- 지역대회(여러 현): 우승 15 · 준우승 10 · 4강 6 / 현 대회: 우승 3 · 준우승 2 · 4강 1 (현 예선은 전국대회 출전 점수와 겹치고 현마다 수준 차가 커서 작게)
+    (case when tourn = 'block' then case place when 1 then 15 when 2 then 10 else 6 end else case place when 1 then 3 when 2 then 2 else 1 end end)
     * case cur.sy - case when tourn = 'haruko' then year - 1 else year end when 0 then 1.0 when 1 then 2.0 / 3 when 2 then 1.0 / 3 else 0 end p
   from public.jp_pref_top, cur
 ), allp as (
