@@ -1028,6 +1028,13 @@ i.dot.k-ob { background: var(--c-fr); }
 .cmp-pick .sc-chip { font-size: 12.5px; padding: 4px 10px; } .cmp-pick .sc-chip:disabled { cursor: default; opacity: .8; }
 /* 왼쪽 끝에서 밀어 뒤로 가기 표시 */
 #edgeBack { position: fixed; left: 0; top: 50%; z-index: 90; width: 36px; height: 36px; margin-top: -18px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); color: var(--ink); box-shadow: 0 2px 10px rgba(0,0,0,.18); font-size: 20px; font-weight: 700; opacity: 0; pointer-events: none; transform: translateX(-40px); }
+.cp-photos { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
+.cp-photos a, .cp-ph { display: grid; gap: 2px; justify-items: center; font-size: 11.5px; color: var(--muted); text-decoration: none; }
+.cp-photos img { width: 96px; height: 72px; object-fit: cover; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); }
+.cp-team { padding: 10px 0; border-top: 1px solid var(--line); } .cp-team:first-of-type { border-top: 0; }
+.cp-up { display: inline-block; cursor: pointer; }
+.cp-notice textarea { width: 100%; font: inherit; font-size: 13.5px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--ink); margin: 6px 0; }
+.cp-prev img { max-width: 100%; border-radius: 4px; }
 </style>
 </head>
 <body>
@@ -1048,10 +1055,10 @@ i.dot.k-ob { background: var(--c-fr); }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=109"></script>
-<script src="guide.js?v=109"></script>
-<script src="library.js?v=109"></script>
-<script src="campus.js?v=109"></script>
-<script src="app.js?v=109"></script>
+<script src="program.js?v=111"></script>
+<script src="guide.js?v=111"></script>
+<script src="library.js?v=111"></script>
+<script src="campus.js?v=111"></script>
+<script src="app.js?v=111"></script>
 </body>
 </html>

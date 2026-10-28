@@ -34,6 +34,7 @@ const hm = s => s ? String(s).slice(0, 5) : "";
 const scoreHtml = m => { if (!m.score) return ""; const x = /^(\d+\s*[-:]\s*\d+)\s*(?:\((.*)\))?$/.exec(m.score); return x ? `<span class="chip sc-res">${esc(x[1])}</span>${x[2] ? `<span class="small muted sc-sets">${esc(x[2].replace(/,\s*/g, " · "))}</span>` : ""}` : `<span class="chip sc-res">${esc(m.score)}</span>`; };
 // 경기 기록 입력: 일정 담당·관리자 + 그 경기 주심·부심·기록심
 const canScore = m => can("schedule") || (!!cmpMe() && ["ju", "bu", "rec"].some(k => (m.refs || {})[k] === cmpMe()));
+const photoBtn = m => state.myPid || can("schedule") ? `<button class="btn link small" type="button" data-act="cmpphoto" data-id="${m.id}" aria-label="팀 사진">사진${(curCup() || { photos: [] }).photos.filter(p => p.match === m.id).length ? ` ${(curCup() || { photos: [] }).photos.filter(p => p.match === m.id).length}` : ""}</button>` : "";
 const scoreBtn = m => canScore(m) ? `<button class="btn link small sc-rec" type="button" data-act="cmpform" data-f="score" data-id="${m.id}">기록</button>` : "";
 const cmpSets = m => { const x = /(\d+)\s*[-:]\s*(\d+)/.exec(m.score || ""); return x ? [Number(x[1]), Number(x[2])] : null; };
 function winnerOf(c, m, depth = 0) {
@@ -76,9 +77,12 @@ function buildCups(raw) {
   const T = {}, M = {};
   for (const r of raw.cup_teams || []) (T[r.cup_id] = T[r.cup_id] || []).push({ id: r.id, name: r.name, grp: r.grp || "", sort: r.sort ?? 9, withdrawn: !!r.withdrawn, koOut: !!r.ko_out });
   for (const r of raw.cup_matches || []) (M[r.cup_id] = M[r.cup_id] || []).push({ id: r.id, date: r.date, start: hm(r.start_time), end: hm(r.end_time), stage: r.stage, label: r.label || "", a: r.team_a, b: r.team_b, al: r.a_label || "", bl: r.b_label || "", score: r.score || "", sets: r.sets || null, winner: r.winner, refs: r.refs || {} });
-  state.cups = (raw.cups || []).map(r => ({ id: r.id, name: r.name, kind: r.kind, start: r.start_date, end: r.end_date, place: r.place || "", cafe: r.cafe_url || "", adv: r.adv || 2, picks: r.picks || {}, note: r.note || "",
+  state.cups = (raw.cups || []).map(r => ({ id: r.id, name: r.name, kind: r.kind, start: r.start_date, end: r.end_date, place: r.place || "", cafe: r.cafe_url || "", adv: r.adv || 2, picks: r.picks || {}, note: r.note || "", notice: r.notice || "",
     teams: (T[r.id] || []).sort((a, b) => a.grp.localeCompare(b.grp) || a.sort - b.sort || a.name.localeCompare(b.name, "ko")),
     matches: (M[r.id] || []).sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start)) })).sort((a, b) => b.start.localeCompare(a.start));
+  const PH = {};
+  for (const r of raw.cup_photos || []) (PH[r.cup_id] = PH[r.cup_id] || []).push({ id: r.id, match: r.match_id, team: r.team_id, path: r.path, author: r.author, at: r.created_at });
+  for (const c of state.cups) c.photos = (PH[c.id] || []).sort((a, b) => String(a.at).localeCompare(String(b.at)));
   const av = {};
   for (const r of raw.cup_avail || []) ((av[r.cup_id] = av[r.cup_id] || {})[r.date] = av[r.cup_id][r.date] || {})[r.player_id] = { going: !!r.going, name: r.name || "", team: r.team_id || "", reason: r.reason || "", note: r.note || "" };
   state.cupAvail = av;
@@ -139,10 +143,10 @@ function matchesHtml(c) {
   const cell = v => `<td class="${v && v === me ? "me" : ""}">${esc(v || "")}</td>`;
   const days = Object.keys(byD).sort().map(d => `<div class="tw cmp-tw"><table class="cmp-tbl"><thead><tr><th>${dayKo(d)}</th><th>경기</th>${REF_ROLES.map(([, l]) => `<th>${l}</th>`).join("")}<th></th></tr></thead><tbody>
     ${byD[d].map(m => { const w = winnerOf(c, m), nm = s => { const id = sideId(c, m, s), n = esc(cmpSide(c, m, s)); return id && w === id ? `<b>${n}</b>` : n; };
-      return `<tr><td class="num">${m.start}${m.end ? "–" + m.end : ""}</td><td class="cmp-vs">${m.stage !== "group" || m.label ? `<span class="small muted">${esc(m.label || STAGE_KO[m.stage])}</span>` : ""}${nm("a")} <span class="muted">vs</span> ${nm("b")} ${scoreHtml(m)}</td>${REF_ROLES.map(([k]) => cell((m.refs || {})[k])).join("")}<td class="cmp-acts">${scoreBtn(m)}${adm ? `<button class="btn link small" type="button" data-act="cmpform" data-f="match" data-id="${m.id}">수정</button>` : ""}</td></tr>`; }).join("")}
+      return `<tr><td class="num">${m.start}${m.end ? "–" + m.end : ""}</td><td class="cmp-vs">${m.stage !== "group" || m.label ? `<span class="small muted">${esc(m.label || STAGE_KO[m.stage])}</span>` : ""}${nm("a")} <span class="muted">vs</span> ${nm("b")} ${scoreHtml(m)}</td>${REF_ROLES.map(([k]) => cell((m.refs || {})[k])).join("")}<td class="cmp-acts">${photoBtn(m)}${scoreBtn(m)}${adm ? `<button class="btn link small" type="button" data-act="cmpform" data-f="match" data-id="${m.id}">수정</button>` : ""}</td></tr>`; }).join("")}
     </tbody></table></div>
     <ul class="cmp-cards"><li class="cmp-dh">${dayKo(d)}</li>${byD[d].map(m => { const w = winnerOf(c, m), nm = sd => { const id = sideId(c, m, sd), n = esc(cmpSide(c, m, sd)); return id && w === id ? `<b>${n}</b>` : n; };
-      return `<li><div class="cmp-mh"><span class="num">${m.start}</span>${m.stage !== "group" || m.label ? `<span class="small muted">${esc(m.label || STAGE_KO[m.stage])}</span>` : ""}${scoreHtml(m)}<span class="cmp-acts">${scoreBtn(m)}${adm ? `<button class="btn link small" type="button" data-act="cmpform" data-f="match" data-id="${m.id}">수정</button>` : ""}</span></div>
+      return `<li><div class="cmp-mh"><span class="num">${m.start}</span>${m.stage !== "group" || m.label ? `<span class="small muted">${esc(m.label || STAGE_KO[m.stage])}</span>` : ""}${scoreHtml(m)}<span class="cmp-acts">${photoBtn(m)}${scoreBtn(m)}${adm ? `<button class="btn link small" type="button" data-act="cmpform" data-f="match" data-id="${m.id}">수정</button>` : ""}</span></div>
         <p class="cmp-mv">${nm("a")} <span class="muted">vs</span> ${nm("b")}</p>${Object.keys(m.refs || {}).length ? `<div class="cmp-rf">${REF_ROLES.map(([k, l]) => (m.refs || {})[k] ? `<span class="${m.refs[k] === me ? "me" : ""}"><em>${l}</em>${esc(m.refs[k])}</span>` : "").join("")}</div>` : ""}</li>`; }).join("")}</ul>`).join("");
   return `<section class="sec"><div class="sec-head"><h3>경기 · 심판</h3>${adm ? `<button class="btn add" type="button" data-act="cmpform" data-f="match">+ 경기</button>` : ""}</div>${days || emptyLine("아직 경기 일정이 없어요.")}</section>`;
 }
@@ -352,6 +356,17 @@ async function campusClick(b, act) {
   if (act === "cmpgo") { state.cmpId = b.dataset.id; state.cmpTab = "games"; return go("campus"); }
   if (act === "cmppost") return openCmpPost(b.dataset.k, b.dataset.d);
   if (act === "cmpcopy") return cmpCopy(b.dataset.w);
+  if (act === "cmpnotice") {
+    const c = curCup(), v = (document.getElementById("cp-notice") || {}).value || "";
+    try { ok(await sb.from("cups").update({ notice: v.trim() || null }).eq("id", c.id)); c.notice = v.trim(); toast("공지 문구를 저장했어요"); openCmpPost("notice", b.dataset.d); } catch (e) { toast(failMsg(e)); }
+    return;
+  }
+  if (act === "cmpphoto") return openCmpPhotos(b.dataset.id);
+  if (act === "cmpphotodel") {
+    if (!await confirmDel("이 사진을 지울까요?")) return;
+    try { const c = curCup(), ph = (c.photos || []).find(x => x.id === b.dataset.id); if (ph) { await sb.storage.from("cup-photos").remove([ph.path]); ok(await sb.from("cup_photos").delete().eq("id", ph.id)); } toast("지웠어요"); await loadAll(); openCmpPhotos(b.dataset.m); } catch (e) { toast(failMsg(e)); }
+    return;
+  }
   if (act === "cmpbpick") {
     const c = curCup(), g = b.dataset.g, l = b.dataset.l;
     if (!await confirmDel(`${g}조 1위가 ${l}에 들어갈까요?`, "네")) return;
@@ -497,7 +512,9 @@ async function syncCup(c) {
 
 /* ---------- 카페 글 만들기: 일정·심판 안내 / 예선 결과·본선 대진 / 최종 결과 → 복사해서 카페에 붙여 넣기 ---------- */
 const iga = w => { const ch = String(w).trim().slice(-1).charCodeAt(0); return ch >= 0xac00 && ch <= 0xd7a3 && (ch - 0xac00) % 28 ? "이" : "가"; };
-const POST_KINDS = [["result", "경기 결과"], ["sched", "경기 일정 · 심판"], ["prelim", "예선 결과 · 본선 대진"], ["final", "최종 결과"]];
+// 카페 글에는 주심·부심만 (선심·기록심은 뺌)
+const POST_REFS = [["ju", "주심"], ["bu", "부심"]];
+const POST_KINDS = [["notice", "오늘 공지"], ["result", "경기 결과"], ["sched", "경기 일정"], ["prelim", "예선 결과 · 본선 대진"], ["final", "최종 결과"]];
 function cmpPost(c, kind, day) {
   const td = "border:1px solid #999;padding:6px 10px;text-align:center", th = td + ";background:#dbe3ef;font-weight:bold";
   const tbl = (head, rows) => `<table style="border-collapse:collapse;margin:6px 0 14px"><tr>${head.map(h => { const [x, n] = h.split("|"); return `<th style="${th}" ${n ? `colspan="${n}"` : ""}>${esc(x)}</th>`; }).join("")}</tr>${rows.map(r => `<tr>${r.map(x => `<td style="${td}">${esc(x)}</td>`).join("")}</tr>`).join("")}</table>`;
@@ -509,15 +526,16 @@ function cmpPost(c, kind, day) {
   const short = CUP_KIND[c.kind] || c.name;
   let title = "";
   if (kind === "result") return cmpResultPost(c, day);
+  if (kind === "notice") return cmpNoticePost(c, day);
   P(`<p>안녕하세요, 서울대학교 배구부입니다.</p>`, "안녕하세요, 서울대학교 배구부입니다.\n");
   if (kind === "sched") {
     const ds = day ? [day] : [...new Set(c.matches.map(m => m.date))].sort();
-    title = `[${c.name}] ${day ? dayKo(day) + " " : ""}경기 일정 및 심판 안내`;
-    P(`<p>${esc(day ? dayKo(day) : cupRange(c))} 경기 일정과 심판 배정 안내드립니다.${c.place ? ` (장소: ${esc(c.place)})` : ""}</p>`, `${day ? dayKo(day) : cupRange(c)} 경기 일정과 심판 배정 안내드립니다.${c.place ? ` (장소: ${c.place})` : ""}\n`);
+    title = `[${c.name}] ${day ? dayKo(day) + " " : ""}경기 일정 안내`;
+    P(`<p>${esc(day ? dayKo(day) : cupRange(c))} 경기 일정 안내드립니다.${c.place ? ` (장소: ${esc(c.place)})` : ""}</p>`, `${day ? dayKo(day) : cupRange(c)} 경기 일정 안내드립니다.${c.place ? ` (장소: ${c.place})` : ""}\n`);
     for (const d of ds) {
       const ms = c.matches.filter(m => m.date === d); if (!ms.length) continue;
-      P(`<p><b>${esc(dayKo(d))}</b></p>` + tbl(["시간", "경기|2", "주심", "부심", "선심", "선심", "기록심"], ms.map(m => { const [a, b] = vs(m); return [time(m), (m.stage !== "group" && m.label ? m.label + " " : "") + a, b, ...REF_ROLES.map(([k]) => (m.refs || {})[k] || "")]; })),
-        `■ ${dayKo(d)}\n` + ms.map(m => { const [a, b] = vs(m); return `${time(m)}  ${m.stage !== "group" && m.label ? m.label + " · " : ""}${a} vs ${b}\n   ${REF_ROLES.map(([k, l]) => `${l} ${(m.refs || {})[k] || "-"}`).join(" / ")}`; }).join("\n") + "\n");
+      P(`<p><b>${esc(dayKo(d))}</b></p>` + tbl(["시간", "경기|2", "주심", "부심"], ms.map(m => { const [a, b] = vs(m); return [time(m), (m.stage !== "group" && m.label ? m.label + " " : "") + a, b, ...POST_REFS.map(([k]) => (m.refs || {})[k] || "")]; })),
+        `■ ${dayKo(d)}\n` + ms.map(m => { const [a, b] = vs(m); return `${time(m)}  ${m.stage !== "group" && m.label ? m.label + " · " : ""}${a} vs ${b}${POST_REFS.some(([k]) => (m.refs || {})[k]) ? `  (${POST_REFS.map(([k, l]) => `${l} ${(m.refs || {})[k] || "-"}`).join(" · ")})` : ""}`; }).join("\n") + "\n");
     }
   } else if (kind === "prelim") {
     title = `[${c.name}] 예선 결과 및 본선 대진 안내`;
@@ -551,21 +569,54 @@ function cmpPost(c, kind, day) {
 }
 let cmpPostCur = null;
 // 경기 결과 글 (카페에 올리던 모양 그대로): 경기마다 "A조 1경기 / 팀 VS 팀 / (팀 사진) / 1세트 21:12 … / 팀 2:0 승리", 끝나면 조별 최종 순위
+// 팀 사진 고르기: 그날 경기마다 한 장. 먼저 이긴 팀, 그다음 아직 사진이 안 들어간 팀 (같은 팀은 한 번만)
+function pickPhotos(c, ms) {
+  const has = id => (c.photos || []).some(p => p.team === id);
+  const photoOf = (id, m) => { const l = (c.photos || []).filter(p => p.team === id); return l.find(p => p.match === m.id) || l[l.length - 1] || null; };
+  const used = new Set(), out = new Map();
+  for (const m of ms) { const w = winnerOf(c, m); if (w && has(w) && !used.has(w)) { used.add(w); out.set(m.id, { team: w, p: photoOf(w, m) }); } }
+  for (const m of ms) if (!out.has(m.id)) for (const id of [sideId(c, m, "a"), sideId(c, m, "b")]) if (id && has(id) && !used.has(id)) { used.add(id); out.set(m.id, { team: id, p: photoOf(id, m) }); break; }
+  const rest = [...new Set(ms.flatMap(m => [sideId(c, m, "a"), sideId(c, m, "b")]))].filter(id => id && has(id) && !used.has(id));
+  for (const m of ms) if (!out.has(m.id) && rest.length) { const id = rest.shift(); used.add(id); out.set(m.id, { team: id, p: photoOf(id, m) }); }
+  return out;
+}
+const photoUrl = path => (state.cupPhotoUrls || {})[path] || "";
+async function loadPhotoUrls(paths) {
+  const need = [...new Set(paths)].filter(p => p && !(state.cupPhotoUrls || {})[p]); if (!need.length) return;
+  try { const r = await sb.storage.from("cup-photos").createSignedUrls(need, 60 * 60 * 24 * 7); state.cupPhotoUrls = state.cupPhotoUrls || {}; for (const x of r.data || []) if (x.signedUrl) state.cupPhotoUrls[x.path] = x.signedUrl; } catch (e) { /* 사진 없이 */ }
+}
+// 오늘 공지 (카톡·카페): "오늘은 B조 예선 경기가 있는 날입니다." + 대회 공지 줄마다 * + 대표자 전달 부탁
+function cmpNoticePost(c, day) {
+  const ms = c.matches.filter(m => m.date === day);
+  const G = [...new Set(ms.filter(m => m.stage === "group").map(m => ((cmpTeam(c, m.a) || {}).grp || "").toUpperCase()).filter(Boolean))].sort();
+  const ko = [...new Set(ms.filter(m => m.stage !== "group").map(m => m.stage))].sort((a, b) => ["r6", "qf", "sf", "3rd", "f", "etc"].indexOf(a) - ["r6", "qf", "sf", "3rd", "f", "etc"].indexOf(b)).map(s => STAGE_KO[s]);
+  const what = [G.length ? `${G.join("·")}조 예선` : "", ko.length ? ko.join("·") : ""].filter(Boolean).join("과 ");
+  const teams = [...new Set(ms.flatMap(m => [sideId(c, m, "a"), sideId(c, m, "b")]))].filter(Boolean).map(id => (cmpTeam(c, id) || {}).name).filter(Boolean);
+  const anyKoKnown = c.matches.some(m => m.stage !== "group" && (sideId(c, m, "a") || sideId(c, m, "b")));
+  const who = G.length ? `${G.join("·")}조 대표자분들${anyKoKnown && day > c.start ? "과 본선에 진출하게 된 팀 대표자" : ""}는` : teams.length ? `오늘 경기하는 팀(${teams.join(", ")}) 대표자분들은` : "각 팀 대표자분들은";
+  const lines = String(c.notice || "").split("\n").map(x => x.trim()).filter(Boolean);
+  const t = [what ? `오늘은 ${what} 경기가 있는 날입니다.` : `오늘은 경기가 없는 날입니다.`, "",
+    ...ms.map(m => `${m.start}  ${m.stage !== "group" && m.label ? m.label + " · " : ""}${cmpSide(c, m, "a")} vs ${cmpSide(c, m, "b")}`), ms.length ? "" : null,
+    ...lines.flatMap(x => [`* ${x}`, ""]),
+    `${who} 위 사항들을 팀원에게 전달 부탁드리겠습니다.`].filter(x => x !== null);
+  return { title: `[${c.name}] ${dayKo(day)} 공지`, html: t.map(x => x ? `<p>${esc(x)}</p>` : "<p><br></p>").join(""), text: t.join("\n") };
+}
 function cmpResultPost(c, day) {
   const html = [], text = [], photo = state.cmpPhoto !== false;
   const P = (h, t) => { html.push(h); text.push(t); };
   const grpOf = m => ((cmpTeam(c, m.a) || {}).grp || "").toUpperCase();
   const gm = g => c.matches.filter(m => m.stage === "group" && grpOf(m) === g);
   const label = m => { if (m.stage !== "group") return m.label || STAGE_KO[m.stage]; const g = grpOf(m), l = gm(g); return l.length === 1 ? `${g}조 예선 순위 결정전` : `${g}조 ${l.indexOf(m) + 1}경기`; };
-  const ms = c.matches.filter(m => m.date === day);
+  const ms = c.matches.filter(m => m.date === day), pics = photo ? pickPhotos(c, ms) : new Map();
   for (const m of ms) {
     const [a, b] = [cmpSide(c, m, "a"), cmpSide(c, m, "b")], w = winnerOf(c, m), wn = w && (cmpTeam(c, w) || {}).name;
     const sets = Array.isArray(m.sets) ? m.sets : [], ss = cmpSets(m);
     const lines = [`${a} VS ${b}`];
-    const ph = photo ? [`[사진] ${a}`, `[사진] ${b}`] : [];
+    const pk = pics.get(m.id), pn = pk && (cmpTeam(c, pk.team) || {}).name;
+    const ph = pk ? [`[사진] ${pn}`] : [];
     const st = sets.map(([x, y], i) => `${i + 1}세트 ${x}:${y}`);
     const res = m.score === "기권승" ? (wn ? `${wn} 기권승` : "") : wn && ss ? `${wn} ${Math.max(...ss)}:${Math.min(...ss)} 승리` : "";
-    P(`<p><b>${esc(label(m))}</b><br>${esc(lines[0])}</p>${ph.map(x => `<p style="color:#888">${esc(x)}</p>`).join("")}${st.length ? `<p>${st.map(esc).join("<br>")}</p>` : ""}${res ? `<p><b>${esc(res)}</b></p>` : m.score ? "" : `<p style="color:#888">(경기 전)</p>`}<p><br></p>`,
+    P(`<p><b>${esc(label(m))}</b><br>${esc(lines[0])}</p>${pk ? (photoUrl(pk.p.path) ? `<p><img src="${esc(photoUrl(pk.p.path))}" alt="${esc(pn)}" style="max-width:100%"></p>` : `<p style="color:#888">[사진] ${esc(pn)}</p>`) : ""}${st.length ? `<p>${st.map(esc).join("<br>")}</p>` : ""}${res ? `<p><b>${esc(res)}</b></p>` : m.score ? "" : `<p style="color:#888">(경기 전)</p>`}<p><br></p>`,
       [label(m), lines[0], ...ph, ...st, "", res || (m.score ? "" : "(경기 전)"), ""].join("\n"));
   }
   // 그날 경기로 조 경기가 모두 끝난 조: 최종 순위
@@ -579,20 +630,24 @@ function cmpResultPost(c, day) {
   P(`<p>수고하셨습니다.</p>`, "수고하셨습니다.");
   return { title: `[${c.name}] ${dayKo(day)} 경기 결과`, html: html.join(""), text: text.join("\n") };
 }
-function openCmpPost(kind, day) {
+async function openCmpPost(kind, day) {
   const c = curCup(); if (!c) return;
   kind = kind || state.cmpPostKind || "result"; state.cmpPostKind = kind;
   const t = iso(today()), days = [...new Set(c.matches.map(m => m.date))].sort();
   if (kind === "sched" && day === undefined) day = days.find(d => d >= t) || "";
   if (kind === "result" && !day) day = days.filter(d => d <= t && c.matches.some(m => m.date === d && m.score)).pop() || days[0] || "";
+  if (kind === "notice" && !day) day = days.find(d => d >= t) || days[days.length - 1] || "";
+  if (kind === "result" && state.cmpPhoto !== false) await loadPhotoUrls([...pickPhotos(c, c.matches.filter(m => m.date === day)).values()].map(x => x.p && x.p.path));
   const p = cmpPostCur = cmpPost(c, kind, day || "");
   const el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>카페 글</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <div class="sc-row">${POST_KINDS.map(([k, l]) => `<button type="button" class="chip sc-chip ${k === kind ? "on" : ""}" data-act="cmppost" data-k="${k}">${l}</button>`).join("")}</div>
-    ${kind === "sched" || kind === "result" ? `<div class="sc-row">${[...(kind === "sched" ? [["", "전체"]] : []), ...days.map(d => [d, dayKo(d)])].map(([d, l]) => `<button type="button" class="chip sc-chip ${d === (day || "") ? "on" : ""}" data-act="cmppost" data-k="${kind}" data-d="${d}">${l}</button>`).join("")}</div>` : ""}
-    ${kind === "result" ? `<label class="check"><input type="checkbox" id="cp-photo" ${state.cmpPhoto !== false ? "checked" : ""} data-d="${esc(day)}"> 팀 사진 자리 표시</label>` : ""}
+    ${kind !== "prelim" && kind !== "final" ? `<div class="sc-row">${[...(kind === "sched" ? [["", "전체"]] : []), ...days.map(d => [d, dayKo(d)])].map(([d, l]) => `<button type="button" class="chip sc-chip ${d === (day || "") ? "on" : ""}" data-act="cmppost" data-k="${kind}" data-d="${d}">${l}</button>`).join("")}</div>` : ""}
+    ${kind === "result" ? `<label class="check"><input type="checkbox" id="cp-photo" ${state.cmpPhoto !== false ? "checked" : ""} data-d="${esc(day)}"> 팀 사진 넣기 <span class="small muted">경기마다 1장 · 이긴 팀 먼저</span></label>` : ""}
+    ${kind === "notice" && can("schedule") ? `<details class="cp-notice"><summary class="small">공지 문구 고치기 (한 줄에 하나)</summary><textarea id="cp-notice" rows="5" maxlength="2000">${esc(c.notice || "")}</textarea><div class="row"><button class="btn small" type="button" data-act="cmpnotice" data-d="${esc(day)}">저장</button></div></details>` : ""}
     <label class="fl">제목<input id="cp-title" value="${esc(p.title)}"></label>
     <div class="cp-prev">${p.html}</div>
+    ${kind === "result" && state.cmpPhoto !== false ? (() => { const l = [...pickPhotos(c, c.matches.filter(m => m.date === day)).values()].filter(x => x.p && photoUrl(x.p.path)); return l.length ? `<p class="small muted">사진이 같이 안 붙으면 저장해서 올려 주세요</p><div class="cp-photos">${l.map(x => `<a href="${esc(photoUrl(x.p.path))}" download target="_blank" rel="noopener"><img src="${esc(photoUrl(x.p.path))}" alt=""><span>${esc((cmpTeam(c, x.team) || {}).name || "")}</span></a>`).join("")}</div>` : ""; })() : ""}
     <div class="row cp-acts"><button class="btn" type="button" data-act="cmpcopy" data-w="title">제목 복사</button><button class="btn primary" type="button" data-act="cmpcopy" data-w="body">본문 복사</button><a class="btn" href="${esc(c.cafe || CAFE_URL)}" target="_blank" rel="noopener">카페 열기</a></div>`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
@@ -605,3 +660,40 @@ async function cmpCopy(w) {
     toast(w === "title" ? "제목을 복사했어요" : "본문을 복사했어요 · 카페 글쓰기에 붙여 넣기");
   } catch (e) { toast("복사하지 못했어요. 글을 길게 눌러 복사해 주세요"); }
 }
+
+/* ---------- 팀 사진 올리기 (경기 전에 찍은 팀 사진 · 부원 누구나) ---------- */
+async function openCmpPhotos(mid) {
+  const c = curCup(), m = c && c.matches.find(x => x.id === mid); if (!m) return;
+  const sides = [sideId(c, m, "a"), sideId(c, m, "b")].filter(Boolean);
+  const mine = (c.photos || []).filter(p => p.match === m.id);
+  await loadPhotoUrls(mine.map(p => p.path));
+  const el = document.getElementById("sheet");
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>팀 사진</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <p class="small muted">${dayKo(m.date)} ${m.start} · ${esc(cmpSide(c, m, "a"))} vs ${esc(cmpSide(c, m, "b"))}</p>
+    ${sides.length ? sides.map(id => { const t = cmpTeam(c, id), l = mine.filter(p => p.team === id);
+      return `<div class="cp-team"><b>${esc(t ? t.name : "")}</b>
+        <div class="cp-photos">${l.map(p => `<span class="cp-ph"><img src="${esc(photoUrl(p.path))}" alt="">${p.author === uid() || can("schedule") ? `<button type="button" class="btn link small danger" data-act="cmpphotodel" data-id="${p.id}" data-m="${m.id}">삭제</button>` : ""}</span>`).join("")}</div>
+        <label class="btn small cp-up">사진 올리기<input type="file" accept="image/*" capture="environment" hidden data-cmp-up="${m.id}|${id}"></label></div>`; }).join("") : emptyLine("팀이 정해지면 올릴 수 있어요.")}`;
+  el.hidden = false; document.body.classList.add("noscroll");
+}
+// 휴대폰 사진은 커서 긴 쪽 1600px JPEG로 줄여서 올림
+function shrinkImage(file) {
+  return new Promise((res, rej) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => { const k = Math.min(1, 1600 / Math.max(img.width, img.height)), cv = document.createElement("canvas"); cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+      cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height); URL.revokeObjectURL(url); cv.toBlob(b => b ? res(b) : rej(new Error("사진을 읽지 못했어요")), "image/jpeg", 0.85); };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error("사진을 읽지 못했어요")); };
+    img.src = url;
+  });
+}
+document.addEventListener("change", async e => {
+  const el = e.target; if (!el || !el.dataset || !el.dataset.cmpUp || !el.files || !el.files[0]) return;
+  const [mid, tid] = el.dataset.cmpUp.split("|"), c = curCup();
+  try {
+    toast("올리는 중…");
+    const blob = await shrinkImage(el.files[0]), path = `cup/${c.id}/${mid}/${tid}-${Date.now()}.jpg`;
+    const up = await sb.storage.from("cup-photos").upload(path, blob, { contentType: "image/jpeg" }); if (up.error) throw up.error;
+    ok(await sb.from("cup_photos").insert({ cup_id: c.id, match_id: mid, team_id: tid, path }));
+    toast("사진을 올렸어요"); await loadAll(); openCmpPhotos(mid);
+  } catch (err) { toast(failMsg(err)); }
+});

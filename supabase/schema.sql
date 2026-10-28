@@ -1984,3 +1984,26 @@ revoke all on function public.cup_score(uuid, jsonb, text, uuid) from public, an
 grant execute on function public.cup_score(uuid, jsonb, text, uuid) to authenticated;
 alter table public.cup_teams add column if not exists ko_out boolean not null default false; -- 본선만 기권 (예선 기록은 남기고 다음 순위가 진출)
 alter table public.cups add column if not exists picks jsonb not null default '{}'::jsonb; -- 조 1위의 본선 자리 선택 {"B": "6강 1경기"}
+-- 2026-10-29: 교내 대회 팀 사진(비공개 버킷 cup-photos) · 대회 공지 문구
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('cup-photos', 'cup-photos', false, 5242880, array['image/jpeg', 'image/png', 'image/webp']) on conflict (id) do nothing;
+create policy "members read cup photos" on storage.objects for select to authenticated using (bucket_id = 'cup-photos' and private.is_member());
+create policy "members upload cup photos" on storage.objects for insert to authenticated with check (bucket_id = 'cup-photos' and private.is_member());
+create policy "owner or schedule delete cup photos" on storage.objects for delete to authenticated using (bucket_id = 'cup-photos' and (owner = auth.uid() or private.can('schedule')));
+create table public.cup_photos (
+  id uuid primary key default gen_random_uuid(),
+  cup_id uuid not null references public.cups(id) on delete cascade,
+  match_id uuid references public.cup_matches(id) on delete set null,
+  team_id uuid not null references public.cup_teams(id) on delete cascade,
+  path text not null check (path like 'cup/%' and length(path) <= 200),
+  author uuid not null default auth.uid(),
+  created_at timestamptz not null default now()
+);
+create index cup_photos_cup on public.cup_photos (cup_id);
+alter table public.cup_photos enable row level security;
+create policy "members read cup_photos" on public.cup_photos for select to authenticated using (private.is_member());
+create policy "members add cup_photos" on public.cup_photos for insert to authenticated with check (private.is_member() and author = auth.uid());
+create policy "owner or schedule delete cup_photos" on public.cup_photos for delete to authenticated using (author = auth.uid() or private.can('schedule'));
+revoke all on public.cup_photos from anon;
+grant select, insert, delete on public.cup_photos to authenticated;
+alter table public.cups add column if not exists notice text check (notice is null or length(notice) <= 2000);
