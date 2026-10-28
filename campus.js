@@ -19,6 +19,9 @@ const cmpTeam = (c, id) => c.teams.find(t => t.id === id) || null;
 function sideId(c, m, s, depth = 0) {
   if (m[s]) { const t = cmpTeam(c, m[s]); if (!(t && (t.withdrawn || t.koOut) && /위$/.test(m[s + "l"] || ""))) return m[s]; }
   const lab = m[s + "l"] || ""; if (depth > 6 || !lab) return null;
+  // "B선택": B조 1위가 고른 경기에 1위, 다른 쪽에 2위
+  const pk = /^([A-Za-z])조?\s*선택$/.exec(lab);
+  if (pk) { const gs = groupStand(c), k = pk[1].toUpperCase(), pick = (c.picks || {})[k]; return gs.done[k] && pick ? gs.order[k][m.label === pick ? 0 : 1] || null : null; }
   const g = /^([A-Za-z])조?\s*([1-9])위$/.exec(lab);
   if (g) { const gs = groupStand(c), k = g[1].toUpperCase(); return gs.done[k] ? gs.order[k][Number(g[2]) - 1] || null : null; }
   const w = /^(.+?)\s*(승자|패자)$/.exec(lab);
@@ -73,7 +76,7 @@ function buildCups(raw) {
   const T = {}, M = {};
   for (const r of raw.cup_teams || []) (T[r.cup_id] = T[r.cup_id] || []).push({ id: r.id, name: r.name, grp: r.grp || "", sort: r.sort ?? 9, withdrawn: !!r.withdrawn, koOut: !!r.ko_out });
   for (const r of raw.cup_matches || []) (M[r.cup_id] = M[r.cup_id] || []).push({ id: r.id, date: r.date, start: hm(r.start_time), end: hm(r.end_time), stage: r.stage, label: r.label || "", a: r.team_a, b: r.team_b, al: r.a_label || "", bl: r.b_label || "", score: r.score || "", sets: r.sets || null, winner: r.winner, refs: r.refs || {} });
-  state.cups = (raw.cups || []).map(r => ({ id: r.id, name: r.name, kind: r.kind, start: r.start_date, end: r.end_date, place: r.place || "", cafe: r.cafe_url || "", adv: r.adv || 2, note: r.note || "",
+  state.cups = (raw.cups || []).map(r => ({ id: r.id, name: r.name, kind: r.kind, start: r.start_date, end: r.end_date, place: r.place || "", cafe: r.cafe_url || "", adv: r.adv || 2, picks: r.picks || {}, note: r.note || "",
     teams: (T[r.id] || []).sort((a, b) => a.grp.localeCompare(b.grp) || a.sort - b.sort || a.name.localeCompare(b.name, "ko")),
     matches: (M[r.id] || []).sort((a, b) => a.date.localeCompare(b.date) || a.start.localeCompare(b.start)) })).sort((a, b) => b.start.localeCompare(a.start));
   const av = {};
@@ -112,10 +115,10 @@ function viewCampus() {
     <div class="seg fill sc-tabs cmp-tabs" role="tablist">${CMP_TABS.map(([k, l]) => `<button type="button" class="seg-tab ${tab === k ? "on solid" : ""}" role="tab" aria-selected="${tab === k}" data-act="cmptab" data-v="${k}">${l}</button>`).join("")}</div></section>`;
   if (tab === "avail") return head + availHtml(c);
   if (tab === "groups") return head + groupsHtml(c);
-  if (tab === "bracket") return head + (bracketHtml(c) || emptyLine("조편성을 하면 대진표가 만들어져요."));
+  if (tab === "bracket") return head + pickHtml(c) + (bracketHtml(c) || emptyLine("조편성을 하면 대진표가 만들어져요."));
   const mine = myRefs(c).filter(x => x.m.date >= t);
   const mineHtml = mine.length ? `<section class="sec"><h3>내 심판</h3><ul class="boxes cmp-mine">${mine.map(({ m, role }) => `<li><span class="num">${dayKo(m.date)} ${m.start}</span><b>${role}</b><span class="small">${esc(cmpSide(c, m, "a"))} vs ${esc(cmpSide(c, m, "b"))}</span></li>`).join("")}</ul></section>` : "";
-  return head + mineHtml + matchesHtml(c);
+  return head + mineHtml + pickHtml(c) + matchesHtml(c);
 }
 // 가능일: 날마다 가능 · 불가 (남녀 합쳐서)
 function availHtml(c) {
@@ -212,6 +215,20 @@ function bracketHtml(c) {
     <svg class="bk-ln" width="${totW}" height="${totH}" aria-hidden="true"><path d="${lines.join("")}"/></svg>${leafHtml}${joinHtml}${champ}${thirdBits.join("")}</div></div></section>`;
 }
 
+// 조 1위 자리 선택: "B선택" 자리가 있는 경기 중 1위 팀이 고름 (관리자가 입력), 2위는 남은 자리로
+function pickHtml(c) {
+  const adm = can("schedule"), gs = groupStand(c), out = [];
+  const G = [...new Set(c.matches.flatMap(m => ["al", "bl"].map(k => (/^([A-Za-z])조?\s*선택$/.exec(m[k] || "") || [])[1])).filter(Boolean).map(x => x.toUpperCase()))].sort();
+  for (const g of G) {
+    const ms = c.matches.filter(m => ["al", "bl"].some(k => new RegExp(`^${g}조?\\s*선택$`, "i").test(m[k] || "")));
+    const t1 = gs.done[g] ? cmpTeam(c, gs.order[g][0]) : null, t2 = gs.done[g] ? cmpTeam(c, gs.order[g][1]) : null, pick = (c.picks || {})[g];
+    const opp = m => { const sd = /선택$/.test(m.al || "") ? "b" : "a"; return cmpSide(c, m, sd); };
+    out.push(`<div class="panel cmp-pick"><div class="row between"><h4>${g}조 1위 자리 선택</h4>${pick ? `<span class="chip ok">${esc(pick)}</span>` : `<span class="chip warn">아직</span>`}</div>
+      <p class="small muted">${t1 ? `1위 <b>${esc(t1.name)}</b>${t2 ? ` · 2위 ${esc(t2.name)}${iga(t2.name) === "이" ? "은" : "는"} 남은 자리` : ""}` : `${g}조 경기가 끝나면 고를 수 있어요`}</p>
+      <div class="cmp-pick-opts">${ms.map(m => `<button type="button" class="pick-opt ${pick === m.label ? "on" : ""}" ${adm && t1 ? `data-act="cmpbpick" data-g="${g}" data-l="${esc(m.label)}"` : "disabled"}><b>${esc(m.label)}</b><span>vs ${esc(opp(m))}</span><span class="small muted">${dayKo(m.date)} ${m.start}</span></button>`).join("")}</div></div>`);
+  }
+  return out.join("");
+}
 /* ---------- 홈: 내 투표 (한 줄씩, 응답한 건 접어 둠) ---------- */
 const VT_SHORT = { go: "참", no: "불참" };
 function myVotesHtml() {
@@ -335,6 +352,12 @@ async function campusClick(b, act) {
   if (act === "cmpgo") { state.cmpId = b.dataset.id; state.cmpTab = "games"; return go("campus"); }
   if (act === "cmppost") return openCmpPost(b.dataset.k, b.dataset.d);
   if (act === "cmpcopy") return cmpCopy(b.dataset.w);
+  if (act === "cmpbpick") {
+    const c = curCup(), g = b.dataset.g, l = b.dataset.l;
+    if (!await confirmDel(`${g}조 1위가 ${l}에 들어갈까요?`, "네")) return;
+    try { ok(await sb.from("cups").update({ picks: { ...(c.picks || {}), [g]: l } }).eq("id", c.id)); toast("자리를 정했어요"); await loadAll(); } catch (e) { toast(failMsg(e)); }
+    return;
+  }
   if (act === "cmptab") { state.cmpTab = b.dataset.v; state.dirty = false; return render(); }
   if (act === "cmppick") { state.cmpId = b.dataset.id; state.dirty = false; return render(); }
   if (act === "cmpform") return openCmpForm(b.dataset.f, b.dataset.id);

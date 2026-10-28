@@ -1022,6 +1022,11 @@ i.dot.k-ob { background: var(--c-fr); }
 .cp-prev { margin: 10px 0; padding: 12px; max-height: 46vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--r); background: #fff; color: #111; font-size: 13.5px; }
 .cp-prev p { margin: 0 0 6px; } .cp-prev table { font-size: 12.5px; }
 .cp-acts { flex-wrap: wrap; gap: 6px; }
+.cmp-pick { margin-bottom: 12px; } .cmp-pick h4 { margin: 0; }
+.cmp-pick-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 8px; }
+.pick-opt { display: grid; gap: 2px; text-align: left; font: inherit; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: var(--r); background: var(--surface); color: var(--ink); cursor: pointer; }
+.pick-opt.on { border-color: var(--blue); background: var(--blue-soft); }
+.pick-opt:disabled { cursor: default; opacity: .75; }
 </style>
 </head>
 <body>
@@ -1042,10 +1047,10 @@ i.dot.k-ob { background: var(--c-fr); }
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=104"></script>
-<script src="guide.js?v=104"></script>
-<script src="library.js?v=104"></script>
-<script src="campus.js?v=104"></script>
-<script src="app.js?v=104"></script>
+<script src="program.js?v=106"></script>
+<script src="guide.js?v=106"></script>
+<script src="library.js?v=106"></script>
+<script src="campus.js?v=106"></script>
+<script src="app.js?v=106"></script>
 </body>
 </html>

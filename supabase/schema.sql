@@ -1979,3 +1979,4 @@ end $$;
 revoke all on function public.cup_score(uuid, jsonb, text, uuid) from public, anon;
 grant execute on function public.cup_score(uuid, jsonb, text, uuid) to authenticated;
 alter table public.cup_teams add column if not exists ko_out boolean not null default false; -- 본선만 기권 (예선 기록은 남기고 다음 순위가 진출)
+alter table public.cups add column if not exists picks jsonb not null default '{}'::jsonb; -- 조 1위의 본선 자리 선택 {"B": "6강 1경기"}
