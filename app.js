@@ -1951,7 +1951,7 @@ function viewScout() {
   return `<section class="sec sc-page"><div class="sc-top"><button class="btn link small" type="button" data-act="scback">‹ 목록</button>
       <span class="row nowrap"><button class="btn link small" type="button" data-act="scxlsx" data-id="${esc(m.id)}">엑셀</button>${can("analysis") ? `<button class="btn link small" type="button" data-act="scedit" data-id="${esc(m.id)}">수정</button>` : ""}</span></div>
     <div class="sc-title"><b>${esc(m.title)}</b><span class="small muted">${scMeta(m)}</span></div>
-    ${m.yt || m.vod ? "" : `<p class="small muted">영상 링크가 없어요.</p>`}${state.ctFocus && S.tab === "court" ? "" : scVodHtml(m)}
+    ${m.yt || m.vod ? "" : `<p class="small muted">영상 링크가 없어요.</p>`}${scVodHtml(m)}
     ${scSeg("sctab", [["court", "코트"], ["input", "목록"], ["scenes", "장면"], ["stats", "분석"]], S.tab)}
     ${!ev ? loaderHtml(true) : S.tab === "stats" ? scoutStats(ev, S.points[m.id] || []) : S.tab === "scenes" ? scoutScenes(ev) : S.tab === "input" ? scoutPad(m, ev) : ctPad(m, ev)}</section>`;
 }
@@ -2181,9 +2181,6 @@ async function scoutXlsx(mid) {
 // 경기 영상: #main 밖(위)의 고정 칸에 둬서 버튼을 눌러 화면을 다시 그려도 끊기지 않음
 let scPlayer = null;
 async function scoutDock() {
-  const onCourt = state.view === "scout" && sc().tab === "court" && !!scMatch();
-  if (!onCourt) { ctWake(false); if (state.ctFocus) ctFocus(false, true); }
-  document.body.classList.toggle("ct-focus", !!(onCourt && state.ctFocus));
   const dock = document.getElementById("dock"); if (!dock) return;
   const m = state.view === "scout" ? scMatch() : null, y = m && m.yt ? parseYt(m.yt) : null;
   if (!y) { if (dock.dataset.mid) { dock.innerHTML = ""; dock.dataset.mid = ""; scPlayer = null; } dock.hidden = true; return; }
@@ -2660,7 +2657,6 @@ function innerBack() {
   const v = state.view, C = state.cup;
   if ((v === "cup" || v === "fr") && C && C.key) { C.key = null; C.edit = false; return true; }
   if (v === "jp") { const J = jp(); if (J.school) { J.school = null; J.open = null; return true; } }
-  if (v === "scout" && state.ctFocus) { ctFocus(false); return true; }
   if (v === "scout" && state.scoutId) { state.scoutId = null; return true; }
   return false;
 }

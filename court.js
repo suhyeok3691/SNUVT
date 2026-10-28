@@ -68,18 +68,6 @@ function ctState(m, ev, setNo) {
   }
   return s;
 }
-// 세트 끝: 25점(5세트 15점) 넘고 2점 차
-const ctSetEnd = (s, setNo) => { const t = setNo === 5 ? 15 : 25; return Math.max(s.us, s.op) >= t && Math.abs(s.us - s.op) >= 2 ? (s.us > s.op ? "us" : "opp") : null; };
-// 다음에 나올 동작 짐작: 랠리 흐름(서브 → 리시브 → 세트 → 공격 → 블로킹/디그 …)
-function ctGuess(s, side, z) {
-  const front = [2, 3, 4].includes(Number(z)), l = s.last;
-  if (!l) return side === s.serve ? "serve" : "receive";
-  if (side === l.side) return { serve: front ? "block" : "dig", receive: "set", dig: "set", free: "set", set: "attack", attack: "dig", block: "dig" }[l.skill] || "set";
-  if (l.skill === "attack" || l.skill === "set") return front ? "block" : "dig";
-  if (l.skill === "serve") return "receive";
-  if (l.action === "rover") return front ? "attack" : "free";
-  return front && l.skill !== "block" ? "block" : "dig";
-}
 const ctName = (side, v) => { if (side === "us") { const p = playerOf(v); return p ? { no: p.number != null ? String(p.number) : "", nm: p.name } : { no: "", nm: "?" }; } return { no: String(v ?? ""), nm: "" }; };
 function ctBtn(side, v, z, serving, lib, mini) {
   const n = ctName(side, v);
@@ -90,8 +78,7 @@ const ctFlip = () => { try { return localStorage.getItem("snuvt-ctflip") === "1"
 function ctPad(m, ev) {
   const S = sc(), L = ctLu(m), setNo = S.sel.set || 1;
   if (!ctReady(m)) return `<div class="panel ct-empty"><b>라인업이 아직 없어요</b>${can("analysis") ? `<button class="btn primary" type="button" data-act="ctlineup">라인업 넣기</button>` : `<span class="small muted">전력분석 담당이 넣을 수 있어요.</span>`}</div>`;
-  ctWake(true);
-  const s = ctState(m, ev, setNo), flip = ctFlip(), end = ctSetEnd(s, setNo);
+  const s = ctState(m, ev, setNo), flip = ctFlip();
   // 아래 칸: 앞줄(네트) 4·3·2, 뒷줄 5·6·1 / 위 칸: 뒷줄 1·6·5, 앞줄 2·3·4 (영상 방향에 맞게 뒤집기)
   const half = (side, top) => { const srv = s.serve === side && !s.last;
     const rows = top ? [[1, 6, 5], [2, 3, 4]] : [[4, 3, 2], [5, 6, 1]];
@@ -101,16 +88,12 @@ function ctPad(m, ev) {
     const l = ctLibs(L, side).filter(x => !slots.some(y => ctSame(y, x)));
     return `<div class="ct-lrow ${side}"><span class="sc-k">${side === "us" ? "우리" : "상대"}</span>${l.length ? `<span class="ct-lk">L</span>${l.map(v => ctBtn(side, v, 0, false, ctSame(v, cur), true)).join("")}` : ""}<button class="btn small ct-subbtn" type="button" data-act="ctsubopen" data-side="${side}">교체</button></div>`; };
   const recent = s.list.slice(-6).reverse(), q = ctQ.list.length;
-  // 랠리 시작이면 서버 한 번에 기록
-  const server = s.serve === "us" ? ctAt(s.usSlots, s.rot, 1) : ctAt(s.opSlots, s.orot, 1), sn = ctName(s.serve, server);
-  const srvRow = !s.last && !end ? `<div class="ct-srv ${s.serve}"><span class="ct-srvw">Serve <b>${esc(sn.no ? "#" + sn.no : "")}</b> ${esc(sn.nm)}</span><div class="ct-srvb">${CT_MENU[0][2].filter(a => a[0] !== "foot").map(a => `<button type="button" class="btn sc-g ${a[3] === "earned" ? "g-best" : a[3] === "error" ? "g-err" : a[2] === "+" ? "g-good" : "g-ok"}" data-act="ctsrv" data-a="${a[0]}">${esc(a[1])}</button>`).join("")}</div></div>` : "";
-  const endRow = end ? `<div class="ct-end"><b>${setNo}세트 ${end === "us" ? "우리" : esc(m.opponent || "상대")} 승 · ${s.us}:${s.op}</b>${setNo < 5 ? `<button class="btn primary small" type="button" data-act="ctnextset">${setNo + 1}세트 시작</button>` : ""}</div>` : "";
   const court = flip ? `${half("us", true)}<div class="ct-net"><span>네트</span></div>${half("opp", false)}` : `${half("opp", true)}<div class="ct-net"><span>네트</span></div>${half("us", false)}`;
-  return `<div class="ct-wrap">${state.ctFocus ? `<div class="ct-clock">${scVodHtml(m)}</div>` : ""}<div class="panel ct-bar">
-      <div class="sc-row"><span class="sc-k">세트</span>${[1, 2, 3, 4, 5].map(n => scChip("scset", n, setNo, n)).join("")}<span class="ct-tools">${q ? `<span class="chip warn" title="인터넷이 되면 저장돼요">대기 ${q}</span>` : ""}<button class="btn link small" type="button" data-act="ctflip">뒤집기</button><button class="btn small ${state.ctFocus ? "" : "primary"}" type="button" data-act="ctfocus">${state.ctFocus ? "나가기" : "기록 화면"}</button>${can("analysis") ? `<button class="btn link small" type="button" data-act="ctlineup">라인업</button>` : ""}</span></div>
+  const rally = s.us + s.op + 1;
+  return `<div class="ct-wrap"><div class="panel ct-bar">
+      <div class="sc-row"><span class="sc-k">세트</span>${[1, 2, 3, 4, 5].map(n => scChip("scset", n, setNo, n)).join("")}<span class="ct-tools">${q ? `<span class="chip warn" title="인터넷이 되면 저장돼요">대기 ${q}</span>` : ""}${can("analysis") ? `<button class="btn link small" type="button" data-act="ctlineup">라인업</button>` : ""}</span></div>
       <div class="ct-score"><span class="ct-t us ${s.serve === "us" ? "srv" : ""}">우리 <small>R${s.rot}</small></span><b class="num">${s.us} : ${s.op}</b><span class="ct-t opp ${s.serve === "opp" ? "srv" : ""}"><small>R${s.orot}</small> ${esc(m.opponent || "상대")}</span></div>
-      ${endRow || srvRow}
-      <div class="ct-quick"><button class="btn small" type="button" data-act="ctpt" data-w="us">우리 +1</button>${s.list.length ? `<button class="btn small ct-undo" type="button" data-act="ctundo">↶ 되돌리기</button>` : "<span></span>"}<button class="btn small" type="button" data-act="ctpt" data-w="opp">상대 +1</button></div>
+      <div class="ct-quick"><span class="small muted">Rally ${rally}</span><span class="row nowrap">${s.list.length ? `<button class="btn small" type="button" data-act="ctundo">↶ Undo</button>` : ""}<button class="btn small" type="button" data-act="ctflip">Change Court</button></span></div>
     </div>
     <div class="ct-court">${court}</div>
     <div class="ct-extra">${flip ? libRow("us") + libRow("opp") : libRow("opp") + libRow("us")}</div>
@@ -127,15 +110,13 @@ function ctLabel(e) {
 }
 // 지금 리베로로 뛰는 중인가 (코트 6명 칸이 아닌 리베로)
 const ctLibActing = (m, s, side, v) => ctIsLib(ctLu(m), v, side) && !(side === "us" ? s.usSlots : s.opSlots).some(x => ctSame(x, v));
-// 선수를 누르면: 동작 고르기 창 (다음 동작을 미리 골라 둠)
+// 선수를 누르면: 동작 고르기 창
 function ctOpen(side, v, z) {
   const S = sc(), m = scMatch(), s = ctState(m, S.events[m.id] || [], S.sel.set || 1);
   const slots = side === "us" ? s.usSlots : s.opSlots, i = slots.findIndex(x => ctSame(x, v)), libAct = ctLibActing(m, s, side, v);
   const cur = side === "us" ? s.lib : s.olib;
   if (i < 0 && (!libAct || !ctSame(v, cur))) return ctSubOpen(side, { inn: v }); // 벤치 · 안 뛰는 리베로 → 교체
-  let cat = ctGuess(s, side, z);
-  if (libAct && CT_NOLIB.includes(cat)) cat = cat === "attack" ? "set" : "dig";
-  S.ct = { side, v, z: z || null, cat, zone: null, act: null };
+  S.ct = { side, v, z: z || null, cat: null, act: null }; // 예전 프로그램처럼: 카테고리 → 결과 → 세부
   ctSheet();
 }
 function ctSubOpen(side, o) {
@@ -163,23 +144,18 @@ function ctSheet() {
   const m = scMatch(), el = document.getElementById("sheet"), s = ctState(m, S.events[m.id] || [], S.sel.set || 1);
   const noEl = document.getElementById("ctSubNo"); if (noEl && c.cat === "sub" && c.side === "opp" && noEl.value !== "") c.inn = noEl.value;
   const libAct = c.v != null && ctLibActing(m, s, c.side, c.v);
-  const zoned = ["serve", "attack"].includes(c.cat);
-  const btn = (a, i) => { const cls = a[3] === "earned" ? "g-best" : a[3] === "error" ? "g-err" : a[2] === "#" || a[2] === "+" ? "g-good" : "g-ok";
-    return `<button type="button" class="btn sc-g ${cls}" data-act="ctact" data-a="${a[0]}">${i < 9 ? `<kbd>${i + 1}</kbd>` : ""}${esc(a[1])}</button>`; };
-  const det = c.act && CT_ACT[c.act].det;
-  let body, title;
-  if (c.cat === "sub") { body = ctSubHtml(m, s); title = `${c.side === "us" ? "우리" : "상대"} 교체`; }
-  else {
-    const n = ctName(c.side, c.v), cat = CT_MENU.find(x => x[0] === c.cat) || CT_MENU[0];
-    title = `${c.side === "us" ? "우리" : "상대"} ${esc(n.no ? "#" + n.no : "")} ${esc(n.nm)}${libAct ? ` <span class="chip">L</span>` : ""}`;
-    body = `${zoned ? `<div class="sc-row"><span class="sc-k">코스</span><div class="sc-court">${ZONES.map(z => `<button type="button" class="sc-z ${c.zone === z ? "on" : ""}" data-act="ctzone" data-v="${z}">${z}</button>`).join("")}</div></div>` : ""}
-    ${det ? `<p class="small">${esc(CT_ACT[c.act].name)}</p><div class="ct-acts">${det.map((d, i) => `<button type="button" class="btn sc-g g-err" data-act="ctdet" data-v="${esc(d)}"><kbd>${i + 1}</kbd>${esc(d)}</button>`).join("")}</div>`
-      : `<div class="ct-acts">${cat[2].map(btn).join("")}</div>`}`;
-  }
+  const cls = a => a[3] === "earned" ? "g-best" : a[3] === "error" ? "g-err" : a[2] === "#" || a[2] === "+" ? "g-good" : "g-ok";
+  const grid = items => `<div class="ct-acts">${items.map(([act, attrs, cl, label], i) => `<button type="button" class="btn sc-g ${cl}" data-act="${act}" ${attrs}>${i < 9 ? `<kbd>${i + 1}</kbd>` : ""}${esc(label)}</button>`).join("")}</div>`;
   const cats = CT_MENU.filter(([k]) => !(libAct && CT_NOLIB.includes(k)));
-  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${title}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
-    ${c.v != null ? `<div class="sc-row ct-cats">${cats.map(([k, l]) => `<button type="button" class="chip sc-chip ${k === c.cat ? "on" : ""}" data-act="ctcat" data-v="${k}">${l}</button>`).join("")}<button type="button" class="chip sc-chip ${c.cat === "sub" ? "on" : ""}" data-act="ctcat" data-v="sub">교체</button></div>` : ""}
-    ${body}`;
+  const n = c.v != null ? ctName(c.side, c.v) : null, who = n ? `${c.side === "us" ? "우리" : "상대"} ${esc(n.no ? "#" + n.no : "")} ${esc(n.nm)}${libAct ? ` <span class="chip">L</span>` : ""}` : "";
+  let body, title, back = "";
+  if (c.cat === "sub") { body = ctSubHtml(m, s); title = `${c.side === "us" ? "우리" : "상대"} 교체`; if (c.v != null && (libAct || (c.side === "us" ? s.usSlots : s.opSlots).some(x => ctSame(x, c.v)))) back = `<button type="button" class="btn link small" data-act="ctback">‹ 뒤로</button>`; }
+  else if (!c.cat) { title = who;
+    body = `<div class="ct-catg">${grid(cats.map(([k, l]) => ["ctcat", `data-v="${k}"`, `ct-cat ${c.side}`, l]))}</div>${c.v != null ? `<div class="row"><button type="button" class="btn link small" data-act="ctcat" data-v="sub">교체</button></div>` : ""}`; }
+  else { const cat = CT_MENU.find(x => x[0] === c.cat) || CT_MENU[0], det = c.act && CT_ACT[c.act].det;
+    title = `${who} · ${esc(det ? CT_ACT[c.act].name : cat[1])}`; back = `<button type="button" class="btn link small" data-act="ctback">‹ 뒤로</button>`;
+    body = det ? grid(det.map(d => ["ctdet", `data-v="${esc(d)}"`, "g-err", d])) : grid(cat[2].map(a => ["ctact", `data-a="${a[0]}"`, cls(a), a[1]])); }
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${title}</h3><span class="row nowrap">${back}<button class="btn link" type="button" data-act="sheetclose">닫기</button></span></div>${body}`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
 /* 저장: 화면에 먼저 넣고(바로 다음 입력) 서버에는 차례대로 보냄. 인터넷이 끊겨도 대기열에 남았다가 다시 보냄 */
@@ -226,7 +202,6 @@ function ctPush(row, pr) {
   let pt = null;
   if (pr) { pt = { ...pr, id: "tp" + tmp, event_id: null }; (S.points[row.match_id] = S.points[row.match_id] || []).push(pt); }
   ctQ.list.push({ ev: { ...row, id: tmp }, pt }); ctQSave();
-  try { navigator.vibrate && navigator.vibrate(12); } catch (e) {}
   ctFlush();
 }
 function ctSave(code, detail) {
@@ -277,25 +252,6 @@ async function ctUndo() {
   } catch (err) { toast(failMsg(err)); }
   state.dirty = false; render();
 }
-// 기록 화면: 머리말·메뉴를 숨기고 점수·코트만 (가로로 돌리면 코트 옆에 점수)
-function ctFocus(on, quiet) {
-  state.ctFocus = !!on;
-  try {
-    if (on && document.documentElement.requestFullscreen && !document.fullscreenElement) document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
-    else if (!on && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {});
-  } catch (e) {}
-  if (on) { pushInner(); window.scrollTo(0, 0); }
-  if (!quiet) { state.dirty = false; render(); }
-}
-// 화면 꺼짐 막기 (코트 입력 중에만)
-let ctLock = null;
-async function ctWake(on) {
-  try {
-    if (on && !ctLock && navigator.wakeLock && document.visibilityState === "visible") { ctLock = await navigator.wakeLock.request("screen"); ctLock.addEventListener("release", () => { ctLock = null; }); }
-    else if (!on && ctLock) { const l = ctLock; ctLock = null; await l.release(); }
-  } catch (e) { ctLock = null; }
-}
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && state.view === "scout" && sc().tab === "court" && scMatch()) ctWake(true); });
 // 라인업 · 세트 시작 로테 (전력분석 담당). 라인업 용지처럼 앞줄 4·3·2, 뒷줄 5·6·1 순서로 입력 (저장은 자리 1~6)
 const CT_SHEET = [3, 2, 1, 4, 5, 0];
 function ctLineupForm() {
@@ -349,23 +305,17 @@ function courtClick(b, act) {
   if (act === "ctcat") { if (b.dataset.v === "sub") { const m = scMatch(), s = ctState(m, S.events[m.id] || [], S.sel.set || 1), slots = S.ct.side === "us" ? s.usSlots : s.opSlots, i = slots.findIndex(x => ctSame(x, S.ct.v));
       return ctSubOpen(S.ct.side, i >= 0 ? { out: i, v: S.ct.v } : { inn: S.ct.v, v: S.ct.v }); }
     S.ct.cat = b.dataset.v; S.ct.act = null; return ctSheet(); }
+  if (act === "ctback") { if (S.ct.act) S.ct.act = null; else if (S.ct.cat === "sub") S.ct = { side: S.ct.side, v: S.ct.v, z: null, cat: null, act: null }; else S.ct.cat = null; return ctSheet(); }
   if (act === "ctsubout") { const m = scMatch(), s = ctState(m, S.events[m.id] || [], S.sel.set || 1), i = Number(b.dataset.i); S.ct.out = i; S.ct.pos = (S.ct.side === "us" ? s.usPos : s.opPos)[i] || S.ct.pos; return ctSheet(); }
   if (act === "ctsubin") { S.ct.inn = b.dataset.v; const n = document.getElementById("ctSubNo"); if (n) n.value = ""; return ctSheet(); }
   if (act === "ctsubpos") { S.ct.pos = b.dataset.v; return ctSheet(); }
   if (act === "ctsubok") return ctSubSave();
-  if (act === "ctzone") { const z = Number(b.dataset.v); S.ct.zone = S.ct.zone === z ? null : z; return ctSheet(); }
   if (act === "ctact") { const a = CT_ACT[b.dataset.a]; if (a.det) { S.ct.act = a.code; return ctSheet(); } return ctSave(a.code, null); }
   if (act === "ctdet") return ctSave(S.ct.act, b.dataset.v || null);
-  if (act === "ctsrv") { const m = scMatch(), s = ctState(m, S.events[m.id] || [], S.sel.set || 1);
-    S.ct = { side: s.serve, v: String(s.serve === "us" ? ctAt(s.usSlots, s.rot, 1) : ctAt(s.opSlots, s.orot, 1)), z: 1, cat: "serve", zone: null, act: null };
-    const a = CT_ACT[b.dataset.a]; if (a.det) { S.ct.act = a.code; return ctSheet(); } return ctSave(a.code, null); }
-  if (act === "ctpt") { S.ct = { side: b.dataset.w, v: null }; return ctSave(CT_PT, null); }
   if (act === "ctlib") return ctLibSave(b.dataset.side || "us", b.dataset.v);
   if (act === "ctundo") return ctUndo();
   if (act === "ctlineup") return ctLineupForm();
-  if (act === "ctfocus") { if (state.ctFocus) { try { history.back(); } catch (e) { ctFocus(false); } return; } return ctFocus(true); }
   if (act === "ctflip") { try { localStorage.setItem("snuvt-ctflip", ctFlip() ? "0" : "1"); } catch (e) {} state.dirty = false; return render(); }
-  if (act === "ctnextset") { const m = scMatch(), n = (S.sel.set || 1) + 1; S.sel.set = n; state.dirty = false; render(); if (!(ctLu(m).sets || {})[n] && can("analysis")) ctLineupForm(); return; }
 }
 // 컴퓨터: 창이 열려 있으면 숫자 키로 바로 고르기 (예전 프로그램처럼) · 코트에서 Backspace = 되돌리기
 document.addEventListener("keydown", ev => {
@@ -373,7 +323,7 @@ document.addEventListener("keydown", ev => {
   const t = ev.target; if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
   const sh = document.getElementById("sheet");
   if (sh && !sh.hidden && sc().ct && /^[1-9]$/.test(ev.key)) { const bs = sh.querySelectorAll(".ct-acts .btn"), x = bs[Number(ev.key) - 1]; if (x) { ev.preventDefault(); x.click(); } }
-  else if (sh && !sh.hidden && sc().ct && ev.key === "Backspace" && sc().ct.act) { ev.preventDefault(); sc().ct.act = null; ctSheet(); } // 세부 → 결과로
+  else if (sh && !sh.hidden && sc().ct && ev.key === "Backspace") { ev.preventDefault(); const c = sc().ct; if (c.act) c.act = null; else if (c.cat && c.cat !== "sub" || c.cat === "sub" && c.v != null) c.cat = null; else return closeSheet(); ctSheet(); } // 한 단계 뒤로
   else if (sh && sh.hidden && ev.key === "Backspace") { ev.preventDefault(); ctUndo(); }
 });
 

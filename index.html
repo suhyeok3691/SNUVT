@@ -1044,7 +1044,7 @@ i.dot.k-ob { background: var(--c-fr); }
 .ct-score b { font-size: 26px; font-weight: 800; }
 .ct-t { font-weight: 700; font-size: 14px; } .ct-t.opp { text-align: right; } .ct-t small { color: var(--muted); font-weight: 600; }
 .ct-t.srv::after { content: " ●"; color: var(--yellow); } .ct-t.opp.srv::after { content: ""; } .ct-t.opp.srv::before { content: "● "; color: var(--yellow); }
-.ct-quick { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px; text-align: center; }
+.ct-quick { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ct-court { margin: 10px auto; width: 100%; max-width: 420px; box-sizing: border-box; display: grid; gap: 4px; padding: 8px; border-radius: 10px; background: color-mix(in srgb, var(--c-match) 12%, var(--surface)); border: 2px solid color-mix(in srgb, var(--c-match) 40%, var(--line)); }
 .ct-half { display: grid; gap: 6px; } .ct-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .ct-net { position: relative; height: 14px; display: grid; place-items: center; } .ct-net::before { content: ""; position: absolute; left: -8px; right: -8px; top: 6px; border-top: 3px solid var(--ink); }
@@ -1069,11 +1069,13 @@ i.dot.k-ob { background: var(--c-fr); }
 .ct-sb b { flex: 1; min-width: 0; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .ct-sb small { flex: none; font-size: 11px; color: var(--muted); }
 .ct-sb.on { border-color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, var(--surface)); }
 .ct-lu-n { font-size: 12px; color: var(--muted); } .ct-lu-c select, .ct-lu-c input { width: 100%; min-width: 0; } .ct-lu-c .ct-pos { font-size: 13px; padding-top: 4px; padding-bottom: 4px; }
-.ct-lu-c { display: grid; gap: 2px; min-width: 0; } .ct-lf { display: flex; align-items: center; justify-content: flex-start; gap: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; } .ct-lf input { margin: 0; width: auto; flex: none; }
+.ct-lu-c { display: grid; gap: 2px; min-width: 0; }
 .ct-p.srv { border-color: var(--yellow); box-shadow: 0 0 0 2px var(--yellow); }
 .ct-extra details { margin-top: 6px; } .ct-extra summary { cursor: pointer; padding: 4px 0; }
 .ct-empty { display: grid; gap: 8px; justify-items: start; }
 .ct-cats { margin-bottom: 8px; }
+.ct-catg .ct-acts { grid-template-columns: repeat(4, minmax(0, 1fr)); } .ct-catg .sc-g { min-height: 64px; font-weight: 700; color: #fff; border: 0; } .ct-catg .ct-cat.us { background: var(--blue); } .ct-catg .ct-cat.opp { background: #c0392b; }
+@media (max-width: 420px) { .ct-catg .sc-g { min-height: 56px; font-size: 13.5px; padding: 4px; } }
 .ct-acts { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; margin-top: 8px; }
 .ct-acts .sc-g { min-height: 48px; }
 .ct-lu { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 8px; margin-bottom: 8px; }
@@ -1084,29 +1086,12 @@ i.dot.k-ob { background: var(--c-fr); }
 :root[data-theme="dark"] .ct-sheet td.ct-hi { background: #4a4214; } :root[data-theme="dark"] .ct-sheet td.ct-up { background: #173d22; } :root[data-theme="dark"] .ct-sheet td.ct-dn { background: #4a1d1d; }
 tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: color-mix(in srgb, var(--good) 14%, var(--surface)); }
 .ct-tools { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
-.ct-srv { display: grid; gap: 6px; padding: 8px; border-radius: 10px; background: color-mix(in srgb, var(--blue) 10%, var(--surface)); }
-.ct-srv.opp { background: color-mix(in srgb, #c0392b 10%, var(--surface)); }
-.ct-srvw { font-size: 13px; } .ct-srvw b { font-family: var(--f-data); font-size: 16px; }
-.ct-srvb { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; } .ct-srvb .sc-g { min-height: 46px; padding: 4px 2px; font-size: 13.5px; }
-.ct-end { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 10px; border-radius: 10px; background: var(--warn-soft); }
-.ct-quick .ct-undo { justify-self: center; }
 .ct-pend { opacity: .6; }
 .sc-g kbd { display: none; font: 600 10px var(--f-data); margin-right: 5px; padding: 0 4px; border: 1px solid currentColor; border-radius: 4px; opacity: .7; }
 @media (hover: hover) and (pointer: fine) { .sc-g kbd { display: inline-block; } }
 @media (orientation: landscape) and (max-height: 520px) {
   .sc-page .ct-bar { padding: 6px 10px; gap: 5px; } .ct-score b { font-size: 22px; }
   .ct-court { max-width: 560px; } .ct-p { min-height: 44px; padding: 3px 2px; } .ct-p b { font-size: 17px; }
-}
-.ct-wrap { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "clock" "bar" "court" "extra" "rec"; }
-.ct-clock { grid-area: clock; } .ct-wrap > .ct-bar { grid-area: bar; } .ct-wrap > .ct-court { grid-area: court; } .ct-wrap > .ct-extra { grid-area: extra; } .ct-wrap > .ct-recs { grid-area: rec; }
-.ct-clock .sc-vod { margin: 0 0 6px; padding: 6px 10px; }
-body.ct-focus header.top, body.ct-focus .netbar, body.ct-focus .sc-top, body.ct-focus .sc-title, body.ct-focus .sc-tabs, body.ct-focus .sc-page > p.small { display: none !important; }
-body.ct-focus #main { padding-top: 6px; } body.ct-focus .sc-page { margin-top: 0; }
-@media (orientation: landscape) and (max-height: 560px) {
-  body.ct-focus .ct-wrap { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); grid-template-areas: "court clock" "court bar" "court extra" "court rec"; gap: 0 12px; align-items: start; }
-  body.ct-focus .ct-wrap > .ct-court { margin: 0; max-width: none; position: sticky; top: 6px; }
-  body.ct-focus .ct-court .ct-p { min-height: calc((100vh - 70px) / 4 - 6px); }
-  body.ct-focus .ct-recs .sc-recent li:nth-child(n+4) { display: none; }
 }
 .ct-rec li .ct-l { flex: 1; text-align: left; } .ct-rec li .num { min-width: 34px; flex: none; }
 /* 참·불참: 목록엔 숫자만, 명단은 투표 창에서 */
@@ -1144,11 +1129,11 @@ body.ct-focus #main { padding-top: 6px; } body.ct-focus .sc-page { margin-top: 0
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=128"></script>
-<script src="guide.js?v=128"></script>
-<script src="library.js?v=128"></script>
-<script src="campus.js?v=128"></script>
-<script src="court.js?v=128"></script>
-<script src="app.js?v=128"></script>
+<script src="program.js?v=129"></script>
+<script src="guide.js?v=129"></script>
+<script src="library.js?v=129"></script>
+<script src="campus.js?v=129"></script>
+<script src="court.js?v=129"></script>
+<script src="app.js?v=129"></script>
 </body>
 </html>
