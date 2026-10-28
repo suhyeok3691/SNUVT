@@ -16,20 +16,26 @@ const CT_MENU = [
 const CT_ACT = Object.fromEntries(CT_MENU.flatMap(([sk, , l]) => l.map(a => [a[0], { skill: sk, code: a[0], name: a[1], grade: a[2], res: a[3] || "", det: a[4] || null }])));
 const CT_PT = "pt"; // 누가 땄는지만 (선수 없이)
 const CT_SUB = "sub"; // 교체 (zone = 바뀐 자리 1~6, detail = 나간 선수)
+const CT_LIB = "lib"; // 코트에 서는 리베로 바꾸기 (리베로 2명일 때)
+const ctIsLib = (L, v) => ((L.us || {}).libero || []).some(x => String(x) === String(v));
 const ctOther = s => s === "us" ? "opp" : "us";
 const ctLu = m => m.lineup || {};
 const ctReady = m => { const L = ctLu(m); return L.us && (L.us.slots || []).filter(Boolean).length === 6 && L.opp && (L.opp.slots || []).filter(x => x !== "" && x != null).length === 6; };
 // 로테이션 r에서 자리 z(1~6)에 선 선수 = 처음(R1) 자리 ((z-1)+(r-1))%6 +1 의 선수 (로테이션은 2→1, 1→6 … 시계 방향)
 const ctAt = (slots, r, z) => slots[((z - 1) + (r - 1)) % 6];
+// 리베로 자동: '리베로' 표시한 선수가 뒷줄(5·6, 상대 서브일 때 1)에 오면 그 자리에 리베로. 우리 서브 차례 1번 자리는 원래 선수가 서브
+const ctUsAt = (s, z) => { const i = ((z - 1) + (s.rot - 1)) % 6; return s.lib && s.libFor.includes(i) && (z === 5 || z === 6 || (z === 1 && s.serve !== "us")) ? { v: s.lib, lib: true } : { v: s.usSlots[i], lib: false }; };
 const ctZoneOf = (slots, r, i) => ((i - (r - 1)) % 6 + 6) % 6 + 1; // 처음 자리 i(0~5)가 지금 서 있는 자리
 // 세트 하나를 처음부터 다시 따라가며 지금 상태 계산 (되돌리기도 이걸로 맞음)
 function ctState(m, ev, setNo) {
   const L = ctLu(m), st = (L.sets || {})[setNo] || {};
   const s = { rot: st.rot || 1, orot: st.opp_rot || 1, serve: st.serve || "us", us: 0, op: 0, done: false, last: null, list: [],
-    usSlots: [...((L.us || {}).slots || [])], opSlots: [...((L.opp || {}).slots || [])] };
+    usSlots: [...((L.us || {}).slots || [])], opSlots: [...((L.opp || {}).slots || [])],
+    lib: ((L.us || {}).libero || [])[0] || null, libFor: (L.us || {}).libFor || [] };
   for (const e of ev) {
     if (e.set_no !== setNo || !e.action) continue;
     s.list.push(e);
+    if (e.action === CT_LIB) { if (ctIsLib(L, e.player_id)) s.lib = e.player_id; continue; }
     if (e.action === CT_SUB) { const i = (e.zone || 0) - 1; if (i >= 0 && i < 6) { if (e.side === "us") s.usSlots[i] = e.player_id; else s.opSlots[i] = e.opp_no; } continue; }
     if (e.skill === "serve") { s.serve = e.side; s.done = false; s.last = null; }
     else if (e.skill === "receive") { s.serve = ctOther(e.side); s.done = false; s.last = null; } // 리시브 = 새 랠리 (서브 기록을 빼먹어도)
@@ -54,9 +60,9 @@ function ctGuess(s, side, z) {
   return front && l.skill !== "block" ? "block" : "dig";
 }
 const ctName = (side, v) => { if (side === "us") { const p = playerOf(v); return p ? { no: p.number != null ? String(p.number) : "", nm: p.name } : { no: "", nm: "?" }; } return { no: String(v ?? ""), nm: "" }; };
-function ctBtn(side, v, z, serving) {
+function ctBtn(side, v, z, serving, lib) {
   const n = ctName(side, v);
-  return `<button type="button" class="ct-p ${side} ${serving ? "srv" : ""}" data-act="ctpick" data-side="${side}" data-v="${esc(v)}" ${z ? `data-z="${z}"` : ""}><b>${esc(n.no || "–")}</b>${n.nm ? `<span>${esc(n.nm)}</span>` : ""}${z ? `<i>${z}</i>` : ""}</button>`;
+  return `<button type="button" class="ct-p ${side} ${serving ? "srv" : ""} ${lib ? "lib" : ""}" data-act="ctpick" data-side="${side}" data-v="${esc(v)}" ${z ? `data-z="${z}"` : ""}><b>${esc(n.no || "–")}</b>${n.nm ? `<span>${esc(n.nm)}</span>` : ""}${z ? `<i>${z}</i>` : ""}</button>`;
 }
 const ctFlip = () => { try { return localStorage.getItem("snuvt-ctflip") === "1"; } catch (e) { return false; } };
 // 코트 화면
@@ -68,8 +74,8 @@ function ctPad(m, ev) {
   // 아래 칸: 앞줄(네트) 4·3·2, 뒷줄 5·6·1 / 위 칸: 뒷줄 1·6·5, 앞줄 2·3·4 (영상 방향에 맞게 뒤집기)
   const half = (side, slots, r, top) => { const srv = s.serve === side && !s.last;
     const rows = top ? [[1, 6, 5], [2, 3, 4]] : [[4, 3, 2], [5, 6, 1]];
-    return `<div class="ct-half ${side}">${rows.map(row => `<div class="ct-row">${row.map(z => ctBtn(side, ctAt(slots, r, z), z, srv && z === 1)).join("")}</div>`).join("")}</div>`; };
-  const lib = (side, l) => (l || []).filter(x => x !== "" && x != null).map(v => ctBtn(side, v, 0, false)).join("");
+    return `<div class="ct-half ${side}">${rows.map(row => `<div class="ct-row">${row.map(z => { const x = side === "us" ? ctUsAt(s, z) : { v: ctAt(slots, r, z), lib: false }; return ctBtn(side, x.v, z, srv && z === 1, x.lib); }).join("")}</div>`).join("")}</div>`; };
+  const lib = (side, l) => (l || []).filter(x => x !== "" && x != null).map(v => ctBtn(side, v, 0, false, side === "us" && String(v) === String(s.lib))).join("");
   const onCourt = new Set(s.usSlots), bench = sortedPlayers().filter(p => !p.military && !onCourt.has(p.id) && !(L.us.libero || []).includes(p.id));
   const recent = s.list.slice(-6).reverse(), q = ctQ.list.length;
   // 랠리 시작이면 서버 한 번에 기록
@@ -99,6 +105,7 @@ function ctPad(m, ev) {
 function ctLabel(e) {
   const a = CT_ACT[e.action], who = e.side === "us" ? (() => { const p = playerOf(e.player_id); return p ? `${pNo(p)}${esc(p.name)}` : "우리"; })() : `상대 #${e.opp_no ?? "?"}`;
   if (e.action === CT_PT) return `${e.side === "us" ? "우리" : "상대"} 점수`;
+  if (e.action === CT_LIB) return `리베로 바꿈 · ${who}`;
   if (e.action === CT_SUB) return `교체 · ${who} 들어감${e.detail ? ` ↔ ${esc(e.detail)}` : ""}`;
   return `${who} · ${a ? esc(a.name) : esc(e.action)}${e.detail ? ` (${esc(e.detail)})` : ""}${e.zone ? ` → ${e.zone}` : ""}`;
 }
@@ -106,8 +113,11 @@ function ctLabel(e) {
 function ctOpen(side, v, z) {
   const S = sc(), m = scMatch(), s = ctState(m, S.events[m.id] || [], S.sel.set || 1);
   const onCourt = (side === "us" ? s.usSlots : s.opSlots).some(x => String(x) === String(v));
-  const lib = ((ctLu(m)[side] || {}).libero || []).some(x => String(x) === String(v));
-  S.ct = { side, v, z: z || null, cat: !onCourt && !lib ? "sub" : ctGuess(s, side, z), zone: null, act: null };
+  const L = ctLu(m), lib = ((L[side] || {}).libero || []).some(x => String(x) === String(v));
+  const usLib = side === "us" && lib, other = usLib && s.libFor.length && String(v) !== String(s.lib); // 지금 안 뛰는 리베로
+  let cat = (!onCourt && !lib) || other ? "sub" : ctGuess(s, side, z);
+  if (usLib && ["serve", "block", "attack"].includes(cat)) cat = cat === "attack" ? "set" : "dig"; // 리베로는 서브·블로킹 X
+  S.ct = { side, v, z: z || null, cat, zone: null, act: null };
   ctSheet();
 }
 function ctSheet() {
@@ -121,7 +131,9 @@ function ctSheet() {
   if (c.cat === "sub") {
     const s = ctState(m, S.events[m.id] || [], S.sel.set || 1), L = ctLu(m), slots = c.side === "us" ? s.usSlots : s.opSlots, r = c.side === "us" ? s.rot : s.orot;
     const i = slots.findIndex(x => String(x) === String(c.v));
-    if (i >= 0) { // 코트에 있는 선수 → 누가 들어오나
+    if (c.side === "us" && ctIsLib(L, c.v)) body = String(c.v) === String(s.lib) ? `<p class="small muted">지금 뛰는 리베로예요.</p>`
+      : `<div class="ct-acts"><button type="button" class="btn sc-g g-good" data-act="ctlib" data-v="${esc(c.v)}">이 리베로로 바꾸기</button></div>`;
+    else if (i >= 0) { // 코트에 있는 선수 → 누가 들어오나
       body = c.side === "us"
         ? `<p class="small">들어올 선수</p><div class="ct-acts">${sortedPlayers().filter(p => !p.military && !slots.includes(p.id) && !(L.us.libero || []).includes(p.id)).map(p => `<button type="button" class="btn sc-g g-ok" data-act="ctsub" data-in="${esc(p.id)}" data-i="${i}">${esc(pNo(p) + p.name)}</button>`).join("")}</div>`
         : `<div class="sc-row"><label class="fl sc-opp">들어올 번호<input id="ctSubNo" type="number" inputmode="numeric" min="0" max="99"></label><button class="btn primary small" type="button" data-act="ctsub" data-i="${i}">교체</button></div>`;
@@ -209,6 +221,11 @@ function ctSubSave(inV, i) {
     detail: `${on.no ? "#" + on.no + " " : ""}${on.nm}`.trim().slice(0, 30) || null, zone: i + 1, rot: s.rot, opp_rot: s.orot, serve: s.serve, point: null, score: `${s.us}:${s.op}`, t: scNow(), author: uid() }, null);
   S.ct = null; closeSheet(); state.dirty = false; render();
 }
+function ctLibSave(v) {
+  const S = sc(), m = scMatch(), setNo = S.sel.set || 1, s = ctState(m, S.events[m.id] || [], setNo);
+  ctPush({ match_id: m.id, set_no: setNo, side: "us", player_id: v, opp_no: null, skill: "sub", grade: "!", action: CT_LIB, detail: null, zone: null, rot: s.rot, opp_rot: s.orot, serve: s.serve, point: null, score: `${s.us}:${s.op}`, t: scNow(), author: uid() }, null);
+  S.ct = null; closeSheet(); state.dirty = false; render();
+}
 async function ctUndo() {
   const S = sc(), m = scMatch(); if (!m) return;
   const l = (S.events[m.id] || []).filter(e => e.action && e.set_no === (S.sel.set || 1)), e = l[l.length - 1]; if (!e) return;
@@ -249,14 +266,16 @@ function ctLineupForm() {
   const S = sc(), m = scMatch(), L = ctLu(m), setNo = S.sel.set || 1, prev = (L.sets || {})[setNo - 1];
   const st = (L.sets || {})[setNo] || (prev ? { rot: prev.rot, opp_rot: prev.opp_rot, serve: prev.serve === "opp" ? "us" : "opp" } : {});
   const ps = sortedPlayers().filter(p => !p.military), us = (L.us && L.us.slots) || [], op = (L.opp && L.opp.slots) || [];
-  const sel = (i, cur) => `<label class="fl">${i + 1}${i === 0 ? " 서브" : ""}<select id="ctu-${i}"><option value="">선택</option>${ps.map(p => `<option value="${p.id}" ${cur === p.id ? "selected" : ""}>${esc(pNo(p) + p.name)} · ${esc(p.pos || "")}</option>`).join("")}</select></label>`;
+  const libFor = L.us && L.us.libFor ? L.us.libFor : us.map((id, i) => (playerOf(id) || {}).pos === "MB" ? i : -1).filter(i => i >= 0);
+  const sel = (i, cur) => `<div class="ct-lu-c"><label class="fl">${i + 1}${i === 0 ? " 서브" : ""}<select id="ctu-${i}"><option value="">선택</option>${ps.map(p => `<option value="${p.id}" ${cur === p.id ? "selected" : ""}>${esc(pNo(p) + p.name)} · ${esc(p.pos === "Li" ? "L" : p.pos || "")}</option>`).join("")}</select></label><label class="ct-lf"><input type="checkbox" id="ctf-${i}" ${libFor.includes(i) ? "checked" : ""}>리베로</label></div>`;
+  const lsel = (k, cur) => `<label class="fl">리베로 ${k + 1}<select id="ctu-l${k}"><option value="">없음</option>${ps.map(p => `<option value="${p.id}" ${cur === p.id ? "selected" : ""}>${esc(pNo(p) + p.name)}${p.pos === "Li" ? " · L" : ""}</option>`).join("")}</select></label>`;
   const num = (id, v, l) => `<label class="fl">${l}<input id="${id}" type="number" inputmode="numeric" min="0" max="99" value="${esc(v ?? "")}"></label>`;
   const libs = (L.us && L.us.libero) || [];
   const el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>라인업</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="ctLineupForm">
       <h4>우리</h4><div class="ct-lu"><span class="ct-netl">네트</span>${CT_SHEET.map(i => sel(i, us[i])).join("")}</div>
-      <label class="fl">리베로<select id="ctu-lib" multiple size="3">${ps.map(p => `<option value="${p.id}" ${libs.includes(p.id) ? "selected" : ""}>${esc(pNo(p) + p.name)}</option>`).join("")}</select></label>
+      <div class="pair">${lsel(0, libs[0])}${lsel(1, libs[1])}</div>
       <h4>${esc(m.opponent || "상대")} (등번호)</h4><div class="ct-lu"><span class="ct-netl">네트</span>${CT_SHEET.map(i => num(`cto-${i}`, op[i], `${i + 1}${i === 0 ? " 서브" : ""}`)).join("")}</div>
       <div class="pair">${num("cto-l1", ((L.opp && L.opp.libero) || [])[0], "상대 리베로")}${num("cto-l2", ((L.opp && L.opp.libero) || [])[1], "상대 리베로 2")}</div>
       <h4>${setNo}세트 시작</h4><div class="fields">
@@ -270,9 +289,14 @@ async function ctLineupSave(f) {
   const S = sc(), m = scMatch(), v = id => (document.getElementById(id) || {}).value || "", setNo = S.sel.set || 1;
   const us = [0, 1, 2, 3, 4, 5].map(i => v(`ctu-${i}`)), op = [0, 1, 2, 3, 4, 5].map(i => v(`cto-${i}`));
   if (us.some(x => !x) || new Set(us).size !== 6) { toast("우리 선수 6명을 겹치지 않게 골라 주세요"); return false; }
+  const libs = [v("ctu-l0"), v("ctu-l1")].filter(Boolean);
+  if (new Set(libs).size !== libs.length) { toast("리베로 1·2를 다른 사람으로 골라 주세요"); return false; }
+  if (libs.some(x => us.includes(x))) { toast("코트 6명에 넣은 선수는 리베로로 고를 수 없어요"); return false; }
+  const libFor = [0, 1, 2, 3, 4, 5].filter(i => (document.getElementById(`ctf-${i}`) || {}).checked);
+  if (libFor.length && !libs.length) { toast("리베로를 골라 주세요"); return false; }
   if (op.some(x => x === "")) { toast("상대 등번호 6개를 넣어 주세요"); return false; }
   const L = { ...ctLu(m) };
-  L.us = { slots: us, libero: [...document.getElementById("ctu-lib").selectedOptions].map(o => o.value).slice(0, 2) };
+  L.us = { slots: us, libero: libs, libFor };
   L.opp = { slots: op.map(Number), libero: [v("cto-l1"), v("cto-l2")].filter(x => x !== "").map(Number) };
   L.sets = { ...(L.sets || {}), [setNo]: { rot: Number(v("cts-rot")) || 1, opp_rot: Number(v("cts-orot")) || 1, serve: v("cts-serve") || "us" } };
   ok(await sb.from("scout_matches").update({ lineup: L }).eq("id", m.id));
@@ -292,6 +316,7 @@ function courtClick(b, act) {
     const a = CT_ACT[b.dataset.a]; if (a.det) { S.ct.act = a.code; return ctSheet(); } return ctSave(a.code, null); }
   if (act === "ctsub") return ctSubSave(b.dataset.in != null ? b.dataset.in : (document.getElementById("ctSubNo") || {}).value, Number(b.dataset.i));
   if (act === "ctpt") { S.ct = { side: b.dataset.w, v: null }; return ctSave(CT_PT, null); }
+  if (act === "ctlib") return ctLibSave(b.dataset.v);
   if (act === "ctundo") return ctUndo();
   if (act === "ctlineup") return ctLineupForm();
   if (act === "ctfocus") { if (state.ctFocus) { try { history.back(); } catch (e) { ctFocus(false); } return; } return ctFocus(true); }
@@ -308,7 +333,7 @@ document.addEventListener("keydown", ev => {
 });
 
 /* ---------- 분석: 기록지 (예전 프로그램 엑셀 요약과 같은 항목) · 상대 로테이션별 ---------- */
-const ctReal = l => l.filter(e => e.action !== CT_PT && e.action !== CT_SUB);
+const ctReal = l => l.filter(e => e.action !== CT_PT && e.action !== CT_SUB && e.action !== CT_LIB);
 function ctSum(l) {
   const c = (sk, g) => l.filter(e => e.skill === sk && (!g || g.includes(e.grade))).length;
   const at = c("attack"), ak = c("attack", "#"), ae = c("attack", "=/");
