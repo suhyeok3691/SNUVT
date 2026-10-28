@@ -676,7 +676,7 @@ async function openCmpPhotos(mid) {
     ${sides.length ? sides.map(id => { const t = cmpTeam(c, id), l = mine.filter(p => p.team === id);
       return `<div class="cp-team"><b>${esc(t ? t.name : "")}</b>
         <div class="cp-photos">${l.map(p => `<span class="cp-ph"><img src="${esc(photoUrl(p.path))}" alt="">${p.author === uid() || can("schedule") ? `<button type="button" class="btn link small danger" data-act="cmpphotodel" data-id="${p.id}" data-m="${m.id}">삭제</button>` : ""}</span>`).join("")}</div>
-        <label class="btn small cp-up">사진 올리기<input type="file" accept="image/*" capture="environment" hidden data-cmp-up="${m.id}|${id}"></label></div>`; }).join("") : emptyLine("팀이 정해지면 올릴 수 있어요.")}`;
+        <label class="btn small cp-up">사진 올리기<input type="file" accept="image/*" hidden data-cmp-up="${m.id}|${id}"></label></div>`; }).join("") : emptyLine("팀이 정해지면 올릴 수 있어요.")}`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
 // 휴대폰 사진은 커서 긴 쪽 1600px JPEG로 줄여서 올림
