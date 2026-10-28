@@ -328,7 +328,9 @@ async function openCmpForm(kind, id) {
     const x = id ? c.matches.find(m => m.id === id) : null, s = x || { date: c.start, stage: "group", refs: {} };
     const d = s.date, av = availOf(c, d), cnt = refCounts(c);
     const pool = Object.values(av).filter(v => v.going).sort((a, b) => (cnt[a.name] || 0) - (cnt[b.name] || 0) || a.name.localeCompare(b.name, "ko"));
-    const teamSel = (sid, cur, lab) => `<label class="fl">${sid === "a" ? "A" : "B"} 팀<select id="cm-${sid}"><option value="">정해지지 않음</option>${c.teams.filter(t => !t.withdrawn).map(t => opt(t.id, `${t.grp ? t.grp + "조 " : ""}${t.name}`, cur)).join("")}</select></label><label class="fl">${sid === "a" ? "A" : "B"} 자리 이름<input id="cm-${sid}l" maxlength="20" value="${esc(lab || "")}" placeholder="예: A1위"></label>`;
+    // 예선: 팀을 고름 / 본선: 자리 이름("A1위" · "B선택" · "6강 1경기 승자")만 — 팀은 결과대로 저절로
+    const ko = s.stage !== "group";
+    const teamSel = (sid, cur, lab) => `<label class="fl cm-team" ${ko ? "hidden" : ""}>${sid === "a" ? "A" : "B"} 팀<select id="cm-${sid}"><option value="">선택</option>${c.teams.filter(t => !t.withdrawn).map(t => opt(t.id, `${t.grp ? t.grp + "조 " : ""}${t.name}`, cur)).join("")}</select></label><label class="fl cm-slot" ${ko ? "" : "hidden"}>${sid === "a" ? "A" : "B"} 자리<input id="cm-${sid}l" maxlength="20" value="${esc(lab || "")}" placeholder="예: A1위"></label>`;
     title = x ? "경기 · 심판" : "경기 추가";
     html = `<form class="f" id="cmpMatchForm" data-c="${c.id}" data-id="${x ? x.id : ""}" data-close="1"><div class="fields">
       <label class="fl">날짜<input type="date" id="cm-date" required value="${esc(d)}" min="${c.start}" max="${c.end}"></label>
@@ -343,6 +345,8 @@ async function openCmpForm(kind, id) {
     <div class="row"><button class="btn primary" type="submit">${x ? "저장" : "추가"}</button></div></form>${x ? delZone(`data-act="cmpdel" data-t="cup_matches" data-id="${x.id}"`, "경기 삭제") : ""}`;
   } else return;
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${title}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>${html}`;
+  const stg = document.getElementById("cm-stage");
+  if (stg) stg.addEventListener("change", () => { const ko = stg.value !== "group"; el.querySelectorAll(".cm-team").forEach(x => x.hidden = ko); el.querySelectorAll(".cm-slot").forEach(x => x.hidden = !ko); });
   el.hidden = false; document.body.classList.add("noscroll");
 }
 let cmpLastRef = null;
@@ -437,9 +441,9 @@ async function campusSubmit(f) {
     const s = v("cm-s") || null, e = v("cm-e") || null;
     if (s && e && e <= s) { toast("끝 시간이 시작보다 앞이에요."); return false; }
     const refs = {}; for (const [k] of REF_ROLES) { const sel = v("cm-r-" + k), n = sel === "__custom" ? v("cm-rc-" + k) : sel; if (n) refs[k] = n; }
-    const a = v("cm-a") || null, b = v("cm-b") || null;
+    const ko = v("cm-stage") !== "group", a = ko ? null : v("cm-a") || null, b = ko ? null : v("cm-b") || null;
     if (a && a === b) { toast("같은 팀끼리는 경기할 수 없어요."); return false; }
-    const row = { cup_id: f.dataset.c, date: v("cm-date"), start_time: s, end_time: e, stage: v("cm-stage"), label: v("cm-label") || null, team_a: a, team_b: b, a_label: v("cm-al") || null, b_label: v("cm-bl") || null, refs };
+    const row = { cup_id: f.dataset.c, date: v("cm-date"), start_time: s, end_time: e, stage: v("cm-stage"), label: v("cm-label") || null, team_a: a, team_b: b, a_label: ko ? v("cm-al") || null : null, b_label: ko ? v("cm-bl") || null : null, refs };
     ok(f.dataset.id ? await sb.from("cup_matches").update(row).eq("id", f.dataset.id) : await sb.from("cup_matches").insert(row));
     toast("저장했어요");
   }

@@ -2176,12 +2176,10 @@ function openScoutForm(id) {
       <label class="fl">상대 팀<input id="scf-opp" maxlength="60" value="${esc(m.opponent || "")}"></label>
       <label class="fl">날짜<input type="date" id="scf-date" value="${esc(m.date || iso(today()))}"></label>
       <label class="fl">기록자<input id="scf-rec" maxlength="30" value="${esc(m.recorder || (me ? me.name : ""))}"></label>
-      <div class="fl wide"><span>인원</span><div class="seg">${[["6", "6인제"], ["9", "9인제"]].map(([v, l]) => `<label class="seg-tab ${div === v ? "on solid" : ""}"><input type="radio" name="scf-div" value="${v}" ${div === v ? "checked" : ""} hidden>${l}</label>`).join("")}</div></div>
+      <label class="fl">인원<select id="scf-div">${[["6", "6인제"], ["9", "9인제"]].map(([v, l]) => `<option value="${v}" ${div === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <label class="fl wide">유튜브<input id="scf-yt" maxlength="200" value="${esc(m.yt || "")}" placeholder="https://youtu.be/..."></label>
       <label class="fl wide">치지직 다시보기<input id="scf-vod" maxlength="200" value="${esc(m.vod || "")}" placeholder="chzzk.naver.com/video/… 또는 naver.me/…"></label>
     </div><div class="row"><button class="btn primary" type="submit">${id ? "저장" : "다음: 라인업"}</button></div></form>`;
-  const divs = [...el.querySelectorAll('input[name="scf-div"]')];
-  divs.forEach(r => r.addEventListener("change", () => divs.forEach(x => { x.parentElement.classList.toggle("on", x.checked); x.parentElement.classList.toggle("solid", x.checked); })));
   if (id) addDelZone(`data-act="scdel" data-id="${esc(id)}"`, "경기 삭제");
   el.hidden = false; document.body.classList.add("noscroll");
 }
@@ -3321,8 +3319,7 @@ document.addEventListener("submit", async ev => {
         vodIn = data.url; }
       const vod = vodIn ? parseVod(vodIn) : null;
       if (vodIn && !vod) { toast("치지직 다시보기 주소를 확인해 주세요"); return; }
-      const dv = f.querySelector('input[name="scf-div"]:checked');
-      const row = { title: txt("scf-title"), stage: txt("scf-stage") || null, date: txt("scf-date") || null, opponent: txt("scf-opp") || null, recorder: txt("scf-rec") || null, division: dv ? dv.value : "6", yt: yt || null, vod };
+      const row = { title: txt("scf-title"), stage: txt("scf-stage") || null, date: txt("scf-date") || null, opponent: txt("scf-opp") || null, recorder: txt("scf-rec") || null, division: txt("scf-div") === "9" ? "9" : "6", yt: yt || null, vod };
       const r = f.dataset.id ? await sb.from("scout_matches").update(row).eq("id", f.dataset.id).select().maybeSingle() : await sb.from("scout_matches").insert(row).select().maybeSingle(); ok(r);
       closeSheet(); toast("저장했어요"); await scoutLoad();
       if (!f.dataset.id && r.data && r.data.id) { pushInner(); state.scoutId = r.data.id; sc().tab = "court"; sc().sel.set = 1; state.dirty = false; render(); if (can("analysis")) ctLineupForm(); } // Next: Lineup Setup
