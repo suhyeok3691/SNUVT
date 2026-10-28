@@ -2574,12 +2574,54 @@ const loaderHtml = small => `<div class="loader ${small ? "sm" : ""}" role="stat
 function go(view) {
   const from = state.view;
   state.view = view; state.dirty = false; state.armed = null;
-  try { history.replaceState(null, "", "#" + view); } catch (e) {}
+  // 화면을 바꿀 때마다 기록을 쌓아 휴대폰 뒤로 가기(버튼·밀기)로 돌아올 수 있게
+  try { if (from !== view) history.pushState(null, "", "#" + view); else history.replaceState(null, "", "#" + view); } catch (e) {}
   render(); window.scrollTo(0, 0);
   if (from === view || reduceMotion()) return;
   const m = document.getElementById("main");
   try { m.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: "ease-out" }); } catch (e) { /* 지원 안 하면 그냥 바뀜 */ }
 }
+// 안쪽 화면(대회 하나 · 일본 고교 학교 · 전력분석 경기)에 들어갈 때도 기록을 하나 쌓음
+const pushInner = () => { try { history.pushState({ inner: 1 }, "", "#" + state.view); } catch (e) {} };
+function innerBack() {
+  const v = state.view, C = state.cup;
+  if ((v === "cup" || v === "fr") && C && C.key) { C.key = null; C.edit = false; return true; }
+  if (v === "jp") { const J = jp(); if (J.school) { J.school = null; J.open = null; return true; } }
+  if (v === "scout" && state.scoutId) { state.scoutId = null; return true; }
+  return false;
+}
+// 뒤로 가기: 열린 창 닫기 → 안쪽 화면 나가기 → 이전 화면
+window.addEventListener("popstate", () => {
+  const cf = document.getElementById("confirmBox");
+  if (cf && !cf.hidden) { const x = cf.querySelector('[data-cf="0"]'); if (x) x.click(); else cf.hidden = true; try { history.pushState(null, "", "#" + state.view); } catch (e) {} return; }
+  const ov = [["sheet", () => closeSheet()], ["setpanel", () => closeSettings()], ["drawer", () => closeDrawer()]].find(([id]) => { const el = document.getElementById(id); return el && !el.hidden; });
+  if (ov) { ov[1](); try { history.pushState(null, "", "#" + state.view); } catch (e) {} return; }
+  if (innerBack()) { state.dirty = false; render(); window.scrollTo(0, 0); return; }
+  const h = (location.hash || "").replace("#", ""), v = VIEWS.includes(h) ? h : "home";
+  if (v !== state.view) { state.view = v; state.dirty = false; state.armed = null; render(); window.scrollTo(0, 0); }
+});
+// 아이폰 홈 화면 앱은 왼쪽 끝 밀기 뒤로 가기가 없어서 직접 만듦 (안드로이드·사파리는 기본 동작 사용)
+(() => {
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone = navigator.standalone === true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
+  if (!ios || !standalone) return;
+  let sx = 0, sy = 0, on = false, el = null;
+  const show = dx => { if (!el) { el = document.createElement("div"); el.id = "edgeBack"; el.textContent = "‹"; document.body.appendChild(el); } el.style.opacity = Math.min(1, dx / 70); el.style.transform = `translateX(${Math.min(dx, 80) - 40}px)`; };
+  const hide = () => { if (el) { el.style.opacity = 0; el.style.transform = "translateX(-40px)"; } };
+  document.addEventListener("touchstart", e => { const t = e.touches[0]; on = t.clientX <= 22; sx = t.clientX; sy = t.clientY; }, { passive: true });
+  document.addEventListener("touchmove", e => { if (!on) return; const t = e.touches[0], dx = t.clientX - sx, dy = Math.abs(t.clientY - sy); if (dy > 30 && dy > dx) { on = false; hide(); return; } show(Math.max(0, dx)); }, { passive: true });
+  document.addEventListener("touchend", e => { if (!on) return; on = false; const dx = e.changedTouches[0].clientX - sx; hide(); if (dx > 70) history.back(); }, { passive: true });
+  document.addEventListener("touchcancel", () => { on = false; hide(); }, { passive: true });
+})();
+// 전화번호: 숫자만 넣어도 하이픈 자동 (010-1234-5678 · 02-123-4567)
+const fmtPhone = v => {
+  const d = String(v || "").replace(/\D/g, "").slice(0, 11);
+  if (d.startsWith("02")) return d.length <= 2 ? d : d.length <= 5 ? `${d.slice(0, 2)}-${d.slice(2)}` : d.length <= 9 ? `${d.slice(0, 2)}-${d.slice(2, 5)}-${d.slice(5)}` : `${d.slice(0, 2)}-${d.slice(2, 6)}-${d.slice(6, 10)}`;
+  if (d.length <= 3) return d;
+  if (d.length <= 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  return d.length === 10 && !d.startsWith("01") ? `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}` : `${d.slice(0, 3)}-${d.slice(3, 7)}-${d.slice(7)}`;
+};
+document.addEventListener("input", e => { const el = e.target; if (el && el.type === "tel") { const f = fmtPhone(el.value); if (f !== el.value) el.value = f; } });
 let toastT;
 function toast(msg) {
   const t = document.getElementById("toast"); t.textContent = msg; t.hidden = false;
@@ -2717,8 +2759,8 @@ document.addEventListener("click", async ev => {
     else if (act === "jppref") J.pref = v;
     else if (act === "jprankmore") J.rankMore = true;
     else if (act === "jpstourn") J.stourn = v || null;
-    else if (act === "jpschool") { J.school = b.dataset.id; J.open = null; J.stourn = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
-    else if (act === "jpback") { J.school = null; J.open = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
+    else if (act === "jpschool") { if (!J.school) pushInner(); J.school = b.dataset.id; J.open = null; J.stourn = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
+    else if (act === "jpback") { if (history.state && history.state.inner) return history.back(); J.school = null; J.open = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
     else if (act === "jptourn") { J.tourn = v; J.year = 0; }
     else if (act === "jprg") { J.rg = v === "" ? null : Number(v); J.year = 0; }
     else if (act === "jpyear") J.year = Number(v);
@@ -2734,8 +2776,8 @@ document.addEventListener("click", async ev => {
     const S = sc(), x = S.sel, v = b.dataset.v;
     if (act === "scnew") return openScoutForm("");
     if (act === "scedit") return openScoutForm(b.dataset.id);
-    if (act === "scopen") { state.scoutId = b.dataset.id; S.tab = "input"; state.dirty = false; render(); window.scrollTo(0, 0); return; }
-    if (act === "scback") { state.scoutId = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
+    if (act === "scopen") { pushInner(); state.scoutId = b.dataset.id; S.tab = "input"; state.dirty = false; render(); window.scrollTo(0, 0); return; }
+    if (act === "scback") { if (history.state && history.state.inner) return history.back(); state.scoutId = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
     if (act === "scxlsx") return scoutXlsx(b.dataset.id);
     if (act === "scpoint") return scoutPoint(b.dataset.w === "1");
     if (act === "sctab") S.tab = b.dataset.k;
@@ -2772,8 +2814,8 @@ document.addEventListener("click", async ev => {
   if (act === "entry") return openEntry(b.dataset.kind, b.dataset.id);
   if (act.startsWith("cup")) {
     const C = cupState();
-    if (act === "cupopen") { C.key = b.dataset.k; C.edit = false; C.set = 1; state.dirty = false; render(); window.scrollTo(0, 0); return; }
-    if (act === "cupback") { C.key = null; C.edit = false; state.dirty = false; render(); window.scrollTo(0, 0); return; }
+    if (act === "cupopen") { C.key = b.dataset.k; C.edit = false; C.set = 1; pushInner(); state.dirty = false; render(); window.scrollTo(0, 0); return; }
+    if (act === "cupback") { if (history.state && history.state.inner) return history.back(); C.key = null; C.edit = false; state.dirty = false; render(); window.scrollTo(0, 0); return; }
     if (act === "cupprint") return cupPrint();
     if (act === "cupedit") C.edit = !C.edit;
     else if (act === "cupset") C.set = Number(b.dataset.v);

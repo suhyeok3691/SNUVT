@@ -115,10 +115,10 @@ function viewCampus() {
     <div class="seg fill sc-tabs cmp-tabs" role="tablist">${CMP_TABS.map(([k, l]) => `<button type="button" class="seg-tab ${tab === k ? "on solid" : ""}" role="tab" aria-selected="${tab === k}" data-act="cmptab" data-v="${k}">${l}</button>`).join("")}</div></section>`;
   if (tab === "avail") return head + availHtml(c);
   if (tab === "groups") return head + groupsHtml(c);
-  if (tab === "bracket") return head + pickHtml(c) + (bracketHtml(c) || emptyLine("조편성을 하면 대진표가 만들어져요."));
+  if (tab === "bracket") return head + (bracketHtml(c) || emptyLine("조편성을 하면 대진표가 만들어져요.")) + pickHtml(c);
   const mine = myRefs(c).filter(x => x.m.date >= t);
   const mineHtml = mine.length ? `<section class="sec"><h3>내 심판</h3><ul class="boxes cmp-mine">${mine.map(({ m, role }) => `<li><span class="num">${dayKo(m.date)} ${m.start}</span><b>${role}</b><span class="small">${esc(cmpSide(c, m, "a"))} vs ${esc(cmpSide(c, m, "b"))}</span></li>`).join("")}</ul></section>` : "";
-  return head + mineHtml + pickHtml(c) + matchesHtml(c);
+  return head + mineHtml + matchesHtml(c);
 }
 // 가능일: 날마다 가능 · 불가 (남녀 합쳐서)
 function availHtml(c) {
@@ -223,9 +223,8 @@ function pickHtml(c) {
     const ms = c.matches.filter(m => ["al", "bl"].some(k => new RegExp(`^${g}조?\\s*선택$`, "i").test(m[k] || "")));
     const t1 = gs.done[g] ? cmpTeam(c, gs.order[g][0]) : null, t2 = gs.done[g] ? cmpTeam(c, gs.order[g][1]) : null, pick = (c.picks || {})[g];
     const opp = m => { const sd = /선택$/.test(m.al || "") ? "b" : "a"; return cmpSide(c, m, sd); };
-    out.push(`<div class="panel cmp-pick"><div class="row between"><h4>${g}조 1위 자리 선택</h4>${pick ? `<span class="chip ok">${esc(pick)}</span>` : `<span class="chip warn">아직</span>`}</div>
-      <p class="small muted">${t1 ? `1위 <b>${esc(t1.name)}</b>${t2 ? ` · 2위 ${esc(t2.name)}${iga(t2.name) === "이" ? "은" : "는"} 남은 자리` : ""}` : `${g}조 경기가 끝나면 고를 수 있어요`}</p>
-      <div class="cmp-pick-opts">${ms.map(m => `<button type="button" class="pick-opt ${pick === m.label ? "on" : ""}" ${adm && t1 ? `data-act="cmpbpick" data-g="${g}" data-l="${esc(m.label)}"` : "disabled"}><b>${esc(m.label)}</b><span>vs ${esc(opp(m))}</span><span class="small muted">${dayKo(m.date)} ${m.start}</span></button>`).join("")}</div></div>`);
+    out.push(`<div class="cmp-pick"><span class="cmp-pick-h">${g}조 1위 자리</span>${t1 ? `<span class="small muted">${esc(t1.name)}</span>` : `<span class="small muted">${g}조 경기 끝나면</span>`}
+      <span class="cmp-pick-opts">${ms.map(m => `<button type="button" class="chip sc-chip ${pick === m.label ? "on" : ""}" ${adm && t1 ? `data-act="cmpbpick" data-g="${g}" data-l="${esc(m.label)}"` : "disabled"}>${esc(m.label)} · vs ${esc(opp(m))}</button>`).join("")}</span></div>`);
   }
   return out.join("");
 }
