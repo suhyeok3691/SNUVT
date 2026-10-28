@@ -194,12 +194,11 @@ function bracketHtml(c) {
     const x0 = winX + BW + 34, jx = x0 + LW + GAP, fy = tops.length ? tops[0].p.y : TOP + RH;
     third.forEach((m, i) => {
       const w = winnerOf(c, m), wt = w && cmpTeam(c, w), my = fy + i * 2.4 * RH, ys = [my - RH / 2, my + RH / 2];
-      thirdBits.push(`<span class="bk-l" style="left:${x0}px;top:${ys[0] - BH / 2 - 20}px;width:${LW + GAP + 14 + BW}px">3·4위전</span>`);
       ["a", "b"].forEach((sd, k) => { const id = sideId(c, m, sd), t = id && cmpTeam(c, id);
         thirdBits.push(`<div class="tb-leaf ${w && id && w !== id ? "lose" : ""} ${w && id === w ? "win" : ""}" style="left:${x0}px;top:${ys[k] - BH / 2}px;width:${LW}px;height:${BH}px">${t ? esc(t.name) : esc((m[sd + "l"] || "미정").replace(/ 패자$/, " 패"))}</div>`);
         lines.push(`M${x0 + LW} ${ys[k]}H${jx}`); });
       lines.push(`M${jx} ${ys[0]}V${ys[1]}M${jx} ${my}H${jx + 14}`);
-      thirdBits.push(`<div class="tb-lab" style="left:${jx - GAP + 4}px;top:${my - 17}px;width:${GAP - 10}px" ${tag(m)}><b>${md(parseD(m.date))}</b><span>${m.start}${m.end ? "–" + m.end : ""}${m.score ? ` · ${esc(m.score)}` : ""}</span></div>`,
+      thirdBits.push(`<div class="tb-lab" style="left:${jx - GAP + 4}px;top:${my - 17}px;width:${GAP - 10}px" ${tag(m)}><b>${esc(m.label || "3·4위전")}</b></div>`,
         `<div class="tb-win ${wt ? "on" : ""}" style="left:${jx + 14}px;top:${my - BH / 2}px;width:${BW}px;height:${BH}px">${wt ? esc(wt.name) : "3위"}</div>`);
       thirdBits.w = Math.max(thirdBits.w || 0, jx + 14 + BW + 4);
       row = Math.max(row, (ys[1] + BH / 2 - TOP) / RH);
@@ -210,7 +209,7 @@ function bracketHtml(c) {
   const leafHtml = leaves.map(({ n, y }) => { const id = sideId(c, n.m, n.sd), w = winnerOf(c, n.m), t = id && cmpTeam(c, id);
     return `<div class="tb-leaf ${w && id && w !== id ? "lose" : ""} ${w && id === w ? "win" : ""}" style="top:${y - BH / 2}px;width:${LW}px;height:${BH}px" title="${esc(n.m[n.sd + "l"] || "")}">${t ? `${esc(t.name)}${n.m[n.sd + "l"] ? `<small>${esc(n.m[n.sd + "l"])}</small>` : ""}` : esc(n.m[n.sd + "l"] || "미정")}</div>`; }).join("");
   const joinHtml = joins.map(({ n, h, y, jx }) => { const m = n.m, w = winnerOf(c, m), wt = w && cmpTeam(c, w);
-    const lab = `<div class="tb-lab" style="left:${jx - GAP + 4}px;top:${y - 17}px;width:${GAP - 10}px" ${tag(m)}><b>${esc(m.label || STAGE_KO[m.stage])}</b><span>${m.start}${m.end ? "–" + m.end : ""}${m.score ? ` · ${esc(m.score)}` : ""}</span></div>`;
+    const lab = `<div class="tb-lab" style="left:${jx - GAP + 4}px;top:${y - 17}px;width:${GAP - 10}px" ${tag(m)}><b>${esc(m.label || STAGE_KO[m.stage])}</b></div>`;
     const isTop = tops.some(x => x.t === n);
     return lab + (h >= 2 && !isTop ? `<div class="tb-win ${wt ? "on" : ""}" style="left:${jx + 14}px;top:${y - BH / 2}px;width:${BW}px;height:${BH}px">${wt ? esc(wt.name) : esc((m.label || "") + " 승자")}</div>` : ""); }).join("");
   const champ = tops.map(({ t, p }) => { const w = winnerOf(c, t.m), wt = w && cmpTeam(c, w);
