@@ -99,7 +99,7 @@ function confirmDel(msg, yes = "네, 삭제") {
     const done = v => { el.hidden = true; el.onclick = null; document.removeEventListener("keydown", key); if (v && state.delFromSheet) closeSheet(); state.delFromSheet = false; res(v); };
     const key = e => { if (e.key === "Escape") done(false); };
     document.addEventListener("keydown", key);
-    el.onclick = e => { e.stopPropagation(); const b = e.target.closest("[data-cf]"); if (b) done(b.dataset.cf === "1"); else if (e.target === el) done(false); };
+    el.onclick = e => { e.stopPropagation(); const b = e.target.closest("[data-cf]"); if (b) done(b.dataset.cf === "1"); };
     el.querySelector('[data-cf="0"]').focus();
   });
 }
@@ -2286,7 +2286,7 @@ function openVote(type, id) {
   el.hidden = false;
   const f = el.querySelector("#voteForm");
   f.addEventListener("change", e => { if (e.target.name === "vt-go") { const w = f.querySelector(".vote-why"); if (w) w.hidden = e.target.value !== "0"; } });
-  el.onclick = e => { if (e.target === el || e.target.closest('[data-cf="0"]')) { el.hidden = true; el.onclick = null; } };
+  el.onclick = e => { if (e.target.closest('[data-cf="0"]')) { el.hidden = true; el.onclick = null; } }; // 바깥을 눌러도 안 닫힘 (닫기 버튼만)
 }
 /* ---------- 엔트리 (대회·교류전 명단) ---------- */
 const entryOf = (kind, id) => state.entries[kind + ":" + id] || new Set();
@@ -3745,8 +3745,8 @@ function boot() {
   setInterval(() => { const t = iso(today()); if (t !== shown) { shown = t; state.day = null; state.week = null; if (!state.dirty) render(); else header(); } }, 60 * 1000);
 }
 if (typeof document !== "undefined" && document.getElementById("main")) {
-  document.body.insertAdjacentHTML("beforeend", `<div class="sheet-bg" id="sheet" hidden data-act="sheetclose"><div class="sheet" role="dialog" aria-modal="true" data-act="noop"><div class="sheet-body"></div></div></div>`);
-  document.body.insertAdjacentHTML("beforeend", `<div class="setpanel-bg" id="setpanel" hidden data-act="setclose"><aside class="setpanel" aria-label="설정" data-act="noop"><div class="setpanel-body"></div></aside></div>`);
+  document.body.insertAdjacentHTML("beforeend", `<div class="sheet-bg" id="sheet" hidden><div class="sheet" role="dialog" aria-modal="true" data-act="noop"><div class="sheet-body"></div></div></div>`);
+  document.body.insertAdjacentHTML("beforeend", `<div class="setpanel-bg" id="setpanel" hidden><aside class="setpanel" aria-label="설정" data-act="noop"><div class="setpanel-body"></div></aside></div>`);
   document.body.insertAdjacentHTML("beforeend", `<div class="drawer-bg" id="drawer" hidden data-act="drawerclose"><aside class="drawer" aria-label="전체 메뉴" data-act="noop"><div class="drawer-body"></div></aside></div>`);
   boot();
 }
