@@ -1671,8 +1671,8 @@ create or replace function private.jp_sid(n text, p text, g text) returns text l
   select case when p is not null or (select count(*) from c) = 1 then (select id from c limit 1) end
 $$;
 -- 일본 고교 랭킹: 전국대회(하루코·인터하이·국민스포츠대회 단독 학교 대표)에서 간 곳 + 현 대회 4강 이상
--- 최근일수록 크게: 1년 지나면 ×0.4, 3년 넘은 전국대회는 안 셈 (2026-10-28 바꿈: 예전엔 1년 ×0.7, 기간 제한 없음)
--- 점수: 우승 100 · 준우승 70 · 4강 50 · 8강 32 · 16강 20 · 32강 10 · 출전 5 (국민스포츠대회는 한 학교가 현 대표로 나간 경우만, 24팀 대회라 ×0.8. 여러 학교 선발팀은 학교를 알 수 없어 안 셈) / 현 우승 10 · 준우승 6 · 4강 3
+-- 최근 가중 = 선수 겹침 기준 (2026-10-28): 학년도(4월~3월, 1월 하루코는 지난 학년도) 이번 ×1 · 1년 전 ×2/3 · 2년 전 ×1/3 · 그 전 0
+-- 점수: 우승 100 · 준우승 70 · 4강 50 · 8강 32 · 16강 20 · 32강 10 · 출전 5 (국민스포츠대회는 한 학교가 현 대표로 나간 경우만 ×0.8) / 현 우승 10 · 준우승 6 · 4강 3
 create materialized view public.jp_rank as
 with mt as (
   select tourn, year, gender, rnd, a_name n, a_pref p, a_sets > b_sets won from public.jp_matches where a_sets is distinct from b_sets
@@ -1684,7 +1684,7 @@ with mt as (
     case rnd when 'group' then 0 when 'R1' then 1 when 'rep' then 1 when 'R2' then 2 when 'R3' then 3 when 'QF' then 4 when 'SF' then 5 when '3rd' then 5 when 'F' then 6 else 0 end
       + case when tourn = 'kokutai' and rnd in ('R1', 'R2') then 1 else 0 end d
   from mt
-), st as ( -- 대회마다 학교가 간 곳: 이긴 판이 가장 깊은 판이면 한 단계 위 (빠진 라운드 보정)
+), st as (
   select tourn, year, gender, sid, max(d + case when won and rnd <> '3rd' then 1 else 0 end) lvl
   from (select *, private.jp_sid(n, p, gender) sid from mt2 where n <> '') x
   where sid is not null group by 1, 2, 3, 4
@@ -1694,25 +1694,26 @@ with mt as (
   select r.tourn, r.year, r.gender, r.school_id, case r.place when 1 then 7 when 2 then 6 else 5 end
   from public.jp_results r
   where r.school_id is not null and not exists (select 1 from public.jp_matches m where m.tourn = r.tourn and m.year = r.year and m.gender = r.gender)
+), cur as (
+  select case when extract(month from now()) >= 4 then extract(year from now())::int else extract(year from now())::int - 1 end sy
 ), pts as (
   select sid, gender, tourn, year, lvl,
     (case lvl when 7 then 100 when 6 then 70 when 5 then 50 when 4 then 32 when 3 then 20 when 2 then 10 else 5 end)
     * case tourn when 'kokutai' then 0.8 else 1 end
-    * power(0.4, greatest(0, extract(epoch from now() - make_date(year, case tourn when 'haruko' then 1 when 'ih' then 8 when 'kokutai' then 10 else 6 end, 15)) / 31557600)) p
-  from nat where make_date(year, case tourn when 'haruko' then 1 when 'ih' then 8 when 'kokutai' then 10 else 6 end, 15) > now() - interval '3 years'
+    * case cur.sy - case when tourn = 'haruko' then year - 1 else year end when 0 then 1.0 when 1 then 2.0 / 3 when 2 then 1.0 / 3 else 0 end p
+  from nat, cur
 ), pref as (
   select private.jp_sid(name, pref, gender) sid, gender,
     (case place when 1 then 10 when 2 then 6 else 3 end)
-    * power(0.4, greatest(0, extract(epoch from now() - make_date(case when tourn = 'haruko' then year - 1 else year end, case tourn when 'haruko' then 11 else 6 end, 1)) / 31557600)) p
-  from public.jp_pref_top
+    * case cur.sy - case when tourn = 'haruko' then year - 1 else year end when 0 then 1.0 when 1 then 2.0 / 3 when 2 then 1.0 / 3 else 0 end p
+  from public.jp_pref_top, cur
 ), allp as (
   select sid, gender, p from pts union all select sid, gender, p from pref where sid is not null
-  union all select sid, gender, 0 from nat -- 3년 넘은 기록만 있는 학교도 목록·기록은 남김 (점수 0)
-), best as ( -- 대표 성적: 최근 3년 중 (최근일수록 크게 친) 점수가 가장 큰 대회
+), best as ( -- 대표 성적: 가중을 친 점수가 가장 큰 대회
   select distinct on (sid, gender) sid, gender, tourn, year, lvl from pts
-  where lvl >= 3
+  where lvl >= 3 and p > 0
   order by sid, gender, p desc, year desc
-), hist as ( -- 전국대회 기록 전부 (lvl 7 우승 · 6 준우승 · 5 4강 · 4 8강 · 3 16강 · 2 32강 · 그 아래 출전)
+), hist as ( -- 전국대회 기록 전부
   select sid, gender, jsonb_agg(jsonb_build_object('t', tourn, 'y', year, 'l', lvl) order by year desc, lvl desc) h
   from (select distinct sid, gender, tourn, year, max(lvl) over (partition by sid, gender, tourn, year) lvl from nat) x group by 1, 2
 ), tot as (select sid, gender, sum(p) p from allp group by 1, 2)
