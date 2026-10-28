@@ -36,7 +36,7 @@ const ctAt = (slots, r, z) => slots[((z - 1) + (r - 1)) % 6];
 function ctSideAt(s, side, z) {
   const us = side === "us", r = us ? s.rot : s.orot, i = ((z - 1) + (r - 1)) % 6, slots = us ? s.usSlots : s.opSlots, pos = us ? s.usPos : s.opPos, lib = us ? s.lib : s.olib;
   const on = lib != null && !slots.some(x => ctSame(x, lib)) && pos[i] === "MB" && (z === 5 || z === 6 || (z === 1 && s.serve !== side));
-  return on ? { v: lib, lib: true } : { v: slots[i], lib: false };
+  return on ? { v: lib, lib: true, pos: "L" } : { v: slots[i], lib: false, pos: pos[i] || "" };
 }
 const ctUsAt = (s, z) => ctSideAt(s, "us", z);
 const ctZoneOf = (slots, r, i) => ((i - (r - 1)) % 6 + 6) % 6 + 1; // 처음 자리 i(0~5)가 지금 서 있는 자리
@@ -69,9 +69,9 @@ function ctState(m, ev, setNo) {
   return s;
 }
 const ctName = (side, v) => { if (side === "us") { const p = playerOf(v); return p ? { no: p.number != null ? String(p.number) : "", nm: p.name } : { no: "", nm: "?" }; } return { no: String(v ?? ""), nm: "" }; };
-function ctBtn(side, v, z, serving, lib, mini) {
+function ctBtn(side, v, z, serving, lib, mini, pos) {
   const n = ctName(side, v);
-  return `<button type="button" class="ct-p ${side} ${serving ? "srv" : ""} ${lib ? "lib" : ""} ${mini ? "mini" : ""}" data-act="ctpick" data-side="${side}" data-v="${esc(v)}" ${z ? `data-z="${z}"` : ""}><b>${esc(n.no || "–")}</b>${n.nm ? `<span>${esc(n.nm)}</span>` : ""}${z ? `<i>${z}</i>` : ""}</button>`;
+  return `<button type="button" class="ct-p ${side} ${serving ? "srv" : ""} ${lib ? "lib" : ""} ${mini ? "mini" : ""}" data-act="ctpick" data-side="${side}" data-v="${esc(v)}" ${z ? `data-z="${z}"` : ""}><b>${esc(n.no || "–")}</b>${n.nm ? `<span>${esc(n.nm)}</span>` : ""}${z ? `<i>${z}</i>` : ""}${pos ? `<em>${esc(pos)}</em>` : ""}</button>`;
 }
 const ctFlip = () => { try { return localStorage.getItem("snuvt-ctflip") === "1"; } catch (e) { return false; } };
 // 코트 화면
@@ -82,7 +82,7 @@ function ctPad(m, ev) {
   // 아래 칸: 앞줄(네트) 4·3·2, 뒷줄 5·6·1 / 위 칸: 뒷줄 1·6·5, 앞줄 2·3·4 (영상 방향에 맞게 뒤집기)
   const half = (side, top) => { const srv = s.serve === side && !s.last;
     const rows = top ? [[1, 6, 5], [2, 3, 4]] : [[4, 3, 2], [5, 6, 1]];
-    return `<div class="ct-half ${side}">${rows.map(row => `<div class="ct-row">${row.map(z => { const x = ctSideAt(s, side, z); return ctBtn(side, x.v, z, srv && z === 1, x.lib); }).join("")}</div>`).join("")}</div>`; };
+    return `<div class="ct-half ${side}">${rows.map(row => `<div class="ct-row">${row.map(z => { const x = ctSideAt(s, side, z); return ctBtn(side, x.v, z, srv && z === 1, x.lib, false, x.pos); }).join("")}</div>`).join("")}</div>`; };
   // 리베로 줄 (작게): 지금 코트 리베로는 색칠, 일반 선수로 들어간 리베로는 빠짐
   const libRow = side => { const slots = side === "us" ? s.usSlots : s.opSlots, cur = side === "us" ? s.lib : s.olib;
     const l = ctLibs(L, side).filter(x => !slots.some(y => ctSame(y, x)));

@@ -1895,7 +1895,7 @@ const SC_LEN = [["short", "짧게"], ["long", "길게"]];
 const ZONES = [4, 3, 2, 5, 6, 1]; // 코트 위에서 본 배치 (네트 쪽 4·3·2, 뒤 5·6·1)
 const SC_SRC = [["L", "레프트"], ["M", "속공"], ["R", "라이트"], ["P", "파이프"], ["B", "백라이트"]];
 const SC_GLABEL = [["#", "최고"], ["+", "좋음"], ["!", "보통"], ["-", "나쁨"], ["/", "막힘"], ["=", "범실"]];
-const sc = () => state.scout || (state.scout = { loaded: false, matches: [], events: {}, points: {}, all: false, sel: { set: 1, side: "us", pid: null, opp: "", skill: "serve", kind: null, len: null, zone: null, src: null, rot: 1, serve: "us" }, tab: "input", ltab: "match", fset: 0, flt: { side: "", pid: "", skill: "", grade: "" }, metric: "atk", sy: 0, oppSel: "" });
+const sc = () => state.scout || (state.scout = { loaded: false, matches: [], events: {}, points: {}, all: false, sel: { set: 1, side: "us", pid: null, opp: "", skill: "serve", kind: null, len: null, zone: null, src: null, rot: 1, serve: "us" }, tab: "court", ltab: "match", fset: 0, flt: { side: "", pid: "", skill: "", grade: "" }, metric: "atk", sy: 0, oppSel: "" });
 const scMatch = () => sc().matches.find(m => m.id === state.scoutId) || null;
 async function scoutLoad() {
   const S = sc();
@@ -1952,8 +1952,8 @@ function viewScout() {
       <span class="row nowrap"><button class="btn link small" type="button" data-act="scxlsx" data-id="${esc(m.id)}">엑셀</button>${can("analysis") ? `<button class="btn link small" type="button" data-act="scedit" data-id="${esc(m.id)}">수정</button>` : ""}</span></div>
     <div class="sc-title"><b>${esc(m.title)}</b><span class="small muted">${scMeta(m)}</span></div>
     ${m.yt || m.vod ? "" : `<p class="small muted">영상 링크가 없어요.</p>`}${scVodHtml(m)}
-    ${scSeg("sctab", [["court", "코트"], ["input", "목록"], ["scenes", "장면"], ["stats", "분석"]], S.tab)}
-    ${!ev ? loaderHtml(true) : S.tab === "stats" ? scoutStats(ev, S.points[m.id] || []) : S.tab === "scenes" ? scoutScenes(ev) : S.tab === "input" ? scoutPad(m, ev) : ctPad(m, ev)}</section>`;
+    ${scSeg("sctab", [["court", "코트"], ["stats", "분석"]], S.tab)}
+    ${!ev ? loaderHtml(true) : S.tab === "stats" ? scoutStats(ev, S.points[m.id] || []) : ctPad(m, ev)}</section>`;
 }
 function scoutList() {
   const S = sc(), head = `<div class="sec-head"><h2>전력분석</h2><span class="row nowrap">${S.matches.length ? `<button class="btn link small" type="button" data-act="scxlsx" data-id="">엑셀</button>` : ""}${can("analysis") ? `<button class="btn add" type="button" data-act="scnew">+ 경기</button>` : ""}</span></div>`;
@@ -1964,37 +1964,6 @@ function scoutList() {
   else if (S.all !== true) { scoutAll(); body = loaderHtml(true); }
   else body = S.ltab === "season" ? scoutSeason() : scoutOpp();
   return `<section class="sec">${head}${tabs}${body}</section>`;
-}
-/* ---- 입력 ---- */
-function scoutPad(m, ev) {
-  const S = sc(), x = S.sel, ps = sortedPlayers().filter(p => !p.military).sort((a, b) => (a.number ?? 999) - (b.number ?? 999)), chip = scChip;
-  const who = x.side === "us"
-    ? `<div class="sc-row">${ps.map(p => chip("scpid", p.id, x.pid, `${pNo(p)}${esc(p.name)}`)).join("")}</div>`
-    : `<div class="sc-row"><label class="fl sc-opp">상대 등번호<input id="scOpp" type="number" inputmode="numeric" min="0" max="99" value="${esc(x.opp)}" placeholder="번호"></label>${[...new Set(ev.filter(e => e.side === "opp" && e.opp_no != null).map(e => e.opp_no))].slice(-8).map(n => chip("scoppno", n, x.opp, "#" + n)).join("")}</div>`;
-  const kinds = SC_KINDS[x.skill];
-  const detail = `${kinds ? `<div class="sc-row"><span class="sc-k">종류</span>${kinds.map(k => chip("sckind", k, x.kind, k)).join("")}</div>` : ""}
-    ${x.skill === "attack" ? `<div class="sc-row"><span class="sc-k">토스</span>${SC_SRC.map(([v, l]) => chip("scsrc", v, x.src, l)).join("")}</div>` : ""}
-    ${x.skill === "serve" ? `<div class="sc-row"><span class="sc-k">길이</span>${SC_LEN.map(([v, l]) => chip("sclen", v, x.len, l)).join("")}</div>` : ""}
-    ${["serve", "attack", "receive", "dig"].includes(x.skill) ? `<div class="sc-row"><span class="sc-k">${x.skill === "serve" || x.skill === "attack" ? "코스" : "위치"}</span><div class="sc-court">${ZONES.map(z => `<button type="button" class="sc-z ${x.zone === z ? "on" : ""}" data-act="sczone" data-v="${z}">${z}</button>`).join("")}</div></div>` : ""}`;
-  const pts = (S.points[m.id] || []).filter(p => p.set_no === x.set), mineLast = [...pts].reverse().find(p => p.author === uid() || can("analysis"));
-  const rally = `<div class="panel sc-rally">
-    <div class="sc-row"><span class="sc-k">${x.set}세트</span><b class="sc-score num">${pts.filter(p => p.won).length} : ${pts.filter(p => !p.won).length}</b>
-      <span class="seg sc-serve">${[["us", "우리 서브"], ["opp", "상대 서브"]].map(([v, l]) => `<button type="button" class="seg-tab ${x.serve === v ? "on solid" : ""}" data-act="scserve" data-v="${v}">${l}</button>`).join("")}</span></div>
-    <div class="sc-row"><span class="sc-k">로테</span>${[1, 2, 3, 4, 5, 6].map(n => chip("scrot", n, x.rot, "R" + n)).join("")}</div>
-    <div class="sc-pts"><button type="button" class="btn sc-g g-best" data-act="scpoint" data-w="1">우리 득점</button><button type="button" class="btn sc-g g-err" data-act="scpoint" data-w="0">상대 득점</button>${mineLast ? `<button type="button" class="btn link small" data-act="scpundo" data-id="${esc(mineLast.id)}">되돌리기</button>` : ""}</div>
-  </div>`;
-  const mine = ev.filter(e => e.skill !== "sub").slice(-8).reverse();
-  return `${rally}<div class="panel sc-pad">
-    <div class="sc-row"><span class="sc-k">세트</span>${[1, 2, 3, 4, 5].map(n => chip("scset", n, x.set, n)).join("")}</div>
-    <div class="seg fill sc-side">${[["us", "우리"], ["opp", "상대"]].map(([v, l]) => `<button type="button" class="seg-tab ${x.side === v ? "on solid" : ""}" data-act="scside" data-v="${v}">${l}</button>`).join("")}</div>
-    ${who}
-    <div class="sc-row sc-skills">${SC_SKILLS.map(([v, l]) => chip("scskill", v, x.skill, l)).join("")}</div>
-    ${detail}
-    <div class="sc-grades">${SC_GRADES[x.skill].map(([g, l]) => `<button type="button" class="btn sc-g g-${g === "#" ? "best" : g === "+" ? "good" : g === "!" ? "ok" : g === "-" ? "bad" : g === "/" ? "blk" : "err"}" data-act="scsave" data-g="${g}">${l}</button>`).join("")}</div>
-  </div>
-  <section class="sec"><div class="sec-head"><h3>방금 입력 <span class="small muted">${ev.length}개</span></h3></div>
-    ${mine.length ? `<ul class="watch sc-recent">${mine.map(e => `<li>${e.t != null ? `<button type="button" class="btn link small num" data-act="scseek" data-t="${e.t}">${scTime(e.t)}</button>` : ""}<span class="small">${e.set_no}세트 · ${scLbl(e)}</span>${e.author === uid() || can("analysis") ? `<button type="button" class="btn link small danger" data-act="scundo" data-id="${esc(e.id)}">지우기</button>` : ""}</li>`).join("")}</ul>` : emptyLine("결과 버튼을 누르면 한 플레이가 저장돼요.")}
-  </section>`;
 }
 // 치지직 다시보기는 앱 안에 못 띄워서(퍼가기 없음) 새 창으로 열고, 영상 시계를 맞춰 두면 기록마다 그 시간이 붙음
 const parseVod = u => { const x = /^(?:https?:\/\/)?(?:m\.)?chzzk\.naver\.com\/video\/(\d+)/.exec(String(u || "").trim()); return x ? `https://chzzk.naver.com/video/${x[1]}` : null; };
@@ -2013,47 +1982,6 @@ function scVodHtml(m) {
 setInterval(() => { const c = state.vodClock, el = document.getElementById("vodT"); if (c && c.run && el && document.activeElement !== el) el.value = fmtClock(vodNow()); }, 1000);
 const scNow = () => { try { if (scPlayer && scPlayer.getCurrentTime) return Math.round(scPlayer.getCurrentTime() * 10) / 10; } catch (e) {}
   const m = scMatch(), c = state.vodClock; if (m && m.vod && c && c.mid === m.id && (c.run || c.base)) return Math.round(vodNow() * 10) / 10; return null; };
-async function scoutSave(g) {
-  const S = sc(), x = S.sel, m = scMatch(); if (!m) return;
-  if (x.side === "us" && !x.pid) { toast("선수를 골라 주세요"); return; }
-  const opp = x.side === "opp" ? (document.getElementById("scOpp") ? document.getElementById("scOpp").value : x.opp) : "";
-  if (x.side === "opp") x.opp = opp;
-  const row = { match_id: m.id, set_no: x.set, side: x.side, player_id: x.side === "us" ? x.pid : null, opp_no: x.side === "opp" && opp !== "" ? Number(opp) : null, skill: x.skill,
-    kind: SC_KINDS[x.skill] ? x.kind : null, len: x.skill === "serve" ? x.len : null, zone: ["serve", "attack", "receive", "dig"].includes(x.skill) ? x.zone : null,
-    src: x.skill === "attack" ? x.src : null, grade: g, t: scNow(), author: uid() };
-  const r = await sb.from("scout_events").insert(row).select().maybeSingle();
-  if (r.error) { toast(failMsg(r.error)); return; }
-  (S.events[m.id] = S.events[m.id] || []).push({ ...row, id: (r.data && r.data.id) || "tmp" + Date.now(), created_at: (r.data && r.data.created_at) || new Date().toISOString() });
-  x.kind = null; x.len = null; x.zone = null; x.src = null;
-  state.dirty = false; render();
-}
-// 랠리 결과: 상대 서브 때 이기면 로테이션 하나 돌고 우리 서브, 지면 상대 서브
-async function scoutPoint(won) {
-  const S = sc(), x = S.sel, m = scMatch(); if (!m) return;
-  const row = { match_id: m.id, set_no: x.set, rot: x.rot, serve: x.serve, won, t: scNow(), author: uid() };
-  const r = await sb.from("scout_points").insert(row).select().maybeSingle();
-  if (r.error) { toast(failMsg(r.error)); return; }
-  (S.points[m.id] = S.points[m.id] || []).push({ ...row, id: (r.data && r.data.id) || "tmp" + Date.now() });
-  if (won && x.serve === "opp") { x.rot = x.rot % 6 + 1; x.serve = "us"; } else if (!won) x.serve = "opp";
-  state.dirty = false; render();
-}
-/* ---- 장면 모아보기 ---- */
-function scoutScenes(ev) {
-  const S = sc(), f = S.flt, chip = scChip;
-  const ps = sortedPlayers().filter(p => ev.some(e => e.side === "us" && e.player_id === p.id));
-  const l = ev.filter(e => e.skill !== "sub" && (!S.fset || e.set_no === S.fset) && (!f.side || e.side === f.side) && (!f.pid || e.player_id === f.pid) && (!f.skill || e.skill === f.skill) && (!f.grade || e.grade === f.grade))
-    .sort((a, b) => a.set_no - b.set_no || (a.t ?? 1e9) - (b.t ?? 1e9));
-  return `<div class="panel sc-pad sc-flt">
-    <div class="sc-row"><span class="sc-k">세트</span>${[0, 1, 2, 3, 4, 5].map(n => chip("scfset", n, S.fset, n || "전체")).join("")}</div>
-    <div class="sc-row"><span class="sc-k">팀</span>${[["", "전체"], ["us", "우리"], ["opp", "상대"]].map(([v, t]) => chip("scf-side", v, f.side, t)).join("")}</div>
-    ${f.side !== "opp" && ps.length ? `<div class="sc-row"><span class="sc-k">선수</span>${chip("scf-pid", "", f.pid, "전체")}${ps.map(p => chip("scf-pid", p.id, f.pid, `${pNo(p)}${esc(p.name)}`)).join("")}</div>` : ""}
-    <div class="sc-row"><span class="sc-k">기술</span>${chip("scf-skill", "", f.skill, "전체")}${SC_SKILLS.map(([v, t]) => chip("scf-skill", v, f.skill, t)).join("")}</div>
-    <div class="sc-row"><span class="sc-k">결과</span>${chip("scf-grade", "", f.grade, "전체")}${SC_GLABEL.map(([v, t]) => chip("scf-grade", v, f.grade, t)).join("")}</div>
-  </div>
-  <section class="sec"><div class="sec-head"><h3>장면 <span class="small muted">${l.length}개</span></h3></div>
-    ${l.length ? `<ul class="watch sc-recent">${l.map(e => `<li>${e.t != null ? `<button type="button" class="btn link small num" data-act="scseek" data-t="${e.t}">${scTime(e.t)}</button>` : ""}<span class="small">${e.set_no}세트 · ${scLbl(e)}</span></li>`).join("")}</ul>` : emptyLine("맞는 장면이 없어요.")}
-  </section>`;
-}
 /* ---- 분석 ---- */
 function scZoneMap(l) { const c = {}; for (const e of l) if (e.zone) c[e.zone] = (c[e.zone] || 0) + 1; const mx = Math.max(1, ...Object.values(c)); return `<div class="sc-court heat">${ZONES.map(z => `<span class="sc-z" style="--a:${((c[z] || 0) / mx).toFixed(2)}">${c[z] || ""}</span>`).join("")}</div>`; }
 function scServeTable(l) {
@@ -2088,7 +2016,7 @@ function scSetterTable(ev) {
   return `<div class="tw"><table class="sc-dist"><thead><tr><th></th>${SC_SRC.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead><tbody>${qs.map(tr).join("")}</tbody></table></div><p class="small muted">비율 · 아래는 득점%</p>`;
 }
 function scRotTable(pts) {
-  if (!pts.length) return emptyLine("입력 탭에서 우리 득점·상대 득점을 누르면 나와요.");
+  if (!pts.length) return emptyLine("코트에서 기록하면 나와요.");
   return `<div class="tw"><table><thead><tr><th>로테</th><th>사이드아웃</th><th>브레이크</th><th>득실</th></tr></thead><tbody>${[1, 2, 3, 4, 5, 6].map(r => {
     const l = pts.filter(p => p.rot === r), so = l.filter(p => p.serve === "opp"), bp = l.filter(p => p.serve === "us"), w = l.filter(p => p.won).length;
     return `<tr><td><b>R${r}</b></td><td class="num">${so.length ? `${scPct(so.filter(p => p.won).length, so.length)} <span class="small muted">${so.filter(p => p.won).length}/${so.length}</span>` : "—"}</td><td class="num">${bp.length ? `${scPct(bp.filter(p => p.won).length, bp.length)} <span class="small muted">${bp.filter(p => p.won).length}/${bp.length}</span>` : "—"}</td><td class="num ${w * 2 - l.length > 0 ? "good" : w * 2 - l.length < 0 ? "crit" : ""}">${l.length ? (w * 2 - l.length > 0 ? "+" : "") + (w * 2 - l.length) : "—"}</td></tr>`;
@@ -2103,13 +2031,10 @@ function scoutStats(ev, pts) {
   return `<div class="sc-row"><span class="sc-k">세트</span>${[0, 1, 2, 3, 4, 5].map(n => scChip("scfset", n, S.fset, n || "전체")).join("")}</div>
     <section class="sec"><h3>기록지 · 우리</h3>${ctSheetTable(all, "us")}</section>
     <section class="sec"><h3>기록지 · 상대</h3>${ctSheetTable(all, "opp")}</section>
-    <p class="small muted">공격 득점/시도 · 성공률 25% 이상 노란색 · 효율 (득점−범실−막힘)/시도 · 점유율 = 팀 공격 중 비율 · 서브 점수 (에이스 4 · 흔듦 3 · 보통 2 · 쉬움 1) · 리시브·토스 점수 (완벽 3 · 좋음 2 · 보통 1)</p>
+    <p class="small muted">공격 득점/시도 · 성공률 25% 이상 노란색 · 효율 (득점−범실)/시도 · 점유율 = 팀 공격 중 비율 · 서브 점수 (Ace 4 · 3-serve 3 · 2-serve 2 · 1-serve 1) · 리시브·세트 점수 (3 · 2 · 1)</p>
     <section class="sec"><h3>로테이션별 득실 · 우리</h3>${scRotTable(pl)}</section>
     <section class="sec"><h3>로테이션별 득실 · 상대</h3>${ctOppRotTable(pl)}</section>
-    <section class="sec"><h3>세터 토스 분배</h3>${scSetterTable(all)}</section>
-    <section class="sec"><h3>상대 서브</h3>${scServeTable(opp)}</section>
-    <div class="cols"><div class="col"><section class="sec"><h3>상대 공격 코스</h3>${scZoneMap(opp.filter(e => e.skill === "attack"))}</section></div>
-      <div class="col"><section class="sec"><h3>상대 서브 코스</h3>${scZoneMap(opp.filter(e => e.skill === "serve"))}</section></div></div>`;
+`;
 }
 /* ---- 시즌 누적 · 경기별 ---- */
 const SC_METRICS = [
@@ -2855,29 +2780,11 @@ document.addEventListener("click", async ev => {
     if (act === "scopen") { pushInner(); state.scoutId = b.dataset.id; S.tab = "court"; state.dirty = false; render(); window.scrollTo(0, 0); return; }
     if (act === "scback") { if (history.state && history.state.inner) return history.back(); state.scoutId = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
     if (act === "scxlsx") return scoutXlsx(b.dataset.id);
-    if (act === "scpoint") return scoutPoint(b.dataset.w === "1");
     if (act === "sctab") S.tab = b.dataset.k;
     else if (act === "scltab") S.ltab = b.dataset.k;
     else if (act === "scmetric") S.metric = v;
-    else if (act.startsWith("scf-")) S.flt[act.slice(4)] = v;
-    else if (act === "scsrc") x.src = x.src === v ? null : v;
-    else if (act === "scrot") x.rot = Number(v);
-    else if (act === "scserve") x.serve = v;
-    else if (act === "scpundo") {
-      try { ok(await sb.from("scout_points").delete().eq("id", b.dataset.id)); const m = scMatch(); if (m) { const l = S.points[m.id] || [], d = l.find(p => p.id === b.dataset.id); if (d) { x.rot = d.rot; x.serve = d.serve; } S.points[m.id] = l.filter(p => p.id !== b.dataset.id); } } catch (e) { toast(failMsg(e)); }
-    }
     else if (act === "scset") x.set = Number(v);
-    else if (act === "scside") { x.side = v; x.pid = null; }
-    else if (act === "scpid") x.pid = v;
-    else if (act === "scoppno") x.opp = v;
-    else if (act === "scskill") { x.skill = v; x.kind = null; x.len = null; x.zone = null; }
-    else if (act === "sckind") x.kind = x.kind === v ? null : v;
-    else if (act === "sclen") x.len = x.len === v ? null : v;
-    else if (act === "sczone") x.zone = x.zone === Number(v) ? null : Number(v);
     else if (act === "scfset") S.fset = Number(v);
-    else if (act === "scsave") return scoutSave(b.dataset.g);
-    else if (act === "scseek") { if (scPlayer) { try { scPlayer.seekTo(Number(b.dataset.t), true); } catch (e) {} return; }
-      const m = scMatch(); if (m && m.vod) { const c = vodClock(); c.mid = m.id; c.base = Number(b.dataset.t); c.run = false; window.open(`${m.vod}?currentTime=${Math.floor(c.base)}`, "_blank", "noopener"); state.dirty = false; render(); } return; }
     else if (act === "scvodnudge") { const m = scMatch(), c = vodClock(), d = Number(b.dataset.d);
       if (c.mid !== m.id) { c.mid = m.id; c.base = 0; c.run = false; }
       if (c.run) { c.base = Math.max(0, vodNow() + d); c.at = Date.now(); } else c.base = Math.max(0, c.base + d);
@@ -2886,9 +2793,6 @@ document.addEventListener("click", async ev => {
       if (c.mid === m.id && c.run) { c.base = vodNow(); c.run = false; }
       else { const t = el && el.value.trim() !== "" ? parseClock(el.value) : (c.mid === m.id ? c.base : 0); if (t == null) { toast("영상 시간을 0:00 처럼 넣어 주세요"); return; } c.mid = m.id; c.base = t; c.at = Date.now(); c.run = true; }
       state.dirty = false; return render(); }
-    else if (act === "scundo") {
-      try { ok(await sb.from("scout_events").delete().eq("id", b.dataset.id)); const m = scMatch(); if (m) S.events[m.id] = (S.events[m.id] || []).filter(e => e.id !== b.dataset.id); } catch (e) { toast(failMsg(e)); }
-    }
     else if (act === "scdel") {
       if (!await confirmDel("이 경기와 입력한 플레이를 모두 지울까요?")) return;
       try { ok(await sb.from("scout_matches").delete().eq("id", b.dataset.id)); S.matches = S.matches.filter(m => m.id !== b.dataset.id); state.scoutId = null; toast("지웠어요"); } catch (e) { toast(failMsg(e)); }
