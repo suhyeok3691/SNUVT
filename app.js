@@ -2007,7 +2007,8 @@ function scVodHtml(m) {
   const c = vodClock(), on = c.mid === m.id;
   return `<div class="panel sc-vod"><div class="sc-row"><a class="btn small" href="${esc(m.vod)}${on && c.base ? `?currentTime=${Math.floor(vodNow())}` : ""}" target="_blank" rel="noopener">치지직 다시보기 열기</a>
     <span class="small muted">영상 시간</span><input id="vodT" class="vod-t" inputmode="numeric" placeholder="0:00" value="${on ? fmtClock(vodNow()) : ""}" aria-label="지금 영상 시간">
-    <button class="btn small ${on && c.run ? "danger" : "primary"}" type="button" data-act="scvod">${on && c.run ? "멈춤" : "시계 시작"}</button></div></div>`;
+    <button class="btn small ${on && c.run ? "danger" : "primary"}" type="button" data-act="scvod">${on && c.run ? "멈춤" : "시계 시작"}</button>
+    <button class="btn link small" type="button" data-act="scvodin">${state.vodEmbed === m.id ? "앱 안에서 닫기" : "앱 안에서 보기"}</button></div></div>`;
 }
 setInterval(() => { const c = state.vodClock, el = document.getElementById("vodT"); if (c && c.run && el && document.activeElement !== el) el.value = fmtClock(vodNow()); }, 1000);
 const scNow = () => { try { if (scPlayer && scPlayer.getCurrentTime) return Math.round(scPlayer.getCurrentTime() * 10) / 10; } catch (e) {}
@@ -2182,6 +2183,11 @@ let scPlayer = null;
 async function scoutDock() {
   const dock = document.getElementById("dock"); if (!dock) return;
   const m = state.view === "scout" ? scMatch() : null, y = m && m.yt ? parseYt(m.yt) : null;
+  // 치지직: 퍼가기 주소로 앱 안에 띄워 봄 (치지직이 막으면 빈 칸 → 새 창으로)
+  const vid = !y && m && m.vod && state.vodEmbed === m.id ? (/video\/(\d+)/.exec(m.vod) || [])[1] : null;
+  if (vid) { dock.hidden = false; const hd = document.querySelector("header.top"); dock.style.top = (hd ? hd.offsetHeight : 0) + "px";
+    if (dock.dataset.mid !== m.id + ":vod") { dock.dataset.mid = m.id + ":vod"; scPlayer = null; dock.innerHTML = `<div class="vid-frame"><iframe src="https://chzzk.naver.com/embed/video/${vid}" title="치지직 다시보기" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`; }
+    return; }
   if (!y) { if (dock.dataset.mid) { dock.innerHTML = ""; dock.dataset.mid = ""; scPlayer = null; } dock.hidden = true; return; }
   dock.hidden = false;
   const hd = document.querySelector("header.top"); dock.style.top = (hd ? hd.offsetHeight : 0) + "px";
@@ -2877,6 +2883,7 @@ document.addEventListener("click", async ev => {
     else if (act === "scsave") return scoutSave(b.dataset.g);
     else if (act === "scseek") { if (scPlayer) { try { scPlayer.seekTo(Number(b.dataset.t), true); } catch (e) {} return; }
       const m = scMatch(); if (m && m.vod) { const c = vodClock(); c.mid = m.id; c.base = Number(b.dataset.t); c.run = false; window.open(`${m.vod}?currentTime=${Math.floor(c.base)}`, "_blank", "noopener"); state.dirty = false; render(); } return; }
+    else if (act === "scvodin") { const m = scMatch(); state.vodEmbed = state.vodEmbed === m.id ? null : m.id; state.dirty = false; return render(); }
     else if (act === "scvod") { const m = scMatch(), c = vodClock(), el = document.getElementById("vodT");
       if (c.mid === m.id && c.run) { c.base = vodNow(); c.run = false; }
       else { const t = el && el.value.trim() !== "" ? parseClock(el.value) : (c.mid === m.id ? c.base : 0); if (t == null) { toast("영상 시간을 0:00 처럼 넣어 주세요"); return; } c.mid = m.id; c.base = t; c.at = Date.now(); c.run = true; }
