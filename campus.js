@@ -206,8 +206,9 @@ function bracketHtml(c) {
   }
   const totW = Math.max(winX + BW + 4, thirdBits.w || 0), totH = TOP + row * RH;
   for (const { p } of tops) lines.push(`M${p.x} ${p.y}H${winX}`);
-  const leafHtml = leaves.map(({ n, y }) => { const id = sideId(c, n.m, n.sd), w = winnerOf(c, n.m), t = id && cmpTeam(c, id);
-    return `<div class="tb-leaf ${w && id && w !== id ? "lose" : ""} ${w && id === w ? "win" : ""}" style="top:${y - BH / 2}px;width:${LW}px;height:${BH}px" title="${esc(n.m[n.sd + "l"] || "")}">${t ? `${esc(t.name)}${n.m[n.sd + "l"] ? `<small>${esc(n.m[n.sd + "l"])}</small>` : ""}` : esc(n.m[n.sd + "l"] || "미정")}</div>`; }).join("");
+  // 테두리 = 4강 이상 간 팀: 4강·결승에 바로 놓인 칸은 (팀이 정해지면) 늘 칠하고, 그 아래 경기 칸은 이긴 팀만 · 진 팀은 흐리게
+  const leafHtml = leaves.map(({ n, y }) => { const id = sideId(c, n.m, n.sd), w = winnerOf(c, n.m), t = id && cmpTeam(c, id), top4 = ["sf", "f"].includes(n.m.stage);
+    return `<div class="tb-leaf ${!top4 && w && id && w !== id ? "lose" : ""} ${(top4 && t) || (w && id === w) ? "win" : ""}" style="top:${y - BH / 2}px;width:${LW}px;height:${BH}px" title="${esc(n.m[n.sd + "l"] || "")}">${t ? `${esc(t.name)}${n.m[n.sd + "l"] ? `<small>${esc(n.m[n.sd + "l"])}</small>` : ""}` : esc(n.m[n.sd + "l"] || "미정")}</div>`; }).join("");
   const joinHtml = joins.map(({ n, h, y, jx }) => { const m = n.m, w = winnerOf(c, m), wt = w && cmpTeam(c, w);
     const lab = `<div class="tb-lab" style="left:${jx - GAP + 4}px;top:${y - 17}px;width:${GAP - 10}px" ${tag(m)}><b>${esc(m.label || STAGE_KO[m.stage])}</b></div>`;
     const isTop = tops.some(x => x.t === n);
