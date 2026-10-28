@@ -33,7 +33,7 @@ const hm = s => s ? String(s).slice(0, 5) : "";
 // 점수 보기: 세트 "2-1" + 세트별 점수
 const scoreHtml = m => { if (!m.score) return ""; const x = /^(\d+\s*[-:]\s*\d+)\s*(?:\((.*)\))?$/.exec(m.score); return x ? `<span class="chip sc-res">${esc(x[1])}</span>${x[2] ? `<span class="small muted sc-sets">${esc(x[2].replace(/,\s*/g, " · "))}</span>` : ""}` : `<span class="chip sc-res">${esc(m.score)}</span>`; };
 // 경기 기록 입력: 일정 담당·관리자 + 그 경기 주심·부심·기록심
-const canScore = m => can("schedule") || (!!cmpMe() && ["ju", "bu", "rec"].some(k => (m.refs || {})[k] === cmpMe()));
+const canScore = m => can("schedule") || !!state.myPid; // 부원 누구나
 const photoBtn = m => state.myPid || can("schedule") ? `<button class="btn link small" type="button" data-act="cmpphoto" data-id="${m.id}" aria-label="팀 사진">사진${(curCup() || { photos: [] }).photos.filter(p => p.match === m.id).length ? ` ${(curCup() || { photos: [] }).photos.filter(p => p.match === m.id).length}` : ""}</button>` : "";
 const scoreBtn = m => canScore(m) ? `<button class="btn link small sc-rec" type="button" data-act="cmpform" data-f="score" data-id="${m.id}">기록</button>` : "";
 const cmpSets = m => { const x = /(\d+)\s*[-:]\s*(\d+)/.exec(m.score || ""); return x ? [Number(x[1]), Number(x[2])] : null; };
@@ -141,9 +141,9 @@ function matchesHtml(c) {
   const adm = can("schedule"), me = cmpMe(), byD = {};
   for (const m of c.matches) (byD[m.date] = byD[m.date] || []).push(m);
   const cell = v => `<td class="${v && v === me ? "me" : ""}">${esc(v || "")}</td>`;
-  const days = Object.keys(byD).sort().map(d => `<div class="tw cmp-tw"><table class="cmp-tbl"><thead><tr><th>${dayKo(d)}</th><th>경기</th>${REF_ROLES.map(([, l]) => `<th>${l}</th>`).join("")}<th></th></tr></thead><tbody>
+  const days = Object.keys(byD).sort().map(d => `<div class="tw cmp-tw"><table class="cmp-tbl"><thead><tr><th>${dayKo(d)}</th><th>경기</th>${REF_ROLES.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead><tbody>
     ${byD[d].map(m => { const w = winnerOf(c, m), nm = s => { const id = sideId(c, m, s), n = esc(cmpSide(c, m, s)); return id && w === id ? `<b>${n}</b>` : n; };
-      return `<tr><td class="num"><b>${m.start}</b>${m.end ? `<span>~${m.end}</span>` : ""}</td><td class="cmp-vs">${m.stage !== "group" || m.label ? `<span class="small muted">${esc(m.label || STAGE_KO[m.stage])}</span>` : ""}${nm("a")} <span class="muted">vs</span> ${nm("b")} ${scoreHtml(m)}</td>${REF_ROLES.map(([k]) => cell((m.refs || {})[k])).join("")}<td class="cmp-acts">${photoBtn(m)}${scoreBtn(m)}${adm ? `<button class="btn link small" type="button" data-act="cmpform" data-f="match" data-id="${m.id}">수정</button>` : ""}</td></tr>`; }).join("")}
+      return `<tr><td class="num"><b>${m.start}</b>${m.end ? `<span>~${m.end}</span>` : ""}</td><td class="cmp-vs">${m.stage !== "group" || m.label ? `<span class="small muted">${esc(m.label || STAGE_KO[m.stage])}</span>` : ""}${nm("a")} <span class="muted">vs</span> ${nm("b")} ${scoreHtml(m)}<div class="cmp-mact">${photoBtn(m)}${scoreBtn(m)}${adm ? `<button class="btn link small" type="button" data-act="cmpform" data-f="match" data-id="${m.id}">수정</button>` : ""}</div></td>${REF_ROLES.map(([k]) => cell((m.refs || {})[k])).join("")}</tr>`; }).join("")}
     </tbody></table></div>
     <ul class="cmp-cards"><li class="cmp-dh">${dayKo(d)}</li>${byD[d].map(m => { const w = winnerOf(c, m), nm = sd => { const id = sideId(c, m, sd), n = esc(cmpSide(c, m, sd)); return id && w === id ? `<b>${n}</b>` : n; };
       return `<li><div class="cmp-mh"><span class="num">${m.start}</span>${m.stage !== "group" || m.label ? `<span class="small muted">${esc(m.label || STAGE_KO[m.stage])}</span>` : ""}${scoreHtml(m)}<span class="cmp-acts">${photoBtn(m)}${scoreBtn(m)}${adm ? `<button class="btn link small" type="button" data-act="cmpform" data-f="match" data-id="${m.id}">수정</button>` : ""}</span></div>

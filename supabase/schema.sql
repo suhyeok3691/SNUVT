@@ -2037,3 +2037,18 @@ create policy "members read terms" on public.terms for select to authenticated u
 create policy "schedule writes terms" on public.terms for all to authenticated using (private.can('schedule')) with check (private.can('schedule'));
 revoke all on public.terms from anon;
 grant select, insert, update, delete on public.terms to authenticated;
+-- 2026-10-29: 경기 기록은 부원 누구나 (cup_score 권한 넓힘)
+create or replace function public.cup_score(mid uuid, new_sets jsonb, new_score text, new_winner uuid)
+ returns void language plpgsql security definer set search_path to ''
+as $$
+declare m public.cup_matches;
+begin
+  select * into m from public.cup_matches where id = mid;
+  if m.id is null then raise exception '경기를 찾을 수 없어요'; end if;
+  if not (private.is_member() or private.can('schedule')) then raise exception '권한이 없어요' using errcode = '42501'; end if;
+  if new_winner is not null and not exists (select 1 from public.cup_teams t where t.id = new_winner and t.cup_id = m.cup_id) then
+    raise exception '잘못된 팀이에요' using errcode = '23514';
+  end if;
+  if new_score is not null and length(new_score) > 40 then raise exception '점수가 너무 길어요' using errcode = '23514'; end if;
+  update public.cup_matches set sets = new_sets, score = new_score, winner = new_winner where id = mid;
+end $$;
