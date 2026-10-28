@@ -1060,7 +1060,9 @@ i.dot.k-ob { background: var(--c-fr); }
 .ct-cats { margin-bottom: 8px; }
 .ct-acts { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; margin-top: 8px; }
 .ct-acts .sc-g { min-height: 48px; }
-.ct-lu { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.ct-lu { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 8px; margin-bottom: 8px; }
+.ct-lu .fl { min-width: 0; } .ct-lu select { width: 100%; min-width: 0; }
+.ct-netl { grid-column: 1 / -1; text-align: center; font-size: 11px; color: var(--muted); border-top: 3px solid var(--ink); padding-top: 2px; }
 .ct-sheet td.ct-hi { background: #fff6c8; } .ct-sheet td.ct-up { background: #d8f5dc; } .ct-sheet td.ct-dn { background: #fbdada; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ct-sheet td.ct-hi { background: #4a4214; } :root:not([data-theme="light"]) .ct-sheet td.ct-up { background: #173d22; } :root:not([data-theme="light"]) .ct-sheet td.ct-dn { background: #4a1d1d; } }
 :root[data-theme="dark"] .ct-sheet td.ct-hi { background: #4a4214; } :root[data-theme="dark"] .ct-sheet td.ct-up { background: #173d22; } :root[data-theme="dark"] .ct-sheet td.ct-dn { background: #4a1d1d; }
@@ -1101,11 +1103,11 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=118"></script>
-<script src="guide.js?v=118"></script>
-<script src="library.js?v=118"></script>
-<script src="campus.js?v=118"></script>
-<script src="court.js?v=118"></script>
-<script src="app.js?v=118"></script>
+<script src="program.js?v=119"></script>
+<script src="guide.js?v=119"></script>
+<script src="library.js?v=119"></script>
+<script src="campus.js?v=119"></script>
+<script src="court.js?v=119"></script>
+<script src="app.js?v=119"></script>
 </body>
 </html>

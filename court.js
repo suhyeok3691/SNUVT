@@ -128,25 +128,25 @@ async function ctUndo() {
   } catch (err) { toast(failMsg(err)); }
   state.dirty = false; render();
 }
-// 라인업 · 세트 시작 로테 (전력분석 담당)
+// 라인업 · 세트 시작 로테 (전력분석 담당). 라인업 용지처럼 앞줄 4·3·2, 뒷줄 5·6·1 순서로 입력 (저장은 자리 1~6)
+const CT_SHEET = [3, 2, 1, 4, 5, 0];
 function ctLineupForm() {
   const S = sc(), m = scMatch(), L = ctLu(m), setNo = S.sel.set || 1, st = (L.sets || {})[setNo] || {};
   const ps = sortedPlayers().filter(p => !p.military), us = (L.us && L.us.slots) || [], op = (L.opp && L.opp.slots) || [];
-  const sel = (i, cur) => `<label class="fl">${i + 1}번 자리${i === 0 ? " (서브)" : ""}<select id="ctu-${i}"><option value="">선택</option>${ps.map(p => `<option value="${p.id}" ${cur === p.id ? "selected" : ""}>${esc(pNo(p) + p.name)} · ${esc(p.pos || "")}</option>`).join("")}</select></label>`;
+  const sel = (i, cur) => `<label class="fl">${i + 1}${i === 0 ? " 서브" : ""}<select id="ctu-${i}"><option value="">선택</option>${ps.map(p => `<option value="${p.id}" ${cur === p.id ? "selected" : ""}>${esc(pNo(p) + p.name)} · ${esc(p.pos || "")}</option>`).join("")}</select></label>`;
   const num = (id, v, l) => `<label class="fl">${l}<input id="${id}" type="number" inputmode="numeric" min="0" max="99" value="${esc(v ?? "")}"></label>`;
   const libs = (L.us && L.us.libero) || [];
   const el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>라인업</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
-    <form class="f" id="ctLineupForm"><p class="small muted">1세트 시작 때 서 있는 자리 (1번 = 서브 자리, 2·3·4 = 앞줄)</p>
-      <h4>우리</h4><div class="fields ct-lu">${[0, 1, 2, 3, 4, 5].map(i => sel(i, us[i])).join("")}</div>
+    <form class="f" id="ctLineupForm">
+      <h4>우리</h4><div class="ct-lu"><span class="ct-netl">네트</span>${CT_SHEET.map(i => sel(i, us[i])).join("")}</div>
       <label class="fl">리베로<select id="ctu-lib" multiple size="3">${ps.map(p => `<option value="${p.id}" ${libs.includes(p.id) ? "selected" : ""}>${esc(pNo(p) + p.name)}</option>`).join("")}</select></label>
-      <h4>${esc(m.opponent || "상대")} (등번호)</h4><div class="fields ct-lu">${[0, 1, 2, 3, 4, 5].map(i => num(`cto-${i}`, op[i], `${i + 1}번 자리${i === 0 ? " (서브)" : ""}`)).join("")}</div>
+      <h4>${esc(m.opponent || "상대")} (등번호)</h4><div class="ct-lu"><span class="ct-netl">네트</span>${CT_SHEET.map(i => num(`cto-${i}`, op[i], `${i + 1}${i === 0 ? " 서브" : ""}`)).join("")}</div>
       <div class="pair">${num("cto-l1", ((L.opp && L.opp.libero) || [])[0], "상대 리베로")}${num("cto-l2", ((L.opp && L.opp.libero) || [])[1], "상대 리베로 2")}</div>
       <h4>${setNo}세트 시작</h4><div class="fields">
         <label class="fl">우리 로테<select id="cts-rot">${[1, 2, 3, 4, 5, 6].map(n => `<option ${n === (st.rot || 1) ? "selected" : ""}>${n}</option>`).join("")}</select></label>
         <label class="fl">상대 로테<select id="cts-orot">${[1, 2, 3, 4, 5, 6].map(n => `<option ${n === (st.opp_rot || 1) ? "selected" : ""}>${n}</option>`).join("")}</select></label>
         <label class="fl">첫 서브<select id="cts-serve"><option value="us" ${st.serve !== "opp" ? "selected" : ""}>우리</option><option value="opp" ${st.serve === "opp" ? "selected" : ""}>상대</option></select></label></div>
-      <p class="small muted">세트마다 시작 로테·첫 서브만 바꾸면 돼요 (위 세트 칩에서 세트를 고른 뒤 열기)</p>
       <div class="row"><button class="btn primary" type="submit">저장</button></div></form>`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
