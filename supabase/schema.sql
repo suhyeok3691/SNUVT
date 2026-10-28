@@ -1670,7 +1670,8 @@ create or replace function private.jp_sid(n text, p text, g text) returns text l
         or exists (select 1 from unnest(s.aliases) a where a like 're:%' and n ~ substr(a, 4))))
   select case when p is not null or (select count(*) from c) = 1 then (select id from c limit 1) end
 $$;
--- 일본 고교 랭킹: 전국대회(하루코·인터하이·국민스포츠대회 단독 학교 대표)에서 간 곳 + 현 대회 4강 이상, 오래된 결과일수록 덜 셈 (1년에 ×0.7)
+-- 일본 고교 랭킹: 전국대회(하루코·인터하이·국민스포츠대회 단독 학교 대표)에서 간 곳 + 현 대회 4강 이상
+-- 최근일수록 크게: 1년 지나면 ×0.4, 3년 넘은 전국대회는 안 셈 (2026-10-28 바꿈: 예전엔 1년 ×0.7, 기간 제한 없음)
 -- 점수: 우승 100 · 준우승 70 · 4강 50 · 8강 32 · 16강 20 · 32강 10 · 출전 5 (국민스포츠대회는 한 학교가 현 대표로 나간 경우만, 24팀 대회라 ×0.8. 여러 학교 선발팀은 학교를 알 수 없어 안 셈) / 현 우승 10 · 준우승 6 · 4강 3
 create materialized view public.jp_rank as
 with mt as (
@@ -1694,22 +1695,23 @@ with mt as (
   from public.jp_results r
   where r.school_id is not null and not exists (select 1 from public.jp_matches m where m.tourn = r.tourn and m.year = r.year and m.gender = r.gender)
 ), pts as (
-  select sid, gender,
+  select sid, gender, tourn, year, lvl,
     (case lvl when 7 then 100 when 6 then 70 when 5 then 50 when 4 then 32 when 3 then 20 when 2 then 10 else 5 end)
     * case tourn when 'kokutai' then 0.8 else 1 end
-    * power(0.7, greatest(0, extract(epoch from now() - make_date(year, case tourn when 'haruko' then 1 when 'ih' then 8 when 'kokutai' then 10 else 6 end, 15)) / 31557600)) p
-  from nat
+    * power(0.4, greatest(0, extract(epoch from now() - make_date(year, case tourn when 'haruko' then 1 when 'ih' then 8 when 'kokutai' then 10 else 6 end, 15)) / 31557600)) p
+  from nat where make_date(year, case tourn when 'haruko' then 1 when 'ih' then 8 when 'kokutai' then 10 else 6 end, 15) > now() - interval '3 years'
 ), pref as (
   select private.jp_sid(name, pref, gender) sid, gender,
     (case place when 1 then 10 when 2 then 6 else 3 end)
-    * power(0.7, greatest(0, extract(epoch from now() - make_date(case when tourn = 'haruko' then year - 1 else year end, case tourn when 'haruko' then 11 else 6 end, 1)) / 31557600)) p
+    * power(0.4, greatest(0, extract(epoch from now() - make_date(case when tourn = 'haruko' then year - 1 else year end, case tourn when 'haruko' then 11 else 6 end, 1)) / 31557600)) p
   from public.jp_pref_top
 ), allp as (
   select sid, gender, p from pts union all select sid, gender, p from pref where sid is not null
-), best as ( -- 최근 3년 전국 최고 성적 (같으면 하루코·인터하이 먼저, 그다음 최근)
-  select distinct on (sid, gender) sid, gender, tourn, year, lvl from nat
-  where year >= extract(year from now())::int - 2 and lvl >= 3
-  order by sid, gender, lvl desc, (tourn = 'kokutai'), year desc
+  union all select sid, gender, 0 from nat -- 3년 넘은 기록만 있는 학교도 목록·기록은 남김 (점수 0)
+), best as ( -- 대표 성적: 최근 3년 중 (최근일수록 크게 친) 점수가 가장 큰 대회
+  select distinct on (sid, gender) sid, gender, tourn, year, lvl from pts
+  where lvl >= 3
+  order by sid, gender, p desc, year desc
 ), hist as ( -- 전국대회 기록 전부 (lvl 7 우승 · 6 준우승 · 5 4강 · 4 8강 · 3 16강 · 2 32강 · 그 아래 출전)
   select sid, gender, jsonb_agg(jsonb_build_object('t', tourn, 'y', year, 'l', lvl) order by year desc, lvl desc) h
   from (select distinct sid, gender, tourn, year, max(lvl) over (partition by sid, gender, tourn, year) lvl from nat) x group by 1, 2

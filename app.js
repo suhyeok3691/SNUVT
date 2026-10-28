@@ -2591,7 +2591,11 @@ function innerBack() {
   return false;
 }
 // 뒤로 가기: 열린 창 닫기 → 안쪽 화면 나가기 → 이전 화면
+let popN = 0, popAt = 0;
 window.addEventListener("popstate", () => {
+  // 같은 밀기 한 번에 뒤로 가기가 두 번 오면(기본 밀기 + 직접 만든 밀기) 두 번째는 무시
+  const now = Date.now(); if (now - popAt < 450) { try { history.pushState(null, "", "#" + state.view); } catch (e) {} return; }
+  popAt = now; popN++;
   const cf = document.getElementById("confirmBox");
   if (cf && !cf.hidden) { const x = cf.querySelector('[data-cf="0"]'); if (x) x.click(); else cf.hidden = true; try { history.pushState(null, "", "#" + state.view); } catch (e) {} return; }
   const ov = [["sheet", () => closeSheet()], ["setpanel", () => closeSettings()], ["drawer", () => closeDrawer()]].find(([id]) => { const el = document.getElementById(id); return el && !el.hidden; });
@@ -2610,7 +2614,8 @@ window.addEventListener("popstate", () => {
   const hide = () => { if (el) { el.style.opacity = 0; el.style.transform = "translateX(-40px)"; } };
   document.addEventListener("touchstart", e => { const t = e.touches[0]; on = t.clientX <= 22; sx = t.clientX; sy = t.clientY; }, { passive: true });
   document.addEventListener("touchmove", e => { if (!on) return; const t = e.touches[0], dx = t.clientX - sx, dy = Math.abs(t.clientY - sy); if (dy > 30 && dy > dx) { on = false; hide(); return; } show(Math.max(0, dx)); }, { passive: true });
-  document.addEventListener("touchend", e => { if (!on) return; on = false; const dx = e.changedTouches[0].clientX - sx; hide(); if (dx > 70) history.back(); }, { passive: true });
+  // 아이폰이 이미 뒤로 갔으면(기본 밀기) 또 가지 않음
+  document.addEventListener("touchend", e => { if (!on) return; on = false; const dx = e.changedTouches[0].clientX - sx; hide(); if (dx > 70) { const n = popN; setTimeout(() => { if (popN === n) history.back(); }, 380); } }, { passive: true });
   document.addEventListener("touchcancel", () => { on = false; hide(); }, { passive: true });
 })();
 // 전화번호: 숫자만 넣어도 하이픈 자동 (010-1234-5678 · 02-123-4567)
