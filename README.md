@@ -221,7 +221,7 @@
 - 선수를 누르면 동작 고르기 — 이름·순서는 예전 프로그램 그대로: Serve(Ace · 1/2/3-serve · Serve Error(Net·Out·Blocked) · Foot Fault) · Receive(Receive Error · Over Pass (Play) · 1/2/3-Receive) · Attack(Spike/Tip/Dump/Down Ball/Over Pass Kill · Hit In Play · Spike/Tip/Dump/Down Ball Error(Into Net·Blocked·Out) · Back Row Fault) · Set(1/2/3-Set (In)·(Out) · Set Error) · Block(Block · Block Assist · Block In Play · half block · Block Error(Into Net·Out)) · Dig(Tip/Dump/Down Ball/Spike/block Dig · 각 Error) · Pass(F.B. Return In Play · Over Pass In Play · 1/2/3-Free Ball Pass) · Fault & Error(???? · Ball Handling · Net Fault · Under Net · Over Net · Whose Ball? · Ball Return Err · Free Ball Recv Err · Out of Rotation · Outside Court). 숫자는 3이 가장 좋음. 공격 범실 이유 Blocked는 "막힘"으로 셈. 서브·공격은 코스(선택)
 - 득점·실점 동작이면 점수가 오르고, 서브권이 넘어오면 그 팀 로테이션이 자동으로 돎(우리·상대 둘 다). 한 랠리에 점수는 한 번만(블로킹 당함 + 블로킹 득점 같이 눌러도 1점). 서브·리시브를 누르면 새 랠리
 - 되돌리기는 마지막 기록을 지우고 세트를 처음부터 다시 따라가 점수·로테를 맞춤
-- 분석: 기록지(우리·상대 선수별 득점 · 공격 성공률/효율/점유율 · 서브 점수 · 블로킹 · 디그 · 리시브 점수 · 토스 점수 · 범실, 프로그램 엑셀 요약과 같은 항목) · 로테이션별 득실 우리·상대(상대가 가장 강한/약한 로테) · 엑셀에 동작·이유·로테·점수
+- 분석: 기록지(우리·상대 선수별 득점 · 공격 성공률/효율/점유율 · 서브 점수 · 블로킹 · 디그 · 리시브 점수 · 세트 점수 · 범실, 예전 프로그램 엑셀 요약과 같은 항목) · 로테이션별 득실 우리·상대(상대가 가장 강한/약한 로테) · 엑셀에 동작·이유·로테·점수
 - 경기 화면은 코트 · 분석 두 탭만(예전 "목록" 입력 · "장면" 모아보기는 원래 프로그램에 없어서 뺌). 코트 버튼마다 자리 번호(왼쪽 위) · 포지션(오른쪽 위, 리베로는 L). 9인제 코트는 아직 없음
 - 영상: 유튜브(앱 안에서 재생 · 기록마다 영상 시간 자동) 또는 치지직 다시보기(KUSF 대학스포츠, `scout_matches.vod`). 치지직은 앱 안에 안 열려서(앱 안 보기 없앰) "치지직" 버튼으로 따로 열고 폰·TV·노트북으로 보면서 입력. 공유 단축 주소(`naver.me/…`)는 저장할 때 Edge Function `resolve-link`가 치지직 주소로 풀어 줌(naver.me만 받음). 영상 시간 칸에 지금 시간을 넣고 "시계 시작"(±5초로 맞춤)하면 기록마다 그 시간이 붙고, 장면의 시간을 누르면 그 시간(?currentTime=)으로 치지직을 엶
 - 예전 프로그램을 그대로 옮기고 화면만 정리 (추가 기능은 나중에)
