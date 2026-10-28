@@ -138,16 +138,16 @@ function availHtml(c) {
 }
 // 경기 · 심판 (날짜별 표, 화면 캡처와 같은 모양)
 function matchesHtml(c) {
-  const adm = can("schedule"), me = cmpMe(), byD = {};
+  const adm = can("schedule"), me = cmpMe(), byD = {}, open = state.cmpRefOpen || (state.cmpRefOpen = new Set());
   for (const m of c.matches) (byD[m.date] = byD[m.date] || []).push(m);
-  const cell = v => `<td class="${v && v === me ? "me" : ""}">${esc(v || "")}</td>`;
-  const days = Object.keys(byD).sort().map(d => `<div class="tw cmp-tw"><table class="cmp-tbl"><thead><tr><th>${dayKo(d)}</th><th>경기</th>${REF_ROLES.map(([, l]) => `<th>${l}</th>`).join("")}</tr></thead><tbody>
-    ${byD[d].map(m => { const w = winnerOf(c, m), nm = s => { const id = sideId(c, m, s), n = esc(cmpSide(c, m, s)); return id && w === id ? `<b>${n}</b>` : n; };
-      return `<tr><td class="num"><b>${m.start}</b>${m.end ? `<span>~${m.end}</span>` : ""}</td><td class="cmp-vs">${m.stage !== "group" || m.label ? `<span class="small muted">${esc(m.label || STAGE_KO[m.stage])}</span>` : ""}${nm("a")} <span class="muted">vs</span> ${nm("b")} ${scoreHtml(m)}<div class="cmp-mact">${photoBtn(m)}${scoreBtn(m)}${adm ? `<button class="btn link small" type="button" data-act="cmpform" data-f="match" data-id="${m.id}">수정</button>` : ""}</div></td>${REF_ROLES.map(([k]) => cell((m.refs || {})[k])).join("")}</tr>`; }).join("")}
-    </tbody></table></div>
-    <ul class="cmp-cards"><li class="cmp-dh">${dayKo(d)}</li>${byD[d].map(m => { const w = winnerOf(c, m), nm = sd => { const id = sideId(c, m, sd), n = esc(cmpSide(c, m, sd)); return id && w === id ? `<b>${n}</b>` : n; };
-      return `<li><div class="cmp-mh"><span class="num">${m.start}</span>${m.stage !== "group" || m.label ? `<span class="small muted">${esc(m.label || STAGE_KO[m.stage])}</span>` : ""}${scoreHtml(m)}<span class="cmp-acts">${photoBtn(m)}${scoreBtn(m)}${adm ? `<button class="btn link small" type="button" data-act="cmpform" data-f="match" data-id="${m.id}">수정</button>` : ""}</span></div>
-        <p class="cmp-mv">${nm("a")} <span class="muted">vs</span> ${nm("b")}</p>${Object.keys(m.refs || {}).length ? `<div class="cmp-rf">${REF_ROLES.map(([k, l]) => (m.refs || {})[k] ? `<span class="${m.refs[k] === me ? "me" : ""}"><em>${l}</em>${esc(m.refs[k])}</span>` : "").join("")}</div>` : ""}</li>`; }).join("")}</ul>`).join("");
+  // 심판은 "심판" 버튼을 눌러야 보임 (내가 맡은 경기는 버튼에 표시)
+  const refBtn = m => { const rf = m.refs || {}, n = REF_ROLES.filter(([k]) => rf[k]).length, mine = REF_ROLES.find(([k]) => rf[k] && rf[k] === me);
+    return n ? `<button class="btn link small cmp-rfb ${open.has(m.id) ? "on" : ""} ${mine ? "me" : ""}" type="button" data-act="cmpref" data-id="${m.id}" aria-expanded="${open.has(m.id)}">${mine ? `내 ${mine[1]}` : "심판"} ${open.has(m.id) ? "▴" : "▾"}</button>` : ""; };
+  const refList = m => open.has(m.id) ? `<div class="cmp-rf">${REF_ROLES.map(([k, l]) => (m.refs || {})[k] ? `<span class="${m.refs[k] === me ? "me" : ""}"><em>${l}</em>${esc(m.refs[k])}</span>` : "").join("")}</div>` : "";
+  const acts = m => `${refBtn(m)}${photoBtn(m)}${scoreBtn(m)}${adm ? `<button class="btn link small" type="button" data-act="cmpform" data-f="match" data-id="${m.id}">수정</button>` : ""}`;
+  const days = Object.keys(byD).sort().map(d => `<ul class="cmp-cards all"><li class="cmp-dh">${dayKo(d)}</li>${byD[d].map(m => { const w = winnerOf(c, m), nm = sd => { const id = sideId(c, m, sd), n = esc(cmpSide(c, m, sd)); return id && w === id ? `<b>${n}</b>` : n; };
+      return `<li><div class="cmp-mh"><span class="num">${m.start}${m.end ? `<small>~${m.end}</small>` : ""}</span>${m.stage !== "group" || m.label ? `<span class="small muted">${esc(m.label || STAGE_KO[m.stage])}</span>` : ""}${scoreHtml(m)}</div>
+        <div class="cmp-mrow"><p class="cmp-mv">${nm("a")} <span class="muted">vs</span> ${nm("b")}</p><span class="cmp-acts">${acts(m)}</span></div>${refList(m)}</li>`; }).join("")}</ul>`).join("");
   return `<section class="sec"><div class="sec-head"><h3>경기 · 심판</h3>${adm ? `<button class="btn add" type="button" data-act="cmpform" data-f="match">+ 경기</button>` : ""}</div>${days || emptyLine("아직 경기 일정이 없어요.")}</section>`;
 }
 // 조편성 + 조별 순위 (점수 "2-1" = 세트)
@@ -379,6 +379,7 @@ async function campusClick(b, act) {
   if (act === "cmptab") { state.cmpTab = b.dataset.v; state.dirty = false; return render(); }
   if (act === "cmppick") { state.cmpId = b.dataset.id; state.dirty = false; return render(); }
   if (act === "cmpform") return openCmpForm(b.dataset.f, b.dataset.id);
+  if (act === "cmpref") { const o = state.cmpRefOpen || (state.cmpRefOpen = new Set()), id = b.dataset.id; o.has(id) ? o.delete(id) : o.add(id); state.dirty = false; return render(); }
   if (act === "cmpfill") {
     const ins = [...document.querySelectorAll("select.cmp-ref")], tgt = cmpLastRef && document.contains(cmpLastRef) && !cmpLastRef.value ? cmpLastRef : ins.find(i => !i.value);
     if (!tgt) return toast("빈 심판 칸이 없어요");
