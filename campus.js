@@ -33,7 +33,7 @@ const hm = s => s ? String(s).slice(0, 5) : "";
 // 점수 보기: 세트 "2-1" + 세트별 점수
 const scoreHtml = m => { if (!m.score) return ""; const x = /^(\d+\s*[-:]\s*\d+)\s*(?:\((.*)\))?$/.exec(m.score); return x ? `<span class="chip sc-res">${esc(x[1])}</span>${x[2] ? `<span class="small muted sc-sets">${esc(x[2].replace(/,\s*/g, " · "))}</span>` : ""}` : `<span class="chip sc-res">${esc(m.score)}</span>`; };
 // 경기 기록 입력: 일정 담당·관리자 + 그 경기 주심·부심·기록심
-const canScore = m => can("schedule") || (!!cmpMe() && (m.refs || {}).rec === cmpMe()); // 그 경기 기록심 + 관리자·주장·부주장
+const canScore = m => can("schedule") || (!!cmpMe() && ["ju", "bu", "rec"].some(k => (m.refs || {})[k] === cmpMe())); // 그 경기 주심·부심·기록심 + 관리자·주장·부주장
 const photoBtn = m => state.myPid || can("schedule") ? `<button class="btn link small" type="button" data-act="cmpphoto" data-id="${m.id}" aria-label="팀 사진">사진${(curCup() || { photos: [] }).photos.filter(p => p.match === m.id).length ? ` ${(curCup() || { photos: [] }).photos.filter(p => p.match === m.id).length}` : ""}</button>` : "";
 const scoreBtn = m => canScore(m) ? `<button class="btn link small sc-rec" type="button" data-act="cmpform" data-f="score" data-id="${m.id}">기록</button>` : "";
 const cmpSets = m => { const x = /(\d+)\s*[-:]\s*(\d+)/.exec(m.score || ""); return x ? [Number(x[1]), Number(x[2])] : null; };

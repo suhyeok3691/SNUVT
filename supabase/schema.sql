@@ -2070,3 +2070,22 @@ begin
   if new_score is not null and length(new_score) > 40 then raise exception '점수가 너무 길어요' using errcode = '23514'; end if;
   update public.cup_matches set sets = new_sets, score = new_score, winner = new_winner where id = mid;
 end $$;
+-- 2026-10-29: 전력분석 치지직 다시보기 · 경기 기록은 그 경기 주심·부심·기록심 + 관리자·주장·부주장
+alter table public.scout_matches add column if not exists vod text check (vod is null or (length(vod) <= 200 and vod ~ '^https://(m\.)?chzzk\.naver\.com/video/[0-9]+'));
+create or replace function public.cup_score(mid uuid, new_sets jsonb, new_score text, new_winner uuid)
+ returns void language plpgsql security definer set search_path to ''
+as $$
+declare m public.cup_matches; me text;
+begin
+  select * into m from public.cup_matches where id = mid;
+  if m.id is null then raise exception '경기를 찾을 수 없어요'; end if;
+  select name into me from public.players where id = private.my_player_id();
+  if not (private.can('schedule') or (private.is_member() and me is not null and me in (m.refs->>'ju', m.refs->>'bu', m.refs->>'rec'))) then
+    raise exception '권한이 없어요' using errcode = '42501';
+  end if;
+  if new_winner is not null and not exists (select 1 from public.cup_teams t where t.id = new_winner and t.cup_id = m.cup_id) then
+    raise exception '잘못된 팀이에요' using errcode = '23514';
+  end if;
+  if new_score is not null and length(new_score) > 40 then raise exception '점수가 너무 길어요' using errcode = '23514'; end if;
+  update public.cup_matches set sets = new_sets, score = new_score, winner = new_winner where id = mid;
+end $$;
