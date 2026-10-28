@@ -2005,10 +2005,10 @@ const fmtClock = t => { t = Math.max(0, Math.floor(t)); const h = Math.floor(t /
 function scVodHtml(m) {
   if (!m.vod) return "";
   const c = vodClock(), on = c.mid === m.id;
-  return `<div class="panel sc-vod"><div class="sc-row"><a class="btn small" href="${esc(m.vod)}${on && c.base ? `?currentTime=${Math.floor(vodNow())}` : ""}" target="_blank" rel="noopener">치지직 다시보기 열기</a>
+  return `<div class="panel sc-vod"><div class="sc-row"><a class="btn small" href="${esc(m.vod)}${on && c.base ? `?currentTime=${Math.floor(vodNow())}` : ""}" target="_blank" rel="noopener">새 창</a>
     <span class="small muted">영상 시간</span><input id="vodT" class="vod-t" inputmode="numeric" placeholder="0:00" value="${on ? fmtClock(vodNow()) : ""}" aria-label="지금 영상 시간">
     <button class="btn small ${on && c.run ? "danger" : "primary"}" type="button" data-act="scvod">${on && c.run ? "멈춤" : "시계 시작"}</button>
-    <button class="btn link small" type="button" data-act="scvodin">${state.vodEmbed === m.id ? "앱 안에서 닫기" : "앱 안에서 보기"}</button></div></div>`;
+    <button class="btn link small" type="button" data-act="scvodin">${state.vodHide !== m.id ? "영상 닫기" : "앱 안에서 보기"}</button></div></div>`;
 }
 setInterval(() => { const c = state.vodClock, el = document.getElementById("vodT"); if (c && c.run && el && document.activeElement !== el) el.value = fmtClock(vodNow()); }, 1000);
 const scNow = () => { try { if (scPlayer && scPlayer.getCurrentTime) return Math.round(scPlayer.getCurrentTime() * 10) / 10; } catch (e) {}
@@ -2183,10 +2183,11 @@ let scPlayer = null;
 async function scoutDock() {
   const dock = document.getElementById("dock"); if (!dock) return;
   const m = state.view === "scout" ? scMatch() : null, y = m && m.yt ? parseYt(m.yt) : null;
-  // 치지직: 퍼가기 주소로 앱 안에 띄워 봄 (치지직이 막으면 빈 칸 → 새 창으로)
-  const vid = !y && m && m.vod && state.vodEmbed === m.id ? (/video\/(\d+)/.exec(m.vod) || [])[1] : null;
+  // 치지직: 다시보기 주소를 그대로 앱 안에 띄움 (장면 누르면 그 시간으로 다시 엶)
+  const vid = !y && m && m.vod && state.vodHide !== m.id ? (/video\/(\d+)/.exec(m.vod) || [])[1] : null;
   if (vid) { dock.hidden = false; const hd = document.querySelector("header.top"); dock.style.top = (hd ? hd.offsetHeight : 0) + "px";
-    if (dock.dataset.mid !== m.id + ":vod") { dock.dataset.mid = m.id + ":vod"; scPlayer = null; dock.innerHTML = `<div class="vid-frame"><iframe src="https://chzzk.naver.com/embed/video/${vid}" title="치지직 다시보기" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`; }
+    const t = Math.max(0, Math.floor(state.vodSeek || 0)), key = `${m.id}:vod:${t}`;
+    if (dock.dataset.mid !== key) { dock.dataset.mid = key; scPlayer = null; dock.innerHTML = `<div class="vid-frame"><iframe src="https://chzzk.naver.com/video/${vid}${t ? `?currentTime=${t}` : ""}" title="치지직 다시보기" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`; }
     return; }
   if (!y) { if (dock.dataset.mid) { dock.innerHTML = ""; dock.dataset.mid = ""; scPlayer = null; } dock.hidden = true; return; }
   dock.hidden = false;
@@ -2207,7 +2208,7 @@ function openScoutForm(id) {
       <label class="fl">날짜<input type="date" id="scf-date" value="${esc(m.date || "")}"></label>
       <label class="fl">상대<input id="scf-opp" maxlength="60" value="${esc(m.opponent || "")}"></label>
       <label class="fl wide">유튜브 링크<input id="scf-yt" maxlength="200" value="${esc(m.yt || "")}" placeholder="https://youtu.be/..."></label>
-      <label class="fl wide">치지직 다시보기 (KUSF 대학스포츠)<input id="scf-vod" maxlength="200" value="${esc(m.vod || "")}" placeholder="https://chzzk.naver.com/video/..."></label>
+      <label class="fl wide">치지직 다시보기 (KUSF 대학스포츠)<input id="scf-vod" maxlength="200" value="${esc(m.vod || "")}" placeholder="chzzk.naver.com/video/… 또는 naver.me/…"></label>
       <label class="fl wide">메모<input id="scf-note" maxlength="300" value="${esc(m.note || "")}"></label>
     </div><div class="row"><button class="btn primary" type="submit">${id ? "저장" : "추가"}</button></div></form>`;
   if (id) addDelZone(`data-act="scdel" data-id="${esc(id)}"`, "경기 삭제");
@@ -2882,8 +2883,8 @@ document.addEventListener("click", async ev => {
     else if (act === "scfset") S.fset = Number(v);
     else if (act === "scsave") return scoutSave(b.dataset.g);
     else if (act === "scseek") { if (scPlayer) { try { scPlayer.seekTo(Number(b.dataset.t), true); } catch (e) {} return; }
-      const m = scMatch(); if (m && m.vod) { const c = vodClock(); c.mid = m.id; c.base = Number(b.dataset.t); c.run = false; window.open(`${m.vod}?currentTime=${Math.floor(c.base)}`, "_blank", "noopener"); state.dirty = false; render(); } return; }
-    else if (act === "scvodin") { const m = scMatch(); state.vodEmbed = state.vodEmbed === m.id ? null : m.id; state.dirty = false; return render(); }
+      const m = scMatch(); if (m && m.vod) { const c = vodClock(); c.mid = m.id; c.base = Number(b.dataset.t); c.run = false; if (state.vodHide !== m.id) state.vodSeek = c.base; else window.open(`${m.vod}?currentTime=${Math.floor(c.base)}`, "_blank", "noopener"); state.dirty = false; render(); } return; }
+    else if (act === "scvodin") { const m = scMatch(); state.vodHide = state.vodHide === m.id ? null : m.id; state.vodSeek = 0; state.dirty = false; return render(); }
     else if (act === "scvod") { const m = scMatch(), c = vodClock(), el = document.getElementById("vodT");
       if (c.mid === m.id && c.run) { c.base = vodNow(); c.run = false; }
       else { const t = el && el.value.trim() !== "" ? parseClock(el.value) : (c.mid === m.id ? c.base : 0); if (t == null) { toast("영상 시간을 0:00 처럼 넣어 주세요"); return; } c.mid = m.id; c.base = t; c.at = Date.now(); c.run = true; }
@@ -3350,8 +3351,13 @@ document.addEventListener("submit", async ev => {
     } else if (f.id === "scForm") {
       const yt = txt("scf-yt");
       if (yt && !parseYt(yt)) { toast("유튜브 링크를 확인해 주세요"); return; }
-      const vodIn = txt("scf-vod"), vod = vodIn ? parseVod(vodIn) : null;
-      if (vodIn && !vod) { toast("치지직 다시보기 주소(chzzk.naver.com/video/…)를 확인해 주세요"); return; }
+      let vodIn = txt("scf-vod");
+      if (/^(?:https?:\/\/)?naver\.me\//.test(vodIn)) { // 공유 단축 주소 → 서버에서 풀어서 치지직 주소로
+        const { data, error } = await sb.functions.invoke("resolve-link", { body: { url: /^https?:/.test(vodIn) ? vodIn : "https://" + vodIn } });
+        if (error || !data || !data.url) { toast("치지직 다시보기 주소를 찾지 못했어요"); return; }
+        vodIn = data.url; }
+      const vod = vodIn ? parseVod(vodIn) : null;
+      if (vodIn && !vod) { toast("치지직 다시보기 주소를 확인해 주세요"); return; }
       const row = { title: txt("scf-title"), date: txt("scf-date") || null, opponent: txt("scf-opp") || null, yt: yt || null, vod, note: txt("scf-note") || null };
       ok(f.dataset.id ? await sb.from("scout_matches").update(row).eq("id", f.dataset.id) : await sb.from("scout_matches").insert(row));
       closeSheet(); toast("저장했어요"); await scoutLoad(); return;
