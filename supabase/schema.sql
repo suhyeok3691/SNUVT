@@ -2159,3 +2159,6 @@ alter table public.live_rallies add column if not exists x smallint check (x is 
 alter table public.live_rallies add column if not exists y smallint check (y is null or y between 0 and 100);
 alter table public.live_rallies drop constraint if exists live_rallies_zone_check;
 alter table public.live_rallies add constraint live_rallies_zone_check check (zone is null or zone between 1 and 9);
+
+-- live_shot
+alter table public.live_rallies add column if not exists shot text check (shot is null or shot in ('spike','tip'));

@@ -1101,9 +1101,13 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 .lv-t1.srv::after { content: " ●"; color: var(--yellow); } .lv-t2.srv::before { content: "● "; color: var(--yellow); }
 .lv-run { grid-column: 1 / -1; justify-self: center; }
 .lv-pad { display: grid; gap: 8px; padding: 10px 12px; }
-.lv-b { font-weight: 700; border: 0; color: #fff; }
-.lv-b.best { background: #1e8e4e; } .lv-b.good { background: #4caf73; } .lv-b.ok { background: #6b7280; } .lv-b.bad { background: #c0392b; } .lv-b.zone { background: #c0392b; font: 800 20px var(--f-data); }
-.lv-b:not(.best):not(.good):not(.ok):not(.bad):not(.zone) { background: var(--surface-2); color: var(--ink); border: 1.5px solid var(--line); } .lv-b.on { background: var(--blue) !important; color: #fff !important; }
+.lv-b { font-weight: 700; border: 1.5px solid var(--line); color: var(--ink); background: var(--surface); }
+.lv-b.best { background: color-mix(in srgb, #1e8e4e 13%, var(--surface)); border-color: color-mix(in srgb, #1e8e4e 45%, var(--line)); color: color-mix(in srgb, #1e8e4e 70%, var(--ink)); }
+.lv-b.good { background: color-mix(in srgb, #1e8e4e 6%, var(--surface)); border-color: color-mix(in srgb, #1e8e4e 28%, var(--line)); }
+.lv-b.ok { background: var(--surface); }
+.lv-b.bad { background: color-mix(in srgb, #c0392b 9%, var(--surface)); border-color: color-mix(in srgb, #c0392b 38%, var(--line)); color: color-mix(in srgb, #c0392b 72%, var(--ink)); }
+.lv-b.zone { background: color-mix(in srgb, #c0392b 9%, var(--surface)); border-color: color-mix(in srgb, #c0392b 38%, var(--line)); font: 800 20px var(--f-data); }
+.lv-b:not(.best):not(.good):not(.ok):not(.bad):not(.zone) { background: var(--surface-2); color: var(--ink); border: 1.5px solid var(--line); } .lv-b.on { background: color-mix(in srgb, var(--blue) 16%, var(--surface)) !important; border-color: var(--blue) !important; color: var(--ink) !important; }
 .lv-zmap { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; max-width: 260px; }
 .lv-zmap span { position: relative; display: grid; place-items: center; height: 42px; border-radius: 6px; font: 700 15px var(--f-data); background: color-mix(in srgb, #c0392b calc(var(--a) * 70%), var(--surface-2)); }
 .lv-zmap i { position: absolute; top: 2px; left: 5px; font-style: normal; font-size: 10px; color: var(--muted); }
@@ -1113,7 +1117,7 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 .lv-ns { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
 .lv-n { display: inline-flex; align-items: baseline; gap: 4px; padding: 6px 10px; min-height: 40px; font: inherit; border-radius: 9px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
 .lv-n b { font: 800 16px var(--f-data); } .lv-n span { font-size: 12px; } .lv-n.sub { opacity: .75; }
-.lv-n.us.on { background: var(--blue); border-color: var(--blue); color: #fff; } .lv-n.opp.on { background: #c0392b; border-color: #c0392b; color: #fff; }
+.lv-n.us.on { background: color-mix(in srgb, var(--blue) 14%, var(--surface)); border: 2px solid var(--blue); color: var(--ink); } .lv-n.opp.on { background: color-mix(in srgb, #c0392b 12%, var(--surface)); border: 2px solid #c0392b; color: var(--ink); }
 .lv-add { display: inline-flex; gap: 4px; align-items: center; } .lv-add input { width: 70px; font: inherit; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--ink); }
 .lv-row { display: grid; grid-template-columns: 52px 1fr; gap: 6px; align-items: center; } .lv-rk { font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .lv-rb { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; } .lv-b { min-height: 44px; padding: 4px 2px; font-size: 14px; }
@@ -1124,6 +1128,7 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 .lv-c-bd { fill: none; stroke: var(--ink); stroke-width: 2; } .lv-c-net { stroke: #c0392b; stroke-width: 6; } .lv-c-al { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 6 4; }
 .lv-c-g { stroke: var(--muted); stroke-width: .8; opacity: .45; } .lv-c-z { fill: var(--muted); font: 700 22px var(--f-data); text-anchor: middle; opacity: .45; }
 .lv-dot { fill: #6b7280; stroke: #fff; stroke-width: 1.5; opacity: .9; }
+.lv-dot.tip { fill: var(--surface) !important; stroke-width: 3; } .lv-dot.tip.w4 { stroke: #1d4ed8; } .lv-dot.tip.o2 { stroke: #c0392b; } .lv-dot.tip.q3 { stroke: #1e8e4e; } .lv-dot.tip.pipe { stroke: #d9822b; } .lv-dot.tip.etc, .lv-dot.tip:not(.w4):not(.o2):not(.q3):not(.pipe) { stroke: #6b7280; }
 .lv-dot.w4, .lv-dot-k.w4 { fill: #1d4ed8; background: #1d4ed8; } .lv-dot.o2, .lv-dot-k.o2 { fill: #c0392b; background: #c0392b; } .lv-dot.q3, .lv-dot-k.q3 { fill: #1e8e4e; background: #1e8e4e; }
 .lv-dot.pipe, .lv-dot-k.pipe { fill: #d9822b; background: #d9822b; } .lv-dot.etc, .lv-dot-k.etc { fill: #6b7280; background: #6b7280; }
 .lv-leg { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; } .lv-dot-k { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 3px; }
@@ -1186,12 +1191,12 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=146"></script>
-<script src="guide.js?v=146"></script>
-<script src="library.js?v=146"></script>
-<script src="campus.js?v=146"></script>
-<script src="court.js?v=146"></script>
-<script src="live.js?v=146"></script>
-<script src="app.js?v=146"></script>
+<script src="program.js?v=147"></script>
+<script src="guide.js?v=147"></script>
+<script src="library.js?v=147"></script>
+<script src="campus.js?v=147"></script>
+<script src="court.js?v=147"></script>
+<script src="live.js?v=147"></script>
+<script src="app.js?v=147"></script>
 </body>
 </html>
