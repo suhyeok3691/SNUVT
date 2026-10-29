@@ -132,7 +132,7 @@ function lvRosSheet() {
     : `<input class="lvr-c" data-z="${z}" maxlength="4" autocapitalize="characters" autocomplete="off" placeholder="번호" value="${esc(v ?? "")}" aria-label="${z}번 자리">`}</div>`; };
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${esc(lvTN(g, side))} 명단 · 로테</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="lvRosForm">
-      ${snu ? "" : `<h4>명단</h4><div class="lvr-list" id="lvrList">${ros.map(lvRosRow).join("")}${ros.length ? "" : lvRosRow(null)}</div><div class="sc-row"><button type="button" class="btn small" data-act="lvrosadd" aria-label="줄 추가">+</button>${["OH", "MB", "OP", "S", "Li"].map(t => `<button type="button" class="btn small" data-act="lvrostag" data-v="${t}">+ ${t}</button>`).join("")}</div>`}
+      ${snu ? "" : `<h4>명단</h4><div class="lvr-list" id="lvrList">${ros.map(lvRosRow).join("")}${lvRosRow(null)}</div><div class="sc-row">${["OH", "MB", "OP", "S", "Li"].map(t => `<button type="button" class="btn small" data-act="lvrostag" data-v="${t}">+ ${t}</button>`).join("")}</div>`}
       <h4>${L.set}세트 코트 <span class="small muted" id="lvrInfo"></span></h4>
       <div class="sc-row"><button type="button" class="btn small primary" data-act="lvauto">자동 배치</button><button type="button" class="btn small" data-act="lvswap" data-v="OH">OH 바꾸기</button><button type="button" class="btn small" data-act="lvswap" data-v="MB">MB 바꾸기</button><button type="button" class="btn small" data-act="lvturn" data-d="1" aria-label="로테 한 칸">↻</button><button type="button" class="btn small" data-act="lvturn" data-d="-1" aria-label="반대로 한 칸">↺</button></div>
       <div class="ct-lu"><span class="ct-netl">네트</span>${[4, 3, 2, 5, 6, 1].map(cell).join("")}</div>
@@ -158,6 +158,7 @@ function lvRosInfo(ev) {
   const le = document.getElementById("lvrLib");
   if (le && ev && ev.target === le) le.dataset.touched = "1";
   if (ev && ev.target && ev.target.classList.contains("lvr-n")) { const ps = ev.target.parentNode.querySelector(".lvr-p"), tp = lvTagPos(ev.target.value); if (ps && tp && !ps.value) ps.value = tp; } // OH3 → OH
+  { const l = document.getElementById("lvrList"); if (l) { const rows = l.querySelectorAll(".lvr-row"), last = rows[rows.length - 1]; if (!last || last.querySelector(".lvr-n").value.trim() !== "") l.insertAdjacentHTML("beforeend", lvRosRow(null)); } } // 마지막 줄에 쓰면 빈 줄이 저절로
   if (le && le.tagName === "INPUT" && !le.dataset.touched && le.value === "") { const m = lvRosMap(), n = Object.keys(m).find(k => lvNormPos(m[k]) === "L"); if (n != null) le.value = n; } // 명단에 L이 있으면 리베로 칸에 저절로
   const arr = lvCourtRead(), sz = arr.findIndex(x => x.pos === "S") + 1;
   arr.forEach((x, i) => { const b = document.querySelector(`#lvRosForm .lvr-pos[data-z="${i + 1}"]`); if (b) b.textContent = x.pos; });
@@ -595,7 +596,9 @@ async function liveClick(b, act) {
     let tag; // OH · MB는 OH1 · OH2 · OH3 …, S · OP · Li는 처음엔 그대로 다음부터 S2 · Li2 …
     if (t === "OH" || t === "MB") { let n = 1; while (used.has(base + n)) n++; tag = base + n; }
     else { tag = base; for (let n = 2; used.has(tag); n++) tag = base + n; }
-    l.insertAdjacentHTML("beforeend", lvRosRow({ no: tag, pos: lvTagPos(tag) })); lvRosInfo(); return; }
+    const rows = l.querySelectorAll(".lvr-row"), last = rows[rows.length - 1];
+    if (last && last.querySelector(".lvr-n").value.trim() === "") last.insertAdjacentHTML("beforebegin", lvRosRow({ no: tag, pos: lvTagPos(tag) })); else l.insertAdjacentHTML("beforeend", lvRosRow({ no: tag, pos: lvTagPos(tag) }));
+    lvRosInfo(); return; }
   if (act === "lvswap") return lvRosSwap(b.dataset.v);
   if (act === "lvturn") return lvRosTurn(Number(b.dataset.d));
   if (act === "lvrosadd") { const l = document.getElementById("lvrList"); if (l) { l.insertAdjacentHTML("beforeend", lvRosRow(null)); const i = l.querySelectorAll(".lvr-n"); i[i.length - 1].focus(); } return; }
