@@ -2180,3 +2180,16 @@ alter publication supabase_realtime add table public.live_rallies, public.live_g
 
 -- live_rally_tag (번호 대신 이름표: OH1 · Li …)
 alter table public.live_rallies add column if not exists tag text check (tag is null or char_length(tag) between 1 and 8);
+
+-- weight_private (여자부: 몸무게 비공개 → 저장 안 함)
+alter table public.player_private add column if not exists weight_private boolean not null default false;
+create or replace function public.set_weight_private(on_ boolean) returns void language plpgsql security definer set search_path = '' as $$
+declare pid uuid := private.my_player_id();
+begin
+  if pid is null then raise exception '권한이 없어요' using errcode = '42501'; end if;
+  insert into public.player_private (player_id, weight, weight_private, updated_at) values (pid, null, coalesce(on_, false), now())
+    on conflict (player_id) do update set weight_private = coalesce(on_, false), weight = case when coalesce(on_, false) then null else public.player_private.weight end, updated_at = now();
+  if coalesce(on_, false) then update public.players set weight = null where id = pid; end if;
+end $$;
+revoke all on function public.set_weight_private(boolean) from public, anon;
+grant execute on function public.set_weight_private(boolean) to authenticated;

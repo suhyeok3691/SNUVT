@@ -931,7 +931,7 @@ function viewSettings() {
         <label class="fl">전화번호<input id="pr-phone" type="tel" inputmode="tel" maxlength="20" placeholder="010-0000-0000" value="${esc((state.contacts || {})[me.id] || "")}"></label>
         <label class="fl">학년<input id="pr-year" maxlength="10" placeholder="예: 3" value="${esc(me.year || "")}"></label>
         <label class="fl">키 (cm)<input id="pr-h" type="number" inputmode="decimal" min="140" max="220" step="0.1" value="${esc(me.height ?? "")}"></label>
-        <label class="fl">몸무게 (kg)<input id="pr-w" type="number" inputmode="decimal" min="40" max="150" step="0.1" value="${esc(me.weight ?? "")}"></label>
+        ${weightField("pr-w", me.weight, me.weightPrivate)}
         <label class="fl">배구 경력 (년)<input id="pr-exp" type="number" inputmode="decimal" min="0" max="20" step="0.5" value="${esc(me.exp ?? "")}"></label>
         ${wexpSelect("pr-wexp", me.weightExp, false, "—")}
       </div><div class="row"><button class="btn primary" type="submit">저장</button></div></form>
@@ -965,6 +965,11 @@ function refreshSettings() {
   const el = document.getElementById("setpanel");
   if (el && !el.hidden && state.session && state.loaded) { el.querySelector(".setpanel-body").innerHTML = viewSettings(); fillPushBox(); }
 }
+// 몸무게 칸 (여자부는 "비공개"를 고를 수 있음 → 몸무게를 아예 저장하지 않음)
+const wPrivOk = () => TEAM.id === "women";
+const weightField = (id, v, priv) => `<div class="fl"><label for="${id}">몸무게 (kg)</label><span class="w-row"><input id="${id}" type="number" inputmode="decimal" min="40" max="150" step="0.1" value="${priv ? "" : esc(v ?? "")}" ${priv ? "disabled" : ""} placeholder="${priv ? "비공개" : ""}">${wPrivOk() ? `<label class="w-priv"><input type="checkbox" id="${id}-priv" data-w="${id}" ${priv ? "checked" : ""}>비공개</label>` : ""}</span></div>`;
+document.addEventListener("change", e => { const c = e.target; if (!c || !c.dataset || !c.dataset.w) return; const i = document.getElementById(c.dataset.w); if (!i) return; i.disabled = c.checked; if (c.checked) { i.value = ""; i.placeholder = "비공개"; } else i.placeholder = ""; });
+const wPrivOn = id => { const c = document.getElementById(id + "-priv"); return c ? c.checked : null; };
 /* ---------- 홈 ---------- */
 function viewHome() {
   if (!state.loaded) return loaderHtml();
@@ -1484,7 +1489,7 @@ function viewSelfReg() {
           <label class="fl">등번호<input id="sf-num" type="number" inputmode="numeric" min="0" max="99" value="${esc(p.number ?? "")}"></label>
           <label class="fl">전화번호<input id="sf-phone" type="tel" inputmode="tel" maxlength="20" placeholder="010-0000-0000" value="${esc(state.myPhone || "")}"></label>
           <label class="fl">키 (cm)<input id="sf-height" type="number" inputmode="decimal" min="140" max="220" step="0.1" value="${esc(p.height ?? "")}"></label>
-          <label class="fl">몸무게 (kg)<input id="sf-weight" type="number" inputmode="decimal" min="40" max="150" step="0.1" value="${esc(p.weight ?? "")}"></label>
+          ${weightField("sf-weight", p.weight, p.weightPrivate)}
           <label class="fl">배구 경력 (년)<input id="sf-exp" type="number" inputmode="decimal" min="0" max="20" step="0.5" value="${esc(p.exp ?? "")}"></label>
           ${wexpSelect("sf-wexp", p.weightExp, true)}
         </div>
@@ -1553,7 +1558,7 @@ function viewIntake() {
             <label class="fl">전화번호<input id="pf-phone" type="tel" inputmode="tel" maxlength="20" placeholder="010-0000-0000" value="${esc((state.contacts || {})[pid] || "")}"></label>
             <label class="fl">학년<input id="pf-year" maxlength="10" placeholder="예: 3학년" value="${esc(p.year || "")}"></label>
             <label class="fl">키 (cm)<input id="pf-height" type="number" inputmode="decimal" min="140" max="220" step="0.1" value="${esc(p.height ?? "")}"></label>
-            <label class="fl">몸무게 (kg)<input id="pf-weight" type="number" inputmode="decimal" min="40" max="150" step="0.1" value="${esc(p.weight ?? "")}"></label>
+            <label class="fl">몸무게 (kg)<input id="pf-weight" type="number" inputmode="decimal" min="40" max="150" step="0.1" value="${p.weightPrivate ? "" : esc(p.weight ?? "")}" ${p.weightPrivate ? `disabled placeholder="비공개"` : ""}></label>
             <label class="fl">배구 경력 (년)<input id="pf-exp" type="number" inputmode="decimal" min="0" max="20" step="0.5" value="${esc(p.exp ?? "")}"></label>
             ${wexpSelect("pf-wexp", p.weightExp, false)}
           </div>
@@ -1624,7 +1629,7 @@ async function exportXlsx(sy) {
     if (pr.error) throw pr.error;
     const name = Object.fromEntries((pr.data || []).map(p => [p.id, p.name])), pos = Object.fromEntries((pr.data || []).map(p => [p.id, p.pos]));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sortedPlayers().map(p => ({ 이름: p.name, 포지션: p.pos, 학년: p.year || "", "키(cm)": p.height ?? "", "체중(kg)": p.weight ?? "", "배구 경력(년)": p.exp ?? "" }))), "선수");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sortedPlayers().map(p => ({ 이름: p.name, 포지션: p.pos, 학년: p.year || "", "키(cm)": p.height ?? "", "체중(kg)": p.weightPrivate ? "비공개" : p.weight ?? "", "배구 경력(년)": p.exp ?? "" }))), "선수");
     const fq = await sb.from("friendlies").select("*").gte("date", from).lt("date", to).order("date");
     if (!fq.error) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet((fq.data || []).length ? fq.data.map(f => ({ 날짜: f.date, 상대: f.opponent, 방식: f.format === "9" ? "9인제" : "6인제", 시작: (f.start_time || "").slice(0, 5), 끝: (f.end_time || "").slice(0, 5), 장소: f.place || "", 메모: f.note || "" })) : [{ 날짜: "기록 없음" }]), "교류전");
     for (const [tb, label] of XL_SHEETS) {
@@ -3063,7 +3068,7 @@ document.addEventListener("submit", async ev => {
   if (f.id === "selfForm") {
     const info = {
       name: txt("sf-name"), pos: document.getElementById("sf-pos").value, year: normYear(txt("sf-year")),
-      height: txt("sf-height"), weight: txt("sf-weight"), exp: txt("sf-exp"),
+      height: txt("sf-height"), weight: wPrivOn("sf-weight") ? "" : txt("sf-weight"), exp: txt("sf-exp"),
       weight_exp: document.getElementById("sf-wexp").value || null,
       ankle_l: txt("sf-al"), ankle_r: txt("sf-ar"), injuries: readInjuries("sf"),
       pain: readPain("sf"),
@@ -3076,6 +3081,7 @@ document.addEventListener("submit", async ev => {
       const r = await sb.rpc("submit_my_info", { info });
       if (r.error) { toast(r.error.code === "23514" || r.error.code === "42501" ? r.error.message : failMsg(r.error)); return; }
       if (phone && r.data) { await sb.from("player_contacts").upsert({ player_id: r.data, phone, updated_at: new Date().toISOString() }); state.myPhone = phone; }
+      if (wPrivOn("sf-weight") != null) await sb.rpc("set_weight_private", { on_: wPrivOn("sf-weight") });
       const wasPending = state.role === "pending";
       state.editingSelf = false; state.dirty = false;
       toast(wasPending ? "제출했어요. 승인을 기다려 주세요." : "저장했어요. 프로그램이 열렸어요.");
@@ -3214,7 +3220,8 @@ document.addEventListener("submit", async ev => {
     } else if (f.id === "profileForm") {
       const phone = fmtPhone(txt("pr-phone"));
       if (phone && !/^[0-9+ -]{7,20}$/.test(phone)) { toast("전화번호를 확인해 주세요."); return; }
-      ok(await sb.rpc("update_my_profile", { info: { year: normYear(txt("pr-year")), height: txt("pr-h"), weight: txt("pr-w"), exp: txt("pr-exp"), weight_exp: document.getElementById("pr-wexp").value } }));
+      ok(await sb.rpc("update_my_profile", { info: { year: normYear(txt("pr-year")), height: txt("pr-h"), weight: wPrivOn("pr-w") ? "" : txt("pr-w"), exp: txt("pr-exp"), weight_exp: document.getElementById("pr-wexp").value } }));
+      if (wPrivOn("pr-w") != null) ok(await sb.rpc("set_weight_private", { on_: wPrivOn("pr-w") }));
       if (phone !== ((state.contacts || {})[state.myPid] || "")) ok(await sb.from("player_contacts").upsert({ player_id: state.myPid, phone: phone || null, updated_at: new Date().toISOString() }));
       toast("내 정보를 저장했어요");
     } else if (f.id === "hsForm") {
@@ -3408,12 +3415,13 @@ async function loadProfile() {
 }
 // 승인 대기 중인 사람이 자기가 낸 정보를 다시 불러올 때
 async function loadSelf() {
-  const [pl, hl] = await Promise.all([
+  const [pl, hl, pp] = await Promise.all([
     sb.from("players").select("*").eq("id", state.myPid).maybeSingle(),
     sb.from("health").select("*").eq("player_id", state.myPid).maybeSingle(),
+    sb.from("player_private").select("*").eq("player_id", state.myPid).maybeSingle(),
   ]);
-  const r = pl.data, h = hl.data;
-  state.selfPlayer = r ? { name: r.name, pos: r.pos, year: r.year, height: r.height, weight: r.weight, exp: r.exp, weightExp: wexpNorm(r.weight_exp), number: r.number } : null;
+  const r = pl.data, h = hl.data, q = (pp && pp.data) || {};
+  state.selfPlayer = r ? { name: r.name, pos: r.pos, year: r.year, height: r.height ?? q.height ?? null, weight: r.weight ?? q.weight ?? null, weightPrivate: !!q.weight_private, exp: r.exp, weightExp: wexpNorm(r.weight_exp), number: r.number } : null;
   state.selfHealth = h ? { ankleL: h.ankle_l, ankleR: h.ankle_r, injuries: h.injuries || [], pain: h.pain || {}, note: h.note, consent: h.consent } : null;
 }
 /* ---------- 오프라인 ----------
@@ -3593,7 +3601,7 @@ function buildState(raw) {
     state.admin = state.viewAs !== "player";
   }
   state.contacts = Object.fromEntries((raw.player_contacts || []).map(r => [r.player_id, fmtPhone(r.phone || "")]));
-  for (const r of raw.player_private || []) if (state.players[r.player_id]) Object.assign(state.players[r.player_id], { height: r.height == null ? null : Number(r.height), weight: r.weight == null ? null : Number(r.weight) });
+  for (const r of raw.player_private || []) if (state.players[r.player_id]) Object.assign(state.players[r.player_id], { height: r.height == null ? null : Number(r.height), weight: r.weight == null ? null : Number(r.weight), weightPrivate: !!r.weight_private });
   state.videos = (raw.videos || []).map(r => ({ id: r.id, kind: r.kind, cat: r.category, title: r.title, yt: r.yt, date: r.date, note: r.note || "" }));
   state.notes = (raw.training_notes || []).map(r => ({ id: r.id, pid: r.player_id, date: r.date, good: r.good || "", fix: r.fix || "", next: r.next || "", body: r.body || "", shared: !!r.shared }));
   state.practice = Object.fromEntries((raw.practice_plans || []).map(r => [r.date, { title: r.title || "", goal: r.goal || "", blocks: Array.isArray(r.blocks) ? r.blocks : [], published: r.published !== false }]));
