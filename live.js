@@ -78,15 +78,26 @@ function lvCourtNow(g, side, s, setNo) {
   const k = (((side === "us" ? s.rot : s.orot) - (lu.rot || 1)) % 6 + 6) % 6;
   return [1, 2, 3, 4, 5, 6].map(z => lu.slots[((z - 1) + k) % 6]);
 }
+// 리베로 (배구 규칙): MB가 뒷줄(5 · 6, 그 팀이 서브권이 없을 때는 1도)에 오면 리베로가 대신 섬. MB가 1번에서 서브할 때는 MB 그대로, 서브권을 잃으면 리베로가 들어오고 MB가 앞줄(4)로 올라가면 다시 MB
+const lvLib = (g, side, setNo) => { const lu = lvLu(g, side, setNo); if (!lu) return null; if (lu.lib !== undefined) return lu.lib === "" ? null : lu.lib;
+  if (lvSnu(g, side)) return null; const x = lvRos(g, side).find(r => lvNormPos(r.pos) === "L"); return x ? x.no : null; };
+function lvCourtOn(g, side, s, setNo) {
+  const base = lvCourtNow(g, side, s, setNo); if (!base) return null;
+  const lib = lvLib(g, side, setNo), libZ = [];
+  if (lib == null || base.some(v => String(v) === String(lib))) return { vals: base, libZ };
+  const vals = base.map((v, i) => { const z = i + 1; if (lvPosOf(g, side, v) === "MB" && (z === 5 || z === 6 || (z === 1 && s.serve !== side))) { libZ.push(z); return lib; } return v; });
+  return { vals, libZ };
+}
 const lvPosSel = (cls, cur) => `<select class="${cls}" aria-label="포지션"><option value="">포지션</option>${LV_POS.map(p => `<option ${p === cur ? "selected" : ""}>${p}</option>`).join("")}</select>`;
 const lvRosRow = x => `<div class="lvr-row"><input class="lvr-n" type="number" inputmode="numeric" min="0" max="99" placeholder="번호" value="${x ? x.no : ""}" aria-label="번호">${lvPosSel("lvr-p", x ? x.pos : "")}<button type="button" class="btn small danger" data-act="lvrosdel" aria-label="지우기">✕</button></div>`;
 // 명단 · 로테 창: 명단(번호 + 포지션, 줄마다 지우기) → "자동 배치"로 S 1번 서브 자리 기준 기본 로테(S · OH · MB · OP · OH · MB) → OH끼리 · MB끼리 바꾸기, 한 칸씩 돌리기, 칸 직접 고치기
 // 세트 처음(기록 없음)에 저장하면 S 자리로 로테 번호도 맞춤 (S 1번 = R1, 6번 = R2, 5번 = R3, 4번 = R4, 3번 = R5, 2번 = R6)
 const LV_SROT = { 1: 1, 6: 2, 5: 3, 4: 4, 3: 5, 2: 6 };
+const lvRefKey = g => [g.ref_kind, g.ref_id];
 const lvNormPos = p => { p = String(p || "").toUpperCase(); return p === "LI" ? "L" : p; };
 function lvRosSheet() {
   const L = lv(), g = lvGame(), side = L.side, snu = lvSnu(g, side), s = lvState(g, L.rallies[g.id] || [], L.set), now = lvCourtNow(g, side, s, L.set) || [], el = document.getElementById("sheet");
-  const ros = lvRos(g, side);
+  const ros = lvRos(g, side), lib = lvLib(g, side, L.set) ?? (snu ? (sortedPlayers().find(p => !p.military && lvNormPos(p.pos) === "L" && (startersOf(...lvRefKey(g)).has(p.id) || entryOf(...lvRefKey(g)).has(p.id))) || {}).id : null);
   const cell = z => { const v = now[z - 1]; return `<div class="ct-lu-c"><span class="ct-lu-n">${z}${z === 1 ? " 서브" : ""} <b class="lvr-pos" data-z="${z}"></b></span>${snu
     ? `<select class="lvr-c" data-z="${z}" aria-label="${z}번 자리"><option value="">선택</option>${sortedPlayers().filter(p => !p.military).map(p => `<option value="${esc(p.id)}" data-pos="${esc(lvNormPos(p.pos))}" ${v === p.id ? "selected" : ""}>${esc(pNo(p) + p.name)} · ${esc(lvNormPos(p.pos))}</option>`).join("")}</select>`
     : `<input class="lvr-c" data-z="${z}" type="number" inputmode="numeric" min="0" max="99" placeholder="번호" value="${v ?? ""}" aria-label="${z}번 자리 번호">`}</div>`; };
@@ -96,10 +107,13 @@ function lvRosSheet() {
       <h4>${L.set}세트 코트 <span class="small muted" id="lvrInfo"></span></h4>
       <div class="sc-row"><button type="button" class="btn small primary" data-act="lvauto">자동 배치</button><button type="button" class="btn small" data-act="lvswap" data-v="OH">OH 바꾸기</button><button type="button" class="btn small" data-act="lvswap" data-v="MB">MB 바꾸기</button><button type="button" class="btn small" data-act="lvturn" data-d="1">↻ 한 칸</button><button type="button" class="btn small" data-act="lvturn" data-d="-1">↺</button></div>
       <div class="ct-lu"><span class="ct-netl">네트</span>${[4, 3, 2, 5, 6, 1].map(cell).join("")}</div>
+      <div class="fields"><label class="fl">리베로${snu
+        ? `<select id="lvrLib"><option value="">없음</option>${sortedPlayers().filter(p => !p.military).sort((a, b) => (lvNormPos(b.pos) === "L") - (lvNormPos(a.pos) === "L")).map(p => `<option value="${esc(p.id)}" ${String(lib ?? "") === String(p.id) ? "selected" : ""}>${esc(pNo(p) + p.name)}${lvNormPos(p.pos) === "L" ? " · L" : ""}</option>`).join("")}</select>`
+        : `<input id="lvrLib" type="number" inputmode="numeric" min="0" max="99" placeholder="번호" value="${lib ?? ""}">`}</label></div>
       <div class="row"><button class="btn primary" type="submit">저장</button></div></form>`;
   el.hidden = false; document.body.classList.add("noscroll");
   const f = document.getElementById("lvRosForm");
-  f.addEventListener("input", () => lvRosInfo()); f.addEventListener("change", () => lvRosInfo());
+  f.addEventListener("input", e => lvRosInfo(e)); f.addEventListener("change", e => lvRosInfo(e));
   lvRosInfo();
 }
 // 창 안: 명단 포지션 · 코트 읽기/쓰기
@@ -111,7 +125,10 @@ function lvCourtRead() {
     return { v, pos: lvNormPos(pos) }; });
 }
 function lvCourtWrite(arr) { arr.forEach((x, i) => { const el = document.querySelector(`#lvRosForm .lvr-c[data-z="${i + 1}"]`); if (el) el.value = x.v; }); lvRosInfo(); }
-function lvRosInfo() {
+function lvRosInfo(ev) {
+  const le = document.getElementById("lvrLib");
+  if (le && ev && ev.target === le) le.dataset.touched = "1";
+  if (le && le.tagName === "INPUT" && !le.dataset.touched && le.value === "") { const m = lvRosMap(), n = Object.keys(m).find(k => lvNormPos(m[k]) === "L"); if (n != null) le.value = n; } // 명단에 L이 있으면 리베로 칸에 저절로
   const arr = lvCourtRead(), sz = arr.findIndex(x => x.pos === "S") + 1;
   arr.forEach((x, i) => { const b = document.querySelector(`#lvRosForm .lvr-pos[data-z="${i + 1}"]`); if (b) b.textContent = x.pos; });
   const el = document.getElementById("lvrInfo"); if (el) el.textContent = sz ? `S ${sz}번 자리 · R${LV_SROT[sz]}` : "";
@@ -149,12 +166,15 @@ async function lvRosSave(f) {
     const list = [], add = (no, pos) => { if (isNaN(no) || no < 0 || no > 99) return; const i = list.findIndex(x => x.no === no); if (i >= 0) { if (pos) list[i].pos = pos; } else list.push({ no, pos: pos || "" }); };
     f.querySelectorAll(".lvr-row").forEach(r => { const n = r.querySelector(".lvr-n").value; if (n !== "") add(Number(n), r.querySelector(".lvr-p").value); });
     slots.forEach(n => { if (n !== "") add(n, ""); });
+    { const le = document.getElementById("lvrLib"); if (le && le.value !== "") add(Number(le.value), "L"); }
     roster[side] = list.sort((a, b) => a.no - b.no);
   }
   const sets = { ...(g.sets || {}) }, st = { ...(sets[L.set] || {}) }, lu = { ...(st.lu || {}) }, rk = side === "us" ? "rot" : "orot";
   const sz = arr.findIndex(x => x.pos === "S") + 1, fresh = !s.list.length;
   if (filled.length && fresh && sz) st[rk] = LV_SROT[sz]; // 세트 처음이면 S 자리로 로테 번호
-  if (filled.length) lu[side] = { rot: fresh && sz ? LV_SROT[sz] : (side === "us" ? s.rot : s.orot), slots }; else delete lu[side];
+  const le = document.getElementById("lvrLib"), lib = !le || le.value === "" ? "" : snu ? le.value : Number(le.value);
+  if (lib !== "" && filled.some(x => String(x) === String(lib))) { toast("리베로는 코트 6명과 다른 선수로 넣어 주세요"); return; }
+  if (filled.length) lu[side] = { rot: fresh && sz ? LV_SROT[sz] : (side === "us" ? s.rot : s.orot), slots, lib }; else delete lu[side];
   st.lu = lu; sets[L.set] = st;
   try { ok(await sb.from("live_games").update({ roster, sets }).eq("id", g.id)); } catch (e) { toast(failMsg(e)); return; }
   g.roster = roster; g.sets = sets; closeSheet(); state.dirty = false; render();
@@ -441,10 +461,10 @@ function lvPage(x) {
   const me = lvCan(), en = entryOf(x.kind, x.id), st = mem || startersOf(x.kind, x.id), kb = matchMedia("(hover: hover) and (pointer: fine)").matches;
   const ps = sortedPlayers().filter(p => !p.military && (st.size ? st.has(p.id) || en.has(p.id) : en.size ? en.has(p.id) : true)).sort((a, b) => (st.has(b.id) - st.has(a.id)) || (a.number ?? 999) - (b.number ?? 999));
   const side = L.side;
-  const nos = lvSnu(g, side) ? null : lvNos(g, side), now = lvCourtNow(g, side, cur, L.set);
-  const nb = (v, z) => { const on = String(L.pick) === String(v), pos = nos ? lvPosOf(g, side, v) : "";
-    if (!nos) { const p = playerOf(v); return `<button type="button" class="lv-n us ${on ? "on" : ""}" data-act="lvpick" data-v="${esc(v)}">${z ? `<i>${z}</i>` : ""}<b>${esc(p && p.number != null ? p.number : "–")}</b><span>${esc(p ? p.name : "?")}</span></button>`; }
-    return `<button type="button" class="lv-n ${side} ${on ? "on" : ""}" data-act="lvpick" data-v="${v}">${z ? `<i>${z}</i>` : ""}<b>${v}</b>${pos ? `<span>${esc(pos)}</span>` : ""}</button>`; };
+  const nos = lvSnu(g, side) ? null : lvNos(g, side), on6 = lvCourtOn(g, side, cur, L.set), now = on6 && on6.vals;
+  const nb = (v, z) => { const on = String(L.pick) === String(v), pos = nos ? lvPosOf(g, side, v) : "", lb = z && on6 && on6.libZ.includes(z) ? " lib" : "";
+    if (!nos) { const p = playerOf(v); return `<button type="button" class="lv-n us ${on ? "on" : ""}${lb}" data-act="lvpick" data-v="${esc(v)}">${z ? `<i>${z}</i>` : ""}<b>${esc(p && p.number != null ? p.number : "–")}</b><span>${esc(p ? p.name : "?")}${lb ? " · L" : ""}</span></button>`; }
+    return `<button type="button" class="lv-n ${side} ${on ? "on" : ""}${lb}" data-act="lvpick" data-v="${v}">${z ? `<i>${z}</i>` : ""}<b>${v}</b>${pos ? `<span>${esc(pos)}</span>` : ""}</button>`; };
   const rosBtn = me ? `<button type="button" class="btn small" data-act="lvros">명단 · 로테</button>` : "";
   const players = now
     ? `<div class="lv-c6">${[4, 3, 2, 5, 6, 1].map(z => nb(now[z - 1], z)).join("")}</div><div class="lv-ns">${(nos ? nos.filter(n => !now.some(v => Number(v) === n)) : ps.filter(p => !now.includes(p.id)).map(p => p.id)).map(v => nb(v).replace('class="lv-n', 'class="lv-n sub')).join("")}${rosBtn}</div>`
