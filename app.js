@@ -2673,6 +2673,7 @@ function render(soft) {
   const main = document.getElementById("main"), out = bar + html;
   if (soft === true && out === lastMain && main.childElementCount) return;
   main.innerHTML = lastMain = out;
+  navSave();
   refreshSettings();
   scoutDock();
 }
@@ -3753,9 +3754,23 @@ async function pushRefresh() {
   } catch (e) { /* 다음에 다시 */ }
 }
 
+// 새로고침해도 보던 안쪽 화면(대회 하나 · 전력분석 경기 · 실시간 경기 분석 경기 · 세트)에 그대로 (탭마다, sessionStorage)
+const NAV_KEY = "snuvt-nav";
+function navSave() {
+  try { const L = state.live || {}; sessionStorage.setItem(NAV_KEY, JSON.stringify({ v: state.view, tr: (state.scout || {}).track || null, sid: state.scoutId || null, ck: (state.cup || {}).key || null, lo: L.open || null, ls: L.set || 1, sc: L.scope || "set" })); } catch (e) {}
+}
+function navRestore() {
+  let n = null; try { n = JSON.parse(sessionStorage.getItem(NAV_KEY) || "null"); } catch (e) {}
+  if (!n || n.v !== state.view) return;
+  if (n.tr) sc().track = n.tr;
+  if (n.sid && state.view === "scout") state.scoutId = n.sid;
+  if (n.ck && (state.view === "cup" || state.view === "fr")) cupState().key = n.ck;
+  if (n.lo) { const L = lv(); L.open = n.lo; L.set = n.ls || 1; L.scope = n.sc || "set"; L.restored = true; }
+}
 function boot() {
   const h = (location.hash || "").replace("#", "");
   state.view = VIEWS.includes(h) ? h : h === "player" ? "plan" : ["week", "load"].includes(h) ? "report" : "home";
+  navRestore();
   render();
   const cfg = window.SNUVT_CONFIG || {};
   if (!window.supabase || !cfg.url || !cfg.anonKey || /YOUR/.test(cfg.url + cfg.anonKey)) {
