@@ -92,7 +92,7 @@ function lvRosSheet() {
     : `<input class="lvr-c" data-z="${z}" type="number" inputmode="numeric" min="0" max="99" placeholder="번호" value="${v ?? ""}" aria-label="${z}번 자리 번호">`}</div>`; };
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${esc(lvTN(g, side))} 명단 · 로테</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="lvRosForm">
-      ${snu ? "" : `<h4>명단</h4><div class="lvr-list" id="lvrList">${ros.map(lvRosRow).join("")}${ros.length ? "" : lvRosRow(null)}</div><div class="row"><button type="button" class="btn small" data-act="lvrosadd">+ 줄</button></div>`}
+      ${snu ? "" : `<h4>명단</h4><div class="lvr-list" id="lvrList">${ros.map(lvRosRow).join("")}${ros.length ? "" : lvRosRow(null)}</div><div class="row"><button type="button" class="btn small" data-act="lvrosadd" aria-label="줄 추가">+</button></div>`}
       <h4>${L.set}세트 코트 <span class="small muted" id="lvrInfo"></span></h4>
       <div class="sc-row"><button type="button" class="btn small primary" data-act="lvauto">자동 배치</button><button type="button" class="btn small" data-act="lvswap" data-v="OH">OH 바꾸기</button><button type="button" class="btn small" data-act="lvswap" data-v="MB">MB 바꾸기</button><button type="button" class="btn small" data-act="lvturn" data-d="1">↻ 한 칸</button><button type="button" class="btn small" data-act="lvturn" data-d="-1">↺</button></div>
       <div class="ct-lu"><span class="ct-netl">네트</span>${[4, 3, 2, 5, 6, 1].map(cell).join("")}</div>
