@@ -2197,3 +2197,10 @@ grant execute on function public.set_weight_private(boolean) to authenticated;
 -- live_setter (세트: 누가 올렸는지 · 세트 점수)
 alter table public.live_rallies add column if not exists setter text check (setter is null or char_length(setter) <= 40);
 alter table public.live_rallies add column if not exists set_q smallint check (set_q is null or set_q between 1 and 3);
+
+-- live_flow_kinds (캐치 · 넘김 · 세트 이단 · 타법 밀어넣기 · 연타)
+alter table public.live_rallies drop constraint if exists live_rallies_kind_check;
+alter table public.live_rallies add constraint live_rallies_kind_check check (kind is null or kind in ('rcv','atk','blk','srv','dig','set','err','opt','oer','cat','ovr'));
+alter table public.live_rallies drop constraint if exists live_rallies_shot_check;
+alter table public.live_rallies add constraint live_rallies_shot_check check (shot is null or shot in ('spike','tip','push','soft'));
+alter table public.live_rallies add column if not exists two boolean;
