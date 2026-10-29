@@ -89,14 +89,18 @@ const lvLu = (g, side, setNo) => ((((g.sets || {})[setNo] || {}).lu || {})[side]
 function lvDefLu(g, side, setNo) {
   if (!g) return null;
   if (side === "opp" && g.ref_kind === "friendly" && !(g.roster || {}).opp) return { rot: 1, slots: ["S", "OH1", "MB1", "OP", "OH2", "MB2"], lib: "Li" };
-  if (!lvSnu(g, side) || (g.ref_kind !== "friendly" && g.ref_kind !== "event")) return null;
-  const kind = g.ref_kind, id = g.ref_id, sl = kind === "friendly" ? (cupState().lineups[kind + ":" + id] || {})[setNo] : null;
-  const pick = ids => [...ids].map(playerOf).filter(p => p && !p.military);
-  let ps = pick((sl && sl.members) || []); if (ps.filter(p => lvNormPos(p.pos) !== "L").length < 6) ps = pick(new Set([...ps.map(p => p.id), ...startersOf(kind, id)]));
-  const court = ps.filter(p => lvNormPos(p.pos) !== "L").map(p => ({ v: p.id, pos: lvNormPos(p.pos) }));
+  if (!lvSnu(g, side)) return null;
+  const ps = lvSnuPool(g, setNo), court = ps.filter(p => lvNormPos(p.pos) !== "L").map(p => ({ v: p.id, pos: lvNormPos(p.pos) }));
   if (court.length < 6) return null;
-  const lib = [...ps, ...pick(entryOf(kind, id))].find(p => lvNormPos(p.pos) === "L");
+  const lib = ps.find(p => lvNormPos(p.pos) === "L");
   return { rot: 1, slots: lvAutoArrange(court).map(x => x.v), lib: lib ? lib.id : "" };
+}
+// SNU 자동 배치 후보 (앞에 있을수록 먼저): 그 세트 출전(교류전) → 주전 → 엔트리 → 나머지 부원. 포지션은 명단 포지션
+function lvSnuPool(g, setNo) {
+  const kind = g.ref_kind, id = g.ref_id, cup = kind === "friendly" || kind === "event";
+  const sl = kind === "friendly" ? (cupState().lineups[kind + ":" + id] || {})[setNo] : null;
+  const ids = [...((sl && sl.members) || []), ...(cup ? [...startersOf(kind, id), ...entryOf(kind, id)] : []), ...sortedPlayers().map(p => p.id)];
+  return [...new Set(ids)].map(playerOf).filter(p => p && !p.military);
 }
 function lvCourtNow(g, side, s, setNo) {
   const lu = lvLu(g, side, setNo); if (!lu || !(lu.slots || []).some(x => x !== "" && x != null)) return null;
@@ -167,6 +171,15 @@ function lvAutoArrange(list) {
 }
 function lvRosAuto() {
   let cur = lvCourtRead();
+  const L = lv(), g = lvGame();
+  if (lvSnu(g, L.side)) { // 우리 팀: 명단 포지션으로 자동으로 골라서 배치
+    const pool = lvSnuPool(g, L.set), have = new Set(cur.filter(x => x.v !== "").map(x => x.v));
+    if (have.size < 6) cur = [...cur.filter(x => x.v !== ""), ...pool.filter(p => !have.has(p.id) && lvNormPos(p.pos) !== "L").map(p => ({ v: p.id, pos: lvNormPos(p.pos) }))];
+    const out = lvAutoArrange(cur); lvCourtWrite(out);
+    const le = document.getElementById("lvrLib"), lib = pool.find(p => lvNormPos(p.pos) === "L" && !out.some(x => x.v === p.id));
+    if (le && !le.value && lib) le.value = lib.id;
+    return;
+  }
   if (cur.filter(x => x.v !== "").length < 6) { // 코트가 비었으면 명단에서 고름
     const m = lvRosMap(), have = new Set(cur.filter(x => x.v !== "").map(x => String(x.v)));
     const extra = Object.entries(m).filter(([n]) => !have.has(n)).map(([n, p]) => ({ v: n, pos: lvNormPos(p) }));
