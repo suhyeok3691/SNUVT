@@ -1122,16 +1122,19 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 .lv-row { display: grid; grid-template-columns: 52px 1fr; gap: 6px; align-items: center; } .lv-rk { font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .lv-row.gap { margin-top: 18px; } .lv-rkb { display: flex; align-items: center; gap: 3px; min-height: 44px; padding: 0 0 0 2px; border: 0; background: none; font-family: inherit; text-align: left; cursor: pointer; } .lv-rkb i { font-style: normal; font-size: 10px; } .lv-rkb.on { color: var(--blue); }
 .lv-rb { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; } .lv-b { min-height: 44px; padding: 4px 2px; font-size: 14px; }
-.lv-at { grid-template-columns: repeat(4, minmax(0, 1fr)); } .lv-at .chip { justify-content: center; font-size: 12.5px; }
+.lv-at { display: flex; flex-wrap: wrap; gap: 5px; } .lv-at .chip { justify-content: center; font-size: 12.5px; }
 .lv-at .chip kbd { font: 600 10px var(--f-data); margin-left: 4px; padding: 0 3px; border: 1px solid currentColor; border-radius: 4px; opacity: .7; }
 .lv-cwrap { max-width: 340px; margin: 6px auto; } .lv-cwrap.sm { max-width: 220px; margin: 4px 0; }
 .lv-c { display: block; width: 100%; height: auto; background: color-mix(in srgb, #e3a35b 22%, var(--surface)); border-radius: 6px; } .lv-c.big { cursor: crosshair; }
 .lv-c-bd { fill: none; stroke: var(--ink); stroke-width: 2; } .lv-c-net { stroke: #c0392b; stroke-width: 6; } .lv-c-al { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 6 4; }
 .lv-c-g { stroke: var(--muted); stroke-width: .8; opacity: .45; } .lv-c-z { fill: var(--muted); font: 700 22px var(--f-data); text-anchor: middle; opacity: .45; }
 .lv-dot { fill: #6b7280; stroke: #fff; stroke-width: 1.5; opacity: .9; }
-.lv-dot.tip { fill: var(--surface) !important; stroke-width: 3; } .lv-dot.tip.w4 { stroke: #1d4ed8; } .lv-dot.tip.o2 { stroke: #c0392b; } .lv-dot.tip.q3 { stroke: #1e8e4e; } .lv-dot.tip.pipe { stroke: #d9822b; } .lv-dot.tip.etc, .lv-dot.tip:not(.w4):not(.o2):not(.q3):not(.pipe) { stroke: #6b7280; }
-.lv-dot.w4, .lv-dot-k.w4 { fill: #1d4ed8; background: #1d4ed8; } .lv-dot.o2, .lv-dot-k.o2 { fill: #c0392b; background: #c0392b; } .lv-dot.q3, .lv-dot-k.q3 { fill: #1e8e4e; background: #1e8e4e; }
-.lv-dot.pipe, .lv-dot-k.pipe { fill: #d9822b; background: #d9822b; } .lv-dot.etc, .lv-dot-k.etc { fill: #6b7280; background: #6b7280; }
+.lv-dot.tip { fill: var(--surface) !important; stroke-width: 3; stroke: #6b7280; } .lv-dot.tip.gL { stroke: #1d4ed8; } .lv-dot.tip.gR { stroke: #c0392b; } .lv-dot.tip.gM { stroke: #1e8e4e; } .lv-dot.tip.gC { stroke: #7c3aed; } .lv-dot.tip.gB { stroke: #d9822b; }
+.lv-miss { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0 4px; } .lv-miss .lv-b { min-height: 64px; font-size: 16px; }
+.lv-miss .lv-b kbd { font: 600 10px var(--f-data); margin-left: 5px; padding: 0 4px; border: 1px solid currentColor; border-radius: 4px; opacity: .7; }
+.lv-at2 .chip kbd { font: 600 10px var(--f-data); margin-left: 4px; padding: 0 3px; border: 1px solid currentColor; border-radius: 4px; opacity: .7; }
+.lv-dot.gL, .lv-dot-k.gL { fill: #1d4ed8; background: #1d4ed8; } .lv-dot.gR, .lv-dot-k.gR { fill: #c0392b; background: #c0392b; } .lv-dot.gM, .lv-dot-k.gM { fill: #1e8e4e; background: #1e8e4e; }
+.lv-dot.gC, .lv-dot-k.gC { fill: #7c3aed; background: #7c3aed; } .lv-dot.gB, .lv-dot-k.gB { fill: #d9822b; background: #d9822b; } .lv-dot.gE, .lv-dot-k.gE { fill: #6b7280; background: #6b7280; }
 .lv-leg { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; } .lv-dot-k { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 3px; }
 .lv-end { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; background: var(--warn-soft); }
 .lv-kpi { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 8px 0; }
@@ -1192,12 +1195,12 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=149"></script>
-<script src="guide.js?v=149"></script>
-<script src="library.js?v=149"></script>
-<script src="campus.js?v=149"></script>
-<script src="court.js?v=149"></script>
-<script src="live.js?v=149"></script>
-<script src="app.js?v=149"></script>
+<script src="program.js?v=150"></script>
+<script src="guide.js?v=150"></script>
+<script src="library.js?v=150"></script>
+<script src="campus.js?v=150"></script>
+<script src="court.js?v=150"></script>
+<script src="live.js?v=150"></script>
+<script src="app.js?v=150"></script>
 </body>
 </html>

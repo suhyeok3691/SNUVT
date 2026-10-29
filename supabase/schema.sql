@@ -2162,3 +2162,8 @@ alter table public.live_rallies add constraint live_rallies_zone_check check (zo
 
 -- live_shot
 alter table public.live_rallies add column if not exists shot text check (shot is null or shot in ('spike','tip'));
+
+-- live_atype2_miss
+alter table public.live_rallies drop constraint if exists live_rallies_atype_check;
+alter table public.live_rallies add constraint live_rallies_atype_check check (atype is null or atype in ('lo','lq','ro','rq','a','b','mv','fc','bc','pipe','back','etc','w4','o2','q3'));
+alter table public.live_rallies add column if not exists miss text check (miss is null or miss in ('atk','set'));
