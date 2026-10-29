@@ -2093,10 +2093,50 @@ function scoutOpp() {
   const body = nos.map(prow).join("");
   return `<div class="sc-row"><select id="scOppSel" class="sm-select" aria-label="상대">${opps.map(o => `<option ${o === S.oppSel ? "selected" : ""}>${esc(o)}</option>`).join("")}</select><span class="small muted">${ms.length}경기 · ${opp.length}플레이</span></div>
     <section class="sec"><h3>선수</h3>${body ? `<div class="tw"><table><thead><tr><th>번호</th><th>공격</th><th>효율</th><th>주 코스</th><th>서브</th><th>블록</th></tr></thead><tbody>${body}</tbody></table></div><p class="small muted">공격 시도·득점% · 서브 시도·에이스/범실</p>` : emptyLine("상대 입력이 없어요.")}</section>
+    ${(() => { // 시작 로테 · 로테별 득실 (이 팀)
+      const sr = ms.flatMap(scStartRows).filter(r => r.Team === S.oppSel), rr = ms.flatMap(scRotRows).filter(r => r.Team === S.oppSel); if (!sr.length && !rr.length) return "";
+      const cnt = {}; for (const r of sr) cnt[r["Start Rot"]] = (cnt[r["Start Rot"]] || 0) + 1;
+      const agg = [1, 2, 3, 4, 5, 6].map(n => { const l = rr.filter(r => r.Rot === "R" + n); if (!l.length) return ""; const sum = k => l.reduce((a, r) => a + (Number(String(r[k]).split("/")[0]) || 0), 0), tot = k => l.reduce((a, r) => a + (Number(String(r[k]).split("/")[1]) || 0), 0), d = l.reduce((a, r) => a + r["+/-"], 0);
+        return `<tr><td><b>R${n}</b></td><td class="num">${scPct(sum("Side-out"), tot("Side-out"))} <span class="small muted">${sum("Side-out")}/${tot("Side-out")}</span></td><td class="num">${scPct(sum("Break"), tot("Break"))} <span class="small muted">${sum("Break")}/${tot("Break")}</span></td><td class="num ${d > 0 ? "ct-up" : d < 0 ? "ct-dn" : ""}">${d > 0 ? "+" : ""}${d}</td></tr>`; }).join("");
+      return `${sr.length ? `<section class="sec"><h3>시작 로테</h3><p class="small">${Object.entries(cnt).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<b>${k}</b> ${v}세트`).join(" · ")}</p>
+        <div class="tw"><table><thead><tr><th>경기</th><th>세트</th><th>로테</th>${[4, 3, 2, 5, 6, 1].map(z => `<th>${z}</th>`).join("")}<th>서브</th></tr></thead><tbody>${sr.map(r => `<tr><td class="small">${esc([r.Date ? md(parseD(r.Date)) : "", r.Stage, "vs " + r.Opponent].filter(Boolean).join(" "))}</td><td class="num">${r.Set}</td><td class="num"><b>${r["Start Rot"]}</b></td>${[4, 3, 2, 5, 6, 1].map(z => `<td class="num small">${esc(r["Z" + z])}</td>`).join("")}<td class="num">${r["First Serve"]}</td></tr>`).join("")}</tbody></table></div></section>` : ""}
+        ${agg ? `<section class="sec"><h3>로테별 득실 (누적)</h3><div class="tw"><table><thead><tr><th>로테</th><th>사이드아웃</th><th>브레이크</th><th>득실</th></tr></thead><tbody>${agg}</tbody></table></div></section>` : ""}`; })()}
     <section class="sec"><h3>서브</h3>${scServeTable(opp)}</section>
     <div class="cols"><div class="col"><section class="sec"><h3>공격 코스</h3>${scZoneMap(opp.filter(e => e.skill === "attack"))}</section></div>
       <div class="col"><section class="sec"><h3>서브 코스</h3>${scZoneMap(opp.filter(e => e.skill === "serve"))}</section></div></div>
     <section class="sec"><h3>경기</h3><div class="sc-list">${ms.map(x => `<button type="button" class="panel sc-card" data-act="scopen" data-id="${esc(x.id)}"><b>${esc(x.title)}</b><span class="small muted">${scMeta(x)}</span><span class="go">›</span></button>`).join("")}</div></section>`;
+}
+/* ---- 시작 로테 · 로테별 득실 (상대 전략 보기용, 엑셀 · 팀별 탭) ---- */
+// 세트마다 두 팀 시작 로테 번호 + 자리 1~6 선수(등번호 · 포지션) + 리베로 + 첫 서브
+function scStartRows(m) {
+  const L = ctLu(m), out = []; if (ctNine(m)) return out;
+  const ev = sc().events[m.id] || [], sets = [...new Set([...Object.keys(L.sets || {}).map(Number), ...ev.map(e => e.set_no)])].filter(n => n >= 1 && n <= 5).sort((a, b) => a - b);
+  const base = { Date: m.date || "", Tournament: m.title || "", Stage: m.stage || "" };
+  for (const n of sets) {
+    const cfg = ev.find(e => e.set_no === n && e.action === CT_CFG), st = (L.sets || {})[n] || (cfg ? { rot: cfg.rot, opp_rot: cfg.opp_rot, serve: cfg.serve } : {});
+    for (const side of ["us", "opp"]) {
+      const T = L[side] || {}, slots = T.slots || []; if (slots.length !== 6) continue;
+      const r = (side === "us" ? st.rot : st.opp_rot) || 1, ros = ctRos(m, side);
+      const lab = v => ros ? (p => p ? (p.number != null ? String(p.number) : p.name) : "")(playerOf(v)) : String(v ?? "");
+      const row = { ...base, Team: ctTN(m, side), Opponent: ctTN(m, ctOther(side)), Set: n, "Start Rot": "R" + r, "First Serve": (st.serve || "us") === side ? "O" : "" };
+      for (let z = 1; z <= 6; z++) { const i = ((z - 1) + (r - 1)) % 6, ps = (T.pos || [])[i] || ""; row["Z" + z] = lab(slots[i]) + (ps ? " " + ps : ""); }
+      row.Libero = (T.libero || []).map(lab).filter(Boolean).join(", ");
+      out.push(row);
+    }
+  }
+  return out;
+}
+// 로테별 사이드아웃 · 브레이크 · 득실 (두 팀)
+function scRotRows(m) {
+  const pts = sc().points[m.id] || [], out = []; if (ctNine(m)) return out;
+  for (const side of ["us", "opp"]) for (let r = 1; r <= 6; r++) {
+    const l = pts.filter(p => (side === "us" ? p.rot : p.opp_rot) === r); if (!l.length) continue;
+    const win = p => side === "us" ? p.won : !p.won, so = l.filter(p => p.serve !== side), br = l.filter(p => p.serve === side), w = l.filter(win).length;
+    out.push({ Date: m.date || "", Tournament: m.title || "", Stage: m.stage || "", Team: ctTN(m, side), Opponent: ctTN(m, ctOther(side)), Rot: "R" + r,
+      "Side-out": `${so.filter(win).length}/${so.length}`, "Side-out %": so.length ? Math.round(100 * so.filter(win).length / so.length) : "-",
+      Break: `${br.filter(win).length}/${br.length}`, "Break %": br.length ? Math.round(100 * br.filter(win).length / br.length) : "-", Won: w, Lost: l.length - w, "+/-": 2 * w - l.length });
+  }
+  return out;
 }
 /* ---- 엑셀 (예전 프로그램 Export Excel 그대로: Logs + 팀별 기록지, 색 · 0은 "-") ---- */
 const SC_T1 = "SNU";
@@ -2147,6 +2187,7 @@ async function scoutXlsx(mid) {
       const cols = Object.keys(rows[0] || { "": "" }); ws.columns = cols.map(k => ({ header: k, key: k, width: Math.max(8, Math.min(28, k.length + 4)) }));
       rows.forEach(r => ws.addRow(r)); ws.getRow(1).font = { bold: true }; return ws; };
     sheet("Logs", logs);
+    { const sr = ms.flatMap(scStartRows), rr = ms.flatMap(scRotRows); if (sr.length) sheet("Start Rotation", sr); if (rr.length) sheet("Rotation", rr); }
     const t2 = mid ? (ms[0].opponent || "Opponent") : "Opponents", t1 = mid ? ctTA(ms[0]) : SC_T1;
     let n1 = t1.slice(0, 31), n2 = t2.slice(0, 31); if (n1 === n2) { n1 += "_1"; n2 += "_2"; }
     const teams = [[n1, scTeamRows(mid ? ms : ms.filter(m => !m.team), "us")]]; if (mid) teams.push([n2, scTeamRows(ms, "opp")]);

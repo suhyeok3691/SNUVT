@@ -39,6 +39,17 @@ const lvAtVis = () => { const L = lv(), list = lvAtList(), cur = lvAtCur(), all 
 const lvAtChips = (act, kb) => { const { ks, more } = lvAtVis(), cur = lvAtCur();
   return ks.map((k, i) => `<button type="button" class="chip sc-chip ${cur === k ? "on" : ""}" data-act="${act}" data-v="${k}">${LV_AT[k]}${kb && LV_ATKEYS[i] ? `<kbd>${LV_ATKEYS[i]}</kbd>` : ""}</button>`).join("") + (more ? `<button type="button" class="chip sc-chip" data-act="lvatmore">기타</button>` : ""); };
 const lvShChips = (act, kb) => LV_SHOT.map(([k, l, key]) => `<button type="button" class="chip sc-chip ${lvShCur() === k ? "on" : ""}" data-act="${act}" data-v="${k}">${l}${kb ? `<kbd>${key}</kbd>` : ""}</button>`).join("");
+// 세트(토스): 누가 올렸는지 · 세트 점수 3·2·1. 기본 = 코트에 있는 S(메이킹), 다른 사람이 올리면 이단
+function lvCourtSide() { const L = lv(), g = lvGame(); if (!g) return null; const s = lvState(g, L.rallies[g.id] || [], L.set), on = lvCourtOn(g, L.side, s, L.set); return on ? on.vals.filter(v => v !== "" && v != null) : null; }
+const lvSetterAuto = () => { const L = lv(), g = lvGame(), vals = lvCourtSide(); if (!vals) return null; const v = vals.find(x => lvPosOf(g, L.side, x) === "S"); return v == null ? null : String(v); };
+const lvSetterCur = () => lv().setter !== undefined ? lv().setter : lvSetterAuto();
+const lvShortName = (g, side, v) => { if (lvSnu(g, side)) { const p = playerOf(v); return p ? (p.number != null ? String(p.number) : p.name) : "?"; } return String(v); };
+const lvSetRows = (act, actq) => { const L = lv(), g = lvGame(), vals = lvCourtSide(), cur = lvSetterCur();
+  const ord = vals ? [...vals].sort((a, b) => (lvPosOf(g, L.side, b) === "S") - (lvPosOf(g, L.side, a) === "S")) : [];
+  return `${ord.length ? `<div class="lv-row"><span class="lv-rk">세트</span><div class="lv-rb lv-at">${ord.map(v => `<button type="button" class="chip sc-chip ${String(cur) === String(v) ? "on" : ""}" data-act="${act}" data-v="${esc(v)}">${esc(lvShortName(g, L.side, v))}${lvPosOf(g, L.side, v) && !lvTagPos(v) ? ` <small>${esc(lvPosOf(g, L.side, v))}</small>` : ""}</button>`).join("")}</div></div>` : ""}
+    <div class="lv-row"><span class="lv-rk">점수</span><div class="lv-rb lv-at">${[3, 2, 1].map(q => `<button type="button" class="chip sc-chip ${L.setq === q ? "on" : ""}" data-act="${actq}" data-v="${q}">${q}</button>`).join("")}</div></div>`; };
+const lvSetLbl = r => { if (r.kind !== "atk" || (!r.setter && !r.set_q)) return ""; const g = lvGame(), two = r.setter && lvPosOf(g, r.side, r.setter) !== "S";
+  if (!two && !r.set_q) return ""; return ` · ${two ? `이단(${esc(lvShortName(g, r.side, r.setter))})` : "세트"}${r.set_q ? " " + r.set_q : ""}`; };
 const LV_RES = {}; for (const [k, l, rs] of LV_BOARD) for (const r of rs) LV_RES[k + ":" + r[0]] = { kind: k, kname: l, res: r[0], name: r[1], key: r[2], cls: r[3], pt: r[4] || null };
 const LV_KEYS = Object.fromEntries(Object.values(LV_RES).map(x => [x.key, x]));
 // 서브 들어감 → 점수 3 · 2 · 1 (예전 프로그램 3/2/1-serve), 안 고르면 그냥 들어감
@@ -60,7 +71,7 @@ const lvIdSort = (a, b) => { const na = lvIdNum(a), nb = lvIdNum(b); if (na && n
   return (LV_TAGO.indexOf(lvTagPos(a)) - LV_TAGO.indexOf(lvTagPos(b))) || String(a).localeCompare(String(b), "en", { numeric: true }); };
 const lvWho = r => { const g = lvGame(); if (lvSnu(g, r.side)) { const p = playerOf(r.player_id); return p ? `${pNo(p)}${esc(p.name)}` : "SNU"; } const id = lvIdOf(r); return `${esc(lvTN(g, r.side))}${id ? ` ${esc(lvShowId(id))}` : ""}`; };
 const lvLabel = r => { const x = LV_RES[r.kind + ":" + r.res], sh = lvShot(r);
-  return `${lvWho(r)} · ${x ? `${x.kind === "err" ? "" : x.kname + " "}${x.name}` : esc(r.kind || "")}${r.atype ? ` · ${LV_AT[r.atype] || r.atype}` : ""}${sh ? ` · ${sh}` : ""}${r.miss ? ` · ${r.miss === "set" ? "토스 미스" : "공격 미스"}` : ""}${r.zone ? ` → ${r.zone}구역` : ""}`; };
+  return `${lvWho(r)} · ${x ? `${x.kind === "err" ? "" : x.kname + " "}${x.name}` : esc(r.kind || "")}${r.atype ? ` · ${LV_AT[r.atype] || r.atype}` : ""}${sh ? ` · ${sh}` : ""}${lvSetLbl(r)}${r.miss ? ` · ${r.miss === "set" ? "토스 미스" : "공격 미스"}` : ""}${r.zone ? ` → ${r.zone}구역` : ""}`; };
 const lv = () => state.live || (state.live = { games: {}, rallies: {}, open: null, set: 1, scope: "set", side: "us", pick: null, atype: null, shot: null, extra: {} });
 const lvCan = () => can("analysis") || can("schedule");
 const lvGame = () => { const L = lv(); for (const l of Object.values(L.games)) { const g = (l || []).find(x => x.id === L.open); if (g) return g; } return null; };
@@ -340,10 +351,10 @@ function lvSave(code, extra) {
   // id는 폰에서 만들어 보냄 → 서버 줄과 화면 줄이 같은 id라 실시간으로 온 내 기록을 다시 안 불러옴
   const row = { id: (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : "tmp" + Date.now() + Math.random().toString(36).slice(2, 5), game_id: g.id, set_no: L.set, side, rot: s.rot, serve, kind: x.kind, res: x.res,
     player_id: lvSnu(g, side) && pk ? pk : null, opp_no: !lvSnu(g, side) && pk != null && pk !== "" && lvIdNum(pk) ? Number(pk) : null, tag: !lvSnu(g, side) && pk != null && pk !== "" && !lvIdNum(pk) ? String(pk) : null, point, won: point ? point === "us" : null,
-    atype: x.kind === "atk" ? lvAtCur() : null, shot: x.kind === "atk" ? lvShCur() : null, miss: null, x: null, y: null, zone: null, ...(extra || {}),
+    atype: x.kind === "atk" ? lvAtCur() : null, shot: x.kind === "atk" ? lvShCur() : null, setter: x.kind === "atk" ? (lvSetterCur() ?? null) : null, set_q: x.kind === "atk" ? L.setq || null : null, miss: null, x: null, y: null, zone: null, ...(extra || {}),
     author: uid(), created_at: new Date().toISOString(), _pending: true };
   (L.rallies[g.id] = rs).push(row); const q = { ...row }; delete q._sit; lvQ.list.push(q); lvQSave();
-  L.pick = null; L.atype = null; L.shot = null; L.atkOpen = false; L.atMore = false; L.spot = null; closeSheet(); state.dirty = false; render(); lvFlush();
+  L.pick = null; L.atype = null; L.shot = null; L.setter = undefined; L.setq = null; L.atkOpen = false; L.atMore = false; L.spot = null; closeSheet(); state.dirty = false; render(); lvFlush();
 }
 // 코트 그림 (지키는 팀 코트). x·y는 지키는 팀 기준(네트 쪽 y=0). flip = SNU 쪽에서 상대 코트를 봄(네트가 아래, 180° 돌림). dots = [{x,y,c}]
 function lvCourt(dots, big, flip) {
@@ -363,6 +374,7 @@ function lvSpotSheet(code) {
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${lvWhoPick()} 공격 득점</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <div class="sc-row lv-at2">${lvAtChips("lvatype2", kb)}</div>
     <div class="sc-row">${lvShChips("lvshot2", kb)}</div>
+    <div class="lv-sheetrows">${lvSetRows("lvsetter2", "lvsetq2")}</div>
     <p class="small muted">${esc(lvTN(g, lvOther(side)))} 코트</p>
     <div class="lv-cwrap">${lvCourt([], true, side === "us")}</div>
     <div class="row"><button type="button" class="btn link small" data-act="lvnospot">코스 모름</button></div>`;
@@ -492,6 +504,18 @@ function lvAtk(rs, g) {
   const u = team("us"), o = team("opp");
   return u || o ? `<div class="cols lv-two">${u}${o}</div><p class="small muted lv-leg">${LV_GRP.map(([k, l]) => `<i class="lv-dot-k g${k}"></i>${l}`).join(" ")}</p>` : "";
 }
+// 세트: 누가 올렸는지(메이킹 = S · 이단 = 다른 사람)별 공격 결과 · 세트 점수
+function lvSets(rs, g) {
+  const team = side => { const a = rs.filter(r => r.side === side && r.kind === "atk" && (r.setter || r.set_q)); if (!a.length) return "";
+    const ks = [...new Set(a.map(r => r.setter || ""))], two = k => k && lvPosOf(g, side, k) !== "S";
+    const row = (lab, l) => { const kk = l.filter(r => r.res === "kill").length, e = l.filter(r => r.res === "err" || r.res === "blk").length, q = l.filter(r => r.set_q);
+      return `<tr><td><b>${lab}</b></td><td class="num">${l.length}</td><td class="num">${q.length ? (q.reduce((x, r) => x + r.set_q, 0) / q.length).toFixed(2) : "—"}</td><td class="num">${lvPct(kk, l.length)}</td><td class="num"><b>${lvPct(kk - e, l.length)}</b></td></tr>`; };
+    const mk = a.filter(r => !two(r.setter || "")), tw = a.filter(r => two(r.setter || ""));
+    const rows = [mk.length ? row("메이킹", mk) : "", tw.length ? row("이단", tw) : "", ...ks.filter(k => k).map(k => row(`${esc(lvShortName(g, side, k))}${two(k) ? " <small>이단</small>" : ""}`, a.filter(r => r.setter === k)))].join("");
+    return `<div class="col"><h4>${esc(lvTN(g, side))} 세트</h4><div class="tw"><table class="lv-t"><thead><tr><th>세트</th><th>공격</th><th>세트 점수</th><th>득점%</th><th>효율</th></tr></thead><tbody>${rows}</tbody></table></div></div>`; };
+  const u = team("us"), o = team("opp");
+  return u || o ? `<div class="cols lv-two">${u}${o}</div>` : "";
+}
 // 점수 상황별 (리드 · 동점 · 추격) — 우리 기준
 function lvSit(rs, g) {
   const rows = [["lead", "리드"], ["tie", "동점"], ["trail", "추격"]].map(([k, l]) => { const l2 = rs.filter(r => r._sit === k), pts = l2.filter(r => r.point), so = pts.filter(r => r.serve === "opp"), br = pts.filter(r => r.serve === "us");
@@ -516,6 +540,7 @@ function lvStats(rs, g) {
     <div class="cols lv-two"><div class="col"><h4>${esc(lvTA(g))} 득점 ${pts.filter(r => r.point === "us").length}</h4>${src("us")}</div><div class="col"><h4>${esc(g.opponent)} 득점 ${pts.filter(r => r.point === "opp").length}</h4>${src("opp")}</div></div>
     <h4>${esc(lvTA(g))}</h4>${lvTeam(rs, "us", g)}<h4>${esc(g.opponent)}</h4>${lvTeam(rs, "opp", g)}
     ${lvAtk(rs, g)}
+    ${lvSets(rs, g)}
     ${lvSit(rs, g)}
     <h4>로테별 (${esc(lvTA(g))})</h4><div class="tw"><table class="lv-t"><thead><tr><th>로테</th><th>사이드아웃</th><th>브레이크</th><th>득실</th></tr></thead><tbody>${rot}</tbody></table></div>
     ${Object.values(g.sets || {}).some(x => x.orot || (x.lu || {}).opp) ? `<h4>로테별 (${esc(lvTB(g))})</h4><div class="tw"><table class="lv-t"><thead><tr><th>로테</th><th>사이드아웃</th><th>브레이크</th><th>득실</th></tr></thead><tbody>${orot}</tbody></table></div>` : ""}`;
@@ -553,8 +578,8 @@ function lvPage(x) {
     : nos.map(n => nb(n)).join("");
   const shRow = `<div class="lv-row"><span class="lv-rk">타법</span><div class="lv-rb lv-at">${lvShChips("lvshot", kb)}</div></div>`;
   const atRow = `<div class="lv-row"><span class="lv-rk">토스</span><div class="lv-rb lv-at">${lvAtChips("lvatype", kb)}</div></div>`;
-  const atkOpen = L.atkOpen || L.atype || L.shot;
-  const board = LV_BOARD.map(([k, l, rs2]) => `<div class="lv-row ${k === "atk" ? "gap" : ""} ${k === want ? "want" : ""}">${k === "atk" ? `<button type="button" class="lv-rk lv-rkb ${atkOpen ? "on" : ""}" data-act="lvatkopen">${l}<i>${atkOpen ? "▴" : "▾"}</i></button>` : `<span class="lv-rk">${l}</span>`}<div class="lv-rb">${rs2.map(r => `<button type="button" class="btn lv-b ${r[3]}" data-act="lvcode" data-v="${k}:${r[0]}">${esc(r[1])}${kb ? `<kbd>${r[2]}</kbd>` : ""}</button>`).join("")}</div></div>${k === "atk" && atkOpen ? atRow + shRow : ""}`).join("");
+  const atkOpen = L.atkOpen || L.atype || L.shot || L.setter !== undefined || L.setq;
+  const board = LV_BOARD.map(([k, l, rs2]) => `<div class="lv-row ${k === "atk" ? "gap" : ""} ${k === want ? "want" : ""}">${k === "atk" ? `<button type="button" class="lv-rk lv-rkb ${atkOpen ? "on" : ""}" data-act="lvatkopen">${l}<i>${atkOpen ? "▴" : "▾"}</i></button>` : `<span class="lv-rk">${l}</span>`}<div class="lv-rb">${rs2.map(r => `<button type="button" class="btn lv-b ${r[3]}" data-act="lvcode" data-v="${k}:${r[0]}">${esc(r[1])}${kb ? `<kbd>${r[2]}</kbd>` : ""}</button>`).join("")}</div></div>${k === "atk" && atkOpen ? atRow + shRow + lvSetRows("lvsetter", "lvsetq") : ""}`).join("");
   const pad = me && !end ? `<div class="panel lv-pad ${side}">
       <div class="seg fill lv-side">${[["us", esc(lvTA(g))], ["opp", esc(g.opponent)]].map(([v, l]) => `<button type="button" class="seg-tab ${side === v ? "on solid" : ""}" data-act="lvside" data-v="${v}">${l}${todo(v) ? ` <span class="lv-todo ${todo(v)}">${todo(v) === "srv" ? "서브" : "리시브"}</span>` : ""}${kb ? ` <kbd>Tab</kbd>` : ""}</button>`).join("")}</div>
       ${now ? players : `<div class="lv-ns">${players}${rosBtn}</div>`}
@@ -590,7 +615,7 @@ async function liveClick(b, act) {
     if (!(g.sets || {})[n] && lvCan() && !(L.rallies[g.id] || []).some(r => r.set_no === n && r.kind)) return lvSetForm(n);
     state.dirty = false; return render(); }
   if (act === "lvnext") return lvSetForm(L.set + 1);
-  if (act === "lvside") { L.side = b.dataset.v; L.pick = null; L.atype = null; L.atMore = false; state.dirty = false; return render(); }
+  if (act === "lvside") { L.side = b.dataset.v; L.pick = null; L.atype = null; L.atMore = false; L.setter = undefined; L.setq = null; state.dirty = false; return render(); }
   if (act === "lvpick") { const v = b.dataset.v; L.pick = String(L.pick) === String(v) ? null : v; L.atype = null; L.atMore = false; state.dirty = false; return render(); }
   if (act === "lvros") return lvRosSheet();
   if (act === "lvsub") { L.sub = { out: null, inn: null }; return lvSubSheet(); }
@@ -615,7 +640,9 @@ async function liveClick(b, act) {
   if (act === "lvsrv") return lvSave("srv:" + b.dataset.v);
   if (act === "lvmiss") return lvSave("atk:err", { miss: b.dataset.v });
   if (act === "lvatmore") { L.atMore = true; if (L.spot && !document.getElementById("sheet").hidden) return lvSpotSheet(L.spot.code); state.dirty = false; return render(); }
-  if (act === "lvatkopen") { const o = !(L.atkOpen || L.atype || L.shot); L.atkOpen = o; if (!o) { L.atype = null; L.shot = null; } state.dirty = false; return render(); }
+  if (act === "lvatkopen") { const o = !(L.atkOpen || L.atype || L.shot || L.setter !== undefined || L.setq); L.atkOpen = o; if (!o) { L.atype = null; L.shot = null; L.setter = undefined; L.setq = null; } state.dirty = false; return render(); }
+  if (act === "lvsetter" || act === "lvsetter2") { const v = b.dataset.v; L.setter = String(v) === String(lvSetterAuto()) ? undefined : v; if (act === "lvsetter2") return lvSpotSheet(L.spot.code); state.dirty = false; return render(); }
+  if (act === "lvsetq" || act === "lvsetq2") { const q = Number(b.dataset.v); L.setq = L.setq === q ? null : q; if (act === "lvsetq2") return lvSpotSheet(L.spot.code); state.dirty = false; return render(); }
   if (act === "lvshot" || act === "lvshot2") { L.shot = b.dataset.v === "spike" ? null : b.dataset.v; if (act === "lvshot2") return lvSpotSheet(L.spot.code); state.dirty = false; return render(); }
   if (act === "lvatype" || act === "lvatype2") { const v = b.dataset.v; L.atype = lvAtCur() === v && !lvAtList() ? null : v === (lvAtList() || [])[0] ? null : v; if (act === "lvatype2") return lvSpotSheet(L.spot.code); state.dirty = false; return render(); }
   if (act === "lvnospot") return lvSave(L.spot ? L.spot.code : "atk:kill");

@@ -2193,3 +2193,7 @@ begin
 end $$;
 revoke all on function public.set_weight_private(boolean) from public, anon;
 grant execute on function public.set_weight_private(boolean) to authenticated;
+
+-- live_setter (세트: 누가 올렸는지 · 세트 점수)
+alter table public.live_rallies add column if not exists setter text check (setter is null or char_length(setter) <= 40);
+alter table public.live_rallies add column if not exists set_q smallint check (set_q is null or set_q between 1 and 3);
