@@ -2167,3 +2167,10 @@ alter table public.live_rallies add column if not exists shot text check (shot i
 alter table public.live_rallies drop constraint if exists live_rallies_atype_check;
 alter table public.live_rallies add constraint live_rallies_atype_check check (atype is null or atype in ('lo','lq','ro','rq','a','b','mv','fc','bc','pipe','back','etc','w4','o2','q3'));
 alter table public.live_rallies add column if not exists miss text check (miss is null or miss in ('atk','set'));
+
+-- analysis_any_team (분석 팀이 SNU가 아니어도 됨 · 전력분석에서 실시간 경기 분석)
+alter table public.live_games drop constraint if exists live_games_ref_kind_check;
+alter table public.live_games add constraint live_games_ref_kind_check check (ref_kind in ('event','friendly','scout'));
+alter table public.live_games add column if not exists team text check (team is null or char_length(team) between 1 and 60);
+alter table public.live_games add column if not exists roster jsonb not null default '{}'::jsonb;
+alter table public.scout_matches add column if not exists team text check (team is null or char_length(team) between 1 and 60);

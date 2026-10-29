@@ -32,6 +32,11 @@ const ctSame = (a, b) => a != null && b != null && String(a) === String(b);
 const ctLibs = (L, side) => ((L[side] || {}).libero || []).filter(x => x !== "" && x != null);
 const ctIsLib = (L, v, side = "us") => ctLibs(L, side).some(x => ctSame(x, v));
 const ctOther = s => s === "us" ? "opp" : "us";
+// 분석 팀(us) · 상대 팀(opp). m.team이 있으면 분석 팀도 SNU가 아닌 팀 → 두 팀 다 등번호로 (SNU면 명단 선수)
+const ctTA = m => (m && m.team) || "SNU";
+const ctTB = m => (m && m.opponent) || "상대";
+const ctTN = (m, side) => side === "us" ? ctTA(m) : ctTB(m);
+const ctRos = (m, side) => side === "us" && !(m && m.team);
 const ctLu = m => m.lineup || {};
 const ctReady = m => { const L = ctLu(m), n = ctNine(m) ? 9 : 6; return L.us && (L.us.slots || []).length === n && L.us.slots.every(Boolean) && L.opp && (L.opp.slots || []).length === n && L.opp.slots.every(x => x !== "" && x != null); };
 const ctRosterPos = id => { const p = playerOf(id) || {}; return CT_POS.includes(p.pos) ? p.pos : "OH"; }; // 명단 L 선수가 코트 6명이면 OH
@@ -50,7 +55,7 @@ function ctState(m, ev, setNo) {
   const L = ctLu(m), st = (L.sets || {})[setNo] || {}, U = L.us || {}, O = L.opp || {}, nine = ctNine(m);
   const s = { nine, rot: nine ? null : st.rot || 1, orot: nine ? null : st.opp_rot || 1, serve: st.serve || "us", us: 0, op: 0, rally: 1, done: false, last: null, list: [],
     usSlots: [...(U.slots || [])], opSlots: [...(O.slots || [])],
-    usPos: (U.slots || []).map((id, i) => nine ? CT_POS9[i] : (U.pos || [])[i] || ctRosterPos(id)), opPos: (O.slots || []).map((n, i) => nine ? CT_POS9[i] : (O.pos || [])[i] || ""),
+    usPos: (U.slots || []).map((id, i) => nine ? CT_POS9[i] : (U.pos || [])[i] || (m.team ? "" : ctRosterPos(id))), opPos: (O.slots || []).map((n, i) => nine ? CT_POS9[i] : (O.pos || [])[i] || ""),
     lib: nine ? null : ctLibs(L, "us")[0] ?? null, olib: nine ? null : ctLibs(L, "opp")[0] ?? null };
   for (const e of ev) {
     if (e.set_no !== setNo || !e.action) continue;
@@ -74,7 +79,7 @@ function ctState(m, ev, setNo) {
   }
   return s;
 }
-const ctName = (side, v) => { if (side === "us") { const p = playerOf(v); return p ? { no: p.number != null ? String(p.number) : "", nm: p.name } : { no: "", nm: "?" }; } return { no: String(v ?? ""), nm: "" }; };
+const ctName = (side, v) => { if (ctRos(scMatch(), side)) { const p = playerOf(v); return p ? { no: p.number != null ? String(p.number) : "", nm: p.name } : { no: "", nm: "?" }; } return { no: String(v ?? ""), nm: "" }; };
 function ctBtn(side, v, z, serving, lib, mini, pos) {
   const n = ctName(side, v);
   return `<button type="button" class="ct-p ${side} ${serving ? "srv" : ""} ${lib ? "lib" : ""} ${mini ? "mini" : ""}" data-act="ctpick" data-side="${side}" data-v="${esc(v)}" ${z ? `data-z="${z}"` : ""}><b>${esc(n.no || "–")}</b>${n.nm ? `<span>${esc(n.nm)}</span>` : ""}${z ? `<i>${z}</i>` : ""}${pos ? `<em>${esc(pos)}</em>` : ""}</button>`;
@@ -92,8 +97,8 @@ function ctPad(m, ev) {
   // 리베로 줄 (작게): 지금 코트 리베로는 색칠, 일반 선수로 들어간 리베로는 빠짐
   const libRow = side => { const slots = side === "us" ? s.usSlots : s.opSlots, cur = side === "us" ? s.lib : s.olib;
     const l = ctLibs(L, side).filter(x => !slots.some(y => ctSame(y, x)));
-    if (s.nine) return `<div class="ct-lrow ${side}"><span class="sc-k">${side === "us" ? "SNU" : "상대"}</span><button class="btn small ct-subbtn" type="button" data-act="ctsubopen" data-side="${side}">교체</button></div>`;
-    return `<div class="ct-lrow ${side}"><span class="sc-k">${side === "us" ? "SNU" : "상대"}</span>${l.length ? `<span class="ct-lk">L</span>${l.map(v => ctBtn(side, v, 0, false, ctSame(v, cur), true)).join("")}` : ""}<button class="btn small ct-subbtn" type="button" data-act="ctsubopen" data-side="${side}">교체</button></div>`; };
+    if (s.nine) return `<div class="ct-lrow ${side}"><span class="sc-k">${esc(ctTN(m, side))}</span><button class="btn small ct-subbtn" type="button" data-act="ctsubopen" data-side="${side}">교체</button></div>`;
+    return `<div class="ct-lrow ${side}"><span class="sc-k">${esc(ctTN(m, side))}</span>${l.length ? `<span class="ct-lk">L</span>${l.map(v => ctBtn(side, v, 0, false, ctSame(v, cur), true)).join("")}` : ""}<button class="btn small ct-subbtn" type="button" data-act="ctsubopen" data-side="${side}">교체</button></div>`; };
   const recent = s.list.slice(-6).reverse(), q = ctQ.list.length;
   // 9인제: 자리 고정 (위 칸은 뒤집어서)
   const half9 = (side, top) => { const slots = side === "us" ? s.usSlots : s.opSlots, pos = side === "us" ? s.usPos : s.opPos;
@@ -103,7 +108,7 @@ function ctPad(m, ev) {
   const court = flip ? `${H("us", true)}<div class="ct-net"><span>네트</span></div>${H("opp", false)}` : `${H("opp", true)}<div class="ct-net"><span>네트</span></div>${H("us", false)}`;
   return `<div class="ct-wrap"><div class="panel ct-bar">
       <div class="sc-row"><span class="sc-k">세트</span>${[1, 2, 3, 4, 5].map(n => scChip("scset", n, setNo, n)).join("")}<span class="ct-tools">${q ? `<span class="chip warn" title="인터넷이 되면 저장돼요">대기 ${q}</span>` : ""}</span></div>
-      <div class="ct-score"><span class="ct-t us ${s.serve === "us" ? "srv" : ""}">SNU${s.nine ? "" : ` <small>R${s.rot}</small>`}</span><b class="num">${s.us} : ${s.op}</b><span class="ct-t opp ${s.serve === "opp" ? "srv" : ""}">${s.nine ? "" : `<small>R${s.orot}</small> `}${esc(m.opponent || "상대")}</span></div>
+      <div class="ct-score"><span class="ct-t us ${s.serve === "us" ? "srv" : ""}">${esc(ctTA(m))}${s.nine ? "" : ` <small>R${s.rot}</small>`}</span><b class="num">${s.us} : ${s.op}</b><span class="ct-t opp ${s.serve === "opp" ? "srv" : ""}">${s.nine ? "" : `<small>R${s.orot}</small> `}${esc(m.opponent || "상대")}</span></div>
       <div class="ct-info small muted">Set ${setNo} · ${s.nine ? "9인제" : `Rot ${s.rot}:${s.orot}`} · Rally ${s.rally}</div>
       <div class="ct-btns">
         <button class="btn small" type="button" data-act="ctundo" ${s.list.length ? "" : "disabled"}>Undo</button>
@@ -117,14 +122,14 @@ function ctPad(m, ev) {
     <div class="ct-court">${court}</div>
     <div class="ct-extra">${flip ? libRow("us") + libRow("opp") : libRow("opp") + libRow("us")}</div>
     <section class="sec ct-recs"><div class="sec-head"><h3>방금 기록 <span class="small muted">${s.list.length}개</span></h3></div>
-      ${recent.length ? `<ul class="watch sc-recent ct-rec">${recent.map(e => `<li class="${e._pending ? "ct-pend" : ""}"><span class="num small">${esc(e.score || "")}</span><span class="small ct-l">${ctLabel(e)}</span>${e.point ? `<span class="chip ${e.point === "us" ? "ok" : "warn"}">${e.point === "us" ? "우리" : "상대"} 점수</span>` : ""}</li>`).join("")}</ul>` : emptyLine("선수를 눌러 기록을 시작해요.")}
+      ${recent.length ? `<ul class="watch sc-recent ct-rec">${recent.map(e => `<li class="${e._pending ? "ct-pend" : ""}"><span class="num small">${esc(e.score || "")}</span><span class="small ct-l">${ctLabel(e)}</span>${e.point ? `<span class="chip ${e.point === "us" ? "ok" : "warn"}">${esc(ctTN(m, e.point))} 점수</span>` : ""}</li>`).join("")}</ul>` : emptyLine("선수를 눌러 기록을 시작해요.")}
     </section></div>`;
 }
 function ctLabel(e) {
-  const a = CT_ACT[e.action], who = e.side === "us" ? (() => { const p = playerOf(e.player_id); return p ? `${pNo(p)}${esc(p.name)}` : "우리"; })() : `상대 #${e.opp_no ?? "?"}`;
-  if (e.action === CT_PT) return `${e.side === "us" ? "우리" : "상대"} 점수`;
+  const m = scMatch(), a = CT_ACT[e.action], who = ctRos(m, e.side) ? (() => { const p = playerOf(e.player_id); return p ? `${pNo(p)}${esc(p.name)}` : "SNU"; })() : `${esc(ctTN(m, e.side))} #${e.opp_no ?? "?"}`;
+  if (e.action === CT_PT) return `${esc(ctTN(m, e.side))} 점수`;
   if (e.action === CT_LIB) return `리베로 바꿈 · ${who}`;
-  if (e.action === CT_CFG) return `Settings · ${e.rot ? `Rot ${e.rot}:${e.opp_rot} · ` : ""}서브 ${e.serve === "opp" ? "상대" : "우리"} · Rally ${e.rally || 1}`;
+  if (e.action === CT_CFG) return `Settings · ${e.rot ? `Rot ${e.rot}:${e.opp_rot} · ` : ""}서브 ${esc(ctTN(m, e.serve === "opp" ? "opp" : "us"))} · Rally ${e.rally || 1}`;
   if (e.action === CT_SUB) return `교체 · ${who}${e.kind ? ` (${esc(e.kind)})` : ""} 들어감${e.detail ? ` ↔ ${esc(e.detail)}` : ""}`;
   return `${who} · ${a ? esc(a.name) : esc(e.action)}${e.detail ? ` (${esc(e.detail)})` : ""}${e.zone ? ` → ${e.zone}` : ""}`;
 }
@@ -151,8 +156,8 @@ function ctSubHtml(m, s) {
   const c = sc().ct, side = c.side, us = side === "us", L = ctLu(m), slots = us ? s.usSlots : s.opSlots, pos = us ? s.usPos : s.opPos, r = us ? s.rot : s.orot, cur = us ? s.lib : s.olib;
   const nm = v => { const n = ctName(side, v); return `${n.no ? "#" + n.no : ""} ${n.nm}`.trim(); };
   const outs = (s.nine ? CT_ROWS9.flat().map(i => [i, ""]) : [4, 3, 2, 5, 6, 1].map(z => [((z - 1) + (r - 1)) % 6, z])).map(([i, z]) => `<button type="button" class="ct-sb ${c.out === i ? "on" : ""}" data-act="ctsubout" data-i="${i}">${z ? `<i>${z}</i>` : ""}<b>${esc(nm(slots[i]))}</b><small>${esc(pos[i] || "")}</small></button>`).join("");
-  const ins = us ? sortedPlayers().filter(p => !p.military && !slots.includes(p.id)).map(p => `<button type="button" class="ct-sb ${ctSame(c.inn, p.id) ? "on" : ""}" data-act="ctsubin" data-v="${esc(p.id)}"><b>${esc(pNo(p) + p.name)}</b><small>${esc(p.pos === "Li" ? "L" : p.pos || "")}</small></button>`).join("")
-    : `<label class="fl sc-opp">번호<input id="ctSubNo" type="number" inputmode="numeric" min="0" max="99" value="${esc(c.inn ?? "")}"></label>${ctLibs(L, "opp").filter(x => !slots.some(y => ctSame(y, x))).map(n => `<button type="button" class="ct-sb ${ctSame(c.inn, n) ? "on" : ""}" data-act="ctsubin" data-v="${esc(n)}"><b>#${esc(n)}</b><small>L</small></button>`).join("")}`;
+  const ins = ctRos(m, side) ? sortedPlayers().filter(p => !p.military && !slots.includes(p.id)).map(p => `<button type="button" class="ct-sb ${ctSame(c.inn, p.id) ? "on" : ""}" data-act="ctsubin" data-v="${esc(p.id)}"><b>${esc(pNo(p) + p.name)}</b><small>${esc(p.pos === "Li" ? "L" : p.pos || "")}</small></button>`).join("")
+    : `<label class="fl sc-opp">번호<input id="ctSubNo" type="number" inputmode="numeric" min="0" max="99" value="${esc(c.inn ?? "")}"></label>${ctLibs(L, side).filter(x => !slots.some(y => ctSame(y, x))).map(n => `<button type="button" class="ct-sb ${ctSame(c.inn, n) ? "on" : ""}" data-act="ctsubin" data-v="${esc(n)}"><b>#${esc(n)}</b><small>L</small></button>`).join("")}`;
   const libs = ctLibs(L, side).filter(x => !slots.some(y => ctSame(y, x)));
   return `${libs.length > 1 ? `<div class="sc-row"><span class="sc-k">코트 리베로</span>${libs.map(v => `<button type="button" class="chip sc-chip ${ctSame(v, cur) ? "on" : ""}" data-act="ctlib" data-side="${side}" data-v="${esc(v)}">${esc(nm(v))}</button>`).join("")}</div>` : ""}
     <div class="ct-subg"><div><p class="sc-k">나감</p><div class="ct-subl out">${outs}</div></div><div><p class="sc-k">들어옴</p><div class="ct-subl">${ins || `<span class="small muted">벤치 선수가 없어요</span>`}</div></div></div>
@@ -162,14 +167,14 @@ function ctSubHtml(m, s) {
 function ctSheet() {
   const S = sc(), c = S.ct; if (!c) return;
   const m = scMatch(), el = document.getElementById("sheet"), s = ctState(m, S.events[m.id] || [], S.sel.set || 1);
-  const noEl = document.getElementById("ctSubNo"); if (noEl && c.cat === "sub" && c.side === "opp" && noEl.value !== "") c.inn = noEl.value;
+  const noEl = document.getElementById("ctSubNo"); if (noEl && c.cat === "sub" && !ctRos(m, c.side) && noEl.value !== "") c.inn = noEl.value;
   const libAct = c.v != null && ctLibActing(m, s, c.side, c.v);
   const cls = a => a[3] === "earned" ? "g-best" : a[3] === "error" ? "g-err" : a[2] === "#" || a[2] === "+" ? "g-good" : "g-ok";
   const grid = items => `<div class="ct-acts">${items.map(([act, attrs, cl, label], i) => `<button type="button" class="btn sc-g ${cl}" data-act="${act}" ${attrs}>${i < 9 ? `<kbd>${i + 1}</kbd>` : ""}${esc(label)}</button>`).join("")}</div>`;
   const cats = CT_MENU.filter(([k]) => !(libAct && CT_NOLIB.includes(k)));
-  const n = c.v != null ? ctName(c.side, c.v) : null, who = n ? `${c.side === "us" ? "우리" : "상대"} ${esc(n.no ? "#" + n.no : "")} ${esc(n.nm)}${libAct ? ` <span class="chip">L</span>` : ""}` : "";
+  const n = c.v != null ? ctName(c.side, c.v) : null, who = n ? `${esc(ctTN(m, c.side))} ${esc(n.no ? "#" + n.no : "")} ${esc(n.nm)}${libAct ? ` <span class="chip">L</span>` : ""}` : "";
   let body, title, back = "";
-  if (c.cat === "sub") { body = ctSubHtml(m, s); title = `${c.side === "us" ? "우리" : "상대"} 교체`; if (c.v != null && (libAct || (c.side === "us" ? s.usSlots : s.opSlots).some(x => ctSame(x, c.v)))) back = `<button type="button" class="btn link small" data-act="ctback">‹ 뒤로</button>`; }
+  if (c.cat === "sub") { body = ctSubHtml(m, s); title = `${esc(ctTN(m, c.side))} 교체`; if (c.v != null && (libAct || (c.side === "us" ? s.usSlots : s.opSlots).some(x => ctSame(x, c.v)))) back = `<button type="button" class="btn link small" data-act="ctback">‹ 뒤로</button>`; }
   else if (!c.cat) { title = who;
     body = `<div class="ct-catg">${grid(cats.map(([k, l]) => ["ctcat", `data-v="${k}"`, `ct-cat ${c.side}`, l]))}</div>${c.v != null ? `<div class="row"><button type="button" class="btn link small" data-act="ctcat" data-v="sub">교체</button></div>` : ""}`; }
   else { const cat = CT_MENU.find(x => x[0] === c.cat) || CT_MENU[0], det = c.act && CT_ACT[c.act].det;
@@ -234,27 +239,27 @@ function ctSave(code, detail) {
   const point = fresh && a.res ? (a.res === "earned" ? c.side : ctOther(c.side)) : null;
   const rot = s.rot, orot = s.orot, rally = Math.max(1, s.done && !["serve", "receive"].includes(a.skill) ? s.rally - 1 : s.rally); let us = s.us, op = s.op;
   if (point === "us") us++; else if (point === "opp") op++;
-  const row = { match_id: m.id, set_no: setNo, side: c.side, player_id: c.side === "us" && code !== CT_PT ? c.v : null, opp_no: c.side === "opp" && code !== CT_PT && c.v !== "" && c.v != null ? Number(c.v) : null,
+  const row = { match_id: m.id, set_no: setNo, side: c.side, player_id: ctRos(m, c.side) && code !== CT_PT ? c.v : null, opp_no: !ctRos(m, c.side) && code !== CT_PT && c.v !== "" && c.v != null ? Number(c.v) : null,
     skill: a.skill, grade: a.skill === "attack" && detail === "Blocked" ? "/" : a.grade, action: code, detail: detail || null, zone: c.zone || null, rot, opp_rot: orot, rally, serve: serveBefore, point, score: `${us}:${op}`, t: scNow(), author: uid() };
   ctPush(row, point && !s.nine ? { match_id: m.id, set_no: setNo, rot, opp_rot: orot, serve: serveBefore, won: point === "us", t: row.t, author: uid() } : null);
   S.ct = null; closeSheet(); state.dirty = false; render();
 }
 function ctSubSave() {
   const S = sc(), m = scMatch(), c = S.ct || {}, setNo = S.sel.set || 1, s = ctState(m, S.events[m.id] || [], setNo), us = c.side === "us";
-  const noEl = document.getElementById("ctSubNo"); if (!us && noEl && noEl.value !== "") c.inn = noEl.value;
+  const ros = ctRos(m, c.side), noEl = document.getElementById("ctSubNo"); if (!ros && noEl && noEl.value !== "") c.inn = noEl.value;
   const slots = us ? s.usSlots : s.opSlots, i = c.out, inV = c.inn;
   if (i == null) return toast("나갈 선수를 골라 주세요");
-  if (inV === "" || inV == null) return toast(us ? "들어올 선수를 골라 주세요" : "들어올 번호를 넣어 주세요");
+  if (inV === "" || inV == null) return toast(ros ? "들어올 선수를 골라 주세요" : "들어올 번호를 넣어 주세요");
   if (slots.some(x => ctSame(x, inV))) return toast("이미 코트에 있어요");
-  const on = ctName(c.side, slots[i]), pos = s.nine ? null : c.pos || (us ? s.usPos : s.opPos)[i] || (us ? ctRosterPos(inV) : null);
-  ctPush({ match_id: m.id, set_no: setNo, side: c.side, player_id: us ? inV : null, opp_no: us ? null : Number(inV), skill: "sub", grade: "!", action: CT_SUB, kind: pos || null,
+  const on = ctName(c.side, slots[i]), pos = s.nine ? null : c.pos || (us ? s.usPos : s.opPos)[i] || (ros ? ctRosterPos(inV) : null);
+  ctPush({ match_id: m.id, set_no: setNo, side: c.side, player_id: ros ? inV : null, opp_no: ros ? null : Number(inV), skill: "sub", grade: "!", action: CT_SUB, kind: pos || null,
     detail: `${on.no ? "#" + on.no + " " : ""}${on.nm}`.trim().slice(0, 30) || null, zone: i + 1, rot: s.rot, opp_rot: s.orot, serve: s.serve, point: null, score: `${s.us}:${s.op}`, t: scNow(), author: uid() }, null);
   S.ct = null; closeSheet(); state.dirty = false; render();
 }
 function ctLibSave(side, v) {
   const S = sc(), m = scMatch(), setNo = S.sel.set || 1, s = ctState(m, S.events[m.id] || [], setNo);
   if (ctSame(v, side === "us" ? s.lib : s.olib)) return;
-  ctPush({ match_id: m.id, set_no: setNo, side, player_id: side === "us" ? v : null, opp_no: side === "us" ? null : Number(v), skill: "sub", grade: "!", action: CT_LIB, detail: null, zone: null, rot: s.rot, opp_rot: s.orot, serve: s.serve, point: null, score: `${s.us}:${s.op}`, t: scNow(), author: uid() }, null);
+  ctPush({ match_id: m.id, set_no: setNo, side, player_id: ctRos(m, side) ? v : null, opp_no: ctRos(m, side) ? null : Number(v), skill: "sub", grade: "!", action: CT_LIB, detail: null, zone: null, rot: s.rot, opp_rot: s.orot, serve: s.serve, point: null, score: `${s.us}:${s.op}`, t: scNow(), author: uid() }, null);
   S.ct = null; closeSheet(); state.dirty = false; render();
 }
 async function ctUndo() {
@@ -281,30 +286,32 @@ function ctLineupForm() {
   const posSel = (id, cur, blank) => `<select id="${id}" class="ct-pos" aria-label="포지션">${blank ? `<option value="">포지션</option>` : ""}${CT_POS.map(p => `<option ${p === cur ? "selected" : ""}>${p}</option>`).join("")}</select>`;
   const sel = i => `<div class="ct-lu-c"><span class="ct-lu-n">${i + 1}${i === 0 ? " 서브" : ""}</span><select id="ctu-${i}" aria-label="${i + 1}번 자리"><option value="">선택</option>${ps.map(p => `<option value="${p.id}" ${us[i] === p.id ? "selected" : ""}>${esc(pNo(p) + p.name)} · ${esc(p.pos === "Li" ? "L" : p.pos || "")}</option>`).join("")}</select>${posSel(`ctp-${i}`, (U.pos || [])[i] || (us[i] ? ctRosterPos(us[i]) : ""), !us[i])}</div>`;
   const lsel = k => `<label class="fl">리베로 ${k + 1}<select id="ctu-l${k}"><option value="">없음</option>${ps.map(p => `<option value="${p.id}" ${(U.libero || [])[k] === p.id ? "selected" : ""}>${esc(pNo(p) + p.name)}${p.pos === "Li" ? " · L" : ""}</option>`).join("")}</select></label>`;
-  const onum = i => `<div class="ct-lu-c"><span class="ct-lu-n">${i + 1}${i === 0 ? " 서브" : ""}</span><input id="cto-${i}" type="number" inputmode="numeric" min="0" max="99" placeholder="번호" value="${esc(op[i] ?? "")}" aria-label="상대 ${i + 1}번 자리 번호">${posSel(`cop-${i}`, (O.pos || [])[i] || "", true)}</div>`;
+  // 등번호 칸: 상대(cto · cop) / SNU 아닌 분석 팀(ctn · cnp)
+  const numc = (pre, ppre, sl, P) => i => `<div class="ct-lu-c"><span class="ct-lu-n">${i + 1}${i === 0 ? " 서브" : ""}</span><input id="${pre}-${i}" type="number" inputmode="numeric" min="0" max="99" placeholder="번호" value="${esc(sl[i] ?? "")}" aria-label="${i + 1}번 자리 번호">${posSel(`${ppre}-${i}`, (P.pos || [])[i] || "", true)}</div>`;
+  const onum = numc("cto", "cop", op, O), unum = numc("ctn", "cnp", us, U), ros = !m.team;
   const num = (id, v, l) => `<label class="fl">${l}<input id="${id}" type="number" inputmode="numeric" min="0" max="99" value="${esc(v ?? "")}"></label>`;
   const el = document.getElementById("sheet");
   if (ctNine(m)) { // 9인제: 자리별 포지션 고정, 리베로·로테 없음
     const sel9 = i => `<div class="ct-lu-c"><span class="ct-lu-n">${CT_POS9[i]}</span><select id="ctu-${i}" aria-label="${CT_POS9[i]}"><option value="">선택</option>${ps.map(p => `<option value="${p.id}" ${us[i] === p.id ? "selected" : ""}>${esc(pNo(p) + p.name)}</option>`).join("")}</select></div>`;
-    const num9 = i => `<div class="ct-lu-c"><span class="ct-lu-n">${CT_POS9[i]}</span><input id="cto-${i}" type="number" inputmode="numeric" min="0" max="99" placeholder="번호" value="${esc(op[i] ?? "")}" aria-label="상대 ${CT_POS9[i]}"></div>`;
+    const num9p = (pre, sl) => i => `<div class="ct-lu-c"><span class="ct-lu-n">${CT_POS9[i]}</span><input id="${pre}-${i}" type="number" inputmode="numeric" min="0" max="99" placeholder="번호" value="${esc(sl[i] ?? "")}" aria-label="${CT_POS9[i]}"></div>`, num9 = num9p("cto", op);
     const grid9 = f => `<span class="ct-netl">네트</span>${CT_ROWS9.map(r => `<div class="ct-lu9" style="grid-template-columns:repeat(${r.length},minmax(0,1fr))">${r.map(f).join("")}</div>`).join("")}`;
     el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>Edit Lineup · 9인제</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
-      <form class="f" id="ctLineupForm"><h4>SNU</h4><div class="ct-lu nine">${grid9(sel9)}</div>
+      <form class="f" id="ctLineupForm"><h4>${esc(ctTA(m))}</h4><div class="ct-lu nine">${grid9(ros ? sel9 : num9p("ctn", us))}</div>
         <h4>${esc(m.opponent || "상대")}</h4><div class="ct-lu nine">${grid9(num9)}</div>
-        <h4>${setNo}세트 시작</h4><div class="fields"><label class="fl">첫 서브<select id="cts-serve"><option value="us" ${st.serve !== "opp" ? "selected" : ""}>SNU</option><option value="opp" ${st.serve === "opp" ? "selected" : ""}>${esc(m.opponent || "상대")}</option></select></label></div>
+        <h4>${setNo}세트 시작</h4><div class="fields"><label class="fl">첫 서브<select id="cts-serve"><option value="us" ${st.serve !== "opp" ? "selected" : ""}>${esc(ctTA(m))}</option><option value="opp" ${st.serve === "opp" ? "selected" : ""}>${esc(m.opponent || "상대")}</option></select></label></div>
         <div class="row"><button class="btn primary" type="submit">저장</button></div></form>`;
     el.hidden = false; document.body.classList.add("noscroll"); return;
   }
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>Edit Lineup</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="ctLineupForm">
-      <h4>SNU</h4><div class="ct-lu"><span class="ct-netl">네트</span>${CT_SHEET.map(sel).join("")}</div>
-      <div class="pair">${lsel(0)}${lsel(1)}</div>
+      <h4>${esc(ctTA(m))}</h4><div class="ct-lu"><span class="ct-netl">네트</span>${CT_SHEET.map(ros ? sel : unum).join("")}</div>
+      <div class="pair">${ros ? lsel(0) + lsel(1) : num("ctn-l1", (U.libero || [])[0], "리베로 1") + num("ctn-l2", (U.libero || [])[1], "리베로 2")}</div>
       <h4>${esc(m.opponent || "상대")}</h4><div class="ct-lu"><span class="ct-netl">네트</span>${CT_SHEET.map(onum).join("")}</div>
       <div class="pair">${num("cto-l1", (O.libero || [])[0], "리베로 1")}${num("cto-l2", (O.libero || [])[1], "리베로 2")}</div>
       <h4>${setNo}세트 시작</h4><div class="fields">
-        <label class="fl">우리 로테<select id="cts-rot">${[1, 2, 3, 4, 5, 6].map(n => `<option ${n === (st.rot || 1) ? "selected" : ""}>${n}</option>`).join("")}</select></label>
-        <label class="fl">상대 로테<select id="cts-orot">${[1, 2, 3, 4, 5, 6].map(n => `<option ${n === (st.opp_rot || 1) ? "selected" : ""}>${n}</option>`).join("")}</select></label>
-        <label class="fl">첫 서브<select id="cts-serve"><option value="us" ${st.serve !== "opp" ? "selected" : ""}>우리</option><option value="opp" ${st.serve === "opp" ? "selected" : ""}>상대</option></select></label></div>
+        <label class="fl">${esc(ctTA(m))} 로테<select id="cts-rot">${[1, 2, 3, 4, 5, 6].map(n => `<option ${n === (st.rot || 1) ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+        <label class="fl">${esc(ctTB(m))} 로테<select id="cts-orot">${[1, 2, 3, 4, 5, 6].map(n => `<option ${n === (st.opp_rot || 1) ? "selected" : ""}>${n}</option>`).join("")}</select></label>
+        <label class="fl">첫 서브<select id="cts-serve"><option value="us" ${st.serve !== "opp" ? "selected" : ""}>${esc(ctTA(m))}</option><option value="opp" ${st.serve === "opp" ? "selected" : ""}>${esc(ctTB(m))}</option></select></label></div>
       <div class="row"><button class="btn primary" type="submit">저장</button></div></form>`;
   el.hidden = false; document.body.classList.add("noscroll");
   // 선수를 고르면 명단 포지션으로 채움 (바꿀 수 있음)
@@ -313,17 +320,17 @@ function ctLineupForm() {
 async function ctLineupSave(f) {
   const S = sc(), m = scMatch(), v = id => (document.getElementById(id) || {}).value || "", setNo = S.sel.set || 1;
   if (ctNine(m)) {
-    const us = CT_POS9.map((x, i) => v(`ctu-${i}`)), op = CT_POS9.map((x, i) => v(`cto-${i}`));
-    if (us.some(x => !x) || new Set(us).size !== 9) { toast("SNU 9명을 겹치지 않게 골라 주세요"); return false; }
+    const ros = !m.team, us = CT_POS9.map((x, i) => v(`${ros ? "ctu" : "ctn"}-${i}`)), op = CT_POS9.map((x, i) => v(`cto-${i}`));
+    if (us.some(x => x === "") || new Set(us).size !== 9) { toast(ros ? "SNU 9명을 겹치지 않게 골라 주세요" : `${ctTA(m)} 등번호 9개를 겹치지 않게 넣어 주세요`); return false; }
     if (op.some(x => x === "") || new Set(op).size !== 9) { toast("상대 등번호 9개를 겹치지 않게 넣어 주세요"); return false; }
-    const L = { ...ctLu(m), us: { slots: us, pos: CT_POS9, libero: [] }, opp: { slots: op.map(Number), pos: CT_POS9, libero: [] } };
+    const L = { ...ctLu(m), us: { slots: ros ? us : us.map(Number), pos: CT_POS9, libero: [] }, opp: { slots: op.map(Number), pos: CT_POS9, libero: [] } };
     L.sets = { ...(L.sets || {}), [setNo]: { serve: v("cts-serve") || "us" } };
     ok(await sb.from("scout_matches").update({ lineup: L }).eq("id", m.id));
     m.lineup = L; closeSheet(); toast("라인업을 저장했어요"); state.dirty = false; render(); return false;
   }
-  const us = [0, 1, 2, 3, 4, 5].map(i => v(`ctu-${i}`)), op = [0, 1, 2, 3, 4, 5].map(i => v(`cto-${i}`));
-  if (us.some(x => !x) || new Set(us).size !== 6) { toast("우리 선수 6명을 겹치지 않게 골라 주세요"); return false; }
-  const libs = [v("ctu-l0"), v("ctu-l1")].filter(Boolean);
+  const ros = !m.team, us = [0, 1, 2, 3, 4, 5].map(i => v(`${ros ? "ctu" : "ctn"}-${i}`)), op = [0, 1, 2, 3, 4, 5].map(i => v(`cto-${i}`));
+  if (us.some(x => x === "") || new Set(us).size !== 6) { toast(ros ? "SNU 선수 6명을 겹치지 않게 골라 주세요" : `${ctTA(m)} 등번호 6개를 겹치지 않게 넣어 주세요`); return false; }
+  const libs = (ros ? [v("ctu-l0"), v("ctu-l1")] : [v("ctn-l1"), v("ctn-l2")]).filter(x => x !== "");
   if (new Set(libs).size !== libs.length) { toast("리베로 1·2를 다른 사람으로 골라 주세요"); return false; }
   if (libs.some(x => us.includes(x))) { toast("코트 6명에 넣은 선수는 리베로로 고를 수 없어요"); return false; }
   if (op.some(x => x === "")) { toast("상대 등번호 6개를 넣어 주세요"); return false; }
@@ -331,7 +338,7 @@ async function ctLineupSave(f) {
   const olibs = [v("cto-l1"), v("cto-l2")].filter(x => x !== "");
   if (olibs.some(x => op.includes(x))) { toast("상대 코트 6명 번호는 리베로로 넣을 수 없어요"); return false; }
   const L = { ...ctLu(m) };
-  L.us = { slots: us, pos: us.map((id, i) => v(`ctp-${i}`) || ctRosterPos(id)), libero: libs };
+  L.us = ros ? { slots: us, pos: us.map((id, i) => v(`ctp-${i}`) || ctRosterPos(id)), libero: libs } : { slots: us.map(Number), pos: us.map((x, i) => v(`cnp-${i}`)), libero: libs.map(Number) };
   L.opp = { slots: op.map(Number), pos: op.map((x, i) => v(`cop-${i}`)), libero: olibs.map(Number) };
   L.sets = { ...(L.sets || {}), [setNo]: { rot: Number(v("cts-rot")) || 1, opp_rot: Number(v("cts-orot")) || 1, serve: v("cts-serve") || "us" } };
   ok(await sb.from("scout_matches").update({ lineup: L }).eq("id", m.id));
@@ -346,7 +353,7 @@ function ctCfgForm() {
     <form class="f" id="ctCfgForm"><div class="fields">
       <label class="fl">Set<select id="ctc-set">${[1, 2, 3, 4, 5].map(n => `<option ${n === setNo ? "selected" : ""}>${n}</option>`).join("")}</select></label>
       ${s.nine ? "" : rot("ctc-rot", s.rot, "Our Rot") + rot("ctc-orot", s.orot, "Opp Rot")}
-      <label class="fl">Serving<select id="ctc-serve"><option value="us" ${s.serve !== "opp" ? "selected" : ""}>SNU</option><option value="opp" ${s.serve === "opp" ? "selected" : ""}>${esc(m.opponent || "상대")}</option></select></label>
+      <label class="fl">Serving<select id="ctc-serve"><option value="us" ${s.serve !== "opp" ? "selected" : ""}>${esc(ctTA(m))}</option><option value="opp" ${s.serve === "opp" ? "selected" : ""}>${esc(m.opponent || "상대")}</option></select></label>
       <label class="fl">Rally<input id="ctc-rally" type="number" inputmode="numeric" min="1" max="200" value="${s.rally}"></label>
     </div><div class="row"><button class="btn primary" type="submit">Confirm</button></div></form>`;
   el.hidden = false; document.body.classList.add("noscroll");
@@ -397,7 +404,7 @@ function courtClick(b, act) {
 }
 // 컴퓨터: 창이 열려 있으면 숫자 키로 바로 고르기 (예전 프로그램처럼) · 코트에서 Backspace = 되돌리기
 document.addEventListener("keydown", ev => {
-  if (state.view !== "scout" || sc().tab !== "court" || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if (state.view !== "scout" || sc().track === "live" || sc().tab !== "court" || ev.ctrlKey || ev.metaKey || ev.altKey) return;
   const t = ev.target; if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
   const sh = document.getElementById("sheet");
   if (sh && !sh.hidden && sc().ct && /^[1-9]$/.test(ev.key)) { const bs = sh.querySelectorAll(".ct-acts .btn"), x = bs[Number(ev.key) - 1]; if (x) { ev.preventDefault(); x.click(); } }
@@ -439,14 +446,14 @@ function ctSum(l) {
 function ctStatRows(l, side, keys) {
   l = ctReal(l).filter(e => e.side === side);
   const teamAt = ctSum(l).at;
-  return keys.map(([k, no, name]) => { const s = ctSum(l.filter(e => side === "us" ? e.player_id === k : e.opp_no === k));
+  return keys.map(([k, no, name]) => { const s = ctSum(l.filter(e => (e.player_id != null ? e.player_id : e.opp_no) === k));
     return { no, name, s, 득점: s.pts, 공격: `${s.ak}/${s.at}`, 성공률: s.at ? Math.round(100 * s.ak / s.at) : null, 효율: s.at ? Math.round(100 * (s.ak - s.ae) / s.at) : null, 점유율: teamAt ? Math.round(100 * s.at / teamAt) : null,
       서브: `${s.sa}/${s.sv}`, 서브점수: s.ss, 블로킹: `${s.bk}/${s.bt}`, 디그: `${s.dok}/${s.dg}`, 리시브: `${s.r3}/${s.rc}`, 리시브점수: s.rs, 세트: `${s.setOk}/${s.st}`, 세트점수: s.ts, 범실: s.err }; });
 }
 function ctSheetTable(l, side) {
   const r = ctReal(l).filter(e => e.side === side);
-  const keys = side === "us" ? sortedPlayers().filter(p => r.some(e => e.player_id === p.id)).map(p => [p.id, p.number ?? "", p.name]) : [...new Set(r.map(e => e.opp_no))].sort((a, b) => (a ?? 999) - (b ?? 999)).map(n => [n, n ?? "", ""]);
-  if (!keys.length) return emptyLine(side === "us" ? "SNU 기록이 없어요." : "상대 기록이 없어요.");
+  const m = scMatch(), keys = ctRos(m, side) ? sortedPlayers().filter(p => r.some(e => e.player_id === p.id)).map(p => [p.id, p.number ?? "", p.name]) : [...new Set(r.map(e => e.opp_no))].sort((a, b) => (a ?? 999) - (b ?? 999)).map(n => [n, n ?? "", ""]);
+  if (!keys.length) return emptyLine(`${ctTN(m, side)} 기록이 없어요.`);
   const d = v => v == null || v === 0 ? "—" : v, f2 = v => v == null ? "—" : v.toFixed(2), fr = (a, b) => b ? `${a}/${b}` : "—";
   const rows = ctStatRows(l, side, keys).map(x => `<tr><td class="num">${esc(x.no)}</td><td><b>${esc(x.name)}</b></td><td class="num">${d(x.득점)}</td><td class="num">${fr(x.s.ak, x.s.at)}</td>
     <td class="num ${x.성공률 != null && x.성공률 >= 25 ? "ct-hi" : ""}">${x.성공률 == null ? "—" : x.성공률}</td><td class="num ${x.효율 == null ? "" : x.효율 > 0 ? "ct-up" : x.효율 < 0 ? "ct-dn" : ""}">${x.효율 == null ? "—" : x.효율}</td><td class="num">${x.s.at ? x.점유율 : "—"}</td>
