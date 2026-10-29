@@ -254,9 +254,10 @@ async function lvRosSave(f) {
 const lvRefOf = g => g.ref_kind === "scout" ? { kind: "scout", id: "-", name: "목록" } : (cupItems().find(y => y.kind === g.ref_kind && String(y.id) === String(g.ref_id)) || { kind: g.ref_kind, id: g.ref_id, name: "목록" });
 // 세트 하나 다시 따라가기: 점수 · 서브권 · 우리 로테 · 연속 득실
 function lvState(g, rs, setNo) {
-  const st = (g.sets || {})[setNo] || {}, s = { rot: st.rot || 1, orot: st.orot || 1, serve: st.serve || "us", us: 0, op: 0, run: 0, list: [], last: null };
+  const st = (g.sets || {})[setNo] || {}, s = { rot: st.rot || 1, orot: st.orot || 1, serve: st.serve || "us", us: 0, op: 0, run: 0, list: [], last: null, phase: "start" };
   for (const r of rs) {
     if (r.set_no !== setNo || !r.kind) continue; s.list.push(r);
+    s.phase = r.point ? "start" : r.kind === "srv" ? "served" : "rally"; // 랠리 단계: 처음(서브 전) → 서브 들어감 → 랠리
     r._sit = s.us > s.op ? "lead" : s.us < s.op ? "trail" : "tie"; // 점수 상황 (우리 기준, 이 플레이 전)
     r._orot = s.orot;
     if (r.kind === "srv") s.serve = r.side || "us"; else if (r.kind === "rcv") s.serve = lvOther(r.side || "us");
@@ -536,6 +537,11 @@ function lvPage(x) {
   const ps = sortedPlayers().filter(p => !p.military && (st.size ? st.has(p.id) || en.has(p.id) : en.size ? en.has(p.id) : true)).sort((a, b) => (st.has(b.id) - st.has(a.id)) || (a.number ?? 999) - (b.number ?? 999));
   const side = L.side;
   const nos = lvSnu(g, side) ? null : lvNos(g, side), on6 = lvCourtOn(g, side, cur, L.set), now = on6 && on6.vals;
+  // 지금 할 일 (팀마다): 랠리 처음엔 서브권 팀 = 서브, 받는 팀 = 리시브 / 서브가 들어간 뒤엔 받는 팀 = 리시브
+  const todo = sd => cur.phase === "start" ? (sd === cur.serve ? "srv" : "rcv") : cur.phase === "served" && sd !== cur.serve ? "rcv" : null, want = todo(side);
+  // 서브 차례면 1번 자리(서브하는 사람)를 미리 골라 둠. 직접 풀면 이 랠리 동안은 다시 안 고름
+  { const server = want === "srv" && now ? now[0] : null, akey = `${g.id}:${L.set}:${cur.list.length}:${side}`;
+    if (server != null && server !== "" && (L.pick == null || L.pick === "") && L.autoKey !== akey) { L.pick = nos ? String(server) : server; L.autoKey = akey; L.atype = null; } }
   const nb = (v, z) => { const on = String(L.pick) === String(v), pos = nos ? lvPosOf(g, side, v) : "", lb = z && on6 && on6.libZ.includes(z) ? " lib" : "";
     if (!nos) { const p = playerOf(v); return `<button type="button" class="lv-n us ${on ? "on" : ""}${lb}" data-act="lvpick" data-v="${esc(v)}">${z ? `<i>${z}</i>` : ""}<b>${esc(p && p.number != null ? p.number : "–")}</b><span>${esc(p ? p.name : "?")}${lb ? " · L" : ""}</span></button>`; }
     return `<button type="button" class="lv-n ${side} ${on ? "on" : ""}${lb}" data-act="lvpick" data-v="${esc(v)}">${z ? `<i>${z}</i>` : ""}<b>${esc(v)}</b>${pos && !lvTagPos(v) ? `<span>${esc(pos)}</span>` : ""}</button>`; };
@@ -548,9 +554,9 @@ function lvPage(x) {
   const shRow = `<div class="lv-row"><span class="lv-rk">타법</span><div class="lv-rb lv-at">${lvShChips("lvshot", kb)}</div></div>`;
   const atRow = `<div class="lv-row"><span class="lv-rk">토스</span><div class="lv-rb lv-at">${lvAtChips("lvatype", kb)}</div></div>`;
   const atkOpen = L.atkOpen || L.atype || L.shot;
-  const board = LV_BOARD.map(([k, l, rs2]) => `<div class="lv-row ${k === "atk" ? "gap" : ""}">${k === "atk" ? `<button type="button" class="lv-rk lv-rkb ${atkOpen ? "on" : ""}" data-act="lvatkopen">${l}<i>${atkOpen ? "▴" : "▾"}</i></button>` : `<span class="lv-rk">${l}</span>`}<div class="lv-rb">${rs2.map(r => `<button type="button" class="btn lv-b ${r[3]}" data-act="lvcode" data-v="${k}:${r[0]}">${esc(r[1])}${kb ? `<kbd>${r[2]}</kbd>` : ""}</button>`).join("")}</div></div>${k === "atk" && atkOpen ? atRow + shRow : ""}`).join("");
+  const board = LV_BOARD.map(([k, l, rs2]) => `<div class="lv-row ${k === "atk" ? "gap" : ""} ${k === want ? "want" : ""}">${k === "atk" ? `<button type="button" class="lv-rk lv-rkb ${atkOpen ? "on" : ""}" data-act="lvatkopen">${l}<i>${atkOpen ? "▴" : "▾"}</i></button>` : `<span class="lv-rk">${l}</span>`}<div class="lv-rb">${rs2.map(r => `<button type="button" class="btn lv-b ${r[3]}" data-act="lvcode" data-v="${k}:${r[0]}">${esc(r[1])}${kb ? `<kbd>${r[2]}</kbd>` : ""}</button>`).join("")}</div></div>${k === "atk" && atkOpen ? atRow + shRow : ""}`).join("");
   const pad = me && !end ? `<div class="panel lv-pad ${side}">
-      <div class="seg fill lv-side">${[["us", esc(lvTA(g))], ["opp", esc(g.opponent)]].map(([v, l]) => `<button type="button" class="seg-tab ${side === v ? "on solid" : ""}" data-act="lvside" data-v="${v}">${l}${kb ? ` <kbd>Tab</kbd>` : ""}</button>`).join("")}</div>
+      <div class="seg fill lv-side">${[["us", esc(lvTA(g))], ["opp", esc(g.opponent)]].map(([v, l]) => `<button type="button" class="seg-tab ${side === v ? "on solid" : ""}" data-act="lvside" data-v="${v}">${l}${todo(v) ? ` <span class="lv-todo ${todo(v)}">${todo(v) === "srv" ? "서브" : "리시브"}</span>` : ""}${kb ? ` <kbd>Tab</kbd>` : ""}</button>`).join("")}</div>
       ${now ? players : `<div class="lv-ns">${players}${rosBtn}</div>`}
       ${board}
       <div class="row between"><button type="button" class="btn small" data-act="lvundo" ${cur.list.length ? "" : "disabled"}>되돌리기${kb ? " <kbd>⌫</kbd>" : ""}</button>${lvQ.list.length ? `<span class="chip warn">대기 ${lvQ.list.length}</span>` : ""}</div>
