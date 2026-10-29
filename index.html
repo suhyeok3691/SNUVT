@@ -1143,6 +1143,9 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 .lv-dot.gC, .lv-dot-k.gC { fill: #7c3aed; background: #7c3aed; } .lv-dot.gB, .lv-dot-k.gB { fill: #d9822b; background: #d9822b; } .lv-dot.gE, .lv-dot-k.gE { fill: #6b7280; background: #6b7280; }
 .lv-leg { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; } .lv-dot-k { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 3px; }
 .lv-end { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; background: var(--warn-soft); }
+.lv-coach { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; margin: 8px 0; } .lv-coach .panel { padding: 10px 12px; } .lv-coach h4 { margin: 0 0 6px; font-size: 13.5px; } .lv-coach h4 small, .lv-coach .sc-k small { font-weight: 500; color: var(--muted); }
+.lv-coach .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; } .lv-coach .col { min-width: 0; } .lv-coach .sc-k { margin: 0 0 2px; font-size: 12px; }
+.lv-cl { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 8px; font-size: 13px; padding: 3px 0; border-top: 1px solid var(--line); } .lv-cl:first-of-type { border-top: 0; } .lv-cl span { text-align: right; } .lv-cl small { color: var(--muted); }
 .lv-kpi { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 8px 0; }
 .lv-kpi > div { display: grid; justify-items: center; gap: 1px; padding: 8px 4px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); text-align: center; }
 .lv-kpi span { font-size: 11px; color: var(--muted); } .lv-kpi b { font: 800 19px var(--f-data); } .lv-kpi small { font-size: 11px; color: var(--muted); }
@@ -1201,12 +1204,12 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=172"></script>
-<script src="guide.js?v=172"></script>
-<script src="library.js?v=172"></script>
-<script src="campus.js?v=172"></script>
-<script src="court.js?v=172"></script>
-<script src="live.js?v=172"></script>
-<script src="app.js?v=172"></script>
+<script src="program.js?v=173"></script>
+<script src="guide.js?v=173"></script>
+<script src="library.js?v=173"></script>
+<script src="campus.js?v=173"></script>
+<script src="court.js?v=173"></script>
+<script src="live.js?v=173"></script>
+<script src="app.js?v=173"></script>
 </body>
 </html>
