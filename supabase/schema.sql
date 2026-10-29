@@ -2204,3 +2204,7 @@ alter table public.live_rallies add constraint live_rallies_kind_check check (ki
 alter table public.live_rallies drop constraint if exists live_rallies_shot_check;
 alter table public.live_rallies add constraint live_rallies_shot_check check (shot is null or shot in ('spike','tip','push','soft'));
 alter table public.live_rallies add column if not exists two boolean;
+
+-- live_cover_kind (막힌 공 커버한 사람)
+alter table public.live_rallies drop constraint if exists live_rallies_kind_check;
+alter table public.live_rallies add constraint live_rallies_kind_check check (kind is null or kind in ('rcv','atk','blk','srv','dig','set','err','opt','oer','cat','ovr','cov'));

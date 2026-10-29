@@ -60,6 +60,7 @@ const LV_OVR = [["3", "어렵게"], ["2", "보통"], ["1", "쉽게"]];
 for (const [k, l] of LV_OVR) LV_RES["ovr:" + k] = { kind: "ovr", kname: "3단 넘김", res: k, name: l, key: "", cls: "ok", pt: null };
 // 막힘 → 블록 실점 / 블록 커버(막혔지만 우리 수비가 받아 이어감)
 LV_RES["atk:bcov"] = { kind: "atk", kname: "공격", res: "bcov", name: "막힘 커버", key: "", cls: "ok", pt: null };
+LV_RES["cov:ok"] = { kind: "cov", kname: "커버", res: "ok", name: "", key: "", cls: "good", pt: null }; // 막힌 공을 받아 낸 사람 (커버의 커버는 안 넣음)
 // 예전 기록 (디그 성공 · 실패)
 LV_RES["dig:ok"] = { kind: "dig", kname: "디그", res: "ok", name: "성공", key: "", cls: "good", pt: null };
 LV_RES["dig:err"] = { kind: "dig", kname: "디그", res: "err", name: "실패", key: "", cls: "bad", pt: "other" };
@@ -79,7 +80,7 @@ const lvIdSort = (a, b) => { const na = lvIdNum(a), nb = lvIdNum(b); if (na && n
   return (LV_TAGO.indexOf(lvTagPos(a)) - LV_TAGO.indexOf(lvTagPos(b))) || String(a).localeCompare(String(b), "en", { numeric: true }); };
 const lvWho = r => { const g = lvGame(); if (lvSnu(g, r.side)) { const p = playerOf(r.player_id); return p ? `${pNo(p)}${esc(p.name)}` : "SNU"; } const id = lvIdOf(r); return `${esc(lvTN(g, r.side))}${id ? ` ${esc(lvShowId(id))}` : ""}`; };
 const lvLabel = r => { const x = LV_RES[r.kind + ":" + r.res], sh = lvShot(r);
-  return `${lvWho(r)} · ${x ? `${x.kind === "err" ? "" : x.kname + " "}${x.name}` : esc(r.kind || "")}${r.atype ? ` · ${LV_AT[r.atype] || r.atype}` : ""}${sh ? ` · ${sh}` : ""}${lvSetLbl(r)}${r.miss ? ` · ${r.miss === "set" ? "토스 미스" : "공격 미스"}` : ""}${r.zone ? ` → ${r.zone}구역` : ""}`; };
+  return `${lvWho(r)} · ${x ? `${x.kind === "err" ? "" : x.kname}${x.kind !== "err" && x.name ? " " : ""}${x.name}` : esc(r.kind || "")}${r.atype ? ` · ${LV_AT[r.atype] || r.atype}` : ""}${sh ? ` · ${sh}` : ""}${lvSetLbl(r)}${r.miss ? ` · ${r.miss === "set" ? "토스 미스" : "공격 미스"}` : ""}${r.zone ? ` → ${r.zone}구역` : ""}`; };
 const lv = () => state.live || (state.live = { games: {}, rallies: {}, open: null, set: 1, scope: "set", side: "us", pick: null, atype: null, shot: null, extra: {} });
 const lvCan = () => can("analysis") || can("schedule");
 const lvGame = () => { const L = lv(); for (const l of Object.values(L.games)) { const g = (l || []).find(x => x.id === L.open); if (g) return g; } return null; };
@@ -362,7 +363,7 @@ function lvPhase(cur) {
   if (last.kind === "srv") return { k: "rcv", side: ot };
   if (["rcv", "dig", "cat"].includes(last.kind)) return { k: "set", side: sd };
   if (last.kind === "set") return { k: "atk", side: sd };
-  if (last.kind === "atk" && last.res === "bcov") return { k: "dig", side: sd, cover: true }; // 막혔지만 커버 → 공격한 팀이 다시 받음
+  if ((last.kind === "atk" && last.res === "bcov") || last.kind === "cov") return { k: "set", side: sd }; // 막혔지만 커버 → 공격한 팀이 다시 세트
   if (last.kind === "atk") return { k: last.shot === "soft" ? "cat" : "dig", side: ot }; // 연타는 캐치, 스파이크 · 팁 · 밀어넣기는 디그
   if (last.kind === "ovr") return { k: "cat", side: ot };
   if (last.kind === "blk") return last.res === "touch" ? { k: "dig", side: sd } : { k: "dig", side: ot };
@@ -443,6 +444,21 @@ function lvBlkSheet() {
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${lvWhoPick()} 공격 막힘</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <div class="lv-miss">${[["blk", "블록 실점", "1", "bad"], ["bcov", "커버 · 이어감", "2", "ok"]].map(([v, l, key, c]) => `<button type="button" class="btn lv-b ${c}" data-act="lvblkd" data-v="${v}">${l}${kb ? `<kbd>${key}</kbd>` : ""}</button>`).join("")}</div>`;
   el.hidden = false; document.body.classList.add("noscroll");
+}
+// 커버한 사람 고르기 (공격한 팀 코트 6명, 기본 리베로) → 막힘 커버 + 커버 기록, 다음은 세트
+function lvCovSheet() {
+  const L = lv(), g = lvGame(), el = document.getElementById("sheet"), side = L.side, cur = lvState(g, L.rallies[g.id] || [], L.set), on = lvCourtOn(g, side, cur, L.set);
+  if (!on) return lvSave("atk:bcov");
+  L.spot = { code: "atk:bcov", cov: true, atk: L.pick };
+  const lib = on.libZ.length ? on.vals[on.libZ[0] - 1] : null;
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${esc(lvTN(g, side))} 커버</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <div class="lv-c6 lv-cov">${[4, 3, 2, 5, 6, 1].map(z => { const v = on.vals[z - 1]; return `<button type="button" class="lv-n ${side} ${String(v) === String(lib) ? "on" : ""}" data-act="lvcov" data-v="${esc(v)}"><i>${z}</i><b>${esc(lvShortName(g, side, v))}</b>${lvPosOf(g, side, v) && !lvTagPos(v) ? `<span>${esc(lvPosOf(g, side, v))}</span>` : ""}</button>`; }).join("")}</div>
+    <div class="row"><button type="button" class="btn link small" data-act="lvcov" data-v="">모름</button></div>`;
+  el.hidden = false; document.body.classList.add("noscroll");
+}
+function lvCovSave(v) {
+  const L = lv(), sp = L.spot || {}; L.pick = sp.atk ?? null; lvSave("atk:bcov");
+  if (v !== "" && v != null) { L.pick = v; lvSave("cov:ok"); }
 }
 // 공격 대신 넘김 → 상대에게 어렵게 · 보통 · 쉽게
 function lvOverSheet() {
@@ -551,8 +567,8 @@ function lvTeam(rs, side, g) {
     return `<tr><td><b>${nm(k)}</b></td><td class="num">${c("srv") ? `${c("srv", "ace")}/${c("srv", "err")}` : "—"}</td><td class="num">${rc.length ? `${lvAvg(rc)} <small>${rc.length}</small>` : "—"}</td>
       <td class="num">${c("set") ? `${st.length ? lvAvg(st) : "—"} <small>${c("set")}${c("set", "err") ? ` · 범실 ${c("set", "err")}` : ""}</small>` : "—"}</td>
       <td class="num">${at ? `${ak}/${at}` : "—"}</td><td class="num">${d(c("atk", "err"))}</td><td class="num">${d(c("atk", "blk"))}</td><td class="num"><b>${at ? lvPct(ak - ae, at) : "—"}</b></td>
-      <td class="num">${c("blk") ? `${c("blk", "pt")}/${c("blk", "touch")}` : "—"}</td><td class="num">${dgl.length ? `${dgl.filter(r => lvGrade(r) > 0).length}/${dgl.length}` : "—"}</td><td class="num">${ct.length ? `${lvAvg(ct)} <small>${ct.length}</small>` : "—"}</td><td class="num">${d(fl)}</td><td class="num"><b>${d(ak + c("blk", "pt") + c("srv", "ace"))}</b></td></tr>`; };
-  return `<div class="tw"><table class="lv-t"><thead><tr><th>선수</th><th>서브 <small>에이스/범실</small></th><th>리시브 <small>평균</small></th><th>세트 <small>평균</small></th><th>공격 <small>득점/시도</small></th><th>범실</th><th>막힘</th><th>효율</th><th>블로킹 <small>득점/원터치</small></th><th>디그 <small>성공/시도</small></th><th>캐치 <small>평균</small></th><th>파울</th><th>득점</th></tr></thead><tbody>${ks.map(row).join("")}</tbody></table></div>`;
+      <td class="num">${c("blk") ? `${c("blk", "pt")}/${c("blk", "touch")}` : "—"}</td><td class="num">${dgl.length ? `${dgl.filter(r => lvGrade(r) > 0).length}/${dgl.length}` : "—"}</td><td class="num">${ct.length ? `${lvAvg(ct)} <small>${ct.length}</small>` : "—"}</td><td class="num">${d(c("cov"))}</td><td class="num">${d(fl)}</td><td class="num"><b>${d(ak + c("blk", "pt") + c("srv", "ace"))}</b></td></tr>`; };
+  return `<div class="tw"><table class="lv-t"><thead><tr><th>선수</th><th>서브 <small>에이스/범실</small></th><th>리시브 <small>평균</small></th><th>세트 <small>평균</small></th><th>공격 <small>득점/시도</small></th><th>범실</th><th>막힘</th><th>효율</th><th>블로킹 <small>득점/원터치</small></th><th>디그 <small>성공/시도</small></th><th>캐치 <small>평균</small></th><th>커버</th><th>파울</th><th>득점</th></tr></thead><tbody>${ks.map(row).join("")}</tbody></table></div>`;
 }
 // 공격 종류(토스 분배) · 득점 자리 (두 팀)
 function lvAtk(rs, g) {
@@ -711,7 +727,8 @@ async function liveClick(b, act) {
   if (act === "lvatmore") { L.atMore = true; if (L.spot && !document.getElementById("sheet").hidden) return lvSpotSheet(L.spot.code); state.dirty = false; return render(); }
   if (act === "lvatkopen") { const o = !(L.atkOpen || L.atype || L.shot); L.atkOpen = o; if (!o) { L.atype = null; L.shot = null; } state.dirty = false; return render(); }
   if (act === "lvover") return lvSave("ovr:" + b.dataset.v);
-  if (act === "lvblkd") return lvSave("atk:" + b.dataset.v);
+  if (act === "lvblkd") return b.dataset.v === "bcov" ? lvCovSheet() : lvSave("atk:blk");
+  if (act === "lvcov") return lvCovSave(b.dataset.v);
   if (act === "lvshot" || act === "lvshot2") { L.shot = b.dataset.v === "spike" ? null : b.dataset.v; if (act === "lvshot2") return lvSpotSheet(L.spot.code); state.dirty = false; return render(); }
   if (act === "lvatype" || act === "lvatype2") { const v = b.dataset.v; L.atype = lvAtCur() === v && !lvAtList() ? null : v === (lvAtList() || [])[0] ? null : v; if (act === "lvatype2") return lvSpotSheet(L.spot.code); state.dirty = false; return render(); }
   if (act === "lvnospot") return lvSave(L.spot ? L.spot.code : "atk:kill");
@@ -725,7 +742,8 @@ document.addEventListener("keydown", ev => {
   const t = ev.target; if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
   const sh = document.getElementById("sheet"), k = ev.key.toLowerCase();
   if (sh && !sh.hidden) { // 득점 자리 창: 숫자 1~9 = 그 구역 가운데, 0 = 코스 모름
-    if (L.spot && L.spot.blkd) { if (k === "1" || k === "2") { ev.preventDefault(); return lvSave(k === "1" ? "atk:blk" : "atk:bcov"); } return; }
+    if (L.spot && L.spot.blkd) { if (k === "1" || k === "2") { ev.preventDefault(); return k === "1" ? lvSave("atk:blk") : lvCovSheet(); } return; }
+    if (L.spot && L.spot.cov) { if (k === "enter" || k === "0") { ev.preventDefault(); const on = document.querySelector('#sheet [data-act="lvcov"].on'); return lvCovSave(k === "0" || !on ? "" : on.dataset.v); } return; }
     if (L.spot && L.spot.over) { if (/^[1-3]$/.test(k)) { ev.preventDefault(); return lvSave("ovr:" + k); } return; }
     if (L.spot && L.spot.srv) { if (/^[0-3]$/.test(k)) { ev.preventDefault(); return lvSave(k === "0" ? "srv:in" : "srv:s" + k); } return; }
     if (L.spot && L.spot.miss) { if (k === "1" || k === "2") { ev.preventDefault(); return lvSave("atk:err", { miss: k === "1" ? "atk" : "set" }); } return; }
