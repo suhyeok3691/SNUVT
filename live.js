@@ -102,12 +102,12 @@ function lvSave(code, extra) {
   (L.rallies[g.id] = rs).push(row); const q = { ...row }; delete q._sit; lvQ.list.push(q); lvQSave();
   L.pick = null; L.atype = null; L.shot = null; L.atkOpen = false; L.spot = null; closeSheet(); state.dirty = false; render(); lvFlush();
 }
-// 코트 그림 (지키는 팀 코트, 네트가 위). dots = [{x,y,c}]
-function lvCourt(dots, big) {
-  const W = 300, lines = `<rect x="1" y="1" width="${W - 2}" height="${W - 2}" class="lv-c-bd"/><line x1="0" y1="1" x2="${W}" y2="1" class="lv-c-net"/><line x1="0" y1="100" x2="${W}" y2="100" class="lv-c-al"/>
+// 코트 그림 (지키는 팀 코트). x·y는 지키는 팀 기준(네트 쪽 y=0). flip = SNU 쪽에서 상대 코트를 봄(네트가 아래, 180° 돌림). dots = [{x,y,c}]
+function lvCourt(dots, big, flip) {
+  const W = 300, ny = flip ? W - 1 : 1, ay = flip ? 200 : 100, lines = `<rect x="1" y="1" width="${W - 2}" height="${W - 2}" class="lv-c-bd"/><line x1="0" y1="${ny}" x2="${W}" y2="${ny}" class="lv-c-net"/><line x1="0" y1="${ay}" x2="${W}" y2="${ay}" class="lv-c-al"/>
     <line x1="100" y1="0" x2="100" y2="${W}" class="lv-c-g"/><line x1="200" y1="0" x2="200" y2="${W}" class="lv-c-g"/><line x1="0" y1="200" x2="${W}" y2="200" class="lv-c-g"/>`;
   const labs = "";
-  const pts = (dots || []).map(d => `<circle cx="${d.x * 3}" cy="${d.y * 3}" r="${big ? 7 : 6}" class="lv-dot ${d.c || ""}"/>`).join("");
+  const pts = (dots || []).map(d => `<circle cx="${(flip ? 100 - d.x : d.x) * 3}" cy="${(flip ? 100 - d.y : d.y) * 3}" r="${big ? 7 : 6}" class="lv-dot ${d.c || ""}"/>`).join("");
   return `<svg class="lv-c ${big ? "big" : ""}" viewBox="0 0 ${W} ${W}" ${big ? 'id="lvCourtTap"' : ""} role="img" aria-label="코트">${lines}${labs}${pts}</svg>`;
 }
 // 공격 득점 → 종류 · 떨어진 자리 고르기
@@ -119,11 +119,11 @@ function lvSpotSheet(code) {
     <div class="sc-row">${LV_ATYPE.map(([k, l]) => `<button type="button" class="chip sc-chip ${L.atype === k ? "on" : ""}" data-act="lvatype2" data-v="${k}">${l}</button>`).join("")}</div>
     <div class="sc-row">${LV_SHOT.map(([k, l]) => `<button type="button" class="chip sc-chip ${L.shot === k ? "on" : ""}" data-act="lvshot2" data-v="${k}">${l}</button>`).join("")}</div>
     <p class="small muted">${side === "us" ? esc(g.opponent) : "SNU"} 코트 · 떨어진 자리를 누르면 저장</p>
-    <div class="lv-cwrap">${lvCourt([], true)}</div>
+    <div class="lv-cwrap">${lvCourt([], true, side === "us")}</div>
     <div class="row"><button type="button" class="btn link small" data-act="lvnospot">코스 모름</button></div>`;
   el.hidden = false; document.body.classList.add("noscroll");
   const svg = document.getElementById("lvCourtTap");
-  svg.addEventListener("click", e => { const r = svg.getBoundingClientRect(), x = Math.max(0, Math.min(100, Math.round((e.clientX - r.left) / r.width * 100))), y = Math.max(0, Math.min(100, Math.round((e.clientY - r.top) / r.height * 100)));
+  svg.addEventListener("click", e => { const r = svg.getBoundingClientRect(), fx = Math.max(0, Math.min(100, Math.round((e.clientX - r.left) / r.width * 100))), fy = Math.max(0, Math.min(100, Math.round((e.clientY - r.top) / r.height * 100))), x = side === "us" ? 100 - fx : fx, y = side === "us" ? 100 - fy : fy;
     lvSave(code, { x, y, zone: lvZone(x, y) }); });
 }
 async function lvUndo() {
@@ -210,7 +210,7 @@ function lvAtk(rs, g) {
     const kills = a.filter(r => r.res === "kill" && r.x != null), zc = {}; for (const r of kills) zc[r.zone] = (zc[r.zone] || 0) + 1;
     const ft = a.filter(r => r.shot === "tip"), ftk = ft.filter(r => r.res === "kill").length;
     return `<div class="col"><h4>${side === "us" ? "SNU" : esc(g.opponent)} 공격</h4>${rows ? `<div class="tw"><table class="lv-t"><thead><tr><th>종류</th><th>시도 <small>분배</small></th><th>득점</th><th>범실·막힘</th><th>효율</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}
-      ${kills.length ? `<p class="small muted">득점 자리 · ${side === "us" ? esc(g.opponent) : "SNU"} 코트${kills.some(r => r.shot === "tip") ? ` · ○ 팁` : ""}</p><div class="lv-cwrap sm">${lvCourt(kills.map(r => ({ x: r.x, y: r.y, c: (r.atype || "") + (r.shot === "tip" ? " tip" : "") })))}</div>
+      ${kills.length ? `<p class="small muted">득점 자리 · ${side === "us" ? esc(g.opponent) : "SNU"} 코트${kills.some(r => r.shot === "tip") ? ` · ○ 팁` : ""}</p><div class="lv-cwrap sm">${lvCourt(kills.map(r => ({ x: r.x, y: r.y, c: (r.atype || "") + (r.shot === "tip" ? " tip" : "") })), false, side === "us")}</div>
         <p class="small">${Object.entries(zc).sort((a, b) => b[1] - a[1]).map(([z, n]) => `${z}구역 ${n}`).join(" · ")}</p>` : ""}${ft.length ? `<p class="small">팁 ${ft.length} · 득점 ${ftk}</p>` : ""}</div>`; };
   const u = team("us"), o = team("opp");
   return u || o ? `<div class="cols lv-two">${u}${o}</div><p class="small muted lv-leg">${LV_ATYPE.map(([k, l]) => `<i class="lv-dot-k ${k}"></i>${l}`).join(" ")}</p>` : "";
@@ -248,7 +248,11 @@ function lvPage(x) {
   const won = sets.filter(({ n, s }) => lvEnd(s, n) === "us").length, lost = sets.filter(({ n, s }) => lvEnd(s, n) === "opp").length;
   const lastSet = Math.max(1, ...rs.map(r => r.set_no), ...Object.keys(g.sets || {}).map(Number).filter(n => n >= 1 && n <= 5));
   const chips = sets.filter(({ n }) => n <= Math.min(5, lastSet + (lvEnd(sets[lastSet - 1].s, lastSet) ? 1 : 0))).map(({ n, s }) => `<button type="button" class="chip sc-chip ${n === L.set ? "on" : ""}" data-act="lvset" data-v="${n}">${n}세트${s.list.length ? ` <span class="num">${s.us}:${s.op}</span>` : ""}</button>`).join("");
-  const me = lvCan(), en = entryOf(x.kind, x.id), st = startersOf(x.kind, x.id), kb = matchMedia("(hover: hover) and (pointer: fine)").matches;
+  // 교류전: 그 세트 출전 명단이 있으면 주전으로
+  const lu = x.kind === "friendly" ? cupState().lineups[x.kind + ":" + x.id] : null;
+  if (x.kind === "friendly" && !lu) cupLoadLineups(x.kind, x.id);
+  const mem = lu && lu[L.set] && (lu[L.set].members || []).length ? new Set(lu[L.set].members) : null;
+  const me = lvCan(), en = entryOf(x.kind, x.id), st = mem || startersOf(x.kind, x.id), kb = matchMedia("(hover: hover) and (pointer: fine)").matches;
   const ps = sortedPlayers().filter(p => !p.military && (st.size ? st.has(p.id) || en.has(p.id) : en.size ? en.has(p.id) : true)).sort((a, b) => (st.has(b.id) - st.has(a.id)) || (a.number ?? 999) - (b.number ?? 999));
   const side = L.side;
   const players = side === "us"
