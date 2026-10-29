@@ -279,10 +279,21 @@ async function ctUndo() {
 }
 // 라인업 · 세트 시작 로테 (전력분석 담당). 라인업 용지처럼 앞줄 4·3·2, 뒷줄 5·6·1 순서로 입력 (저장은 자리 1~6)
 const CT_SHEET = [3, 2, 1, 4, 5, 0];
+// SNU 라인업이 비어 있으면: 가장 가까운 대회·교류전 주전(→ 엔트리 → 나머지 부원)을 명단 포지션으로 자동 배치 (1 S · 2 OH · 3 MB · 4 OP · 5 OH · 6 MB = R1), 리베로는 L
+function ctAutoUs(m) {
+  const items = cupItems().filter(x => startersOf(x.kind, x.id).size >= 6).sort((a, b) => String(b.d).localeCompare(String(a.d)));
+  const it = items.find(x => !m.date || x.d <= m.date) || items[0];
+  const ids = it ? [...startersOf(it.kind, it.id), ...entryOf(it.kind, it.id)] : [];
+  const pool = [...new Set([...ids, ...sortedPlayers().map(p => p.id)])].map(playerOf).filter(p => p && !p.military);
+  const arr = lvAutoArrange(pool.filter(p => lvNormPos(p.pos) !== "L").map(p => ({ v: p.id, pos: lvNormPos(p.pos) })));
+  if (arr.some(x => !x.v)) return null;
+  return { slots: arr.map(x => x.v), pos: arr.map(x => CT_POS.includes(x.pos) ? x.pos : "OH"), libero: pool.filter(p => lvNormPos(p.pos) === "L").slice(0, 2).map(p => p.id) };
+}
 function ctLineupForm() {
   const S = sc(), m = scMatch(), L = ctLu(m), setNo = S.sel.set || 1, prev = (L.sets || {})[setNo - 1];
   const st = (L.sets || {})[setNo] || (prev ? { rot: prev.rot, opp_rot: prev.opp_rot, serve: prev.serve === "opp" ? "us" : "opp" } : {});
-  const ps = sortedPlayers().filter(p => !p.military), U = L.us || {}, O = L.opp || {}, us = U.slots || [], op = O.slots || [];
+  const U0 = L.us || {}, auto = !m.team && !ctNine(m) && !(U0.slots || []).length ? ctAutoUs(m) : null;
+  const ps = sortedPlayers().filter(p => !p.military), U = auto || U0, O = L.opp || {}, us = U.slots || [], op = O.slots || [];
   const posSel = (id, cur, blank) => `<select id="${id}" class="ct-pos" aria-label="포지션">${blank ? `<option value="">포지션</option>` : ""}${CT_POS.map(p => `<option ${p === cur ? "selected" : ""}>${p}</option>`).join("")}</select>`;
   const sel = i => `<div class="ct-lu-c"><span class="ct-lu-n">${i + 1}${i === 0 ? " 서브" : ""}</span><select id="ctu-${i}" aria-label="${i + 1}번 자리"><option value="">선택</option>${ps.map(p => `<option value="${p.id}" ${us[i] === p.id ? "selected" : ""}>${esc(pNo(p) + p.name)} · ${esc(p.pos === "Li" ? "L" : p.pos || "")}</option>`).join("")}</select>${posSel(`ctp-${i}`, (U.pos || [])[i] || (us[i] ? ctRosterPos(us[i]) : ""), !us[i])}</div>`;
   const lsel = k => `<label class="fl">리베로 ${k + 1}<select id="ctu-l${k}"><option value="">없음</option>${ps.map(p => `<option value="${p.id}" ${(U.libero || [])[k] === p.id ? "selected" : ""}>${esc(pNo(p) + p.name)}${p.pos === "Li" ? " · L" : ""}</option>`).join("")}</select></label>`;
