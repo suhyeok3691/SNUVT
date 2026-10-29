@@ -690,6 +690,7 @@ table.roster td.num, table.roster th.num { text-align: center; width: 44px; padd
 @keyframes ball-spin { 0% { transform: rotate(0) translateY(0); } 50% { transform: rotate(180deg) translateY(-4px); } 100% { transform: rotate(360deg) translateY(0); } }
 /* 눌렀을 때 남는 네모 잔상 없애기 */
 html { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+@media (display-mode: standalone) { html, body { overscroll-behavior-y: none; } }
 button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
 .team-switch { width: 170px; }
 .team-switch span { padding: 6px 0; font-size: 14px; }
@@ -1195,12 +1196,12 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=151"></script>
-<script src="guide.js?v=151"></script>
-<script src="library.js?v=151"></script>
-<script src="campus.js?v=151"></script>
-<script src="court.js?v=151"></script>
-<script src="live.js?v=151"></script>
-<script src="app.js?v=151"></script>
+<script src="program.js?v=152"></script>
+<script src="guide.js?v=152"></script>
+<script src="library.js?v=152"></script>
+<script src="campus.js?v=152"></script>
+<script src="court.js?v=152"></script>
+<script src="live.js?v=152"></script>
+<script src="app.js?v=152"></script>
 </body>
 </html>

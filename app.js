@@ -2592,7 +2592,9 @@ function openRolePick() {
   el.hidden = false; document.body.classList.add("noscroll");
 }
 const needsSelfReg = () => state.session && state.role === "player" && !state.myPid && state.loaded;
-function render() {
+// soft = 뒤에서 다시 불러온 뒤: 화면이 그대로면 DOM을 갈아끼우지 않음(누르던 버튼이 사라져 두 번 눌러야 하는 일 막기)
+let lastMain = "";
+function render(soft) {
   flowCache.clear();
   header();
   if (state.dirty) return; // 입력 중인 폼은 덮어쓰지 않음
@@ -2609,7 +2611,9 @@ function render() {
   }
   const q = state.session ? queue().length : 0;
   const bar = state.loaded && (state.net === false || q) ? `<div class="netbar">${state.net === false ? "오프라인 · 마지막으로 불러온 내용" : "기록 올리는 중"}${q ? ` · 올라갈 기록 ${q}건` : ""}</div>` : "";
-  document.getElementById("main").innerHTML = bar + html;
+  const main = document.getElementById("main"), out = bar + html;
+  if (soft === true && out === lastMain && main.childElementCount) return;
+  main.innerHTML = lastMain = out;
   refreshSettings();
   scoutDock();
 }
@@ -3380,9 +3384,10 @@ async function loadProfile() {
   state.staff = state.coach || myStaff().length > 0;
   state.viewAs = pickView(); state.admin = state.viewAs !== "player";
   state.canWrite = state.role === "coach" || state.role === "player";
-  if (state.canWrite) await loadAll();
+  const again = !!state.loaded && !state.booting; // 로그인 상태 새로 고침(앱으로 돌아올 때 등): 화면이 같으면 그대로 둠
+  if (state.canWrite) await loadAll(again);
   else if (state.role === "pending" && state.myPid) await loadSelf();
-  state.booting = false; render();
+  state.booting = false; render(again);
 }
 // 승인 대기 중인 사람이 자기가 낸 정보를 다시 불러올 때
 async function loadSelf() {
@@ -3465,7 +3470,7 @@ async function loadTeam(id) {
   try { const q = await sb.from("teams").select("*").eq("id", id || "men").maybeSingle(); if (q.data) t = q.data; } catch (e) { /* 연결 없으면 기본값 */ }
   setTeam(t); document.documentElement.dataset.team = TEAM.id; const tg = document.getElementById("teamTag"); if (tg) tg.textContent = TEAM.label;
 }
-async function loadAll() {
+async function loadAll(soft) {
   let raw = null;
   try {
     const q = [
@@ -3517,7 +3522,7 @@ async function loadAll() {
   }
   buildState(withQueued(raw));
   state.loaded = true; state.offline = false;
-  render();
+  render(soft === true);
   if (state.net && queue().length) flushQueue();
 }
 function buildState(raw) {
@@ -3693,14 +3698,14 @@ function boot() {
   sb = window.supabase.createClient(cfg.url, cfg.anonKey);
   // 앱 설치·오프라인 (서비스 워커) · 연결되면 모아 둔 기록 올리기
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
-  window.addEventListener("online", () => { if (state.canWrite) { flushQueue(); loadAll(); } });
+  window.addEventListener("online", () => { if (state.canWrite) { flushQueue(); loadAll(true); } });
   // 콜백 안에서 바로 Supabase 를 부르면 멈출 수 있어 다음 틱으로 넘긴다
   sb.auth.onAuthStateChange(event => {
     if (event === "PASSWORD_RECOVERY") { state.recovery = true; state.dirty = false; }
     if (["INITIAL_SESSION", "SIGNED_IN", "SIGNED_OUT", "USER_UPDATED"].includes(event)) setTimeout(loadProfile, 0);
   });
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden && state.canWrite && !state.dirty) loadAll();
+    if (!document.hidden && state.canWrite && !state.dirty) loadAll(true);
   });
   // 날짜가 바뀌면 오늘·D-day를 갱신
   let shown = iso(today());
