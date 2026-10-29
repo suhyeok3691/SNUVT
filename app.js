@@ -3321,7 +3321,7 @@ document.addEventListener("submit", async ev => {
       if (st && en && en <= st) { toast("종강이 개강보다 앞이에요."); return; }
       ok(await sb.from("terms").upsert({ id: f.dataset.id, start_date: st, end_date: en, updated_at: new Date().toISOString() }));
       toast("학사일정을 저장했어요 · 프로그램이 맞춰졌어요");
-    } else if (f.id === "lvForm" || f.id === "lvSetForm") {
+    } else if (f.id === "lvForm" || f.id === "lvSetForm" || f.id === "lvRosForm") {
       await lvSubmit(f); return;
     } else if (f.id === "ctCfgForm") {
       ctCfgSave(); return;
