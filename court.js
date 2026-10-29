@@ -418,7 +418,8 @@ document.addEventListener("keydown", ev => {
   if (state.view !== "scout" || sc().track === "live" || sc().tab !== "court" || ev.ctrlKey || ev.metaKey || ev.altKey) return;
   const t = ev.target; if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
   const sh = document.getElementById("sheet");
-  if (sh && !sh.hidden && sc().ct && /^[1-9]$/.test(ev.key)) { const bs = sh.querySelectorAll(".ct-acts .btn"), x = bs[Number(ev.key) - 1]; if (x) { ev.preventDefault(); x.click(); } }
+  const np = /^Numpad([1-9])$/.exec(ev.code || ""), dk = np ? np[1] : ev.key; // 숫자패드도
+  if (sh && !sh.hidden && sc().ct && /^[1-9]$/.test(dk)) { const bs = sh.querySelectorAll(".ct-acts .btn"), x = bs[Number(dk) - 1]; if (x) { ev.preventDefault(); x.click(); } }
   else if (sh && !sh.hidden && sc().ct && ev.key === "Backspace") { ev.preventDefault(); const c = sc().ct; if (c.act) c.act = null; else if (c.cat && c.cat !== "sub" || c.cat === "sub" && c.v != null) c.cat = null; else return closeSheet(); ctSheet(); } // 한 단계 뒤로
   else if (sh && sh.hidden && ev.key === "Backspace") { ev.preventDefault(); ctUndo(); }
   else if (sh && sh.hidden && /^Arrow(Up|Down|Left|Right)$/.test(ev.key)) { // 방향키로 선수 이동 · Enter로 기록 (예전 프로그램처럼)

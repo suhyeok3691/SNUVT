@@ -770,7 +770,8 @@ let lvNum = { s: "", t: 0 };
 document.addEventListener("keydown", ev => {
   const L = state.live; if (!L || !L.open || !lvView() || !lvCan() || ev.ctrlKey || ev.metaKey || ev.altKey) return;
   const t = ev.target; if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
-  const sh = document.getElementById("sheet"), k = ev.key.toLowerCase();
+  const np = /^Numpad([0-9])$/.exec(ev.code || ""); // 숫자패드도 (Num Lock이 꺼져 있어도) 숫자로
+  const sh = document.getElementById("sheet"), k = np ? np[1] : ev.code === "NumpadEnter" ? "enter" : ev.key.toLowerCase();
   if (sh && !sh.hidden) { // 득점 자리 창: 숫자 1~9 = 그 구역 가운데, 0 = 코스 모름
     if (L.spot && L.spot.blkd) { if (k === "1" || k === "2") { ev.preventDefault(); return k === "1" ? lvSave("atk:blk") : lvCovSheet(); } return; }
     if (L.spot && L.spot.cov) { if (k === "enter" || k === "0") { ev.preventDefault(); const on = document.querySelector('#sheet [data-act="lvcov"].on'); return lvCovSave(k === "0" || !on ? "" : on.dataset.v); } return; }
