@@ -265,7 +265,7 @@ function ctLibSave(side, v) {
 async function ctUndo() {
   const S = sc(), m = scMatch(); if (!m) return;
   const l = (S.events[m.id] || []).filter(e => e.action && e.set_no === (S.sel.set || 1)), e = l[l.length - 1]; if (!e) return;
-  if (!await confirmDel(`방금 기록을 지울까요?\n${ctLabel(e).replace(/<[^>]+>/g, "")}`)) return;
+  if (!await confirmDel(`방금 기록을 지울까요?\n${ctLabel(e).replace(/<[^>]+>/g, "")}`, "네, 지울게요", true)) return;
   const qi = ctQ.list.findIndex(x => x.ev.id === e.id);
   if (qi >= 0) { // 아직 서버에 안 간 것
     if (qi === 0 && ctQ.busy) { toast("저장 중이에요. 잠깐 뒤에 다시 눌러 주세요"); return; }

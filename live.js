@@ -48,7 +48,17 @@ const lvOther = s => s === "us" ? "opp" : "us";
 // 두 팀에서 같은 랠리 끝을 같이 눌렀을 때 (점수 한 번만)
 const LV_PAIR = [["atk:kill", "dig:err"], ["atk:blk", "blk:pt"], ["srv:ace", "rcv:0"]];
 const lvPairOf = (a, b) => LV_PAIR.some(([x, y]) => (a === x && b === y) || (a === y && b === x));
-const lvWho = r => { const g = lvGame(); if (lvSnu(g, r.side)) { const p = playerOf(r.player_id); return p ? `${pNo(p)}${esc(p.name)}` : "SNU"; } return `${esc(lvTN(g, r.side))}${r.opp_no != null ? ` #${r.opp_no}` : ""}`; };
+// 번호로 기록하는 팀: 선수 = 등번호(7) 또는 이름표(OH1 · MB2 · Li · S2, 교류전처럼 번호를 모를 때)
+const lvIdNum = v => /^\d{1,2}$/.test(String(v));
+const lvNormId = v => { const t = String(v ?? "").trim(); if (lvIdNum(t)) return Number(t); const m = /^li(\d*)$/i.exec(t); return m ? "Li" + m[1] : t.toUpperCase(); };
+const lvOkId = v => /^(\d{1,2}|[A-Za-z]{1,2}\d{0,2})$/.test(String(v).trim());
+const lvIdOf = r => r.opp_no != null ? String(r.opp_no) : (r.tag || "");
+const lvShowId = v => lvIdNum(v) ? "#" + v : String(v);
+const lvTagPos = t => { const m = /^(OH|OP|MB|S|LI|L)\d*$/i.exec(String(t)); return m ? lvNormPos(m[1]) : ""; };
+const LV_TAGO = ["S", "OH", "MB", "OP", "L"];
+const lvIdSort = (a, b) => { const na = lvIdNum(a), nb = lvIdNum(b); if (na && nb) return a - b; if (na !== nb) return na ? -1 : 1;
+  return (LV_TAGO.indexOf(lvTagPos(a)) - LV_TAGO.indexOf(lvTagPos(b))) || String(a).localeCompare(String(b), "en", { numeric: true }); };
+const lvWho = r => { const g = lvGame(); if (lvSnu(g, r.side)) { const p = playerOf(r.player_id); return p ? `${pNo(p)}${esc(p.name)}` : "SNU"; } const id = lvIdOf(r); return `${esc(lvTN(g, r.side))}${id ? ` ${esc(lvShowId(id))}` : ""}`; };
 const lvLabel = r => { const x = LV_RES[r.kind + ":" + r.res], sh = lvShot(r);
   return `${lvWho(r)} · ${x ? `${x.kind === "err" ? "" : x.kname + " "}${x.name}` : esc(r.kind || "")}${r.atype ? ` · ${LV_AT[r.atype] || r.atype}` : ""}${sh ? ` · ${sh}` : ""}${r.miss ? ` · ${r.miss === "set" ? "토스 미스" : "공격 미스"}` : ""}${r.zone ? ` → ${r.zone}구역` : ""}`; };
 const lv = () => state.live || (state.live = { games: {}, rallies: {}, open: null, set: 1, scope: "set", side: "us", pick: null, atype: null, shot: null, extra: {} });
@@ -60,19 +70,34 @@ const lvTA = g => (g && g.team) || "SNU";
 const lvTB = g => (g && g.opponent) || "상대";
 const lvTN = (g, side) => side === "us" ? lvTA(g) : lvTB(g);
 const lvSnu = (g, side) => side === "us" && !(g && g.team);
-const lvRos = (g, side) => (((g && g.roster) || {})[side] || []); // [{no, pos}]
-const lvNos = (g, side) => [...new Set([...(lv().rallies[g.id] || []).filter(r => r.side === side && r.opp_no != null).map(r => r.opp_no), ...lvRos(g, side).map(x => x.no)])].sort((a, b) => a - b);
-const lvPosOf = (g, side, v) => String((lvSnu(g, side) ? (playerOf(v) || {}).pos : (lvRos(g, side).find(x => x.no === Number(v)) || {}).pos) || "").toUpperCase();
+// 교류전 상대: 명단을 안 넣었으면 이름표로 시작 (OH1 · OH2 · MB1 · MB2 · OP · S · Li)
+const LV_FR_ROS = [["S", "S"], ["OH1", "OH"], ["OH2", "OH"], ["MB1", "MB"], ["MB2", "MB"], ["OP", "OP"], ["Li", "L"]].map(([no, pos]) => ({ no, pos }));
+const lvRos = (g, side) => { const r = ((g && g.roster) || {})[side]; if (r) return r; return g && side === "opp" && g.ref_kind === "friendly" ? LV_FR_ROS : []; }; // [{no, pos}]
+const lvNos = (g, side) => [...new Set([...(lv().rallies[g.id] || []).filter(r => r.side === side).map(lvIdOf).filter(Boolean), ...lvRos(g, side).map(x => String(x.no))])].sort(lvIdSort);
+const lvPosOf = (g, side, v) => lvSnu(g, side) ? lvNormPos((playerOf(v) || {}).pos) : lvNormPos((lvRos(g, side).find(x => String(x.no) === String(v)) || {}).pos) || lvTagPos(v);
 const LV_POS = ["OH", "OP", "MB", "S", "L"];
 // 번호 · 포지션 저장 (있으면 포지션만 바꿈)
 function lvRosAdd(g, side, no, pos) {
-  const ros = { us: [...lvRos(g, "us")], opp: [...lvRos(g, "opp")] }, l = ros[side], i = l.findIndex(x => x.no === no);
+  const ros = { us: [...lvRos(g, "us")], opp: [...lvRos(g, "opp")] }, l = ros[side], i = l.findIndex(x => String(x.no) === String(no));
   if (i >= 0) { if (!pos || l[i].pos === pos) return; l[i] = { no, pos }; } else l.push({ no, pos: pos || "" });
   g.roster = ros;
   sb.from("live_games").update({ roster: ros }).eq("id", g.id).then(r => { if (r.error) toast(failMsg(r.error)); });
 }
 // 코트 6명 (명단 · 로테 창에서 넣음): sets[n].lu[side] = { rot: 넣을 때 로테, slots: 자리 1~6 }. 로테가 돌면 같이 돎
-const lvLu = (g, side, setNo) => ((((g.sets || {})[setNo] || {}).lu || {})[side]) || null;
+// 저장한 코트가 없으면: SNU(대회 · 교류전)는 그 세트 출전(교류전) 또는 주전으로 자동 배치, 교류전 상대는 이름표 기본 배치
+const lvLu = (g, side, setNo) => ((((g.sets || {})[setNo] || {}).lu || {})[side]) || lvDefLu(g, side, setNo);
+function lvDefLu(g, side, setNo) {
+  if (!g) return null;
+  if (side === "opp" && g.ref_kind === "friendly" && !(g.roster || {}).opp) return { rot: 1, slots: ["S", "OH1", "MB1", "OP", "OH2", "MB2"], lib: "Li" };
+  if (!lvSnu(g, side) || (g.ref_kind !== "friendly" && g.ref_kind !== "event")) return null;
+  const kind = g.ref_kind, id = g.ref_id, sl = kind === "friendly" ? (cupState().lineups[kind + ":" + id] || {})[setNo] : null;
+  const pick = ids => [...ids].map(playerOf).filter(p => p && !p.military);
+  let ps = pick((sl && sl.members) || []); if (ps.filter(p => lvNormPos(p.pos) !== "L").length < 6) ps = pick(new Set([...ps.map(p => p.id), ...startersOf(kind, id)]));
+  const court = ps.filter(p => lvNormPos(p.pos) !== "L").map(p => ({ v: p.id, pos: lvNormPos(p.pos) }));
+  if (court.length < 6) return null;
+  const lib = [...ps, ...pick(entryOf(kind, id))].find(p => lvNormPos(p.pos) === "L");
+  return { rot: 1, slots: lvAutoArrange(court).map(x => x.v), lib: lib ? lib.id : "" };
+}
 function lvCourtNow(g, side, s, setNo) {
   const lu = lvLu(g, side, setNo); if (!lu || !(lu.slots || []).some(x => x !== "" && x != null)) return null;
   const k = (((side === "us" ? s.rot : s.orot) - (lu.rot || 1)) % 6 + 6) % 6;
@@ -80,7 +105,7 @@ function lvCourtNow(g, side, s, setNo) {
 }
 // 리베로 (배구 규칙): MB가 뒷줄(5 · 6, 그 팀이 서브권이 없을 때는 1도)에 오면 리베로가 대신 섬. MB가 1번에서 서브할 때는 MB 그대로, 서브권을 잃으면 리베로가 들어오고 MB가 앞줄(4)로 올라가면 다시 MB
 const lvLib = (g, side, setNo) => { const lu = lvLu(g, side, setNo); if (!lu) return null; if (lu.lib !== undefined) return lu.lib === "" ? null : lu.lib;
-  if (lvSnu(g, side)) return null; const x = lvRos(g, side).find(r => lvNormPos(r.pos) === "L"); return x ? x.no : null; };
+  if (lvSnu(g, side)) return null; const x = lvRos(g, side).find(r => lvNormPos(r.pos) === "L"); return x ? String(x.no) : null; };
 function lvCourtOn(g, side, s, setNo) {
   const base = lvCourtNow(g, side, s, setNo); if (!base) return null;
   const lib = lvLib(g, side, setNo), libZ = [];
@@ -89,7 +114,7 @@ function lvCourtOn(g, side, s, setNo) {
   return { vals, libZ };
 }
 const lvPosSel = (cls, cur) => `<select class="${cls}" aria-label="포지션"><option value="">포지션</option>${LV_POS.map(p => `<option ${p === cur ? "selected" : ""}>${p}</option>`).join("")}</select>`;
-const lvRosRow = x => `<div class="lvr-row"><input class="lvr-n" type="number" inputmode="numeric" min="0" max="99" placeholder="번호" value="${x ? x.no : ""}" aria-label="번호">${lvPosSel("lvr-p", x ? x.pos : "")}<button type="button" class="btn small danger" data-act="lvrosdel" aria-label="지우기">✕</button></div>`;
+const lvRosRow = x => `<div class="lvr-row"><input class="lvr-n" maxlength="4" autocapitalize="characters" autocomplete="off" placeholder="번호 · OH1" value="${x ? esc(x.no) : ""}" aria-label="번호">${lvPosSel("lvr-p", x ? x.pos : "")}<button type="button" class="btn small danger" data-act="lvrosdel" aria-label="지우기">✕</button></div>`;
 // 명단 · 로테 창: 명단(번호 + 포지션, 줄마다 지우기) → "자동 배치"로 S 1번 서브 자리 기준 기본 로테(S · OH · MB · OP · OH · MB) → OH끼리 · MB끼리 바꾸기, 한 칸씩 돌리기, 칸 직접 고치기
 // 세트 처음(기록 없음)에 저장하면 S 자리로 로테 번호도 맞춤 (S 1번 = R1, 6번 = R2, 5번 = R3, 4번 = R4, 3번 = R5, 2번 = R6)
 const LV_SROT = { 1: 1, 6: 2, 5: 3, 4: 4, 3: 5, 2: 6 };
@@ -100,16 +125,16 @@ function lvRosSheet() {
   const ros = lvRos(g, side), lib = lvLib(g, side, L.set) ?? (snu ? (sortedPlayers().find(p => !p.military && lvNormPos(p.pos) === "L" && (startersOf(...lvRefKey(g)).has(p.id) || entryOf(...lvRefKey(g)).has(p.id))) || {}).id : null);
   const cell = z => { const v = now[z - 1]; return `<div class="ct-lu-c"><span class="ct-lu-n">${z}${z === 1 ? " 서브" : ""} <b class="lvr-pos" data-z="${z}"></b></span>${snu
     ? `<select class="lvr-c" data-z="${z}" aria-label="${z}번 자리"><option value="">선택</option>${sortedPlayers().filter(p => !p.military).map(p => `<option value="${esc(p.id)}" data-pos="${esc(lvNormPos(p.pos))}" ${v === p.id ? "selected" : ""}>${esc(pNo(p) + p.name)} · ${esc(lvNormPos(p.pos))}</option>`).join("")}</select>`
-    : `<input class="lvr-c" data-z="${z}" type="number" inputmode="numeric" min="0" max="99" placeholder="번호" value="${v ?? ""}" aria-label="${z}번 자리 번호">`}</div>`; };
+    : `<input class="lvr-c" data-z="${z}" maxlength="4" autocapitalize="characters" autocomplete="off" placeholder="번호" value="${esc(v ?? "")}" aria-label="${z}번 자리">`}</div>`; };
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${esc(lvTN(g, side))} 명단 · 로테</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="lvRosForm">
-      ${snu ? "" : `<h4>명단</h4><div class="lvr-list" id="lvrList">${ros.map(lvRosRow).join("")}${ros.length ? "" : lvRosRow(null)}</div><div class="row"><button type="button" class="btn small" data-act="lvrosadd" aria-label="줄 추가">+</button></div>`}
+      ${snu ? "" : `<h4>명단</h4><div class="lvr-list" id="lvrList">${ros.map(lvRosRow).join("")}${ros.length ? "" : lvRosRow(null)}</div><div class="sc-row"><button type="button" class="btn small" data-act="lvrosadd" aria-label="줄 추가">+</button>${["OH", "MB", "OP", "S", "Li"].map(t => `<button type="button" class="btn small" data-act="lvrostag" data-v="${t}">+ ${t}</button>`).join("")}</div>`}
       <h4>${L.set}세트 코트 <span class="small muted" id="lvrInfo"></span></h4>
       <div class="sc-row"><button type="button" class="btn small primary" data-act="lvauto">자동 배치</button><button type="button" class="btn small" data-act="lvswap" data-v="OH">OH 바꾸기</button><button type="button" class="btn small" data-act="lvswap" data-v="MB">MB 바꾸기</button><button type="button" class="btn small" data-act="lvturn" data-d="1">↻ 한 칸</button><button type="button" class="btn small" data-act="lvturn" data-d="-1">↺</button></div>
       <div class="ct-lu"><span class="ct-netl">네트</span>${[4, 3, 2, 5, 6, 1].map(cell).join("")}</div>
       <div class="fields"><label class="fl">리베로${snu
         ? `<select id="lvrLib"><option value="">없음</option>${sortedPlayers().filter(p => !p.military).sort((a, b) => (lvNormPos(b.pos) === "L") - (lvNormPos(a.pos) === "L")).map(p => `<option value="${esc(p.id)}" ${String(lib ?? "") === String(p.id) ? "selected" : ""}>${esc(pNo(p) + p.name)}${lvNormPos(p.pos) === "L" ? " · L" : ""}</option>`).join("")}</select>`
-        : `<input id="lvrLib" type="number" inputmode="numeric" min="0" max="99" placeholder="번호" value="${lib ?? ""}">`}</label></div>
+        : `<input id="lvrLib" maxlength="4" autocapitalize="characters" autocomplete="off" placeholder="번호 · Li" value="${esc(lib ?? "")}">`}</label></div>
       <div class="row"><button class="btn primary" type="submit">저장</button></div></form>`;
   el.hidden = false; document.body.classList.add("noscroll");
   const f = document.getElementById("lvRosForm");
@@ -117,17 +142,18 @@ function lvRosSheet() {
   lvRosInfo();
 }
 // 창 안: 명단 포지션 · 코트 읽기/쓰기
-const lvRosMap = () => { const m = {}; document.querySelectorAll("#lvRosForm .lvr-row").forEach(r => { const n = r.querySelector(".lvr-n").value; if (n !== "") m[Number(n)] = r.querySelector(".lvr-p").value; }); return m; };
+const lvRosMap = () => { const m = {}; document.querySelectorAll("#lvRosForm .lvr-row").forEach(r => { const n = r.querySelector(".lvr-n").value.trim(); if (n !== "") m[String(lvNormId(n))] = r.querySelector(".lvr-p").value || lvTagPos(n); }); return m; };
 function lvCourtRead() {
   const m = lvRosMap();
   return [1, 2, 3, 4, 5, 6].map(z => { const x = document.querySelector(`#lvRosForm .lvr-c[data-z="${z}"]`), v = x ? x.value : "";
-    const pos = v === "" ? "" : x.tagName === "SELECT" ? (x.selectedOptions[0] || {}).dataset.pos || "" : m[Number(v)] || "";
+    const pos = v === "" ? "" : x.tagName === "SELECT" ? (x.selectedOptions[0] || {}).dataset.pos || "" : m[String(lvNormId(v))] || lvTagPos(v);
     return { v, pos: lvNormPos(pos) }; });
 }
 function lvCourtWrite(arr) { arr.forEach((x, i) => { const el = document.querySelector(`#lvRosForm .lvr-c[data-z="${i + 1}"]`); if (el) el.value = x.v; }); lvRosInfo(); }
 function lvRosInfo(ev) {
   const le = document.getElementById("lvrLib");
   if (le && ev && ev.target === le) le.dataset.touched = "1";
+  if (ev && ev.target && ev.target.classList.contains("lvr-n")) { const ps = ev.target.parentNode.querySelector(".lvr-p"), tp = lvTagPos(ev.target.value); if (ps && tp && !ps.value) ps.value = tp; } // OH3 → OH
   if (le && le.tagName === "INPUT" && !le.dataset.touched && le.value === "") { const m = lvRosMap(), n = Object.keys(m).find(k => lvNormPos(m[k]) === "L"); if (n != null) le.value = n; } // 명단에 L이 있으면 리베로 칸에 저절로
   const arr = lvCourtRead(), sz = arr.findIndex(x => x.pos === "S") + 1;
   arr.forEach((x, i) => { const b = document.querySelector(`#lvRosForm .lvr-pos[data-z="${i + 1}"]`); if (b) b.textContent = x.pos; });
@@ -157,22 +183,23 @@ function lvRosSwap(pos) {
 function lvRosTurn(d) { const a = lvCourtRead(); lvCourtWrite(a.map((x, i) => a[((i + d) % 6 + 6) % 6])); }
 async function lvRosSave(f) {
   const L = lv(), g = lvGame(), side = L.side, snu = lvSnu(g, side), s = lvState(g, L.rallies[g.id] || [], L.set);
-  const arr = lvCourtRead(), slots = arr.map(x => x.v === "" ? "" : snu ? x.v : Number(x.v));
+  const arr = lvCourtRead(), slots = arr.map(x => x.v === "" ? "" : snu ? x.v : lvNormId(x.v));
+  if (!snu && arr.some(x => x.v !== "" && !lvOkId(x.v))) { toast("번호는 숫자, 이름표는 OH1 · Li 처럼 넣어 주세요"); return; }
   const filled = slots.filter(x => x !== "");
   if (filled.length && filled.length < 6) { toast("코트 6자리를 다 넣거나 다 비워 주세요"); return; }
   if (new Set(filled.map(String)).size !== filled.length) { toast("코트에 같은 선수가 두 번 있어요"); return; }
   const roster = { us: [...lvRos(g, "us")], opp: [...lvRos(g, "opp")] };
   if (!snu) {
-    const list = [], add = (no, pos) => { if (isNaN(no) || no < 0 || no > 99) return; const i = list.findIndex(x => x.no === no); if (i >= 0) { if (pos) list[i].pos = pos; } else list.push({ no, pos: pos || "" }); };
-    f.querySelectorAll(".lvr-row").forEach(r => { const n = r.querySelector(".lvr-n").value; if (n !== "") add(Number(n), r.querySelector(".lvr-p").value); });
+    const list = [], add = (raw, pos) => { if (!lvOkId(raw)) return; const no = lvNormId(raw), i = list.findIndex(x => String(x.no) === String(no)); pos = pos || lvTagPos(no); if (i >= 0) { if (pos) list[i].pos = pos; } else list.push({ no, pos: pos || "" }); };
+    f.querySelectorAll(".lvr-row").forEach(r => { const n = r.querySelector(".lvr-n").value.trim(); if (n !== "") add(n, r.querySelector(".lvr-p").value); });
     slots.forEach(n => { if (n !== "") add(n, ""); });
-    { const le = document.getElementById("lvrLib"); if (le && le.value !== "") add(Number(le.value), "L"); }
-    roster[side] = list.sort((a, b) => a.no - b.no);
+    { const le = document.getElementById("lvrLib"); if (le && le.value.trim() !== "") add(le.value.trim(), "L"); }
+    roster[side] = list.sort((a, b) => lvIdSort(String(a.no), String(b.no)));
   }
   const sets = { ...(g.sets || {}) }, st = { ...(sets[L.set] || {}) }, lu = { ...(st.lu || {}) }, rk = side === "us" ? "rot" : "orot";
   const sz = arr.findIndex(x => x.pos === "S") + 1, fresh = !s.list.length;
   if (filled.length && fresh && sz) st[rk] = LV_SROT[sz]; // 세트 처음이면 S 자리로 로테 번호
-  const le = document.getElementById("lvrLib"), lib = !le || le.value === "" ? "" : snu ? le.value : Number(le.value);
+  const le = document.getElementById("lvrLib"), lib = !le || le.value.trim() === "" ? "" : snu ? le.value : lvNormId(le.value);
   if (lib !== "" && filled.some(x => String(x) === String(lib))) { toast("리베로는 코트 6명과 다른 선수로 넣어 주세요"); return; }
   if (filled.length) lu[side] = { rot: fresh && sz ? LV_SROT[sz] : (side === "us" ? s.rot : s.orot), slots, lib }; else delete lu[side];
   st.lu = lu; sets[L.set] = st;
@@ -266,7 +293,7 @@ function lvSave(code, extra) {
   if (point && prev && prev.point === point && prev.side !== side && lvPairOf(prev.kind + ":" + prev.res, code)) point = null;
   // id는 폰에서 만들어 보냄 → 서버 줄과 화면 줄이 같은 id라 실시간으로 온 내 기록을 다시 안 불러옴
   const row = { id: (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : "tmp" + Date.now() + Math.random().toString(36).slice(2, 5), game_id: g.id, set_no: L.set, side, rot: s.rot, serve, kind: x.kind, res: x.res,
-    player_id: lvSnu(g, side) && pk ? pk : null, opp_no: !lvSnu(g, side) && pk != null && pk !== "" ? Number(pk) : null, point, won: point ? point === "us" : null,
+    player_id: lvSnu(g, side) && pk ? pk : null, opp_no: !lvSnu(g, side) && pk != null && pk !== "" && lvIdNum(pk) ? Number(pk) : null, tag: !lvSnu(g, side) && pk != null && pk !== "" && !lvIdNum(pk) ? String(pk) : null, point, won: point ? point === "us" : null,
     atype: x.kind === "atk" ? lvAtCur() : null, shot: x.kind === "atk" ? lvShCur() : null, miss: null, x: null, y: null, zone: null, ...(extra || {}),
     author: uid(), created_at: new Date().toISOString(), _pending: true };
   (L.rallies[g.id] = rs).push(row); const q = { ...row }; delete q._sit; lvQ.list.push(q); lvQSave();
@@ -281,7 +308,7 @@ function lvCourt(dots, big, flip) {
   return `<svg class="lv-c ${big ? "big" : ""}" viewBox="0 0 ${W} ${W}" ${big ? 'id="lvCourtTap"' : ""} role="img" aria-label="코트">${lines}${labs}${pts}</svg>`;
 }
 // 고른 선수 이름
-const lvWhoPick = () => { const L = lv(), g = lvGame(); if (lvSnu(g, L.side)) { const p = playerOf(L.pick); return p ? `${pNo(p)}${esc(p.name)}` : "SNU"; } return `${esc(lvTN(g, L.side))}${L.pick != null && L.pick !== "" ? ` #${L.pick}` : ""}`; };
+const lvWhoPick = () => { const L = lv(), g = lvGame(); if (lvSnu(g, L.side)) { const p = playerOf(L.pick); return p ? `${pNo(p)}${esc(p.name)}` : "SNU"; } return `${esc(lvTN(g, L.side))}${L.pick != null && L.pick !== "" ? ` ${esc(lvShowId(L.pick))}` : ""}`; };
 const lvKb = () => matchMedia("(hover: hover) and (pointer: fine)").matches;
 // 공격 득점 → 종류 · 떨어진 자리 고르기
 function lvSpotSheet(code) {
@@ -318,7 +345,7 @@ function lvSrvSheet() {
 async function lvUndo() {
   const L = lv(), g = lvGame(); if (!g) return;
   const l = (L.rallies[g.id] || []).filter(r => r.set_no === L.set && r.kind), r = l[l.length - 1]; if (!r) return;
-  if (!await confirmDel(`마지막 기록을 지울까요?\n${lvLabel(r).replace(/<[^>]+>/g, "")}`)) return;
+  if (!await confirmDel(`마지막 기록을 지울까요?\n${lvLabel(r).replace(/<[^>]+>/g, "")}`, "네, 지울게요", true)) return;
   const qi = lvQ.list.findIndex(x => x.id === r.id);
   if (qi >= 0) { if (qi === 0 && lvQ.busy) { toast("저장 중이에요. 잠깐 뒤에 다시 눌러 주세요"); return; } lvQ.list.splice(qi, 1); lvQSave(); }
   else { try { ok(await sb.from("live_rallies").delete().eq("id", r.id)); } catch (e) { toast(failMsg(e)); return; } }
@@ -394,10 +421,10 @@ const lvPct = (a, b) => b ? Math.round(100 * a / b) + "%" : "—";
 const lvAvg = l => l.length ? (l.reduce((a, r) => a + Number(r.res), 0) / l.length).toFixed(2) : "—";
 // 팀 하나 선수별 표 (서브 · 리시브 · 공격 · 블로킹 · 디그)
 function lvTeam(rs, side, g) {
-  const snu = lvSnu(g, side), l = rs.filter(r => r.side === side), key = r => snu ? r.player_id || "" : r.opp_no ?? "";
-  const ks = [...new Set(l.map(key))].sort((a, b) => (snu ? ((playerOf(a) || {}).number ?? 999) - ((playerOf(b) || {}).number ?? 999) : (a === "" ? 999 : a) - (b === "" ? 999 : b)));
+  const snu = lvSnu(g, side), l = rs.filter(r => r.side === side), key = r => snu ? r.player_id || "" : lvIdOf(r);
+  const ks = [...new Set(l.map(key))].sort((a, b) => (snu ? ((playerOf(a) || {}).number ?? 999) - ((playerOf(b) || {}).number ?? 999) : a === "" ? 1 : b === "" ? -1 : lvIdSort(a, b)));
   if (!ks.length) return emptyLine("기록이 없어요.");
-  const nm = k => snu ? (playerOf(k) ? `${pNo(playerOf(k))}${esc(playerOf(k).name)}` : "선수 없음") : k === "" ? "번호 없음" : "#" + k + (lvPosOf(g, side, k) ? ` <small>${esc(lvPosOf(g, side, k))}</small>` : "");
+  const nm = k => snu ? (playerOf(k) ? `${pNo(playerOf(k))}${esc(playerOf(k).name)}` : "선수 없음") : k === "" ? "번호 없음" : esc(lvShowId(k)) + (lvPosOf(g, side, k) && !lvTagPos(k) ? ` <small>${esc(lvPosOf(g, side, k))}</small>` : "");
   const d = v => v || "—";
   const row = k => { const m = l.filter(r => key(r) === k), c = (kd, rr) => m.filter(r => r.kind === kd && (!rr || r.res === rr)).length;
     const at = c("atk"), ak = c("atk", "kill"), ae = c("atk", "err") + c("atk", "blk"), rc = m.filter(r => r.kind === "rcv"), dg = c("dig"), fl = c("err");
@@ -466,10 +493,10 @@ function lvPage(x) {
   const nos = lvSnu(g, side) ? null : lvNos(g, side), on6 = lvCourtOn(g, side, cur, L.set), now = on6 && on6.vals;
   const nb = (v, z) => { const on = String(L.pick) === String(v), pos = nos ? lvPosOf(g, side, v) : "", lb = z && on6 && on6.libZ.includes(z) ? " lib" : "";
     if (!nos) { const p = playerOf(v); return `<button type="button" class="lv-n us ${on ? "on" : ""}${lb}" data-act="lvpick" data-v="${esc(v)}">${z ? `<i>${z}</i>` : ""}<b>${esc(p && p.number != null ? p.number : "–")}</b><span>${esc(p ? p.name : "?")}${lb ? " · L" : ""}</span></button>`; }
-    return `<button type="button" class="lv-n ${side} ${on ? "on" : ""}${lb}" data-act="lvpick" data-v="${v}">${z ? `<i>${z}</i>` : ""}<b>${v}</b>${pos ? `<span>${esc(pos)}</span>` : ""}</button>`; };
+    return `<button type="button" class="lv-n ${side} ${on ? "on" : ""}${lb}" data-act="lvpick" data-v="${esc(v)}">${z ? `<i>${z}</i>` : ""}<b>${esc(v)}</b>${pos && !lvTagPos(v) ? `<span>${esc(pos)}</span>` : ""}</button>`; };
   const rosBtn = me ? `<button type="button" class="btn small" data-act="lvros">명단 · 로테</button>` : "";
   const players = now
-    ? `<div class="lv-c6">${[4, 3, 2, 5, 6, 1].map(z => nb(now[z - 1], z)).join("")}</div><div class="lv-ns">${(nos ? nos.filter(n => !now.some(v => Number(v) === n)) : ps.filter(p => !now.includes(p.id)).map(p => p.id)).map(v => nb(v).replace('class="lv-n', 'class="lv-n sub')).join("")}${rosBtn}</div>`
+    ? `<div class="lv-c6">${[4, 3, 2, 5, 6, 1].map(z => nb(now[z - 1], z)).join("")}</div><div class="lv-ns">${(nos ? nos.filter(n => !now.some(v => String(v) === String(n))) : ps.filter(p => !now.includes(p.id)).map(p => p.id)).map(v => nb(v).replace('class="lv-n', 'class="lv-n sub')).join("")}${rosBtn}</div>`
     : !nos
     ? ps.map(p => `<button type="button" class="lv-n us ${L.pick === p.id ? "on" : ""} ${st.has(p.id) ? "" : "sub"}" data-act="lvpick" data-v="${esc(p.id)}"><b>${esc(p.number ?? "–")}</b><span>${esc(p.name)}</span></button>`).join("")
     : nos.map(n => nb(n)).join("");
@@ -513,15 +540,20 @@ async function liveClick(b, act) {
     state.dirty = false; return render(); }
   if (act === "lvnext") return lvSetForm(L.set + 1);
   if (act === "lvside") { L.side = b.dataset.v; L.pick = null; L.atype = null; L.atMore = false; state.dirty = false; return render(); }
-  if (act === "lvpick") { const v = lvSnu(lvGame(), L.side) ? b.dataset.v : Number(b.dataset.v); L.pick = String(L.pick) === String(v) ? null : v; L.atype = null; L.atMore = false; state.dirty = false; return render(); }
+  if (act === "lvpick") { const v = b.dataset.v; L.pick = String(L.pick) === String(v) ? null : v; L.atype = null; L.atMore = false; state.dirty = false; return render(); }
   if (act === "lvros") return lvRosSheet();
   if (act === "lvauto") return lvRosAuto();
+  if (act === "lvrostag") { const l = document.getElementById("lvrList"); if (!l) return; const t = b.dataset.v, used = new Set(Object.keys(lvRosMap())), base = t === "Li" ? "Li" : t;
+    let tag; // OH · MB는 OH1 · OH2 · OH3 …, S · OP · Li는 처음엔 그대로 다음부터 S2 · Li2 …
+    if (t === "OH" || t === "MB") { let n = 1; while (used.has(base + n)) n++; tag = base + n; }
+    else { tag = base; for (let n = 2; used.has(tag); n++) tag = base + n; }
+    l.insertAdjacentHTML("beforeend", lvRosRow({ no: tag, pos: lvTagPos(tag) })); lvRosInfo(); return; }
   if (act === "lvswap") return lvRosSwap(b.dataset.v);
   if (act === "lvturn") return lvRosTurn(Number(b.dataset.d));
   if (act === "lvrosadd") { const l = document.getElementById("lvrList"); if (l) { l.insertAdjacentHTML("beforeend", lvRosRow(null)); const i = l.querySelectorAll(".lvr-n"); i[i.length - 1].focus(); } return; }
   if (act === "lvrosdel") { const r = b.closest(".lvr-row"); if (r) r.remove(); lvRosInfo(); return; }
   if (act === "lvaddno") { const i = document.getElementById("lvAddNo"), n = Number(i && i.value); if (!i || i.value === "" || n < 0 || n > 99) return toast("번호를 넣어 주세요");
-    const g = lvGame(), ps = document.getElementById("lvAddPos"); lvRosAdd(g, L.side, n, ps ? ps.value : ""); L.pick = n; L.atype = null; state.dirty = false; return render(); }
+    const g = lvGame(), ps = document.getElementById("lvAddPos"); lvRosAdd(g, L.side, n, ps ? ps.value : ""); L.pick = String(n); L.atype = null; state.dirty = false; return render(); }
   if (act === "lvcode") return b.dataset.v === "atk:kill" ? lvSpotSheet("atk:kill") : b.dataset.v === "atk:err" ? lvMissSheet() : b.dataset.v === "srv:in" ? lvSrvSheet() : lvSave(b.dataset.v);
   if (act === "lvsrv") return lvSave("srv:" + b.dataset.v);
   if (act === "lvmiss") return lvSave("atk:err", { miss: b.dataset.v });
@@ -552,7 +584,7 @@ document.addEventListener("keydown", ev => {
   if (k === "backspace") { ev.preventDefault(); return lvUndo(); }
   if (/^[0-9]$/.test(k)) { ev.preventDefault(); const now = Date.now(); lvNum.s = now - lvNum.t < 900 && lvNum.s.length < 2 ? lvNum.s + k : k; lvNum.t = now; const n = Number(lvNum.s);
     if (lvSnu(g, L.side)) { const p = sortedPlayers().find(x => x.number === n); if (p) L.pick = p.id; }
-    else { if (!lvNos(g, L.side).includes(n)) lvRosAdd(g, L.side, n, ""); L.pick = n; }
+    else { if (!lvNos(g, L.side).includes(String(n))) lvRosAdd(g, L.side, n, ""); L.pick = String(n); }
     L.atype = null;
     state.dirty = false; return render(); }
   if (LV_SHKEY[k]) { ev.preventDefault(); L.shot = LV_SHKEY[k] === "spike" ? null : LV_SHKEY[k]; L.atkOpen = true; state.dirty = false; return render(); }

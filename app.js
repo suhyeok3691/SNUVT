@@ -89,7 +89,8 @@ const normYear = v => { const t = String(v || "").trim(); return /^[1-9]$/.test(
 const delZone = (attrs, label) => `<div class="del-zone"><button class="btn danger" type="button" ${attrs}>${label}</button></div>`;
 const addDelZone = (attrs, label) => { const b = document.querySelector("#sheet .sheet-body"); if (b) b.insertAdjacentHTML("beforeend", delZone(attrs, label)); };
 // 삭제 확인: 화면 가운데 창 (네 / 아니요)
-function confirmDel(msg, yes = "네, 삭제") {
+// enter: true면 바로 Enter = 네 (되돌리기처럼 자주 쓰는 것)
+function confirmDel(msg, yes = "네, 삭제", enter = false) {
   return new Promise(res => {
     let el = document.getElementById("confirmBox");
     if (!el) { el = document.createElement("div"); el.id = "confirmBox"; el.className = "cf-wrap"; document.body.appendChild(el); }
@@ -97,10 +98,10 @@ function confirmDel(msg, yes = "네, 삭제") {
     el.innerHTML = `<div class="cf-card" role="alertdialog" aria-modal="true" aria-labelledby="cfH"><p id="cfH" class="cf-h">${esc(head)}</p>${rest.length ? `<p class="cf-b small muted">${esc(rest.join(" "))}</p>` : ""}<div class="cf-row"><button type="button" class="btn" data-cf="0">아니요</button><button type="button" class="btn danger-fill" data-cf="1">${esc(yes)}</button></div></div>`;
     el.hidden = false;
     const done = v => { el.hidden = true; el.onclick = null; document.removeEventListener("keydown", key); if (v && state.delFromSheet) closeSheet(); state.delFromSheet = false; res(v); };
-    const key = e => { if (e.key === "Escape") done(false); };
+    const key = e => { if (e.key === "Escape") done(false); else if (enter && e.key === "Enter") { e.preventDefault(); done(true); } };
     document.addEventListener("keydown", key);
     el.onclick = e => { e.stopPropagation(); const b = e.target.closest("[data-cf]"); if (b) done(b.dataset.cf === "1"); };
-    el.querySelector('[data-cf="0"]').focus();
+    el.querySelector(`[data-cf="${enter ? 1 : 0}"]`).focus();
   });
 }
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];

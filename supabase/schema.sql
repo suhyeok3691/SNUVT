@@ -2177,3 +2177,6 @@ alter table public.scout_matches add column if not exists team text check (team 
 
 -- live_realtime (실시간 경기 분석: 다른 사람 기록이 바로 보이게)
 alter publication supabase_realtime add table public.live_rallies, public.live_games;
+
+-- live_rally_tag (번호 대신 이름표: OH1 · Li …)
+alter table public.live_rallies add column if not exists tag text check (tag is null or char_length(tag) between 1 and 8);
