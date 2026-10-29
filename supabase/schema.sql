@@ -2147,3 +2147,8 @@ alter table public.live_rallies add column if not exists zone smallint check (zo
 alter table public.live_rallies add column if not exists opp_no smallint check (opp_no is null or opp_no between 0 and 99);
 alter table public.live_rallies add column if not exists blockers smallint check (blockers is null or blockers between 1 and 3);
 alter table public.live_rallies add column if not exists point text check (point is null or point in ('us','opp'));
+
+-- 실시간 기록 버튼판: 우리·상대 둘 다
+alter table public.live_rallies add column if not exists side text not null default 'us' check (side in ('us','opp'));
+alter table public.live_rallies drop constraint if exists live_rallies_kind_check;
+alter table public.live_rallies add constraint live_rallies_kind_check check (kind is null or kind in ('rcv','atk','blk','srv','dig','set','err','opt','oer'));
