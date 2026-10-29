@@ -3050,7 +3050,7 @@ document.addEventListener("submit", async ev => {
       pain: readPain("sf"),
       note: txt("sf-note"), consent: document.getElementById("sf-consent").checked, number: txt("sf-num"),
     };
-    const phone = txt("sf-phone");
+    const phone = fmtPhone(txt("sf-phone"));
     if (phone && !/^[0-9+ -]{7,20}$/.test(phone)) { toast("전화번호를 확인해 주세요."); return; }
     try {
       if (!info.consent) { toast("동의해야 제출할 수 있어요."); return; }
@@ -3140,7 +3140,7 @@ document.addEventListener("submit", async ev => {
       // 직책 (관리자·주장은 전체 권한) · 연락처
       const titles = [...document.querySelectorAll('input[name="pf-t"]:checked')].map(x => x.value);
       if (titles.slice().sort().join() !== titlesOf(state.players[id]).sort().join()) ok(await sb.rpc("set_member_titles", { target: id, new_titles: titles }));
-      const phone = txt("pf-phone");
+      const phone = fmtPhone(txt("pf-phone"));
       if (phone !== ((state.contacts || {})[id] || "")) ok(await sb.from("player_contacts").upsert({ player_id: id, phone: phone || null, updated_at: new Date().toISOString() }));
       state.editPid = id;
       toast(prevPid ? "저장했어요" : `${name} 선수를 추가했어요`);
@@ -3193,7 +3193,7 @@ document.addEventListener("submit", async ev => {
       ok(await sb.rpc("update_my_injuries", { injuries: readInjuries("mi") }));
       toast("부상 정보를 저장했어요 · 프로그램이 맞춰져요"); state.dirty = false; await loadAll(); return refreshSettings();
     } else if (f.id === "profileForm") {
-      const phone = txt("pr-phone");
+      const phone = fmtPhone(txt("pr-phone"));
       if (phone && !/^[0-9+ -]{7,20}$/.test(phone)) { toast("전화번호를 확인해 주세요."); return; }
       ok(await sb.rpc("update_my_profile", { info: { year: normYear(txt("pr-year")), height: txt("pr-h"), weight: txt("pr-w"), exp: txt("pr-exp"), weight_exp: document.getElementById("pr-wexp").value } }));
       if (phone !== ((state.contacts || {})[state.myPid] || "")) ok(await sb.from("player_contacts").upsert({ player_id: state.myPid, phone: phone || null, updated_at: new Date().toISOString() }));
@@ -3570,7 +3570,7 @@ function buildState(raw) {
     state.viewAs = pickView();
     state.admin = state.viewAs !== "player";
   }
-  state.contacts = Object.fromEntries((raw.player_contacts || []).map(r => [r.player_id, r.phone || ""]));
+  state.contacts = Object.fromEntries((raw.player_contacts || []).map(r => [r.player_id, fmtPhone(r.phone || "")]));
   for (const r of raw.player_private || []) if (state.players[r.player_id]) Object.assign(state.players[r.player_id], { height: r.height == null ? null : Number(r.height), weight: r.weight == null ? null : Number(r.weight) });
   state.videos = (raw.videos || []).map(r => ({ id: r.id, kind: r.kind, cat: r.category, title: r.title, yt: r.yt, date: r.date, note: r.note || "" }));
   state.notes = (raw.training_notes || []).map(r => ({ id: r.id, pid: r.player_id, date: r.date, good: r.good || "", fix: r.fix || "", next: r.next || "", body: r.body || "", shared: !!r.shared }));
