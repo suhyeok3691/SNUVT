@@ -402,7 +402,7 @@ function lvSave(code, extra) {
   (L.rallies[g.id] = rs).push(row); const q = { ...row }; delete q._sit; lvQ.list.push(q); lvQSave();
   L.pick = null; L.atype = null; L.shot = null; L.atkOpen = false; L.atMore = false; L.spot = null; closeSheet(); state.dirty = false; render(); lvFlush();
 }
-// 코트 그림 (지키는 팀 코트). x·y는 지키는 팀 기준(네트 쪽 y=0). flip = SNU 쪽에서 상대 코트를 봄(네트가 아래, 180° 돌림). dots = [{x,y,c}]
+// 코트 그림 (지키는 팀 코트). x·y는 지키는 팀 기준(네트 쪽 y=0). flip = 공격한 팀 쪽에서 봄(네트가 아래, 180° 돌림) — 득점 자리는 늘 이렇게. dots = [{x,y,c}]
 function lvCourt(dots, big, flip) {
   const W = 300, ny = flip ? W - 1 : 1, ay = flip ? 200 : 100, lines = `<rect x="1" y="1" width="${W - 2}" height="${W - 2}" class="lv-c-bd"/><line x1="0" y1="${ny}" x2="${W}" y2="${ny}" class="lv-c-net"/><line x1="0" y1="${ay}" x2="${W}" y2="${ay}" class="lv-c-al"/>
     <line x1="100" y1="0" x2="100" y2="${W}" class="lv-c-g"/><line x1="200" y1="0" x2="200" y2="${W}" class="lv-c-g"/><line x1="0" y1="200" x2="${W}" y2="200" class="lv-c-g"/>`;
@@ -421,11 +421,11 @@ function lvSpotSheet(code) {
     <div class="sc-row lv-at2">${lvAtChips("lvatype2", kb)}</div>
     <div class="sc-row">${lvShChips("lvshot2", kb)}</div>
     <p class="small muted">${esc(lvTN(g, lvOther(side)))} 코트</p>
-    <div class="lv-cwrap">${lvCourt([], true, side === "us")}</div>
+    <div class="lv-cwrap">${lvCourt([], true, true)}</div>
     <div class="row"><button type="button" class="btn link small" data-act="lvnospot">코스 모름</button></div>`;
   el.hidden = false; document.body.classList.add("noscroll");
   const svg = document.getElementById("lvCourtTap");
-  svg.addEventListener("click", e => { const r = svg.getBoundingClientRect(), fx = Math.max(0, Math.min(100, Math.round((e.clientX - r.left) / r.width * 100))), fy = Math.max(0, Math.min(100, Math.round((e.clientY - r.top) / r.height * 100))), x = side === "us" ? 100 - fx : fx, y = side === "us" ? 100 - fy : fy;
+  svg.addEventListener("click", e => { const r = svg.getBoundingClientRect(), fx = Math.max(0, Math.min(100, Math.round((e.clientX - r.left) / r.width * 100))), fy = Math.max(0, Math.min(100, Math.round((e.clientY - r.top) / r.height * 100))), x = 100 - fx, y = 100 - fy; // 늘 공격한 팀 쪽에서 봄 (네트가 아래)
     lvSave(code, { x, y, zone: lvZone(x, y) }); });
 }
 // 공격 범실 → 공격 미스 / 토스 미스
@@ -562,7 +562,7 @@ function lvAtk(rs, g) {
     const kills = a.filter(r => r.res === "kill" && r.x != null), zc = {}; for (const r of kills) zc[r.zone] = (zc[r.zone] || 0) + 1;
     const ft = a.filter(r => r.shot === "tip"), ftk = ft.filter(r => r.res === "kill").length;
     return `<div class="col"><h4>${esc(lvTN(g, side))} 공격</h4>${rows ? `<div class="tw"><table class="lv-t"><thead><tr><th>종류</th><th>시도 <small>분배</small></th><th>득점</th><th>범실·막힘</th><th>효율</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}
-      ${kills.length ? `<p class="small muted">득점 자리 · ${esc(lvTN(g, lvOther(side)))} 코트${kills.some(r => r.shot === "tip") ? ` · ○ 팁` : ""}</p><div class="lv-cwrap sm">${lvCourt(kills.map(r => ({ x: r.x, y: r.y, c: "g" + (LV_ATG[r.atype] || "E") + (r.shot === "tip" ? " tip" : "") })), false, side === "us")}</div>
+      ${kills.length ? `<p class="small muted">득점 자리 · ${esc(lvTN(g, lvOther(side)))} 코트${kills.some(r => r.shot === "tip") ? ` · ○ 팁` : ""}</p><div class="lv-cwrap sm">${lvCourt(kills.map(r => ({ x: r.x, y: r.y, c: "g" + (LV_ATG[r.atype] || "E") + (r.shot === "tip" ? " tip" : "") })), false, true)}</div>
         <p class="small">${Object.entries(zc).sort((a, b) => b[1] - a[1]).map(([z, n]) => `${z}구역 ${n}`).join(" · ")}</p>` : ""}${ft.length ? `<p class="small">팁 ${ft.length} · 득점 ${ftk}</p>` : ""}${a.some(r => r.miss === "set") ? `<p class="small">범실 중 토스 미스 ${a.filter(r => r.miss === "set").length}</p>` : ""}</div>`; };
   const u = team("us"), o = team("opp");
   return u || o ? `<div class="cols lv-two">${u}${o}</div><p class="small muted lv-leg">${LV_GRP.map(([k, l]) => `<i class="lv-dot-k g${k}"></i>${l}`).join(" ")}</p>` : "";
