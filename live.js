@@ -211,7 +211,7 @@ async function lvLoadRallies(gid, quiet) {
   const L = lv();
   try {
     const r = await sb.from("live_rallies").select("*").eq("game_id", gid).order("created_at"); if (r.error) throw r.error;
-    const pend = (L.rallies[gid] || []).filter(x => x._pending);
+    const ids = new Set((r.data || []).map(x => x.id)), pend = (L.rallies[gid] || []).filter(x => x._pending && !ids.has(x.id));
     L.rallies[gid] = [...(r.data || []), ...pend];
   } catch (e) { L.rallies[gid] = L.rallies[gid] || []; }
   if (!quiet || lvView() && L.open === gid && document.getElementById("sheet").hidden) { state.dirty = false; render(); }
@@ -221,9 +221,9 @@ const lvRt = { ch: null, gid: null, ok: false, t: null, last: 0 };
 function lvSub(gid) {
   if (lvRt.gid === gid || !sb || !sb.channel) return;
   lvUnsub(); lvRt.gid = gid;
-  const kick = () => { clearTimeout(lvRt.t); lvRt.t = setTimeout(() => { const L = lv(); if (L.open === gid && !lvQ.busy) { lvRt.last = Date.now(); lvLoadRallies(gid, true); } }, 200); };
+  const kick = () => { clearTimeout(lvRt.t); lvRt.t = setTimeout(() => { const L = lv(); if (L.open === gid) { lvRt.last = Date.now(); lvLoadRallies(gid, true); } }, 200); };
   lvRt.ch = sb.channel("lv-" + gid)
-    .on("postgres_changes", { event: "INSERT", schema: "public", table: "live_rallies", filter: `game_id=eq.${gid}` }, p => { const l = lv().rallies[gid]; if (p.new && p.new.author !== uid() && !(l || []).some(x => x.id === p.new.id)) kick(); })
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "live_rallies", filter: `game_id=eq.${gid}` }, p => { const l = lv().rallies[gid]; if (p.new && !(l || []).some(x => x.id === p.new.id)) kick(); })
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "live_rallies" }, p => { const l = lv().rallies[gid]; if (p.old && (l || []).some(x => x.id === p.old.id)) kick(); })
     .on("postgres_changes", { event: "UPDATE", schema: "public", table: "live_games", filter: `id=eq.${gid}` }, p => { const g = lvGame(); if (g && g.id === gid && p.new) { Object.assign(g, { sets: p.new.sets, roster: p.new.roster, team: p.new.team, opponent: p.new.opponent, label: p.new.label }); if (document.getElementById("sheet").hidden && lvView()) { state.dirty = false; render(); } } })
     .subscribe(st => { lvRt.ok = st === "SUBSCRIBED"; if (lvRt.ok) kick(); });
@@ -243,8 +243,9 @@ async function lvFlush() {
   lvQ.busy = true;
   try {
     while (lvQ.list.length) {
-      const it = lvQ.list[0], row = { ...it }; delete row.id; delete row._pending; delete row.created_at;
-      const r = await sb.from("live_rallies").insert(row).select("id,created_at").maybeSingle();
+      const it = lvQ.list[0], row = { ...it }; if (String(row.id).startsWith("tmp")) delete row.id; delete row._pending; delete row.created_at;
+      let r = await sb.from("live_rallies").insert(row).select("id,created_at").maybeSingle();
+      if (r.error && r.error.code === "23505" && row.id) r = { data: { id: row.id, created_at: it.created_at }, error: null }; // 끊겼다 다시 보낸 것: 이미 들어가 있음
       if (r.error) { if (!r.error.code || /fetch|network|JWT/i.test(r.error.message || "")) { setTimeout(lvFlush, 4000); break; } toast(failMsg(r.error)); }
       const l = lv().rallies[it.game_id] || [], loc = l.find(x => x.id === it.id);
       if (loc) { if (r.error) lv().rallies[it.game_id] = l.filter(x => x !== loc); else { loc.id = r.data.id; loc.created_at = r.data.created_at; delete loc._pending; } }
@@ -263,7 +264,8 @@ function lvSave(code, extra) {
   // 바로 앞 점수 기록이 같은 랠리의 짝이면(상대 팀 쪽에서 같은 끝을 누름) 점수는 한 번만
   const prev = s.list[s.list.length - 1];
   if (point && prev && prev.point === point && prev.side !== side && lvPairOf(prev.kind + ":" + prev.res, code)) point = null;
-  const row = { id: "tmp" + Date.now() + Math.random().toString(36).slice(2, 5), game_id: g.id, set_no: L.set, side, rot: s.rot, serve, kind: x.kind, res: x.res,
+  // id는 폰에서 만들어 보냄 → 서버 줄과 화면 줄이 같은 id라 실시간으로 온 내 기록을 다시 안 불러옴
+  const row = { id: (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : "tmp" + Date.now() + Math.random().toString(36).slice(2, 5), game_id: g.id, set_no: L.set, side, rot: s.rot, serve, kind: x.kind, res: x.res,
     player_id: lvSnu(g, side) && pk ? pk : null, opp_no: !lvSnu(g, side) && pk != null && pk !== "" ? Number(pk) : null, point, won: point ? point === "us" : null,
     atype: x.kind === "atk" ? lvAtCur() : null, shot: x.kind === "atk" ? lvShCur() : null, miss: null, x: null, y: null, zone: null, ...(extra || {}),
     author: uid(), created_at: new Date().toISOString(), _pending: true };
