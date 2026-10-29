@@ -41,6 +41,9 @@ const lvAtChips = (act, kb) => { const { ks, more } = lvAtVis(), cur = lvAtCur()
 const lvShChips = (act, kb) => LV_SHOT.map(([k, l, key]) => `<button type="button" class="chip sc-chip ${lvShCur() === k ? "on" : ""}" data-act="${act}" data-v="${k}">${l}${kb ? `<kbd>${key}</kbd>` : ""}</button>`).join("");
 const LV_RES = {}; for (const [k, l, rs] of LV_BOARD) for (const r of rs) LV_RES[k + ":" + r[0]] = { kind: k, kname: l, res: r[0], name: r[1], key: r[2], cls: r[3], pt: r[4] || null };
 const LV_KEYS = Object.fromEntries(Object.values(LV_RES).map(x => [x.key, x]));
+// 서브 들어감 → 점수 3 · 2 · 1 (예전 프로그램 3/2/1-serve), 안 고르면 그냥 들어감
+const LV_SRV = [["s3", "3", "좋음"], ["s2", "2", "보통"], ["s1", "1", "약함"]];
+for (const [k, l] of LV_SRV) LV_RES["srv:" + k] = { kind: "srv", kname: "서브", res: k, name: "들어감 " + l, key: "", cls: "ok", pt: null };
 const lvOther = s => s === "us" ? "opp" : "us";
 // 두 팀에서 같은 랠리 끝을 같이 눌렀을 때 (점수 한 번만)
 const LV_PAIR = [["atk:kill", "dig:err"], ["atk:blk", "blk:pt"], ["srv:ace", "rcv:0"]];
@@ -147,8 +150,23 @@ async function lvLoadRallies(gid, quiet) {
   } catch (e) { L.rallies[gid] = L.rallies[gid] || []; }
   if (!quiet || lvView() && L.open === gid && document.getElementById("sheet").hidden) { state.dirty = false; render(); }
 }
-// 보는 사람도 바로 보이게: 경기를 열어 두면 몇 초마다 새로 불러옴
-setInterval(() => { const L = state.live; if (!L || !L.open || document.visibilityState !== "visible" || !lvView() || lvQ.busy) return; lvLoadRallies(L.open, true); }, 6000);
+// 보는 사람도 바로 보이게: 경기를 열어 두면 Supabase Realtime으로 다른 사람 기록이 오자마자 다시 불러옴 (안 되면 6초마다)
+const lvRt = { ch: null, gid: null, ok: false, t: null, last: 0 };
+function lvSub(gid) {
+  if (lvRt.gid === gid || !sb || !sb.channel) return;
+  lvUnsub(); lvRt.gid = gid;
+  const kick = () => { clearTimeout(lvRt.t); lvRt.t = setTimeout(() => { const L = lv(); if (L.open === gid && !lvQ.busy) { lvRt.last = Date.now(); lvLoadRallies(gid, true); } }, 200); };
+  lvRt.ch = sb.channel("lv-" + gid)
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "live_rallies", filter: `game_id=eq.${gid}` }, p => { const l = lv().rallies[gid]; if (p.new && p.new.author !== uid() && !(l || []).some(x => x.id === p.new.id)) kick(); })
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "live_rallies" }, p => { const l = lv().rallies[gid]; if (p.old && (l || []).some(x => x.id === p.old.id)) kick(); })
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "live_games", filter: `id=eq.${gid}` }, p => { const g = lvGame(); if (g && g.id === gid && p.new) { Object.assign(g, { sets: p.new.sets, roster: p.new.roster, team: p.new.team, opponent: p.new.opponent, label: p.new.label }); if (document.getElementById("sheet").hidden && lvView()) { state.dirty = false; render(); } } })
+    .subscribe(st => { lvRt.ok = st === "SUBSCRIBED"; if (lvRt.ok) kick(); });
+}
+function lvUnsub() { if (lvRt.ch) { try { sb.removeChannel(lvRt.ch); } catch (e) {} } lvRt.ch = null; lvRt.gid = null; lvRt.ok = false; }
+setInterval(() => { const L = state.live; if (!L || !L.open || !lvView()) { if (lvRt.ch) lvUnsub(); return; }
+  if (document.visibilityState !== "visible" || lvQ.busy) return;
+  if (lvRt.ok && Date.now() - lvRt.last < 30000) return; // 실시간이 붙어 있으면 30초마다만 맞춰 봄
+  lvRt.last = Date.now(); lvLoadRallies(L.open, true); }, 6000);
 /* 저장: 화면에 먼저, 서버엔 차례대로 (끊기면 폰에 남겨 뒀다가 다시) */
 const lvQ = { list: [], busy: false };
 try { lvQ.list = JSON.parse(localStorage.getItem("snuvt-lvq") || "[]") || []; } catch (e) { lvQ.list = []; }
@@ -218,6 +236,15 @@ function lvMissSheet() {
   L.spot = { code: "atk:err", miss: true };
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${lvWhoPick()} 공격 범실</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <div class="lv-miss">${[["atk", "공격 미스", "1"], ["set", "토스 미스", "2"]].map(([v, l, key]) => `<button type="button" class="btn lv-b bad" data-act="lvmiss" data-v="${v}">${l}${kb ? `<kbd>${key}</kbd>` : ""}</button>`).join("")}</div>`;
+  el.hidden = false; document.body.classList.add("noscroll");
+}
+// 서브 들어감 → 점수
+function lvSrvSheet() {
+  const L = lv(), el = document.getElementById("sheet"), kb = lvKb();
+  L.spot = { code: "srv:in", srv: true };
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${lvWhoPick()} 서브 들어감</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <div class="lv-miss lv-srv">${LV_SRV.map(([k, l, d]) => `<button type="button" class="btn lv-b ${k === "s3" ? "best" : k === "s2" ? "good" : "ok"}" data-act="lvsrv" data-v="${k}"><b>${l}</b> <small>${d}</small>${kb ? `<kbd>${l}</kbd>` : ""}</button>`).join("")}</div>
+    <div class="row"><button type="button" class="btn link small" data-act="lvsrv" data-v="in">점수 없이${kb ? " <kbd>0</kbd>" : ""}</button></div>`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
 async function lvUndo() {
@@ -355,6 +382,7 @@ function lvStats(rs, g) {
 function lvPage(x) {
   const L = lv(), g = lvGame();
   if (!g) { L.open = null; return ""; }
+  lvSub(g.id);
   if (!L.rallies[g.id]) { lvLoadRallies(g.id); return loaderHtml(); }
   const rs = L.rallies[g.id], sets = [1, 2, 3, 4, 5].map(n => ({ n, s: lvState(g, rs, n) })), cur = sets[L.set - 1].s, end = lvEnd(cur, L.set);
   const won = sets.filter(({ n, s }) => lvEnd(s, n) === "us").length, lost = sets.filter(({ n, s }) => lvEnd(s, n) === "opp").length;
@@ -423,7 +451,8 @@ async function liveClick(b, act) {
   if (act === "lvrosdel") { const r = b.closest(".lvr-row"); if (r) r.remove(); return; }
   if (act === "lvaddno") { const i = document.getElementById("lvAddNo"), n = Number(i && i.value); if (!i || i.value === "" || n < 0 || n > 99) return toast("번호를 넣어 주세요");
     const g = lvGame(), ps = document.getElementById("lvAddPos"); lvRosAdd(g, L.side, n, ps ? ps.value : ""); L.pick = n; L.atype = null; state.dirty = false; return render(); }
-  if (act === "lvcode") return b.dataset.v === "atk:kill" ? lvSpotSheet("atk:kill") : b.dataset.v === "atk:err" ? lvMissSheet() : lvSave(b.dataset.v);
+  if (act === "lvcode") return b.dataset.v === "atk:kill" ? lvSpotSheet("atk:kill") : b.dataset.v === "atk:err" ? lvMissSheet() : b.dataset.v === "srv:in" ? lvSrvSheet() : lvSave(b.dataset.v);
+  if (act === "lvsrv") return lvSave("srv:" + b.dataset.v);
   if (act === "lvmiss") return lvSave("atk:err", { miss: b.dataset.v });
   if (act === "lvatmore") { L.atMore = true; if (L.spot && !document.getElementById("sheet").hidden) return lvSpotSheet(L.spot.code); state.dirty = false; return render(); }
   if (act === "lvatkopen") { const o = !(L.atkOpen || L.atype || L.shot); L.atkOpen = o; if (!o) { L.atype = null; L.shot = null; } state.dirty = false; return render(); }
@@ -440,6 +469,7 @@ document.addEventListener("keydown", ev => {
   const t = ev.target; if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
   const sh = document.getElementById("sheet"), k = ev.key.toLowerCase();
   if (sh && !sh.hidden) { // 득점 자리 창: 숫자 1~9 = 그 구역 가운데, 0 = 코스 모름
+    if (L.spot && L.spot.srv) { if (/^[0-3]$/.test(k)) { ev.preventDefault(); return lvSave(k === "0" ? "srv:in" : "srv:s" + k); } return; }
     if (L.spot && L.spot.miss) { if (k === "1" || k === "2") { ev.preventDefault(); return lvSave("atk:err", { miss: k === "1" ? "atk" : "set" }); } return; }
     if (L.spot && /^[0-9]$/.test(k)) { ev.preventDefault(); if (k === "0") return lvSave(L.spot.code); const z = Number(k), ri = LV_ZROWS.findIndex(r => r.includes(z)), ci = LV_ZROWS[ri].indexOf(z); return lvSave(L.spot.code, { x: ci * 33 + 17, y: ri * 33 + 17, zone: z }); }
     if (L.spot && LV_SHKEY[k]) { ev.preventDefault(); L.shot = LV_SHKEY[k] === "spike" ? null : LV_SHKEY[k]; return lvSpotSheet(L.spot.code); }
@@ -457,5 +487,5 @@ document.addEventListener("keydown", ev => {
   if (LV_SHKEY[k]) { ev.preventDefault(); L.shot = LV_SHKEY[k] === "spike" ? null : LV_SHKEY[k]; L.atkOpen = true; state.dirty = false; return render(); }
   const ai = LV_ATKEYS.indexOf(k), av = ai >= 0 ? lvAtVis().ks[ai] : null;
   if (av) { ev.preventDefault(); L.atype = av === (lvAtList() || [])[0] ? null : av; L.atkOpen = true; state.dirty = false; return render(); }
-  const x = LV_KEYS[k]; if (x) { ev.preventDefault(); const c = x.kind + ":" + x.res; return c === "atk:kill" ? lvSpotSheet(c) : c === "atk:err" ? lvMissSheet() : lvSave(c); }
+  const x = LV_KEYS[k]; if (x) { ev.preventDefault(); const c = x.kind + ":" + x.res; return c === "atk:kill" ? lvSpotSheet(c) : c === "atk:err" ? lvMissSheet() : c === "srv:in" ? lvSrvSheet() : lvSave(c); }
 });

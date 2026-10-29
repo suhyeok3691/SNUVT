@@ -2174,3 +2174,6 @@ alter table public.live_games add constraint live_games_ref_kind_check check (re
 alter table public.live_games add column if not exists team text check (team is null or char_length(team) between 1 and 60);
 alter table public.live_games add column if not exists roster jsonb not null default '{}'::jsonb;
 alter table public.scout_matches add column if not exists team text check (team is null or char_length(team) between 1 and 60);
+
+-- live_realtime (실시간 경기 분석: 다른 사람 기록이 바로 보이게)
+alter publication supabase_realtime add table public.live_rallies, public.live_games;
