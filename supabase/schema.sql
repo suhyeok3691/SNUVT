@@ -2152,3 +2152,10 @@ alter table public.live_rallies add column if not exists point text check (point
 alter table public.live_rallies add column if not exists side text not null default 'us' check (side in ('us','opp'));
 alter table public.live_rallies drop constraint if exists live_rallies_kind_check;
 alter table public.live_rallies add constraint live_rallies_kind_check check (kind is null or kind in ('rcv','atk','blk','srv','dig','set','err','opt','oer'));
+
+-- 실시간 기록: 공격 종류 · 떨어진 자리
+alter table public.live_rallies add column if not exists atype text check (atype is null or atype in ('w4','o2','q3','pipe','etc'));
+alter table public.live_rallies add column if not exists x smallint check (x is null or x between 0 and 100);
+alter table public.live_rallies add column if not exists y smallint check (y is null or y between 0 and 100);
+alter table public.live_rallies drop constraint if exists live_rallies_zone_check;
+alter table public.live_rallies add constraint live_rallies_zone_check check (zone is null or zone between 1 and 9);
