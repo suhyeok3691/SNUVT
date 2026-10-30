@@ -2211,3 +2211,8 @@ alter table public.live_rallies add constraint live_rallies_kind_check check (ki
 
 -- live_mode (전체 기록 / 라이트)
 alter table public.live_games add column if not exists mode text not null default 'full' check (mode in ('full','lite'));
+
+-- live_video_mode (영상 분석 방식 · 서브 종류)
+alter table public.live_games drop constraint if exists live_games_mode_check;
+alter table public.live_games add constraint live_games_mode_check check (mode in ('full','lite','video'));
+alter table public.live_rallies add column if not exists stype text check (stype is null or stype in ('fl','jf','js','un'));
