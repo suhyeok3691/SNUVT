@@ -2208,3 +2208,6 @@ alter table public.live_rallies add column if not exists two boolean;
 -- live_cover_kind (막힌 공 커버한 사람)
 alter table public.live_rallies drop constraint if exists live_rallies_kind_check;
 alter table public.live_rallies add constraint live_rallies_kind_check check (kind is null or kind in ('rcv','atk','blk','srv','dig','set','err','opt','oer','cat','ovr','cov'));
+
+-- live_mode (전체 기록 / 라이트)
+alter table public.live_games add column if not exists mode text not null default 'full' check (mode in ('full','lite'));
