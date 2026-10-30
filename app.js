@@ -837,7 +837,10 @@ function jpSchoolPage(s) {
   if (olds.length) groups.push(["old", olds]);
   // 대회를 하나 골라서: 전국 본선(결승 → 1회전) → 현 예선 순
   const sel = groups.some(([k]) => k === J.stourn) ? J.stourn : (groups[0] || [])[0];
-  const cur = groups.find(([k]) => k === sel), curL = cur ? cur[1] : [];
+  const cur = groups.find(([k]) => k === sel), allL = cur ? cur[1] : [];
+  // 연도 고르기 (그 대회 영상에 있는 연도만)
+  const years = [...new Set(allL.map(v => v.year).filter(Boolean))].sort((a, b) => b - a);
+  const yr = years.includes(J.syear) ? J.syear : null, curL = yr ? allL.filter(v => v.year === yr) : allL;
   const nat = ["haruko", "ih", "kokutai"].includes(sel);
   const secs = sel === "old" || !nat && !["kokutai", "sakura", "block"].includes(sel) ? [["", curL]] : jpRoundSections(curL, nat, sel);
   const q = s.name_ja.replace(/高校$/, "");
@@ -855,6 +858,7 @@ function jpSchoolPage(s) {
     ${jpPlayersHtml(s)}
     ${visit.length ? `<section class="sec"><h3>학교 탐방 <span class="small muted">${visit.length}</span></h3>${jpList(visit)}</section>` : ""}
     ${groups.length ? `<div class="sc-row jp-regs">${groups.map(([k, x]) => `<button type="button" class="chip sc-chip ${k === sel ? "on" : ""}" data-act="jpstourn" data-v="${k || ""}">${k === "old" ? `그 외 (${JP_RECENT - 1}년 이전)` : k ? JP_TOURN[k] : "기타"} <span class="small">${jpGroups(x).length}</span></button>`).join("")}</div>
+      ${years.length > 1 ? `<div class="sc-row jp-years">${[[null, "전체"], ...years.map(y => [y, y + "년"])].map(([y, l2]) => `<button type="button" class="chip sc-chip ${y === yr ? "on" : ""}" data-act="jpsyear" data-v="${y || ""}">${l2}${y ? ` <span class="small">${jpGroups(allL.filter(v => v.year === y)).length}</span>` : ""}</button>`).join("")}</div>` : ""}
       ${secs.map(([lab, x]) => `<section class="sec">${lab ? `<h3>${lab} <span class="small muted">${jpGroups(x).length}</span></h3>` : ""}${jpList(x)}</section>`).join("")}` : ""}
     ${!l.length ? emptyLine("모아 둔 영상이 없어요. 아래에서 유튜브를 찾아보세요.") : ""}
     ${jpSearchBox(`${q} バレー`, [["", "전체"], ["春高", "하루코"], ["インターハイ", "인터하이"], ["練習", "연습"]])}</section>`;
@@ -2876,8 +2880,9 @@ document.addEventListener("click", async ev => {
     else if (act === "jpreg") { J.reg = v === "" ? null : Number(v); J.pref = null; }
     else if (act === "jppref") J.pref = v;
     else if (act === "jprankmore") J.rankMore = true;
-    else if (act === "jpstourn") J.stourn = v || null;
-    else if (act === "jpschool") { if (!J.school) pushInner(); J.school = b.dataset.id; J.open = null; J.stourn = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
+    else if (act === "jpstourn") { J.stourn = v || null; J.syear = null; }
+    else if (act === "jpsyear") J.syear = v ? Number(v) : null;
+    else if (act === "jpschool") { if (!J.school) pushInner(); J.school = b.dataset.id; J.open = null; J.stourn = null; J.syear = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
     else if (act === "jpback") { if (history.state && history.state.inner) return history.back(); J.school = null; J.open = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
     else if (act === "jptourn") { J.tourn = v; J.year = 0; }
     else if (act === "jprg") { J.rg = v === "" ? null : Number(v); J.year = 0; }
