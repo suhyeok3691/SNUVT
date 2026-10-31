@@ -669,7 +669,9 @@ const jpMeta = v => [v.tourn && JP_TOURN[v.tourn] ? JP_TOURN[v.tourn] + (v.year 
 const JP_PART = [/[\(（]?\s*第?\s*[0-9一二三四五]+(?:\s*[・,，.･•~～\-－と&]\s*[0-9一二三四五]+)*\s*セット(?:目)?(?:のみ|まで)?\s*[\)）]?/g, /(?:最終|ファイナル|ゴールデン)セット/g, /【?\s*(?:前編|中編|後編)\s*】?/g, /(?:その|Part\.?|part\.?|PART)\s*[0-9]+/g, /途中から~?|【?ノーカット版?】?|フル(?:バージョン)?/g];
 function jpPartOf(title) {
   // 「洛南①…⑤」처럼 동그라미 숫자로 나눈 영상은 세트로 (NFKC 가 ①을 1로 바꾸기 전에)
-  let t = String(title || "").replace(/[①②③④⑤⑥⑦⑧⑨]/g, c => ` 第${"①②③④⑤⑥⑦⑧⑨".indexOf(c) + 1}セット `).normalize("NFKC").split(/[｜|]/)[0], lab = [];
+  let t = String(title || "").replace(/[①②③④⑤⑥⑦⑧⑨]/g, c => ` 第${"①②③④⑤⑥⑦⑧⑨".indexOf(c) + 1}セット `).normalize("NFKC"), lab = [];
+  // 「｜」 뒤는 보통 선수 이름이라 빼지만, 「第1セット｜金蘭会 - 就実…」처럼 앞이 세트 표시뿐이면 뒤까지 씀
+  { const sg = t.split(/[｜|]/); t = sg.length > 1 && /^\s*(第?\s*[0-9一二三四五]+\s*セット目?|[0-9]+(st|nd|rd|th)?\s*set|フル|ノーカット)\s*$/i.test(sg[0]) ? sg[0] + " " + sg.slice(1).join(" ") : sg[0]; }
   for (const re of JP_PART) t = t.replace(re, m => { lab.push(m); return " "; });
   const key = t.replace(/[()（）【】\[\]]\s*[()（）【】\[\]]/g, "").replace(/\s+/g, "").trim();
   let label = lab.join(" ").replace(/[()（）【】]/g, "").trim();

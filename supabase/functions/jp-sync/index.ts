@@ -70,9 +70,11 @@ const idsOf = (name: string) => { const n = norm(name); return schools.filter((s
 const rawOf = (name: string) => norm(name).replace(/(高等学校|高校)$/, "");
 const norm = (s: string) => s.normalize("NFKC").replace(/\s+/g, "");
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// 제목 본문: 「｜」 뒤는 보통 선수 이름이라 빼지만, 「第1セット｜金蘭会 - 就実《決勝》…」처럼 앞이 세트 표시뿐이면 뒤를 씀
+const mainOf = (title: string) => { const sg = title.split(/[｜|]/); return sg.length > 1 && /^\s*(第?\s*[0-9０-９一二三四五]+\s*セット目?|[0-9]+(st|nd|rd|th)?\s*set|フル|ノーカット)\s*$/i.test(sg[0]) ? sg.slice(1).join(" ") : sg[0]; };
 function tag(title: string) {
   const t = norm(title);
-  const body = norm(title.split(/[｜|]/)[0].replace(/#[^\s#]+/g, " "));
+  const body = norm(mainOf(title).replace(/#[^\s#]+/g, " "));
   let tourn: string | null = null;
   // 학교 탐방(잠입·밀착·연습 풍경)은 대회 영상이 아님: 「연습·탐방」으로
   const visit = VISIT.test(t);
@@ -124,7 +126,7 @@ function tag(title: string) {
   if (year && year > new Date().getFullYear() + (tourn === "haruko" ? 1 : 0)) year = null;
   let gender: string | null = /女子|女バレ|ガールズ/.test(t) ? "w" : /男子|男バレ/.test(t) ? "m" : null;
   // 학교 이름은 띄어쓰기·「対」를 구분자(・)로 바꾼 제목에서 찾음: 「代表決定戦 相馬 対 郡山北工業」처럼 앞뒤가 한자여도 별칭 경계(앞이 한자가 아님)가 맞게
-  const bodyS = title.split(/[｜|]/)[0].replace(/#[^\s#]+/g, " ").normalize("NFKC").trim().replace(/\s+/g, "・").replace(/対/g, "・対・");
+  const bodyS = mainOf(title).replace(/#[^\s#]+/g, " ").normalize("NFKC").trim().replace(/\s+/g, "・").replace(/対/g, "・対・");
   const hits: { id: string; a: number; b: number }[] = [];
   for (const s of schools) for (const re of s.res) { re.lastIndex = 0; let m; while ((m = re.exec(bodyS))) { hits.push({ id: s.id, a: m.index, b: m.index + m[0].length }); if (!m[0].length) break; } }
   const keep = hits.filter((h) => !hits.some((o) => o.id !== h.id && o.a <= h.a && o.b >= h.b && (o.b - o.a) > (h.b - h.a)));
