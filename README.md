@@ -25,19 +25,26 @@
 
 ## 2. 파일
 
-| 파일 | 역할 |
+```
+index.html              화면 틀과 디자인(CSS). 스크립트 주소의 ?v= 가 캐시 번호
+sw.js                   휴대폰 앱 설치 · 오프라인 · 알림 (앱 전체를 맡으려면 맨 위에 있어야 함)
+manifest.webmanifest    앱 이름 · 아이콘
+js/                     화면 동작 스크립트
+img/                    로고 · 아이콘
+supabase/schema.sql     DB 전체 정의 (표·함수·정책·트리거·예약 작업)
+supabase/functions/*    서버 함수 (아래 5절)
+```
+
+| `js/` 파일 | 역할 |
 | --- | --- |
-| `index.html` | 화면 틀과 디자인(CSS). 스크립트 주소의 `?v=`가 캐시 번호 |
 | `app.js` | 화면 동작 전부: 로그인·데이터 불러오기·각 화면·저장 |
 | `program.js` | 피지컬 프로그램 엔진: 1년 일정 → 날마다 운동. 포지션·근력·부상·통증 규칙, 팀별 요일(`TEAM`) |
 | `live.js` | 대회 실시간 기록 (랠리 결과 → 사이드아웃·브레이크·득실 구성·로테별·리시브별·선수별) |
+| `court.js` | 전력분석: 영상 분석 기록 · 엑셀 내보내기 (6-2절) |
 | `library.js` | 운동 박스 목록 · 훈련 드릴 목록(`DRILL_LIB`: 이름 · 일본 이름 · 분 · 방법 · 포인트 · 출처, 일본 고교·중학 지도 자료에서 모음) · 훈련 계획 기본 틀(볼 체조 → 대인(제한 시간 대인 리시브) → 시트 리시브 → 포지션별 → 서브·리시브 → 게임형(3대3·5대5) → 미팅) |
 | `guide.js` | 운동 이름을 누르면 나오는 하는 법 |
 | `campus.js` | 교내 대회(총장배·종합체육대회): 가능한 날 투표 · 심판 배정 · 조편성 · 대진 |
 | `config.js` | Supabase 주소와 **공개** 키 (service_role 키는 절대 넣지 않기) |
-| `sw.js`, `manifest.webmanifest` | 휴대폰 앱 설치 · 오프라인 · 알림 |
-| `supabase/schema.sql` | DB 전체 정의 (표·함수·정책·트리거·예약 작업) |
-| `supabase/functions/*` | 서버 함수 (아래 5절) |
 
 ## 3. 팀과 직책
 
@@ -322,7 +329,7 @@
 
 ## 7. 고칠 때
 
-1. 파일을 고치고 `index.html`의 `?v=` 숫자를 올려요 (휴대폰 캐시 갱신).
+1. 파일을 고치고 `index.html`의 `?v=` 숫자를 올려요 (휴대폰 캐시 갱신). 파일을 옮기거나 새로 만들면 `sw.js`의 `SHELL` 목록과 `CACHE` 이름도 바꿔요.
 2. `main`에 push 하면 1분 안에 배포돼요.
 3. DB를 바꿀 때:
    - Supabase 마이그레이션으로 적용해요.
@@ -350,5 +357,6 @@
 - **코드**: 안 쓰는 함수·상수·지역 변수와 CSS 규칙(약 80개)을 지웠어요. 모든 스크립트를 이어 붙여 `no-undef` 검사로 지운 이름을 아무 데서도 안 쓰는지 확인했어요.
 - **DB**: 외래 키 칸 인덱스 10개, `cup_photos` RLS 의 `auth.uid()`를 `(select auth.uid())`로(뜻 같음, 줄마다 다시 안 부름), `private.urlenc` 검색 경로 고정.
 - **예약 작업**: 매시간 도는 것과 겹치던 `jp-sync-full`(하루 1번) 지움, `jp-fill-am/pm` → `jp-fill-hourly` 하나로.
-- **지운 것**: 임시 표 `private.wiki_req1`, 함수 `private.urlenc`·`private.jp_yomi_call`, 앱에서 안 부르는 RPC `set_member_media`·`set_member_title`(직책은 `set_member_titles`), 서버 함수 `jp-yomi` 코드(읽기 채우기 한 번 쓰고 끝. 배포된 함수는 Supabase 대시보드 → Edge Functions → jp-yomi → Delete 로 지움), `supabase/k2h.py`(같은 규칙이 `jp-sync`의 `k2h()`).
+- **지운 것**: 임시 표 `private.wiki_req1`, 함수 `private.urlenc`·`private.jp_yomi_call`, 앱에서 안 부르는 RPC `set_member_media`·`set_member_title`(직책은 `set_member_titles`), 서버 함수 `jp-yomi`(읽기 채우기 한 번 쓰고 끝. 코드와 배포된 함수 모두 지움), `supabase/k2h.py`(같은 규칙이 `jp-sync`의 `k2h()`).
 - **이미지**: `logo.png`·`logo-white.png` 390px·256색(152KB → 30KB·19KB), 아이콘·파비콘 무손실 압축(30% 안팎 감소). 바꾸면 `?v=` 올림.
+- **폴더 정리**: 맨 위에 흩어져 있던 스크립트 8개는 `js/`, 이미지 7개는 `img/`로 옮김. `index.html`·`sw.js`·`manifest.webmanifest`는 맨 위에 둠(서비스 워커와 앱 설치 범위 때문).

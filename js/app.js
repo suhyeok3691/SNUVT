@@ -1022,7 +1022,7 @@ function openDrawer() {
   const el = document.getElementById("drawer"); if (!el) return;
   const link = (v, l) => `<button type="button" class="dr-link ${state.view === v ? "on" : ""}" data-act="view" data-v="${v}">${l}</button>`;
   const group = (k, ic) => { const sec = SECTIONS[k]; return `<div class="dr-group"><div class="dr-h">${svg(ic)}<span>${sec.label}</span></div>${secViews(sec).map(([v, l]) => link(v, l)).join("")}</div>`; };
-  el.querySelector(".drawer-body").innerHTML = `<div class="dr-top"><button type="button" class="dr-brand" data-act="view" data-v="home" aria-label="홈으로"><img class="logo logo-light" src="logo.png?v=5" alt="" width="32" height="31"><img class="logo logo-dark" src="logo-white.png?v=5" alt="" width="32" height="31"><b>SNUVT</b></button><button class="btn link" type="button" data-act="drawerclose" aria-label="닫기">닫기</button></div>
+  el.querySelector(".drawer-body").innerHTML = `<div class="dr-top"><button type="button" class="dr-brand" data-act="view" data-v="home" aria-label="홈으로"><img class="logo logo-light" src="img/logo.png?v=5" alt="" width="32" height="31"><img class="logo logo-dark" src="img/logo-white.png?v=5" alt="" width="32" height="31"><b>SNUVT</b></button><button class="btn link" type="button" data-act="drawerclose" aria-label="닫기">닫기</button></div>
     ${state.staff ? `<div class="dr-group dr-view"><div class="dr-h"><span>화면 보기</span></div><div class="dr-roles"><select id="drViewAs" aria-label="화면 보기">${viewOptions().map(k => `<option value="${k}" ${state.viewAs === k ? "selected" : ""}>${VIEW_LABEL(k)}</option>`).join("")}</select></div></div>` : ""}
     <div class="dr-group">${link("home", "홈")}</div>
     ${group("practice", "ball")}${group("physical", "physical")}${group("schedule", "schedule")}${group("cup", "trophy")}${secViews(SECTIONS.admin).length ? group("admin", "admin") : ""}
@@ -1553,8 +1553,8 @@ function viewAuth() {
     </form></section>`;
   return `<section class="auth">
     <div class="auth-hero">
-      <img class="logo logo-light" src="logo.png?v=5" alt="서울대학교 배구부 엠블럼" width="130" height="128">
-      <img class="logo logo-dark" src="logo-white.png?v=5" alt="서울대학교 배구부 엠블럼" width="130" height="128">
+      <img class="logo logo-light" src="img/logo.png?v=5" alt="서울대학교 배구부 엠블럼" width="130" height="128">
+      <img class="logo logo-dark" src="img/logo-white.png?v=5" alt="서울대학교 배구부 엠블럼" width="130" height="128">
       <h2>SNUVT</h2>
       <p>서울대학교 배구부</p>
     </div>

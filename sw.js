@@ -1,11 +1,11 @@
 /* SNUVT 서비스 워커
  * - 앱 화면(index.html 등)은 네트워크 먼저, 안 되면 저장해 둔 것 → 연결이 없어도 앱이 열림
- * - 버전이 붙은 스크립트(app.js?v=191)는 내용이 바뀌면 주소가 바뀌므로 저장해 둔 것 먼저 → 다시 열 때 빠름
+ * - 버전이 붙은 스크립트(js/app.js?v=194)는 내용이 바뀌면 주소가 바뀌므로 저장해 둔 것 먼저 → 다시 열 때 빠름
  * - CDN 스크립트·글꼴은 저장해 둔 것 먼저
  * - Supabase(데이터) 요청은 건드리지 않음 (오프라인 기록은 앱이 따로 모아 뒀다가 올림)
  * - 알림(push) 표시 · 알림을 누르면 앱 열기 */
-const CACHE = "snuvt-v7";
-const SHELL = ["./", "index.html", "app.js", "program.js", "guide.js", "library.js", "campus.js", "court.js", "live.js", "config.js", "logo.png", "logo-white.png", "favicon.png", "icon-192.png", "manifest.webmanifest"];
+const CACHE = "snuvt-v8";
+const SHELL = ["./", "index.html", "js/config.js", "js/program.js", "js/guide.js", "js/library.js", "js/campus.js", "js/court.js", "js/live.js", "js/app.js", "img/logo.png", "img/logo-white.png", "img/favicon.png", "img/icon-192.png", "manifest.webmanifest"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {}));
   self.skipWaiting();
@@ -43,7 +43,7 @@ self.addEventListener("push", e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (err) { d = { body: e.data ? e.data.text() : "" }; }
   e.waitUntil(self.registration.showNotification(d.title || "SNUVT", {
-    body: d.body || "", icon: "icon-192.png", badge: "icon-192.png", tag: d.tag || "snuvt", data: { url: d.url || "./#home" },
+    body: d.body || "", icon: "img/icon-192.png", badge: "img/icon-192.png", tag: d.tag || "snuvt", data: { url: d.url || "./#home" },
   }));
 });
 self.addEventListener("notificationclick", e => {
