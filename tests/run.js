@@ -104,6 +104,20 @@ const SUITES = {
     assert.deepStrictEqual((await c.writes("friendlies"))[0][2].vote_to, ["p2"]);
     clean(c); await c.ctx.close();
   },
+  // 전력분석 명단·로테: 자동 배치 뒤 S ↔ OP 맞바꿈 (다른 팀 = 번호 입력 방식)
+  async rotation(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    const ok = await p.evaluate(() => {
+      document.getElementById("sheet").querySelector(".sheet-body").innerHTML = `<form id="lvRosForm"><div class="lvr-list" id="lvrList"></div>${[1, 2, 3, 4, 5, 6].map(z => `<input class="lvr-c" data-z="${z}">`).join("")}</form>`;
+      const tag = ["S1", "OH1", "MB1", "OP1", "OH2", "MB2"];
+      tag.forEach((v, i) => { document.querySelector(`.lvr-c[data-z="${i + 1}"]`).value = v; });
+      try { lvRosInfo = () => {}; } catch (e) {}
+      lvRosSwap("S|OP");
+      return [1, 2, 3, 4, 5, 6].map(z => document.querySelector(`.lvr-c[data-z="${z}"]`).value).join(" ");
+    });
+    assert.strictEqual(ok, "OP1 OH1 MB1 S1 OH2 MB2");
+    clean(a); await a.ctx.close();
+  },
   // 훈련 계획: 기본 틀이 드릴 목록 이름과 맞고, 드릴 설명이 뜸
   async practice(b) {
     const L = require("../js/library.js"), names = new Set(L.DRILL_LIB.map(x => x.n));
