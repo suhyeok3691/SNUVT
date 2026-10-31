@@ -543,7 +543,7 @@ function lvForm(key, gid) {
   const el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${g ? "경기 수정" : "경기 추가"}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="lvForm" data-k="${esc(key)}" data-id="${esc(gid || "")}"><div class="fields">
-      ${g ? "" : `<label class="fl wide">방식<select id="lv-mode"><option value="full">실시간 · 전체 기록</option><option value="lite">실시간 · 라이트 (코치 현장 입력)</option><option value="video">영상 분석 (전체 + 서브 종류 · 자리)</option></select></label>`}
+      ${g ? "" : `<label class="fl wide">방식<select id="lv-mode"><option value="lite" selected>실시간 라이트</option><option value="full">실시간 전체</option><option value="video">영상 분석</option></select></label>`}
       <div class="fl wide lv-vid" id="lvVid" ${g && lvVideo(g) ? "" : "hidden"}><label class="fl">유튜브<input id="lv-yt" maxlength="200" value="${esc(g ? g.yt || "" : "")}" placeholder="https://youtu.be/..."></label>
         <label class="fl">치지직 다시보기<input id="lv-vod" maxlength="200" value="${esc(g ? g.vod || "" : "")}" placeholder="chzzk.naver.com/video/… 또는 naver.me/…"></label></div>
       <label class="fl">경기<input id="lv-label" maxlength="40" value="${esc(g ? g.label || "" : "")}" placeholder="예선 1경기 · 8강"></label>
