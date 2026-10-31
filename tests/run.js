@@ -158,6 +158,22 @@ const SUITES = {
     assert.strictEqual(await p.evaluate(() => document.querySelectorAll(".ct-spots circle").length), 1, "분석 탭에 점 하나");
     clean(a); await a.ctx.close();
   },
+  // 서브 종류: 플로터 · 스파이크 토글 → kind 저장, 같은 선수 다음 서브는 기억, 떨어진 자리 그림엔 숫자 없음
+  async serve(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(300);
+    assert.strictEqual(await p.$("#vodT"), null, "영상 시계 없음");
+    const srv = async (stype, res) => { await p.click('.ct-court .ct-p.us[data-v="1"]'); await p.click('[data-act="ctcat"][data-v="serve"]'); if (stype) await p.click(`[data-act="ctstype"][data-v="${stype}"]`); await p.click(`[data-act="ctact"][data-a="${res}"]`); await p.waitForTimeout(150); };
+    await srv("jump", "s3"); await srv(null, "s2");
+    const ev = (await a.writes("scout_events")).map(x => x[2]);
+    assert.deepStrictEqual(ev.map(e => [e.action, e.kind]), [["s3", "jump"], ["s2", "jump"]]);
+    await p.click('.ct-court .ct-p.us[data-v="2"]'); await p.click('[data-act="ctcat"][data-v="attack"]'); await p.click('[data-act="ctact"][data-a="kill"]'); await p.waitForTimeout(150);
+    assert.strictEqual(await p.evaluate(() => document.querySelectorAll("#ctCourtTap text").length), 0, "구역 숫자 없음");
+    await p.click('[data-act="ctnospot"]');
+    await p.click('[data-act="sctab"][data-k="stats"]'); await p.waitForTimeout(300);
+    assert.match(await a.text("main"), /서브 종류.*스파이크 2/);
+    clean(a); await a.ctx.close();
+  },
   // 리베로 자동 교대: 1번 자리 MB 가 서브하다 서브권을 잃으면 그 자리에 리베로, 서브권을 다시 따서 로테가 돌면 MB 는 6번(뒷줄) 그대로 리베로
   async libero(b) {
     const a = await openApp(b, "coach"), p = a.page;

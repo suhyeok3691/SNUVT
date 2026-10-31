@@ -2156,23 +2156,11 @@ function scoutList() {
   else body = S.ltab === "season" ? scoutSeason() : scoutOpp();
   return `<section class="sec">${head}${tabs}${body}</section>`;
 }
-// 치지직 다시보기는 앱 안에 못 띄워서(퍼가기 없음) 새 창으로 열고, 영상 시계를 맞춰 두면 기록마다 그 시간이 붙음
+// 치지직 다시보기는 앱 안에 못 띄워서(퍼가기 없음) 새 창으로 열기만 (영상 시계는 2026-11-01 뺌)
 const parseVod = u => { const x = /^(?:https?:\/\/)?(?:m\.)?chzzk\.naver\.com\/video\/(\d+)/.exec(String(u || "").trim()); return x ? `https://chzzk.naver.com/video/${x[1]}` : null; };
-const vodClock = () => state.vodClock || (state.vodClock = { mid: null, base: 0, at: 0, run: false });
-const vodNow = () => { const c = vodClock(); return c.run ? c.base + (Date.now() - c.at) / 1000 : c.base; };
-const parseClock = v => { const p = String(v || "").trim().split(":").map(Number); if (p.some(isNaN) || !p.length) return null; return p.reduce((a, x) => a * 60 + x, 0); };
-const fmtClock = t => { t = Math.max(0, Math.floor(t)); const h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), s = t % 60; return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`; };
-function scVodHtml(m) {
-  if (!m.vod) return "";
-  const c = vodClock(), on = c.mid === m.id;
-  return `<div class="panel sc-vod"><div class="sc-row"><a class="btn small" href="${esc(m.vod)}${on && c.base ? `?currentTime=${Math.floor(vodNow())}` : ""}" target="_blank" rel="noopener">치지직</a>
-    <input id="vodT" class="vod-t" inputmode="numeric" placeholder="0:00" value="${on ? fmtClock(vodNow()) : ""}" aria-label="지금 영상 시간">
-    <button class="btn small" type="button" data-act="scvodnudge" data-d="-5" aria-label="5초 뒤로">−5</button><button class="btn small" type="button" data-act="scvodnudge" data-d="5" aria-label="5초 앞으로">+5</button>
-    <button class="btn small ${on && c.run ? "danger" : "primary"}" type="button" data-act="scvod">${on && c.run ? "멈춤" : "시계 시작"}</button></div></div>`;
-}
-setInterval(() => { const c = state.vodClock, el = document.getElementById("vodT"); if (c && c.run && el && document.activeElement !== el) el.value = fmtClock(vodNow()); }, 1000);
-const scNow = () => { try { if (scPlayer && scPlayer.getCurrentTime) return Math.round(scPlayer.getCurrentTime() * 10) / 10; } catch (e) {}
-  const m = scMatch(), c = state.vodClock; if (m && m.vod && c && c.mid === m.id && (c.run || c.base)) return Math.round(vodNow() * 10) / 10; return null; };
+const scVodHtml = m => m.vod ? `<div class="sc-vod"><a class="btn small" href="${esc(m.vod)}" target="_blank" rel="noopener">치지직 다시보기 열기 ↗</a></div>` : "";
+// 기록마다 영상 시간: 앱 안 유튜브 플레이어가 있을 때만 자동
+const scNow = () => { try { if (scPlayer && scPlayer.getCurrentTime) return Math.round(scPlayer.getCurrentTime() * 10) / 10; } catch (e) {} return null; };
 /* ---- 분석 ---- */
 function scZoneMap(l) { const c = {}; for (const e of l) if (e.zone) c[e.zone] = (c[e.zone] || 0) + 1; const mx = Math.max(1, ...Object.values(c)); return `<div class="sc-court heat">${ZONES.map(z => `<span class="sc-z" style="--a:${((c[z] || 0) / mx).toFixed(2)}">${c[z] || ""}</span>`).join("")}</div>`; }
 function scServeTable(l) {
@@ -2218,6 +2206,7 @@ function scoutStats(ev, pts) {
   return `<div class="sc-row"><span class="sc-k">세트</span>${[0, 1, 2, 3, 4, 5].map(n => scChip("scfset", n, S.fset, n || "전체")).join("")}</div>
     <section class="sec"><h3>${esc(ctTA(m))}</h3>${ctSheetTable(all, "us")}</section>
     <section class="sec"><h3>${esc((m && m.opponent) || "상대")}</h3>${ctSheetTable(all, "opp")}</section>
+    <section class="sec"><h3>서브 종류</h3>${ctServeTypes(all)}</section>
     <section class="sec"><h3>공격이 떨어진 자리</h3>${ctSpotStats(all)}</section>
     ${ctNine(m) ? "" : `<section class="sec"><h3>로테이션별 득실 · ${esc(ctTA(m))}</h3>${scRotTable(pl)}</section>
     <section class="sec"><h3>로테이션별 득실 · ${esc((m && m.opponent) || "상대")}</h3>${ctOppRotTable(pl)}</section>`}`;
@@ -3085,14 +3074,6 @@ document.addEventListener("click", async ev => {
     else if (act === "scmetric") S.metric = v;
     else if (act === "scset") x.set = Number(v);
     else if (act === "scfset") S.fset = Number(v);
-    else if (act === "scvodnudge") { const m = (sc().track === "video" && scMatch()) || lvGame(), c = vodClock(), d = Number(b.dataset.d);
-      if (c.mid !== m.id) { c.mid = m.id; c.base = 0; c.run = false; }
-      if (c.run) { c.base = Math.max(0, vodNow() + d); c.at = Date.now(); } else c.base = Math.max(0, c.base + d);
-      const el = document.getElementById("vodT"); if (el) el.value = fmtClock(vodNow()); return; }
-    else if (act === "scvod") { const m = (sc().track === "video" && scMatch()) || lvGame(), c = vodClock(), el = document.getElementById("vodT");
-      if (c.mid === m.id && c.run) { c.base = vodNow(); c.run = false; }
-      else { const t = el && el.value.trim() !== "" ? parseClock(el.value) : (c.mid === m.id ? c.base : 0); if (t == null) { toast("영상 시간을 0:00 처럼 넣어 주세요"); return; } c.mid = m.id; c.base = t; c.at = Date.now(); c.run = true; }
-      state.dirty = false; return render(); }
     else if (act === "scdel") {
       if (!await confirmDel("이 경기와 입력한 플레이를 모두 지울까요?")) return;
       try { ok(await sb.from("scout_matches").delete().eq("id", b.dataset.id)); S.matches = S.matches.filter(m => m.id !== b.dataset.id); state.scoutId = null; toast("지웠어요"); } catch (e) { toast(failMsg(e)); }

@@ -989,8 +989,12 @@ sub { font-size: 10px; color: var(--muted); }
 @media (max-width: 345px) { .lvr-tools { gap: 2px; } .lvr-tools .btn { font-size: 10.5px; padding: 6px 2px; letter-spacing: -.05em; } .lvr-tools .btn.rot { flex-basis: 24px; } }
 /* 전력분석(예전 프로그램): 공격이 떨어진 자리 */
 .ct-spot { max-width: 360px; margin: 4px auto 10px; }
-.ct-zl { font: 700 30px var(--f-data); fill: var(--ink); opacity: .13; text-anchor: middle; pointer-events: none; }
 .ct-spot-h span { opacity: .8; }
+/* 서브 종류 (플로터 · 스파이크): 결과 버튼 위 두 칸 토글, 선수마다 마지막 것 기억 */
+.ct-stype { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 2px 0 10px; }
+.ct-stype button { font: inherit; font-size: 14px; font-weight: 700; padding: 9px 0; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+.ct-stype button.on { background: var(--blue); border-color: var(--blue); color: var(--surface); }
+.ct-stype kbd { font: 600 11px var(--f-data); opacity: .6; margin-left: 4px; }
 .ct-spots { display: grid; gap: 16px; }
 @media (min-width: 760px) { .ct-spots { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
 .ct-spot-team { display: grid; gap: 8px; min-width: 0; }
@@ -1181,7 +1185,6 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 .who-c.me { font-weight: 800; } .who-c small { color: var(--muted); font-size: 11px; } .who-c em { font-style: normal; font-size: 10px; color: var(--muted); }
 .terms-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 14px 0 4px; }
 .sc-vod { display: grid; gap: 6px; padding: 8px 10px; margin: 8px 0; } .sc-vod .sc-row { gap: 6px; flex-wrap: nowrap; } .sc-vod .sc-row .btn { flex: none; }
-.vod-t { width: 72px; min-width: 0; font: inherit; font-family: var(--f-data); font-size: 15px; text-align: center; padding: 5px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--ink); }
 </style>
 </head>
 <body>
@@ -1207,8 +1210,8 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 <script src="js/guide.js?v=194"></script>
 <script src="js/library.js?v=196"></script>
 <script src="js/campus.js?v=196"></script>
-<script src="js/court.js?v=203"></script>
+<script src="js/court.js?v=207"></script>
 <script src="js/live.js?v=206"></script>
-<script src="js/app.js?v=203"></script>
+<script src="js/app.js?v=207"></script>
 </body>
 </html>
