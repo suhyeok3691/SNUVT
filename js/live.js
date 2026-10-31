@@ -570,7 +570,7 @@ async function lvUndo() {
 function lvSection(x) {
   const L = lv(), key = x.kind + ":" + x.id, gs = L.games[key];
   if (gs === undefined) { lvLoadGames(x); return `<section class="panel sec"><div class="sec-head"><h3>실시간 경기 분석</h3></div>${loaderHtml(true)}</section>`; }
-  const list = (gs || []).map(g => `<button type="button" class="box lv-g" data-act="lvopen" data-id="${esc(g.id)}"><span class="bn"><b>${esc(g.label || "경기")}</b> ${g.team ? `${esc(g.team)} ` : ""}vs ${esc(g.opponent)}${lvLite(g) ? ` <span class="chip">Lite</span>` : ""}</span><span class="go">›</span></button>`).join("");
+  const list = (gs || []).map(g => `<button type="button" class="box lv-g" data-act="lvopen" data-id="${esc(g.id)}"><span class="bn"><b>${esc(g.label || "경기")}</b> ${g.team ? `${esc(g.team)} ` : ""}vs ${esc(g.opponent)}</span><span class="go">›</span></button>`).join("");
   return `<section class="panel sec"><div class="sec-head"><h3>실시간 경기 분석</h3>${lvCan() ? `<button class="btn add" type="button" data-act="lvnew" data-k="${esc(key)}">+ 경기</button>` : ""}</div>${list ? `<div class="boxes">${list}</div>` : emptyLine("아직 기록한 경기가 없어요.")}</section>`;
 }
 // 전력분석 · 실시간 경기 분석 목록
@@ -579,7 +579,7 @@ function lvScoutList() {
   if (gs === undefined) lvLoadAll();
   if (!gs) return loaderHtml(true);
   const src = g => g.ref_kind === "scout" ? "" : (cupItems().find(y => y.kind === g.ref_kind && String(y.id) === String(g.ref_id)) || {}).name || "";
-  const list = gs.map(g => `<button type="button" class="panel sc-card" data-act="lvopen" data-id="${esc(g.id)}"><b>${esc(lvTA(g))} vs ${esc(g.opponent)}${lvLite(g) ? ` <span class="chip">Lite</span>` : lvVideo(g) ? ` <span class="chip">영상</span>` : ""}</b><span class="small muted">${[g.created_at ? shortDate(new Date(g.created_at)) : "", src(g), g.label || ""].filter(Boolean).map(esc).join(" · ")}</span><span class="go">›</span></button>`).join("");
+  const list = gs.map(g => `<button type="button" class="panel sc-card" data-act="lvopen" data-id="${esc(g.id)}"><b>${esc(lvTA(g))} vs ${esc(g.opponent)}${lvLite(g) ? "" : lvVideo(g) ? ` <span class="chip">영상</span>` : ""}</b><span class="small muted">${[g.created_at ? shortDate(new Date(g.created_at)) : "", src(g), g.label || ""].filter(Boolean).map(esc).join(" · ")}</span><span class="go">›</span></button>`).join("");
   return list ? `<div class="sc-list">${list}</div>` : emptyLine("아직 분석한 경기가 없어요.");
 }
 function lvForm(key, gid) {
@@ -588,7 +588,7 @@ function lvForm(key, gid) {
   const el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${g ? "경기 수정" : "경기 추가"}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="lvForm" data-k="${esc(key)}" data-id="${esc(gid || "")}"><div class="fields">
-      ${g ? "" : `<p class="small muted wide">실시간 Lite: 현장에서 서브 · 공격 · 블로킹 · 디그 · 범실만 빠르게 (영상 분석은 전력분석 탭)</p>`}
+      ${g ? "" : `<p class="small muted wide">실시간 기록: 현장에서 서브 · 공격 · 블로킹 · 디그 · 범실만 빠르게 (영상 분석은 전력분석 탭)</p>`}
       <div class="fl wide lv-vid" id="lvVid" ${g && lvVideo(g) ? "" : "hidden"}><label class="fl">유튜브<input id="lv-yt" maxlength="200" value="${esc(g ? g.yt || "" : "")}" placeholder="https://youtu.be/..."></label>
         <label class="fl">치지직 다시보기<input id="lv-vod" maxlength="200" value="${esc(g ? g.vod || "" : "")}" placeholder="chzzk.naver.com/video/… 또는 naver.me/…"></label></div>
       <label class="fl">경기<input id="lv-label" maxlength="40" value="${esc(g ? g.label || "" : "")}" placeholder="예선 1경기 · 8강"></label>
@@ -803,7 +803,7 @@ function lvPage(x) {
   // Lite: 놓친 랠리는 점수판 팀 이름 옆 + 로 점수만 (컴퓨터 = 우리 · - 상대)
   const plus = sd => lvLite(g) && me && !end ? `<button type="button" class="lv-plus" data-act="lvpt" data-v="${sd}" aria-label="${esc(lvTN(g, sd))} 점수만 +1" title="점수만 +1${kb ? ` (${sd === "us" ? "=" : "-"})` : ""}">+</button>` : "";
   return `<section class="sec lv-page"><div class="row between"><button class="btn link small" type="button" data-act="lvback">‹ ${esc(x.name)}</button><span class="row nowrap"><button class="btn link small" type="button" data-act="lvxlsx">엑셀</button>${me ? `<button class="btn link small" type="button" data-act="lvedit">수정</button>` : ""}</span></div>
-    <div class="jp-head"><h2 class="dyn">${g.label ? `${esc(g.label)} · ` : ""}${esc(lvTA(g))} vs ${esc(g.opponent)}</h2><span class="small muted">세트 ${won} : ${lost}${lvLite(g) ? " · Lite" : lvVideo(g) ? " · 영상 분석" : ""}</span></div>
+    <div class="jp-head"><h2 class="dyn">${g.label ? `${esc(g.label)} · ` : ""}${esc(lvTA(g))} vs ${esc(g.opponent)}</h2><span class="small muted">세트 ${won} : ${lost}${lvLite(g) ? "" : lvVideo(g) ? " · 영상 분석" : ""}</span></div>
     ${lvVideo(g) ? (g.vod ? scVodHtml(g) : g.yt ? "" : `<p class="small muted">영상 링크가 없어요. 수정에서 넣을 수 있어요.</p>`) : ""}
     <div class="sc-row">${chips}</div>
     <div class="panel lv-score"><span class="lv-t1 ${cur.serve === "us" ? "srv" : ""}">${esc(lvTA(g))} <small>R${cur.rot}</small>${plus("us")}</span><b class="num">${cur.us} : ${cur.op}</b><span class="lv-t2 ${cur.serve === "opp" ? "srv" : ""}">${plus("opp")}<small>R${cur.orot}</small> ${esc(g.opponent)}</span>
