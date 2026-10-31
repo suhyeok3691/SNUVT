@@ -2246,3 +2246,37 @@ drop function if exists private.urlenc(text);
 drop function if exists private.jp_yomi_call(integer);
 drop function if exists public.set_member_media(uuid, boolean);
 drop function if exists public.set_member_title(uuid, text);
+
+-- ========== 다른 팀 훈련 같이 하기 (2026-11-01) ==========
+create table public.guest_votes (
+  host_team text not null references public.teams(id),
+  date date not null,
+  player_id uuid not null references public.players(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  constraint guest_votes_pkey primary key (host_team, date, player_id)
+);
+create index guest_votes_player on public.guest_votes (player_id);
+alter table public.guest_votes enable row level security;
+create policy "guest own read" on public.guest_votes for select to authenticated using (player_id = (select private.my_player_id()));
+create policy "guest own add" on public.guest_votes for insert to authenticated
+  with check (player_id = (select private.my_player_id()) and host_team <> (select private.my_team()) and (select private.is_member()));
+create policy "guest own del" on public.guest_votes for delete to authenticated using (player_id = (select private.my_player_id()));
+grant select, insert, delete on public.guest_votes to authenticated;
+create or replace function public.guest_cal() returns jsonb language sql stable security definer set search_path = '' as $$
+  select case when private.is_member() then jsonb_build_object(
+    'team', (select jsonb_build_object('id', t.id, 'label', t.label, 'swap_days', t.swap_days) from public.teams t where t.id <> private.my_team() order by t.id limit 1),
+    'events', (select coalesce(jsonb_agg(jsonb_build_object('id', e.id, 'name', e.name, 'kind', e.kind, 'start', e.start_date, 'end', e.end_date)), '[]') from public.events e where e.team_id <> private.my_team()),
+    'off', (select coalesce(jsonb_agg(o.date), '[]') from public.team_off o where o.team_id <> private.my_team()),
+    'times', (select coalesce(jsonb_agg(jsonb_build_object('key', p.key, 'start', to_char(p.start_time, 'HH24:MI'), 'end', to_char(p.end_time, 'HH24:MI'))), '[]') from public.practice_times p where p.team_id <> private.my_team()),
+    'fr', (select coalesce(jsonb_agg(distinct f.date), '[]') from public.friendlies f where f.team_id <> private.my_team())
+  ) end
+$$;
+create or replace function public.guest_list() returns table (date date, name text, pos text, team text) language sql stable security definer set search_path = '' as $$
+  select g.date, pl.name, pl.pos, pl.team_id from public.guest_votes g join public.players pl on pl.id = g.player_id
+  where g.host_team = private.my_team() and private.can('attend') and g.date >= current_date - 14
+  order by g.date, pl.name
+$$;
+revoke all on function public.guest_cal() from public, anon;
+revoke all on function public.guest_list() from public, anon;
+grant execute on function public.guest_cal() to authenticated;
+grant execute on function public.guest_list() to authenticated;

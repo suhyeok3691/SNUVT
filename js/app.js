@@ -1786,9 +1786,9 @@ function viewSeason() {
     <section class="sec sched-cal">${calHtml(me)}</section></div>`;
 }
 // 달력: 정규 훈련 · 자율 훈련 · 교류전 · 대회 색을 나눠서 한 달을 한눈에
-const CAL_KIND = (i, d) => i.cup ? "cup" : i.ob ? "ob" : i.slot === "match" ? "match" : i.slot === "friendly" ? "fr" : i.slot === "tryout" ? "try" : i.slot === "team" && !i.teamOff ? "team" : opensOn(d).length ? "open" : i.slot === "team" ? "off" : "";
-const CAL_LABEL = { team: "정규 훈련", open: "자율 훈련", fr: "교류전", match: "대회", try: "트라이아웃", off: "훈련 없음", cup: "교내 대회", ob: "OB전" };
-const CAL_SHORT = (k, i) => k === "cup" ? CUP_SHORT[i.cup.kind] || "교내" : { team: "훈련", open: "자율", fr: "교류전", match: "대회", try: "트라이", ob: "OB전" }[k] || "";
+const CAL_KIND = (i, d) => i.cup ? "cup" : i.ob ? "ob" : i.slot === "match" ? "match" : i.slot === "friendly" ? "fr" : i.slot === "tryout" ? "try" : i.slot === "team" && !i.teamOff ? "team" : state.guestMine && state.guestMine.has(d) && guestOn(d) ? "guest" : opensOn(d).length ? "open" : i.slot === "team" ? "off" : "";
+const CAL_LABEL = { team: "정규 훈련", open: "자율 훈련", fr: "교류전", match: "대회", try: "트라이아웃", off: "훈련 없음", cup: "교내 대회", ob: "OB전", guest: "다른 팀 훈련" };
+const CAL_SHORT = (k, i) => k === "cup" ? CUP_SHORT[i.cup.kind] || "교내" : k === "guest" ? (state.guest ? state.guest.team.label : "같이") : { team: "훈련", open: "자율", fr: "교류전", match: "대회", try: "트라이", ob: "OB전" }[k] || "";
 function calHtml(me) {
   const t = iso(today()), ym = state.calMonth || t.slice(0, 7), [y, m] = ym.split("-").map(Number);
   const first = new Date(y, m - 1, 1), days = new Date(y, m, 0).getDate(), lead = first.getDay();
@@ -1810,7 +1810,7 @@ function calHtml(me) {
   const prev = new Date(y, m - 2, 1), next = new Date(y, m, 1), ymOf = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   return `<div class="cal-head"><button class="btn link" type="button" data-act="calmonth" data-m="${ymOf(prev)}" aria-label="이전 달">‹</button><h3>${y}년 ${m}월</h3><button class="btn link" type="button" data-act="calmonth" data-m="${ymOf(next)}" aria-label="다음 달">›</button>${ym !== t.slice(0, 7) ? `<button class="btn link small" type="button" data-act="calmonth" data-m="${t.slice(0, 7)}">오늘</button>` : ""}</div>
     <div class="cal">${DOW_KO.map((w, k) => `<span class="cw ${k === 0 ? "sun" : k === 6 ? "sat" : ""}">${w}</span>`).join("")}${cells.join("")}</div>
-    <div class="cal-legend">${["team", "open", "fr", "match", ...((state.cups || []).length ? ["cup"] : [])].map(k => `<span><i class="dot k-${k}"></i>${CAL_LABEL[k]}</span>`).join("")}${me ? `<span><i class="abs-l"></i>불참</span>` : ""}</div>${detail}`;
+    <div class="cal-legend">${["team", "open", "fr", "match", ...((state.cups || []).length ? ["cup"] : []), ...(state.guestMine && state.guestMine.size ? ["guest"] : [])].map(k => `<span><i class="dot k-${k}"></i>${CAL_LABEL[k]}</span>`).join("")}${me ? `<span><i class="abs-l"></i>불참</span>` : ""}</div>${detail}`;
 }
 function viewComps() {
   const { t, sy, from, to } = seasonRange();
@@ -1934,10 +1934,40 @@ function openForm(k) {
 function teamDays(from, n) { const out = []; for (let k = 0; k < n; k++) { const d = dAdd(from, k), i = infoOn(d); if (isTeamDay(i)) out.push({ date: d, i }); } return out; }
 // 정규 훈련·교류전 + 자율 훈련, 날짜순
 const opensOn = d => state.opens[d] || [];
+/* 다른 팀 정규 훈련 같이 하기 (남자부 ↔ 여자부)
+ * - 그 팀 일정은 guest_cal 로 날짜만 받아서 우리와 같은 규칙(seasonDay)으로 계산: 정규 훈련 날 − 훈련 없음 − 교류전·OB전·대회·교내 대회
+ * - 우리 팀 일정(교류전·대회·교내 대회·OB전·정규 훈련)이 있는 날은 우리 일정이 먼저라 안 보임
+ * - 누가 오는지는 그 팀의 관리자·주장·부주장·훈련 담당만 봄 (guest_list) */
+function buildGuest(raw) {
+  const c = raw.guest_cal, t = c && c.team;
+  state.guest = t ? { team: t, events: (c.events || []).map(e => ({ id: e.id, name: e.name, kind: e.kind, start: e.start, end: e.end })), off: new Set(c.off || []), fr: new Set(c.fr || []),
+    times: Object.fromEntries((c.times || []).map(x => [x.key, { start: x.start, end: x.end || "" }])) } : null;
+  state.guestMine = new Set((raw.guest_votes || []).map(r => r.date));
+  const gl = {};
+  for (const r of raw.guest_list || []) (gl[r.date] = gl[r.date] || []).push({ name: r.name, pos: r.pos });
+  state.guestList = gl;
+}
+const guestEvents = g => { const base = g.events; return [...base, ...termEvents().filter(x => !base.some(e => e.kind === x.kind && e.start === x.start))]; };
+function guestOn(date) {
+  const g = state.guest; if (!g) return null;
+  const sw = TEAM.swap; let i;
+  TEAM.swap = !!g.team.swap_days;
+  try { i = seasonDay(date, guestEvents(g)); } finally { TEAM.swap = sw; }
+  if (i.slot !== "team" || g.off.has(date) || g.fr.has(date) || cupOn(date) || g.events.some(e => e.kind === "ob" && e.start <= date && date <= e.end)) return null;
+  const mine = infoOn(date);
+  if (isTeamDay(mine) || mine.cup || ["match", "tryout"].includes(mine.slot)) return null;
+  return { team: g.team.id, label: g.team.label, time: timeTxt(g.times[date] || { start: "18:00", end: "21:00" }) };
+}
+const guestLabel = g => `${g.label} 정규 훈련 · ${g.time}`;
 function upcoming(from, n) {
-  const out = teamDays(from, n);
-  for (let k = 0; k < n; k++) { const d = dAdd(from, k); for (const o of opensOn(d)) out.push({ date: d, open: o }); }
-  return out.sort((a, b) => a.date.localeCompare(b.date) || (a.open ? 1 : 0) - (b.open ? 1 : 0));
+  const out = teamDays(from, n), me = playerOf(state.myPid);
+  for (let k = 0; k < n; k++) {
+    const d = dAdd(from, k);
+    for (const o of opensOn(d)) out.push({ date: d, open: o });
+    const g = me && guestOn(d); if (g) out.push({ date: d, guest: g });
+  }
+  const rank = x => x.open ? 1 : x.guest ? 2 : 0;
+  return out.sort((a, b) => a.date.localeCompare(b.date) || rank(a) - rank(b));
 }
 const fmtKo = f => f.format === "9" ? "9인제" : "6인제";
 const frTime = f => f.start ? `${f.start}${f.end ? "–" + f.end : ""}` : "";
@@ -1958,10 +1988,17 @@ function upcomingAll(from, n, me) {
   return out.sort((a, b) => a.d.localeCompare(b.d) || a.o - b.o).map(x => x.html).join("");
 }
 function attendRows(list, me) { return `<ul class="attend">${list.map(x => attendLi(x, me)).join("")}</ul>`; }
-function attendLi({ date, i, open }, me) {
+function attendLi({ date, i, open, guest }, me) {
   const t = iso(today());
   return (() => {
+    if (guest) {
+      const on = state.guestMine.has(date);
+      return `<li class="guest"><div class="at-when"><b>${longDate(parseD(date))}</b><span class="small muted"><i class="dot k-guest"></i>${esc(guestLabel(guest))}</span></div>
+        <div class="at-side">${on ? `<span class="chip ok">같이 해요</span>` : ""}${me && date >= t ? `<button type="button" class="btn small vote-btn ${on ? "" : "primary"}" data-act="guestgo" data-d="${date}" data-team="${esc(guest.team)}">${on ? "취소" : "같이 하기"}</button>` : ""}</div></li>`;
+    }
+    const gs = !open && can("attend") ? state.guestList[date] || [] : [];
     const when = `<div class="at-when"><b>${longDate(parseD(date))}</b><span class="small muted">${esc(open ? openLabel(open) : tdLabel(i))}</span>${!open && state.practice[date] ? `<button type="button" class="btn link small pr-link" data-act="prgo" data-d="${date}">훈련 계획</button>` : ""}</div>`;
+    const guestHtml = gs.length ? `<p class="at-names small"><span class="chip">${esc(state.guest ? state.guest.team.label : "다른 팀")} ${gs.length}</span> ${gs.map(x => `${esc(x.name)}${x.pos ? ` <span class="muted">${esc(x.pos)}</span>` : ""}`).join(" · ")}</p>` : "";
     if (open) {
       const going = sortedPlayers().filter(p => open.votes[p.id] === true), mine = me ? open.votes[me.id] : undefined;
       const btns = me && date >= t ? voteBtn("open", open.id, mine === true ? "go" : mine === false ? "no" : "") : "";
@@ -1978,7 +2015,7 @@ function attendLi({ date, i, open }, me) {
     if (can("attend")) {
       const abs = sortedPlayers().map(p => [p, absOf(p.id, date)]).filter(([, a]) => a);
       return `<li>${when}<div class="at-side">${abs.length ? `<span class="chip warn">불참 ${abs.length}</span>` : ""}</div>
-        ${abs.length ? `<ul class="at-list">${abs.map(([p, a]) => `<li><b>${esc(p.name)}</b> <span class="small">${esc(ABS_REASONS[a.reason] || a.reason)}${a.note ? ` · ${esc(a.note)}` : ""}</span></li>`).join("")}</ul>` : ""}</li>`;
+        ${abs.length ? `<ul class="at-list">${abs.map(([p, a]) => `<li><b>${esc(p.name)}</b> <span class="small">${esc(ABS_REASONS[a.reason] || a.reason)}${a.note ? ` · ${esc(a.note)}` : ""}</span></li>`).join("")}</ul>` : ""}${guestHtml}</li>`;
     }
     if (!me) return `<li>${when}</li>`;
     const a = absOf(me.id, date);
@@ -2051,7 +2088,7 @@ const scChip = (act, v, cur, l) => `<button type="button" class="chip sc-chip ${
 const scPct = (a, b) => b ? Math.round(100 * a / b) + "%" : "—";
 const scCnt = (l, sk, g) => l.filter(e => e.skill === sk && (!g || g.includes(e.grade))).length;
 // 전력분석 두 갈래: 영상 분석(예전 프로그램 · 코트) / 실시간 경기 분석(버튼판)
-// 전력분석 = 경기 하나에 방식(실시간 전체 기록 · 라이트 · 영상 분석)을 골라 기록. 예전 영상 분석(코트 · scout_matches)은 화면에서 뺌 (court.js는 엑셀 동작 이름 · 기록지 계산에 씀)
+// 전력분석 = 경기 하나에 방식(실시간 전체 기록 · Lite · 영상 분석)을 골라 기록. 예전 영상 분석(코트 · scout_matches)은 화면에서 뺌 (court.js는 엑셀 동작 이름 · 기록지 계산에 씀)
 const scTrack = () => `<div class="row"><button class="btn link small" type="button" data-act="sctrack" data-k="live">‹ 전력분석</button></div>`;
 function viewScout() {
   const S = sc();
@@ -2937,6 +2974,18 @@ document.addEventListener("click", async ev => {
   }
   if (act === "calmonth") { state.calMonth = b.dataset.m; state.calDay = null; state.dirty = false; return render(); }
   if (act === "calday") { state.calDay = b.dataset.d; state.dirty = false; return render(); }
+  if (act === "guestgo") {
+    const d = b.dataset.d, team = b.dataset.team, on = state.guestMine.has(d), lab = state.guest ? state.guest.team.label : "다른 팀";
+    if (!state.myPid) return;
+    b.disabled = true;
+    try {
+      ok(on ? await sb.from("guest_votes").delete().eq("host_team", team).eq("date", d).eq("player_id", state.myPid)
+        : await sb.from("guest_votes").insert({ host_team: team, date: d, player_id: state.myPid }));
+      if (on) state.guestMine.delete(d); else state.guestMine.add(d);
+      render(); toast(on ? "같이 하기를 취소했어요" : `${lab} 훈련에 같이 한다고 남겼어요`);
+    } catch (e) { b.disabled = false; toast(failMsg(e)); }
+    return;
+  }
   if (act === "alumdel") {
     const x = (state.alumni || []).find(y => y.id === b.dataset.pid) || {};
     if (!await confirmDel(`${x.name || "이 졸업생"}의 남은 기록까지 모두 지울까요?\n되돌릴 수 없어요.`)) return;
@@ -3680,14 +3729,17 @@ async function loadAll(soft) {
       sb.from("cup_avail").select("*"),
       sb.from("cup_photos").select("*"),
       sb.from("terms").select("*"),
+      sb.rpc("guest_cal"),
+      sb.from("guest_votes").select("host_team,date").gte("date", iso(addDays(today(), -14))),
+      sb.rpc("guest_list"),
     ];
     if (state.coach) q.push(sb.from("profiles").select("*").order("created_at"));
     const res = await Promise.all(q);
-    const [pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq, frq, abq, nq, enq, ptq, ctq, peq, pvq, ppq, vdq, tnq, osq, ovq, vtq, cuq, ctmq, cmq, caq, cpq, tmq] = res, pr = state.coach ? res[30] : null;
+    const [pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq, frq, abq, nq, enq, ptq, ctq, peq, pvq, ppq, vdq, tnq, osq, ovq, vtq, cuq, ctmq, cmq, caq, cpq, tmq, gcq, gvq, glq] = res, pr = state.coach ? res[33] : null;
     for (const r of [pl, ts, hl, lg]) if (r.error) throw r.error;
     const rows = r => r && !r.error && Array.isArray(r.data) ? r.data : [];
     raw = { players: pl.data, tests: ts.data, health: hl.data, logs: lg.data, pain_checks: rows(pcs), events: evq && !evq.error ? evq.data : null,
-      wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), notices: rows(nq), entries: rows(enq), practice_times: rows(ptq), player_contacts: rows(ctq), program_edits: rows(peq), player_private: rows(pvq), practice_plans: rows(ppq), videos: rows(vdq), training_notes: rows(tnq), open_sessions: rows(osq), open_votes: rows(ovq), event_votes: rows(vtq), cups: rows(cuq), cup_teams: rows(ctmq), cup_matches: rows(cmq), cup_avail: rows(caq), cup_photos: rows(cpq), terms: rows(tmq), profiles: pr && !pr.error ? pr.data : [],
+      wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), notices: rows(nq), entries: rows(enq), practice_times: rows(ptq), player_contacts: rows(ctq), program_edits: rows(peq), player_private: rows(pvq), practice_plans: rows(ppq), videos: rows(vdq), training_notes: rows(tnq), open_sessions: rows(osq), open_votes: rows(ovq), event_votes: rows(vtq), cups: rows(cuq), cup_teams: rows(ctmq), cup_matches: rows(cmq), cup_avail: rows(caq), cup_photos: rows(cpq), terms: rows(tmq), guest_cal: gcq && !gcq.error ? gcq.data : null, guest_votes: rows(gvq), guest_list: rows(glq), profiles: pr && !pr.error ? pr.data : [],
       me: { role: state.role, player_id: state.myPid, team: TEAM.id, super: !!state.superAdmin, teamObj: { id: TEAM.id, label: TEAM.label, net: TEAM.net, swap: TEAM.swap } } };
     // 기기에 남기는 사본에는 연락처와 다른 사람 키·몸무게를 넣지 않음
     lsSet(snapKey(), { ...raw, training_notes: (raw.training_notes || []).filter(r => r.player_id === state.myPid), player_contacts: (raw.player_contacts || []).filter(r => r.player_id === state.myPid), player_private: (raw.player_private || []).filter(r => r.player_id === state.myPid) }); state.net = true;
@@ -3722,6 +3774,7 @@ function buildState(raw) {
   state.evVotes = ev;
   buildCups(raw);
   state.terms = (raw.terms || []).map(r => ({ id: r.id, start: r.start_date || "", end: r.end_date || "" })).sort((a, b) => a.id.localeCompare(b.id));
+  buildGuest(raw);
   const ab = {};
   for (const r of raw.absences || []) (ab[r.player_id] = ab[r.player_id] || {})[r.date] = { id: r.id, reason: r.reason, note: r.note || "" };
   state.absences = ab;
