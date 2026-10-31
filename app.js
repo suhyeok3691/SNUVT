@@ -222,7 +222,6 @@ const timeTxt = o => o.start + (o.end ? "–" + o.end : "");
 const friendlyOn = date => (state.friendlies[date] || [])[0] || null;
 // OB전: 전원 참 (투표·불참 없음)
 const obOn = date => normEvents(events()).find(e => e.kind === "ob" && e.start <= date && date <= e.end) || null;
-const OB_NOTE = "전원 참 · 경조사는 개별 연락";
 const infoOn = date => {
   const i = seasonDay(date, events()), off = state.teamOff[date], f = friendlyOn(date), cp = cupOn(date);
   // 교내 대회 주: 정규 훈련 대신 대회 (남녀 함께 운영)
@@ -839,8 +838,6 @@ function jpLinkPref(J) {
 }
 const jpPrefOf = (id, g) => ((jp().prefRes || {})[id] || []).filter(r => !g || r.gender === g);
 const jpPrefTxt = r => `현 ${JP_PREF_T[r.tourn] || ""} ${r.year} ${JP_PLACE[r.place]}`;
-const jpResultsOf = id => (jp().results || []).filter(r => r.school_id === id).sort((a, b) => b.year - a.year || a.place - b.place);
-const jpResTxt = r => `${JP_TOURN[r.tourn]} ${r.year} ${JP_PLACE[r.place]}`;
 const jpGoogle = q => `https://www.google.com/search?q=${encodeURIComponent(q)}`;
 const jpGenderOk = (g, x) => x === "mw" || x === g;
 // 제목에 女子가 없어도 나온 학교가 모두 여자부면 여자 경기로
@@ -2010,20 +2007,8 @@ function noticesHtml() {
 }
 /* ---------- 전력분석: 경기 영상을 보면서 플레이를 입력 → 선수별·상대 서브 분석 ----------
  * 등급(DataVolley 방식): # 최고(득점·완벽) · + 좋음 · ! 보통 · - 나쁨 · / 막힘 · = 범실(실패) */
-const SC_SKILLS = [["serve", "서브"], ["receive", "리시브"], ["attack", "공격"], ["block", "블로킹"], ["dig", "디그"], ["set", "토스"]];
-const SC_GRADES = {
-  serve: [["#", "에이스"], ["+", "좋음"], ["!", "보통"], ["-", "쉬운 공"], ["=", "범실"]],
-  receive: [["#", "완벽"], ["+", "좋음"], ["!", "보통"], ["-", "나쁨"], ["=", "실패"]],
-  attack: [["#", "득점"], ["+", "좋음"], ["!", "이어짐"], ["/", "막힘"], ["=", "범실"]],
-  block: [["#", "득점"], ["+", "터치"], ["!", "보통"], ["-", "나쁨"], ["=", "범실"]],
-  dig: [["#", "완벽"], ["+", "좋음"], ["!", "보통"], ["-", "나쁨"], ["=", "실패"]],
-  set: [["#", "완벽"], ["+", "좋음"], ["!", "보통"], ["-", "나쁨"], ["=", "범실"]],
-};
-const SC_KINDS = { serve: ["무회전", "점프", "점프 플로터", "언더"], attack: ["오픈", "속공", "시간차", "백어택", "페인트"] };
-const SC_LEN = [["short", "짧게"], ["long", "길게"]];
 const ZONES = [4, 3, 2, 5, 6, 1]; // 코트 위에서 본 배치 (네트 쪽 4·3·2, 뒤 5·6·1)
 const SC_SRC = [["L", "레프트"], ["M", "속공"], ["R", "라이트"], ["P", "파이프"], ["B", "백라이트"]];
-const SC_GLABEL = [["#", "최고"], ["+", "좋음"], ["!", "보통"], ["-", "나쁨"], ["/", "막힘"], ["=", "범실"]];
 const sc = () => state.scout || (state.scout = { loaded: false, matches: [], events: {}, points: {}, all: false, sel: { set: 1, side: "us", pid: null, opp: "", skill: "serve", kind: null, len: null, zone: null, src: null, rot: 1, serve: "us" }, tab: "court", ltab: "match", fset: 0, flt: { side: "", pid: "", skill: "", grade: "" }, metric: "atk", sy: 0, oppSel: "" });
 const scMatch = () => sc().matches.find(m => m.id === state.scoutId) || null;
 async function scoutLoad() {
@@ -2060,12 +2045,7 @@ async function scoutAll() {
   if (state.view === "scout") render();
 }
 const pNo = p => p.number != null ? `${p.number} ` : "";
-const scTime = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
 const scMeta = x => [x.date ? shortDate(parseD(x.date)) : "", x.stage || "", x.opponent ? (x.team ? x.team + " " : "") + "vs " + x.opponent : x.team || "", x.division === "9" ? "9인제" : ""].filter(Boolean).map(esc).join(" · ");
-function scLbl(e) {
-  const p = e.side === "us" ? playerOf(e.player_id) : null, g = (SC_GRADES[e.skill] || []).find(y => y[0] === e.grade), src = SC_SRC.find(y => y[0] === e.src);
-  return `${e.side === "us" ? (p ? `${pNo(p)}${esc(p.name)}` : "우리") : `상대 #${e.opp_no ?? "?"}`} · ${(SC_SKILLS.find(y => y[0] === e.skill) || ["", ""])[1]}${e.kind ? " " + esc(e.kind) : ""}${src ? " " + src[1] : ""}${e.len ? " " + (e.len === "long" ? "길게" : "짧게") : ""}${e.zone ? " → " + e.zone : ""} · <b>${g ? g[1] : esc(e.grade)}</b>`;
-}
 const scSeg = (act, list, cur) => `<div class="seg fill sc-tabs" role="tablist">${list.map(([k, l]) => `<button type="button" class="seg-tab ${cur === k ? "on solid" : ""}" role="tab" aria-selected="${cur === k}" data-act="${act}" data-k="${k}">${l}</button>`).join("")}</div>`;
 const scChip = (act, v, cur, l) => `<button type="button" class="chip sc-chip ${String(v) === String(cur) ? "on" : ""}" data-act="${act}" data-v="${esc(v)}">${l}</button>`;
 const scPct = (a, b) => b ? Math.round(100 * a / b) + "%" : "—";
@@ -3554,6 +3534,8 @@ async function loadProfile() {
     Object.assign(state, { role: null, admin: false, myPid: null, players: {}, tests: {}, health: {}, logs: {}, inbody: {}, profiles: [], loaded: false, booting: false, dirty: false, selfPlayer: null, selfHealth: null, editingSelf: false });
     render(); return;
   }
+  // 이 기기에 저장해 둔 화면 자료가 있으면 먼저 그걸로 보여 주고, 아래에서 새로 받아 조용히 바꿈
+  if (!state.loaded) { const s0 = lsGet(snapKey()); if (s0 && s0.me && (s0.me.role === "coach" || s0.me.role === "player")) { try { applyMe(s0.me); buildState(withQueued(s0)); state.loaded = true; state.booting = false; render(); } catch (e) { state.loaded = false; } } }
   let r;
   try { r = await sb.from("profiles").select("*").eq("id", session.user.id).maybeSingle(); } catch (e) { r = { error: e }; }
   if (r.error) {
@@ -3563,17 +3545,22 @@ async function loadProfile() {
     r = { data: { role: snap.me.role, player_id: snap.me.player_id, team_id: snap.me.team } };
   }
   await loadTeam(r.data ? r.data.team_id : "men");
-  state.role = r.data ? r.data.role : "pending";
-  state.superAdmin = !!(r.data && r.data.super);
-  state.myPid = r.data ? r.data.player_id : null;
-  state.coach = state.role === "coach";
-  state.staff = state.coach || myStaff().length > 0;
-  state.viewAs = pickView(); state.admin = state.viewAs !== "player";
-  state.canWrite = state.role === "coach" || state.role === "player";
+  applyMe({ role: r.data ? r.data.role : "pending", super: !!(r.data && r.data.super), player_id: r.data ? r.data.player_id : null });
+  // 저장본으로 먼저 보여 줬는데 이제 권한이 없으면(승인 취소 등) 저장본을 지우고 처음부터
+  if (!state.canWrite && state.loaded) { lsDel(snapKey()); location.reload(); return; }
   const again = !!state.loaded && !state.booting; // 로그인 상태 새로 고침(앱으로 돌아올 때 등): 화면이 같으면 그대로 둠
   if (state.canWrite) await loadAll(again);
   else if (state.role === "pending" && state.myPid) await loadSelf();
   state.booting = false; render(again);
+}
+// 내 권한 (프로필·저장본 둘 다에서). team 이 있으면(저장본) 팀 설정도
+function applyMe(me) {
+  if (me.teamObj) { setTeam(me.teamObj); document.documentElement.dataset.team = TEAM.id; const tg = document.getElementById("teamTag"); if (tg) tg.textContent = TEAM.label; }
+  state.role = me.role; state.superAdmin = !!me.super; state.myPid = me.player_id || null;
+  state.coach = state.role === "coach";
+  state.staff = state.coach || myStaff().length > 0;
+  state.viewAs = pickView(); state.admin = state.viewAs !== "player";
+  state.canWrite = state.role === "coach" || state.role === "player";
 }
 // 승인 대기 중인 사람이 자기가 낸 정보를 다시 불러올 때
 async function loadSelf() {
@@ -3653,9 +3640,11 @@ async function switchTeam(t) {
 // 팀 (남자부·여자부): 이름·네트 높이·정규 훈련 요일
 const TEAMS_FALLBACK = { men: { id: "men", label: "남자부", net_cm: 243, swap_days: false }, women: { id: "women", label: "여자부", net_cm: 224, swap_days: true } };
 async function loadTeam(id) {
-  let t = TEAMS_FALLBACK[id] || TEAMS_FALLBACK.men;
+  let t = null;
   try { const q = await sb.from("teams").select("*").eq("id", id || "men").maybeSingle(); if (q.data) t = q.data; } catch (e) { /* 연결 없으면 기본값 */ }
-  setTeam(t); document.documentElement.dataset.team = TEAM.id; const tg = document.getElementById("teamTag"); if (tg) tg.textContent = TEAM.label;
+  // 연결이 없으면: 저장본으로 이미 같은 팀을 맞춰 뒀으면 그대로, 아니면 기본값
+  if (!t && TEAM.id !== (id || "men")) t = TEAMS_FALLBACK[id] || TEAMS_FALLBACK.men;
+  if (t) setTeam(t); document.documentElement.dataset.team = TEAM.id; const tg = document.getElementById("teamTag"); if (tg) tg.textContent = TEAM.label;
 }
 async function loadAll(soft) {
   let raw = null;
@@ -3699,7 +3688,7 @@ async function loadAll(soft) {
     const rows = r => r && !r.error && Array.isArray(r.data) ? r.data : [];
     raw = { players: pl.data, tests: ts.data, health: hl.data, logs: lg.data, pain_checks: rows(pcs), events: evq && !evq.error ? evq.data : null,
       wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), notices: rows(nq), entries: rows(enq), practice_times: rows(ptq), player_contacts: rows(ctq), program_edits: rows(peq), player_private: rows(pvq), practice_plans: rows(ppq), videos: rows(vdq), training_notes: rows(tnq), open_sessions: rows(osq), open_votes: rows(ovq), event_votes: rows(vtq), cups: rows(cuq), cup_teams: rows(ctmq), cup_matches: rows(cmq), cup_avail: rows(caq), cup_photos: rows(cpq), terms: rows(tmq), profiles: pr && !pr.error ? pr.data : [],
-      me: { role: state.role, player_id: state.myPid, team: TEAM.id } };
+      me: { role: state.role, player_id: state.myPid, team: TEAM.id, super: !!state.superAdmin, teamObj: { id: TEAM.id, label: TEAM.label, net: TEAM.net, swap: TEAM.swap } } };
     // 기기에 남기는 사본에는 연락처와 다른 사람 키·몸무게를 넣지 않음
     lsSet(snapKey(), { ...raw, training_notes: (raw.training_notes || []).filter(r => r.player_id === state.myPid), player_contacts: (raw.player_contacts || []).filter(r => r.player_id === state.myPid), player_private: (raw.player_private || []).filter(r => r.player_id === state.myPid) }); state.net = true;
   } catch (e) {

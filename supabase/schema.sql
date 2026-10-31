@@ -2256,3 +2256,18 @@ returns json language sql stable security invoker set search_path to '' as $$
 $$;
 revoke all on function public.jp_videos_pack() from public, anon;
 grant execute on function public.jp_videos_pack() to authenticated;
+
+-- 정리·최적화 (2026-10-31): 외래 키 인덱스, RLS initplan, 검색 경로
+create index if not exists cup_avail_player on public.cup_avail (player_id);
+create index if not exists cup_matches_team_a on public.cup_matches (team_a);
+create index if not exists cup_matches_team_b on public.cup_matches (team_b);
+create index if not exists cup_matches_winner on public.cup_matches (winner);
+create index if not exists cup_photos_match on public.cup_photos (match_id);
+create index if not exists cup_photos_team on public.cup_photos (team_id);
+create index if not exists live_games_created_by on public.live_games (created_by);
+create index if not exists live_rallies_author on public.live_rallies (author);
+create index if not exists live_rallies_player on public.live_rallies (player_id);
+create index if not exists scout_points_event on public.scout_points (event_id);
+alter policy "members add cup_photos" on public.cup_photos with check (private.is_member() and author = (select auth.uid()));
+alter policy "owner or schedule delete cup_photos" on public.cup_photos using (author = (select auth.uid()) or private.can('schedule'));
+alter function private.urlenc(text) set search_path = '';

@@ -225,7 +225,7 @@ function pickHtml(c) {
   const G = [...new Set(c.matches.flatMap(m => ["al", "bl"].map(k => (/^([A-Za-z])조?\s*선택$/.exec(m[k] || "") || [])[1])).filter(Boolean).map(x => x.toUpperCase()))].sort();
   for (const g of G) {
     const ms = c.matches.filter(m => ["al", "bl"].some(k => new RegExp(`^${g}조?\\s*선택$`, "i").test(m[k] || "")));
-    const t1 = gs.done[g] ? cmpTeam(c, gs.order[g][0]) : null, t2 = gs.done[g] ? cmpTeam(c, gs.order[g][1]) : null, pick = (c.picks || {})[g];
+    const t1 = gs.done[g] ? cmpTeam(c, gs.order[g][0]) : null, pick = (c.picks || {})[g];
     const opp = m => { const sd = /선택$/.test(m.al || "") ? "b" : "a"; return cmpSide(c, m, sd); };
     out.push(`<div class="cmp-pick"><span class="cmp-pick-h">${g}조 1위 자리</span>${t1 ? `<span class="small muted">${esc(t1.name)}</span>` : `<span class="small muted">${g}조 경기 끝나면</span>`}
       <span class="cmp-pick-opts">${ms.map(m => `<button type="button" class="chip sc-chip ${pick === m.label ? "on" : ""}" ${adm && t1 ? `data-act="cmpbpick" data-g="${g}" data-l="${esc(m.label)}"` : "disabled"}>${esc(m.label)} · vs ${esc(opp(m))}</button>`).join("")}</span></div>`);
@@ -233,7 +233,6 @@ function pickHtml(c) {
   return out.join("");
 }
 /* ---------- 홈: 내 투표 (한 줄씩, 응답한 건 접어 둠) ---------- */
-const VT_SHORT = { go: "참", no: "불참" };
 function myVotesHtml() {
   const me = playerOf(state.myPid); if (!me || me.military) return "";
   const t = iso(today()), rows = [];
@@ -476,13 +475,13 @@ function koPlan(groups, adv) {
   for (let i = 0; i < P; i += 2) { const x = slot[i], y = slot[i + 1]; if (!x || !y || x.g !== y.g) continue;
     for (let j = 0; j < P; j += 2) if (j !== i) { const z = slot[j + 1]; if (z && z.r === y.r && z.g !== x.g && (!slot[j] || slot[j].g !== y.g)) { slot[i + 1] = z; slot[j + 1] = y; break; } } }
   const nm = n => n === 2 ? ["f", "결승"] : n === 4 ? ["sf", "4강"] : K === 6 ? ["r6", "6강"] : ["qf", "8강"];
-  let cur = slot.map(x => x ? x.lab : null); const out = []; let last = null;
+  let cur = slot.map(x => x ? x.lab : null); const out = [];
   while (cur.length > 1) {
     const [st, ko] = nm(cur.length), nx = [], made = [];
     for (let i = 0; i < cur.length; i += 2) { const x = cur[i], y = cur[i + 1];
       if (x && y) { const label = cur.length === 2 ? "결승" : `${ko} ${made.length + 1}경기`; const m = { stage: st, label, al: x, bl: y }; made.push(m); out.push(m); nx.push(label + " 승자"); }
       else nx.push(x || y); }
-    last = made; cur = nx;
+    cur = nx;
   }
   const fin = out.find(m => m.stage === "f");
   if (fin && / 승자$/.test(fin.al) && / 승자$/.test(fin.bl)) out.splice(out.indexOf(fin), 0, { stage: "3rd", label: "3·4위전", al: fin.al.replace(/ 승자$/, " 패자"), bl: fin.bl.replace(/ 승자$/, " 패자") });
@@ -528,7 +527,6 @@ function cmpPost(c, kind, day) {
   const res = m => m.score || "";
   const html = [], text = [];
   const P = (h, t) => { html.push(h); text.push(t); };
-  const short = CUP_KIND[c.kind] || c.name;
   let title = "";
   if (kind === "result") return cmpResultPost(c, day);
   if (kind === "notice") return cmpNoticePost(c, day);

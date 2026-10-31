@@ -129,9 +129,9 @@
 
 예약 작업 (pg_cron, 한국 시간):
 - `push-hourly` 매시 정각: 사람마다 고른 시각에 아침 컨디션·저녁 기록 알림
-- `jp-sync-new` 매일 05:00, `jp-sync-full` 매일 05:30, `jp-schools-daily` 매일 06:00, `jp-rank-daily` 매일 06:50(랭킹 다시 계산)
+- `jp-sync-new` 매일 05:00, `jp-schools-daily` 매일 06:00, `jp-rank-daily` 매일 06:50(랭킹 다시 계산)
 - 매일 아침: `jp-newschools-daily` 06:20 → `jp-retag-daily` 06:35
-- 매시 40분: `jp-fill-am`(짝수 시)·`jp-fill-pm`(홀수 시) — 한 번에 검색 25번까지라 매시간 나눠 돎
+- 매시 40분: `jp-fill-hourly` — 한 번에 검색 25번까지라 매시간 나눠 돎
 - 매시 10분: `jp-sync-full-hourly` — 새로 더한 채널의 영상 목록을 이어 읽기(다 읽은 채널은 건너뜀), `jp-chans-daily` 06:15
 - 저녁에 한 번 더: `jp-sync-new-pm` 18:00, `jp-schools-pm` 18:20, `jp-ch-daily` 18:55(채널 이름 채우기)
 - 매주 화요일 새벽: `jp-nat-weekly` 04:00 → `jp-standings-weekly` 04:05 → `jp-block-weekly` 04:10 → `jp-pref-weekly` 04:15 → `jp-roster-weekly` 04:20
@@ -343,3 +343,10 @@
 - 목록의 항목(대회, 일정, 지역, 영상 등)은 하나씩 **박스(칸)로 나눠** 보여 줘요. 새 화면도 이걸 기본으로 해요 (`index.html`의 `.boxes`, `.box-cols`).
 - 설명 문구는 최소로 하고, 버튼·칩은 작게 해요.
 - 일본어 학교 이름 같은 큰 글씨 제목은 본문 글꼴로 써요(`h2.dyn`). 제목 글꼴(Do Hyeon)에 없는 한글이 있기 때문이에요.
+
+## 정리·최적화 (2026-10-31)
+- **앱 시작**: 이 기기에 저장해 둔 화면 자료(로그인한 사람별)가 있으면 먼저 그걸로 바로 그리고, 뒤에서 새로 받아 조용히 바꿔요. 저장본으로 그렸는데 권한이 없어졌으면 저장본을 지우고 처음부터.
+- **서비스 워커(snuvt-v7)**: 버전이 붙은 스크립트(`app.js?v=…`)는 저장해 둔 것 먼저(주소가 바뀌면 새로 받고 옛 버전은 지움), `index.html`은 네트워크 먼저.
+- **코드**: 안 쓰는 함수·상수·지역 변수와 CSS 규칙(약 80개)을 지웠어요. 모든 스크립트를 이어 붙여 `no-undef` 검사로 지운 이름을 아무 데서도 안 쓰는지 확인했어요.
+- **DB**: 외래 키 칸 인덱스 10개, `cup_photos` RLS 의 `auth.uid()`를 `(select auth.uid())`로(뜻 같음, 줄마다 다시 안 부름), `private.urlenc` 검색 경로 고정.
+- **예약 작업**: 매시간 도는 것과 겹치던 `jp-sync-full`(하루 1번) 지움, `jp-fill-am/pm` → `jp-fill-hourly` 하나로.

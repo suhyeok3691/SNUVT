@@ -40,16 +40,12 @@ const ctRos = (m, side) => side === "us" && !(m && m.team);
 const ctLu = m => m.lineup || {};
 const ctReady = m => { const L = ctLu(m), n = ctNine(m) ? 9 : 6; return L.us && (L.us.slots || []).length === n && L.us.slots.every(Boolean) && L.opp && (L.opp.slots || []).length === n && L.opp.slots.every(x => x !== "" && x != null); };
 const ctRosterPos = id => { const p = playerOf(id) || {}; return CT_POS.includes(p.pos) ? p.pos : "OH"; }; // 명단 L 선수가 코트 6명이면 OH
-// 로테이션 r에서 자리 z(1~6)에 선 선수 = 처음(R1) 자리 ((z-1)+(r-1))%6 +1 의 선수 (로테이션은 2→1, 1→6 … 시계 방향)
-const ctAt = (slots, r, z) => slots[((z - 1) + (r - 1)) % 6];
 // 리베로 자동 (우리·상대 둘 다): MB가 뒷줄(5·6, 그 팀 서브가 아닐 때 1)에 오면 그 자리에 리베로. 그 팀 서브 차례 1번 MB는 직접 서브
 function ctSideAt(s, side, z) {
   const us = side === "us", r = us ? s.rot : s.orot, i = ((z - 1) + (r - 1)) % 6, slots = us ? s.usSlots : s.opSlots, pos = us ? s.usPos : s.opPos, lib = us ? s.lib : s.olib;
   const on = lib != null && !slots.some(x => ctSame(x, lib)) && pos[i] === "MB" && (z === 5 || z === 6 || (z === 1 && s.serve !== side));
   return on ? { v: lib, lib: true, pos: "L" } : { v: slots[i], lib: false, pos: pos[i] || "" };
 }
-const ctUsAt = (s, z) => ctSideAt(s, "us", z);
-const ctZoneOf = (slots, r, i) => ((i - (r - 1)) % 6 + 6) % 6 + 1; // 처음 자리 i(0~5)가 지금 서 있는 자리
 // 세트 하나를 처음부터 다시 따라가며 지금 상태 계산 (되돌리기도 이걸로 맞음)
 function ctState(m, ev, setNo) {
   const L = ctLu(m), st = (L.sets || {})[setNo] || {}, U = L.us || {}, O = L.opp || {}, nine = ctNine(m);

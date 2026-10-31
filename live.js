@@ -44,10 +44,6 @@ const lvAtVis = () => { const L = lv(), list = lvAtList(), cur = lvAtCur(), all 
 const lvAtChips = (act, kb) => { const { ks, more } = lvAtVis(), cur = lvAtCur();
   return ks.map((k, i) => `<button type="button" class="chip sc-chip ${cur === k ? "on" : ""}" data-act="${act}" data-v="${k}">${LV_AT[k]}${kb && LV_ATKEYS[i] ? `<kbd>${LV_ATKEYS[i]}</kbd>` : ""}</button>`).join("") + (more ? `<button type="button" class="chip sc-chip" data-act="lvatmore">기타</button>` : ""); };
 const lvShChips = (act, kb) => LV_SHOT.map(([k, l, key]) => `<button type="button" class="chip sc-chip ${lvShCur() === k ? "on" : ""}" data-act="${act}" data-v="${k}">${l}${kb ? `<kbd>${key}</kbd>` : ""}</button>`).join("");
-// 세트(토스): 누가 올렸는지 · 세트 점수 3·2·1. 기본 = 코트에 있는 S(메이킹), 다른 사람이 올리면 이단
-function lvCourtSide() { const L = lv(), g = lvGame(); if (!g) return null; const s = lvState(g, L.rallies[g.id] || [], L.set), on = lvCourtOn(g, L.side, s, L.set); return on ? on.vals.filter(v => v !== "" && v != null) : null; }
-const lvSetterAuto = () => { const L = lv(), g = lvGame(), vals = lvCourtSide(); if (!vals) return null; const v = vals.find(x => lvPosOf(g, L.side, x) === "S"); return v == null ? null : String(v); };
-const lvSetterCur = () => lv().setter !== undefined ? lv().setter : lvSetterAuto();
 const lvShortName = (g, side, v) => { if (lvSnu(g, side)) { const p = playerOf(v); return p ? (p.number != null ? String(p.number) : p.name) : "?"; } return String(v); };
 const lvSetLbl = r => { if (r.kind === "set") return r.two ? " · 이단" : ""; if (r.kind !== "atk" || (!r.setter && !r.set_q)) return ""; const g = lvGame(), two = r.setter && lvPosOf(g, r.side, r.setter) !== "S";
   if (!two && !r.set_q) return ""; return ` · ${two ? `이단(${esc(lvShortName(g, r.side, r.setter))})` : "세트"}${r.set_q ? " " + r.set_q : ""}`; };
@@ -539,9 +535,8 @@ function lvScoutList() {
   return list ? `<div class="sc-list">${list}</div>` : emptyLine("아직 분석한 경기가 없어요.");
 }
 function lvForm(key, gid) {
-  const [kind, id] = key.split(":"), x = cupItems().find(y => y.kind === kind && String(y.id) === id) || {}, g = gid ? lvGame() : null;
+  const [kind, id] = key.split(":"), g = gid ? lvGame() : null;
   const fr = kind === "friendly" ? ((state.friendlies && Object.values(state.friendlies).flat().find(f => String(f.id) === id)) || {}) : {};
-  const st = g ? (g.sets || {})[lv().set] || {} : {};
   const el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${g ? "경기 수정" : "경기 추가"}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="lvForm" data-k="${esc(key)}" data-id="${esc(gid || "")}"><div class="fields">
@@ -699,10 +694,7 @@ function lvCoach(rs, g, cur) {
     </div>`;
 }
 function lvStats(rs, g) {
-  const pts = rs.filter(r => r.point), so = pts.filter(r => r.serve === "opp"), br = pts.filter(r => r.serve === "us");
-  const eff = side => { const a = rs.filter(r => r.side === side && r.kind === "atk"), k = a.filter(r => r.res === "kill").length, e = a.filter(r => r.res === "err" || r.res === "blk").length; return [lvPct(k - e, a.length), `${k}/${a.length}`]; };
-  const rcv = side => rs.filter(r => r.side === side && r.kind === "rcv");
-  const [ue, ul] = eff("us"), [oe, ol] = eff("opp");
+  const pts = rs.filter(r => r.point);
   const src = winner => { const l = pts.filter(r => r.point === winner), m = {};
     for (const r of l) { const x = LV_RES[r.kind + ":" + r.res], nm = (r.side === winner ? `${x.kname} ${x.name}` : `상대 ${x.kname} ${x.name}`).trim(); m[nm] = (m[nm] || 0) + 1; }
     const tot = l.length; return `<div class="lv-bars">${Object.entries(m).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="lv-bar ${winner}"><span>${esc(k)}</span><i style="--w:${tot ? Math.round(100 * v / tot) : 0}%"></i><b class="num">${v}</b></div>`).join("") || `<span class="small muted">—</span>`}</div>`; };
@@ -837,7 +829,6 @@ async function liveClick(b, act) {
   if (act === "lvmore") { L.more = !L.more; state.dirty = false; return render(); }
 }
 // 컴퓨터 단축키: 동작 글자 · 숫자 = 선수 번호(이어서 치면 두 자리) · Tab = 팀 · Backspace = 되돌리기
-let lvNum = { s: "", t: 0 };
 document.addEventListener("keydown", ev => {
   const L = state.live; if (!L || !L.open || !lvView() || !lvCan() || ev.ctrlKey || ev.metaKey || ev.altKey) return;
   const t = ev.target; if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;

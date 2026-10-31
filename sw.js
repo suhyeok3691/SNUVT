@@ -1,9 +1,10 @@
 /* SNUVT 서비스 워커
- * - 앱 화면(같은 출처 파일)은 네트워크 먼저, 안 되면 저장해 둔 것 → 연결이 없어도 앱이 열림
+ * - 앱 화면(index.html 등)은 네트워크 먼저, 안 되면 저장해 둔 것 → 연결이 없어도 앱이 열림
+ * - 버전이 붙은 스크립트(app.js?v=191)는 내용이 바뀌면 주소가 바뀌므로 저장해 둔 것 먼저 → 다시 열 때 빠름
  * - CDN 스크립트·글꼴은 저장해 둔 것 먼저
  * - Supabase(데이터) 요청은 건드리지 않음 (오프라인 기록은 앱이 따로 모아 뒀다가 올림)
  * - 알림(push) 표시 · 알림을 누르면 앱 열기 */
-const CACHE = "snuvt-v6";
+const CACHE = "snuvt-v7";
 const SHELL = ["./", "index.html", "app.js", "program.js", "guide.js", "library.js", "campus.js", "court.js", "live.js", "config.js", "logo.png", "logo-white.png", "favicon.png", "icon-192.png", "manifest.webmanifest"];
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).catch(() => {}));
@@ -17,6 +18,14 @@ self.addEventListener("fetch", e => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
   if (/supabase\.co$/.test(url.hostname)) return;
+  if (url.origin === location.origin && url.searchParams.has("v")) {
+    e.respondWith(caches.match(req).then(hit => hit || fetch(req).then(res => {
+      // 새 버전을 넣으면서 같은 파일의 옛 버전은 지움
+      if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(async c => { for (const k of await c.keys()) { const u = new URL(k.url); if (u.pathname === url.pathname && u.search !== url.search) c.delete(k); } c.put(req, copy); }); }
+      return res;
+    }).catch(() => caches.match(req, { ignoreSearch: true }))));
+    return;
+  }
   if (url.origin === location.origin) {
     e.respondWith(fetch(req).then(res => {
       if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
