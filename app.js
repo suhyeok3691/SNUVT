@@ -1961,15 +1961,18 @@ const scChip = (act, v, cur, l) => `<button type="button" class="chip sc-chip ${
 const scPct = (a, b) => b ? Math.round(100 * a / b) + "%" : "—";
 const scCnt = (l, sk, g) => l.filter(e => e.skill === sk && (!g || g.includes(e.grade))).length;
 // 전력분석 두 갈래: 영상 분석(예전 프로그램 · 코트) / 실시간 경기 분석(버튼판)
-const scTrack = () => scSeg("sctrack", [["video", "영상 분석"], ["live", "실시간 경기 분석"]], sc().track || "video");
+// 전력분석 = 경기 하나에 방식(전체 기록 · 라이트 · 영상 분석)을 골라 기록. 예전 영상 분석(코트 · 예전 프로그램 방식)은 맨 아래 "예전 영상 분석"으로 (track = "video")
+const scTrack = () => `<div class="row"><button class="btn link small" type="button" data-act="sctrack" data-k="live">‹ 전력분석</button></div>`;
 function viewScout() {
   const S = sc();
-  if (S.track === "live") {
+  if (S.track !== "video") {
     const L = lv(), g = L.open ? lvGame() : null;
     if (g) return lvPage({ ...lvRefOf(g), name: "목록" });
     if (L.open && !L.games["scout:all"]) { if (L.games["scout:all"] === undefined) lvLoadAll(); return loaderHtml(); }
     L.open = null;
-    return `<section class="sec"><div class="sec-head"><h2>전력분석</h2>${lvCan() ? `<button class="btn add" type="button" data-act="lvnew" data-k="scout:-">+ 경기</button>` : ""}</div>${scTrack()}${lvScoutList()}</section>`;
+    if (!S.loaded) scoutLoad();
+    return `<section class="sec"><div class="sec-head"><h2>전력분석</h2>${lvCan() ? `<button class="btn add" type="button" data-act="lvnew" data-k="scout:-">+ 경기</button>` : ""}</div>${lvScoutList()}
+      ${S.matches.length || can("analysis") ? `<div class="row"><button class="btn link small" type="button" data-act="sctrack" data-k="video">예전 영상 분석 (코트 방식)${S.matches.length ? ` ${S.matches.length}` : ""} ›</button></div>` : ""}</section>`;
   }
   if (!S.loaded) { scoutLoad(); return loaderHtml(); }
   const m = scMatch();
@@ -1984,14 +1987,14 @@ function viewScout() {
     ${!ev ? loaderHtml(true) : S.tab === "stats" ? scoutStats(ev, S.points[m.id] || []) : ctPad(m, ev)}</section>`;
 }
 function scoutList() {
-  const S = sc(), head = `<div class="sec-head"><h2>전력분석</h2><span class="row nowrap">${S.matches.length ? `<button class="btn link small" type="button" data-act="scxlsx" data-id="">엑셀</button>` : ""}${can("analysis") ? `<button class="btn add" type="button" data-act="scnew">+ 경기</button>` : ""}</span></div>`;
-  if (!S.matches.length) return `<section class="sec">${head}${scTrack()}${emptyLine(can("analysis") ? "경기 영상을 추가하면 다 같이 보면서 입력할 수 있어요." : "아직 분석할 경기가 없어요.")}</section>`;
+  const S = sc(), head = `<div class="sec-head"><h2>예전 영상 분석</h2><span class="row nowrap">${S.matches.length ? `<button class="btn link small" type="button" data-act="scxlsx" data-id="">엑셀</button>` : ""}${can("analysis") ? `<button class="btn add" type="button" data-act="scnew">+ 경기</button>` : ""}</span></div>`;
+  if (!S.matches.length) return `<section class="sec">${scTrack()}${head}${emptyLine(can("analysis") ? "경기 영상을 추가하면 다 같이 보면서 입력할 수 있어요." : "아직 분석할 경기가 없어요.")}</section>`;
   const tabs = scSeg("scltab", [["match", "경기"], ["season", "시즌"], ["opp", "팀별"]], S.ltab);
   let body;
   if (S.ltab === "match") body = `<div class="sc-list">${S.matches.map(x => `<button type="button" class="panel sc-card" data-act="scopen" data-id="${esc(x.id)}"><b>${esc(x.title)}</b><span class="small muted">${scMeta(x)}</span><span class="go">›</span></button>`).join("")}</div>`;
   else if (S.all !== true) { scoutAll(); body = loaderHtml(true); }
   else body = S.ltab === "season" ? scoutSeason() : scoutOpp();
-  return `<section class="sec">${head}${scTrack()}${tabs}${body}</section>`;
+  return `<section class="sec">${scTrack()}${head}${tabs}${body}</section>`;
 }
 // 치지직 다시보기는 앱 안에 못 띄워서(퍼가기 없음) 새 창으로 열고, 영상 시계를 맞춰 두면 기록마다 그 시간이 붙음
 const parseVod = u => { const x = /^(?:https?:\/\/)?(?:m\.)?chzzk\.naver\.com\/video\/(\d+)/.exec(String(u || "").trim()); return x ? `https://chzzk.naver.com/video/${x[1]}` : null; };
@@ -2216,7 +2219,9 @@ async function scoutXlsx(mid) {
 let scPlayer = null;
 async function scoutDock() {
   const dock = document.getElementById("dock"); if (!dock) return;
-  const m = state.view === "scout" && sc().track !== "live" ? scMatch() : null, y = m && m.yt ? parseYt(m.yt) : null;
+  // 영상: 예전 영상 분석 경기 · 영상 분석 방식 실시간 경기 (유튜브)
+  const lg = state.live && state.live.open && lvView() ? lvGame() : null;
+  const m = lg && lvVideo(lg) && lg.yt ? lg : state.view === "scout" && sc().track === "video" ? scMatch() : null, y = m && m.yt ? parseYt(m.yt) : null;
   if (!y) { if (dock.dataset.mid) { dock.innerHTML = ""; dock.dataset.mid = ""; scPlayer = null; } dock.hidden = true; return; }
   dock.hidden = false;
   const hd = document.querySelector("header.top"); dock.style.top = (hd ? hd.offsetHeight : 0) + "px";
@@ -2910,11 +2915,11 @@ document.addEventListener("click", async ev => {
     else if (act === "scmetric") S.metric = v;
     else if (act === "scset") x.set = Number(v);
     else if (act === "scfset") S.fset = Number(v);
-    else if (act === "scvodnudge") { const m = scMatch(), c = vodClock(), d = Number(b.dataset.d);
+    else if (act === "scvodnudge") { const m = (sc().track === "video" && scMatch()) || lvGame(), c = vodClock(), d = Number(b.dataset.d);
       if (c.mid !== m.id) { c.mid = m.id; c.base = 0; c.run = false; }
       if (c.run) { c.base = Math.max(0, vodNow() + d); c.at = Date.now(); } else c.base = Math.max(0, c.base + d);
       const el = document.getElementById("vodT"); if (el) el.value = fmtClock(vodNow()); return; }
-    else if (act === "scvod") { const m = scMatch(), c = vodClock(), el = document.getElementById("vodT");
+    else if (act === "scvod") { const m = (sc().track === "video" && scMatch()) || lvGame(), c = vodClock(), el = document.getElementById("vodT");
       if (c.mid === m.id && c.run) { c.base = vodNow(); c.run = false; }
       else { const t = el && el.value.trim() !== "" ? parseClock(el.value) : (c.mid === m.id ? c.base : 0); if (t == null) { toast("영상 시간을 0:00 처럼 넣어 주세요"); return; } c.mid = m.id; c.base = t; c.at = Date.now(); c.run = true; }
       state.dirty = false; return render(); }

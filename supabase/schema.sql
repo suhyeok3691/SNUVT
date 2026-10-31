@@ -2216,3 +2216,7 @@ alter table public.live_games add column if not exists mode text not null defaul
 alter table public.live_games drop constraint if exists live_games_mode_check;
 alter table public.live_games add constraint live_games_mode_check check (mode in ('full','lite','video'));
 alter table public.live_rallies add column if not exists stype text check (stype is null or stype in ('fl','jf','js','un'));
+
+-- live_video_links (영상 분석 방식: 유튜브 · 치지직)
+alter table public.live_games add column if not exists yt text check (yt is null or char_length(yt) <= 200);
+alter table public.live_games add column if not exists vod text check (vod is null or char_length(vod) <= 200);

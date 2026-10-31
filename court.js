@@ -415,7 +415,7 @@ function courtClick(b, act) {
 }
 // 컴퓨터: 창이 열려 있으면 숫자 키로 바로 고르기 (예전 프로그램처럼) · 코트에서 Backspace = 되돌리기
 document.addEventListener("keydown", ev => {
-  if (state.view !== "scout" || sc().track === "live" || sc().tab !== "court" || ev.ctrlKey || ev.metaKey || ev.altKey) return;
+  if (state.view !== "scout" || sc().track !== "video" || sc().tab !== "court" || ev.ctrlKey || ev.metaKey || ev.altKey) return;
   const t = ev.target; if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
   const sh = document.getElementById("sheet");
   const np = /^Numpad([1-9])$/.exec(ev.code || ""), dk = np ? np[1] : ev.key; // 숫자패드도

@@ -104,7 +104,7 @@ const lvLabel = r => { const x = LV_RES[r.kind + ":" + r.res], sh = lvShot(r);
 const lv = () => state.live || (state.live = { games: {}, rallies: {}, open: null, set: 1, scope: "set", side: "us", pick: null, atype: null, shot: null, extra: {} });
 const lvCan = () => can("analysis") || can("schedule");
 const lvGame = () => { const L = lv(); for (const l of Object.values(L.games)) { const g = (l || []).find(x => x.id === L.open); if (g) return g; } return null; };
-const lvView = () => state.view === "cup" || state.view === "fr" || (state.view === "scout" && sc().track === "live");
+const lvView = () => state.view === "cup" || state.view === "fr" || (state.view === "scout" && sc().track !== "video");
 // 분석 팀(us) · 상대 팀(opp). team이 비어 있으면 분석 팀 = SNU(명단 선수로 고름), 아니면 두 팀 다 번호로
 const lvTA = g => (g && g.team) || "SNU";
 const lvTB = g => (g && g.opponent) || "상대";
@@ -543,16 +543,29 @@ function lvForm(key, gid) {
   const el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${g ? "경기 수정" : "경기 추가"}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="lvForm" data-k="${esc(key)}" data-id="${esc(gid || "")}"><div class="fields">
+      ${g ? "" : `<label class="fl wide">방식<select id="lv-mode"><option value="full">실시간 · 전체 기록</option><option value="lite">실시간 · 라이트 (코치 현장 입력)</option><option value="video">영상 분석 (전체 + 서브 종류 · 자리)</option></select></label>`}
+      <div class="fl wide lv-vid" id="lvVid" ${g && lvVideo(g) ? "" : "hidden"}><label class="fl">유튜브<input id="lv-yt" maxlength="200" value="${esc(g ? g.yt || "" : "")}" placeholder="https://youtu.be/..."></label>
+        <label class="fl">치지직 다시보기<input id="lv-vod" maxlength="200" value="${esc(g ? g.vod || "" : "")}" placeholder="chzzk.naver.com/video/… 또는 naver.me/…"></label></div>
       <label class="fl">경기<input id="lv-label" maxlength="40" value="${esc(g ? g.label || "" : "")}" placeholder="예선 1경기 · 8강"></label>
       <label class="fl">분석 팀<input id="lv-team" maxlength="60" value="${esc(g ? g.team || "" : "")}" placeholder="SNU"></label>
       <label class="fl">상대 팀<input id="lv-opp" required maxlength="60" value="${esc(g ? g.opponent : fr.opponent || "")}"></label>
-      ${g ? "" : `<label class="fl wide">방식<select id="lv-mode"><option value="full">전체 기록 (전력분석)</option><option value="lite">라이트 (코치 현장 입력)</option><option value="video">영상 분석 (전체 + 서브 종류 · 자리)</option></select></label>
-      <label class="fl">첫 서브<select id="lv-serve"><option value="us">분석 팀</option><option value="opp">상대 팀</option></select></label>
+      ${g ? "" : `<label class="fl">첫 서브<select id="lv-serve"><option value="us">분석 팀</option><option value="opp">상대 팀</option></select></label>
       <label class="fl">분석 팀 로테<select id="lv-rot">${[1, 2, 3, 4, 5, 6].map(n => `<option>${n}</option>`).join("")}</select></label>
       <label class="fl">상대 팀 로테<select id="lv-orot">${[1, 2, 3, 4, 5, 6].map(n => `<option>${n}</option>`).join("")}</select></label>`}
     </div><div class="row"><button class="btn primary" type="submit">${g ? "저장" : "시작"}</button></div></form>`;
   if (g) addDelZone(`data-act="lvdel" data-id="${esc(g.id)}"`, "경기 삭제");
   el.hidden = false; document.body.classList.add("noscroll");
+  const md = document.getElementById("lv-mode"); if (md) md.addEventListener("change", () => { document.getElementById("lvVid").hidden = md.value !== "video"; });
+}
+// 영상 링크 (영상 분석 방식): 유튜브 확인, 치지직은 naver.me 공유 주소를 서버에서 풀어 줌
+async function lvLinks() {
+  const v = id => ((document.getElementById(id) || {}).value || "").trim(), yt = v("lv-yt");
+  if (yt && !parseYt(yt)) { toast("유튜브 링크를 확인해 주세요"); return null; }
+  let vin = v("lv-vod");
+  if (/^(?:https?:\/\/)?naver\.me\//.test(vin)) { const { data, error } = await sb.functions.invoke("resolve-link", { body: { url: /^https?:/.test(vin) ? vin : "https://" + vin } });
+    if (error || !data || !data.url) { toast("치지직 다시보기 주소를 찾지 못했어요"); return null; } vin = data.url; }
+  const vod = vin ? parseVod(vin) : null; if (vin && !vod) { toast("치지직 다시보기 주소를 확인해 주세요"); return null; }
+  return { yt: yt || null, vod };
 }
 // 세트 시작: 첫 서브 · 우리 로테
 function lvSetForm(n) {
@@ -572,9 +585,11 @@ async function lvSubmit(f) {
     const [kind, id] = f.dataset.k.split(":"), tm = v("lv-team").trim(), team = !tm || /^(snu|서울대)/i.test(tm) ? null : tm;
     if (f.dataset.id) { const g = lvGame();
       if (g && !!g.team !== !!team && (L.rallies[g.id] || []).some(r => r.kind)) { toast("기록이 있어서 SNU ↔ 다른 팀은 바꿀 수 없어요"); return; }
-      ok(await sb.from("live_games").update({ label: v("lv-label").trim() || null, team, opponent: v("lv-opp").trim() }).eq("id", f.dataset.id)); }
+      const lk = g && lvVideo(g) ? await lvLinks() : {}; if (!lk) return;
+      ok(await sb.from("live_games").update({ label: v("lv-label").trim() || null, team, opponent: v("lv-opp").trim(), ...lk }).eq("id", f.dataset.id)); if (g) Object.assign(g, lk); }
     else {
-      const r = await sb.from("live_games").insert({ ref_kind: kind, ref_id: id, label: v("lv-label").trim() || null, team, opponent: v("lv-opp").trim(), mode: ["lite", "video"].includes(v("lv-mode")) ? v("lv-mode") : "full", sets: { 1: { serve: v("lv-serve") || "us", rot: Number(v("lv-rot")) || 1, orot: Number(v("lv-orot")) || 1 } } }).select().maybeSingle(); ok(r);
+      const lk = v("lv-mode") === "video" ? await lvLinks() : {}; if (!lk) return;
+      const r = await sb.from("live_games").insert({ ...lk, ref_kind: kind, ref_id: id, label: v("lv-label").trim() || null, team, opponent: v("lv-opp").trim(), mode: ["lite", "video"].includes(v("lv-mode")) ? v("lv-mode") : "full", sets: { 1: { serve: v("lv-serve") || "us", rot: Number(v("lv-rot")) || 1, orot: Number(v("lv-orot")) || 1 } } }).select().maybeSingle(); ok(r);
       if (r.data) { L.open = r.data.id; L.set = 1; L.side = "us"; L.pick = null; L.rallies[r.data.id] = []; pushInner(); }
     }
     closeSheet();
@@ -746,6 +761,7 @@ function lvPage(x) {
   const scope = L.scope === "all" ? rs.filter(r => r.kind) : cur.list;
   return `<section class="sec lv-page"><div class="row between"><button class="btn link small" type="button" data-act="lvback">‹ ${esc(x.name)}</button><span class="row nowrap"><button class="btn link small" type="button" data-act="lvxlsx">엑셀</button>${me ? `<button class="btn link small" type="button" data-act="lvedit">수정</button>` : ""}</span></div>
     <div class="jp-head"><h2 class="dyn">${g.label ? `${esc(g.label)} · ` : ""}${esc(lvTA(g))} vs ${esc(g.opponent)}</h2><span class="small muted">세트 ${won} : ${lost}${lvLite(g) ? " · 라이트" : lvVideo(g) ? " · 영상 분석" : ""}</span></div>
+    ${lvVideo(g) ? (g.vod ? scVodHtml(g) : g.yt ? "" : `<p class="small muted">영상 링크가 없어요. 수정에서 넣을 수 있어요.</p>`) : ""}
     <div class="sc-row">${chips}</div>
     <div class="panel lv-score"><span class="lv-t1 ${cur.serve === "us" ? "srv" : ""}">${esc(lvTA(g))} <small>R${cur.rot}</small></span><b class="num">${cur.us} : ${cur.op}</b><span class="lv-t2 ${cur.serve === "opp" ? "srv" : ""}"><small>R${cur.orot}</small> ${esc(g.opponent)}</span>
       ${cur.run <= -3 ? `<span class="chip warn lv-run">${-cur.run}연속 실점</span>` : cur.run >= 3 ? `<span class="chip ok lv-run">${cur.run}연속 득점</span>` : ""}</div>
