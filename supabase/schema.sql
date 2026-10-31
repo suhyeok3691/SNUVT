@@ -2220,3 +2220,6 @@ alter table public.live_rallies add column if not exists stype text check (stype
 -- live_video_links (영상 분석 방식: 유튜브 · 치지직)
 alter table public.live_games add column if not exists yt text check (yt is null or char_length(yt) <= 200);
 alter table public.live_games add column if not exists vod text check (vod is null or char_length(vod) <= 200);
+
+-- 일본 고교 영상: 채널 이름 (2026-10-31)
+alter table public.jp_videos add column if not exists ch text;

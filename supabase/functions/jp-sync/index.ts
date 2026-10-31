@@ -1,12 +1,13 @@
 // 일본 고교 배구 영상 모으기: 등록한 유튜브 채널·재생목록의 영상 목록을 읽어 jp_videos 에 쌓고,
 // 제목에서 학교(jp_schools 이름·별칭)·대회·연도·라운드·남녀를 찾아 붙임. 서버 예약 작업(x-cron)만 부를 수 있음.
-// mode: new(새 영상만, 기본) · full(처음부터 끝까지, 이어서) · retag(태그만 다시) · fill(빈 전국 경기 검색) · schools(학교별 검색)
+// mode: new(새 영상만, 기본) · full(처음부터 끝까지, 이어서) · retag(태그만 다시) · fill(빈 전국 경기 검색) · schools(학교별 검색) · ch(채널 이름 채우기)
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status, headers: { "Content-Type": "application/json" } });
 const UA = { "Accept-Language": "ja-JP,ja;q=0.9", "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36", Cookie: "CONSENT=YES+1" };
-type V = { id: string; title: string; published: string | null; len: string | null };
+type V = { id: string; title: string; published: string | null; len: string | null; ch?: string | null };
+const runs = (x: any) => x?.runs?.[0]?.text ?? x?.simpleText ?? null;
 
 function walk(o: any, out: V[], cont: { t: string | null }) {
   if (!o || typeof o !== "object") return;
@@ -15,7 +16,7 @@ function walk(o: any, out: V[], cont: { t: string | null }) {
   if (vr && vr.videoId) {
     const title = vr.title?.runs?.map((r: any) => r.text).join("") ?? vr.title?.simpleText ?? "";
     const pub = vr.publishedTimeText?.simpleText ?? vr.videoInfo?.runs?.map((r: any) => r.text).join("") ?? null;
-    out.push({ id: vr.videoId, title, published: pub, len: vr.lengthText?.simpleText ?? null });
+    out.push({ id: vr.videoId, title, published: pub, len: vr.lengthText?.simpleText ?? null, ch: runs(vr.ownerText) ?? runs(vr.longBylineText) ?? runs(vr.shortBylineText) });
     return;
   }
   const lk = o.lockupViewModel;
@@ -41,13 +42,17 @@ async function firstPage(src: any, tab = "videos") {
   if (!m || !key || !ver) throw new Error("page parse " + src.id);
   const out: V[] = [], cont = { t: null as string | null };
   walk(JSON.parse(m[1]), out, cont);
-  return { key, ver, visitor, out, cont: cont.t };
+  // 채널 페이지는 영상마다 채널 이름이 없어서 페이지의 채널 이름을 씀
+  const name = src.kind === "channel" ? JSON.parse(`"${(html.match(/"channelMetadataRenderer":\{"title":"((?:[^"\\]|\\.)*)"/) || [])[1] || ""}"`) || null : null;
+  if (name) for (const v of out) v.ch = v.ch || name;
+  return { key, ver, visitor, out, cont: cont.t, name };
 }
-async function nextPage(key: string, ver: string, visitor: string, token: string) {
+async function nextPage(key: string, ver: string, visitor: string, token: string, name: string | null = null) {
   const r = await fetch(`https://www.youtube.com/youtubei/v1/browse?key=${key}&prettyPrint=false`, { method: "POST", headers: { ...UA, "Content-Type": "application/json" },
     body: JSON.stringify({ context: { client: { clientName: "WEB", clientVersion: ver, hl: "ja", gl: "JP", visitorData: visitor } }, continuation: token }) });
   const out: V[] = [], cont = { t: null as string | null };
   walk(await r.json(), out, cont);
+  if (name) for (const v of out) v.ch = v.ch || name;
   return { out, cont: cont.t };
 }
 
@@ -68,10 +73,13 @@ function tag(title: string) {
   const t = norm(title);
   const body = norm(title.split(/[｜|]/)[0].replace(/#[^\s#]+/g, " "));
   let tourn: string | null = null;
+  // 학교 탐방(잠입·밀착·연습 풍경)은 대회 영상이 아님: 「연습·탐방」으로
+  const visit = VISIT.test(t);
   // 큰 대회 이름은 해시태그 말고 제목 본문에서 먼저 찾고, 여럿이면 먼저 나온 것 (#インターハイ2026 … #春高バレー → 인터하이)
   const BIG: [string, RegExp][] = [["haruko", /春高|春の高校バレー|高等学校選手権|全日本高校選手権/], ["ih", /インターハイ|インハイ|高校総体|総合体育大会/], ["kokutai", /国体|国民体育大会|国スポ|国民スポーツ大会/], ["sakura", /さくらバレー|全国私立高等学校|全国私学/]];
   const first = (x: string) => { let best: [string, number] | null = null; for (const [k, re] of BIG) { const m = x.match(re); if (m && (!best || m.index! < best[1])) best = [k, m.index!]; } return best ? best[0] : null; };
-  if (/インカレ|大学|大学院/.test(t) && !/高校|高等学校/.test(t)) tourn = "univ";
+  if (visit) tourn = "practice";
+  else if (/インカレ|大学|大学院/.test(t) && !/高校|高等学校/.test(t)) tourn = "univ";
   else if (/日本代表|VNL|ネーションズ|アジア(大会|選手権)|SVリーグ|Vリーグ|日本リーグ|天皇杯|オールスター|ドリームマッチ|JOC|JOS|TAURON|Lubin|エキシビション|ハイライト\||ワールドカップ|W杯|五輪|オリンピック|世界選手権|中学|さわやか杯|早慶|代表(MB|WS|OP|L)|全日本(?!高|バレーボール高等|ジュニア)/i.test(t)) tourn = "other";
   else if ((tourn = first(body) || first(t))) { /* 위에서 정함 */ }
   else if (/近畿総体/.test(t) && /2026/.test(t)) tourn = "ih";
@@ -83,16 +91,25 @@ function tag(title: string) {
   let rnd: string | null = null;
   if (/予選|代表決定|県大会|地区大会|都大会|府大会|道大会/.test(t) && tourn !== "block") rnd = "yosen";
   const add = (x: string) => { rnd = (rnd ? rnd + ":" : "") + x; };
+  const repF = rnd === "yosen" && /代表決定/.test(t) && !/準々決勝|準決勝|[1-5一二三四五]回戦|ブロック/.test(t);
   if (/準々決勝/.test(t)) add("QF");
   else if (/準決勝/.test(t)) add("SF");
   else if (/3位|3・4位|3.4位/.test(t)) add("3rd");
   else if (/決勝/.test(t) && !/代表決定|予選/.test(t.replace(/決勝トーナメント/g, ""))) add("F");
   else if (/決勝/.test(t)) add("F");
   else { const r = t.match(/([1-5一二三四五])回戦/); if (r) add("R" + ("1一".includes(r[1]) ? 1 : "2二".includes(r[1]) ? 2 : "3三".includes(r[1]) ? 3 : "4四".includes(r[1]) ? 4 : 5)); }
+  // 현 대표 결정전 = 현 결승
+  if (repF && !/:/.test(rnd || "")) add("F");
   let year: number | null = null;
-  const y = t.match(/(20[0-3]\d)/); if (y) year = Number(y[1]);
-  else if (t.match(/令和(元|\d{1,2})年/)) { const n = t.match(/令和(元|\d{1,2})年/)!; year = 2018 + (n[1] === "元" ? 1 : Number(n[1])); }
-  else if (t.match(/平成(\d{1,2})年/)) year = 1988 + Number(t.match(/平成(\d{1,2})年/)![1]);
+  // 하루코는 1월 대회라 현 예선이 전해 가을(6~12월)에 열림: 날짜(20251115·2025.11.15)나 「令和7年度」로 적힌 해는 대회 해(+1)로
+  const late = (mo: number) => tourn === "haruko" && mo >= 6 ? 1 : 0;
+  const dm = t.match(/(20[0-3]\d)(0[1-9]|1[0-2])[0-3]\d(?!\d)|(20[0-3]\d)[.\/-](1[0-2]|0?[1-9])[.\/-]\d{1,2}|(20[0-3]\d)年(1[0-2]|0?[1-9])月/);
+  const dateY = dm ? Number(dm[1] || dm[3] || dm[5]) + late(Number(dm[2] || dm[4] || dm[6])) : null;
+  const y = (dm ? t.replace(dm[0], " ") : t).match(/(20[0-3]\d)/);
+  if (y) year = Number(y[1]);
+  else if (dateY) year = dateY;
+  else if (t.match(/令和(元|\d{1,2})年/)) { const n = t.match(/令和(元|\d{1,2})年(度)?/)!; year = 2018 + (n[1] === "元" ? 1 : Number(n[1])) + (n[2] && tourn === "haruko" ? 1 : 0); }
+  else if (t.match(/平成(\d{1,2})年/)) { const n = t.match(/平成(\d{1,2})年(度)?/)!; year = 1988 + Number(n[1]) + (n[2] && tourn === "haruko" ? 1 : 0); }
   // 「第N回」은 전국대회 회차일 때만 연도로 (「第74回長崎県高等学校総合体育大会」 같은 현 대회 회차는 다름)
   else if (!/[県都府道](高等学校|高校|総合体育|総体|大会|予選)/.test(t)) { const n = t.match(/第(\d{1,2})回/); if (n && tourn === "haruko") year = Number(n[1]) + (Number(n[1]) < 45 ? 1969 : 1948); else if (n && tourn === "ih") year = Number(n[1]) + 1953; }
   // 국민스포츠대회는 개최지로 연도를 앎 (「とちぎ国体」「青森国スポ」「第77回国体」)
@@ -174,6 +191,7 @@ async function loadSchools() {
 
 // 경기 직캠·중계 풀영상만: 인터뷰·하이라이트·공식연습·선수 소개·뉴스·짧은 클립(8분 미만)은 안 담음
 // (탐방 재생목록과 「연습·탐방」으로 태그된 영상은 그대로)
+const VISIT = /潜入|密着|練習風景|練習メニュー|1日練習|部活紹介|部活動紹介|裏側|強さの秘訣|に迫る|vlog|BeeQuick/i;
 const HARD = /インタビュー|会見|取材|試合後|表彰|閉会式|開会式|入場行進|ハイライト|ダイジェスト|shorts|切り抜き|名場面|好プレー|スーパープレー|プレー集|(スパイク|レシーブ|ブロック|サーブ|アタック|トス|ディグ)集|まとめ|highlight|優勝の瞬間|ラストポイント|勝ち上がり|予告|特集|ニュース|応援団|応援合戦|応援歌|応援メドレー|応援風景|振り返[りる]|校歌|斉唱|カモンロッソ|パブリックビューイング/i;
 const SOFT = /公式練習|スパイク練習|サーブ練習|フリースパイク|メンバー紹介|選手紹介|サービスエース|マッチポイント|ウォーミングアップ|応援/;
 const secs = (len: string | null) => { if (!len) return null; const p = len.split(":").map(Number); return p.some(isNaN) ? null : p.reduce((a, x) => a * 60 + x, 0); };
@@ -182,12 +200,15 @@ function notMatch(title: string, len: string | null) {
   if (HARD.test(t) || (SOFT.test(t) && !/セット|フル|全試合|full/i.test(t))) return true;
   const s = secs(len); return s !== null && s < 480;
 }
-const keepRow = (role: string | undefined, r: { title: string; len: string | null; tourn: string | null }) => role === "visit" || r.tourn === "practice" || !notMatch(r.title, r.len);
+// 「연습·탐방」은 학교 탐방(잠입·밀착)만 둠. 스파이크 연습 같은 짧은 연습 영상은 뺌
+const keepRow = (role: string | undefined, r: { title: string; len: string | null; tourn: string | null }) => role === "visit" || (r.tourn === "practice" ? VISIT.test(norm(r.title)) : !notMatch(r.title, r.len));
 
 async function upsert(src: any, vs: V[]) {
   if (!vs.length) return;
-  const rows = vs.filter((v) => v.id && v.title).map((v) => ({ id: v.id, source: src.id, title: v.title, published: v.published, len: v.len, ...tag(v.title) })).filter((r) => keepRow(src.role, r));
-  for (let i = 0; i < rows.length; i += 200) { const r = await sb.from("jp_videos").upsert(rows.slice(i, i + 200), { onConflict: "id" }); if (r.error) throw r.error; }
+  const rows = vs.filter((v) => v.id && v.title).map((v) => ({ id: v.id, source: src.id, title: v.title, published: v.published, len: v.len, ...(v.ch ? { ch: v.ch } : {}), ...tag(v.title) })).filter((r) => keepRow(src.role, r));
+  // 채널 이름을 모르는 영상은 ch 를 덮어쓰지 않게 따로
+  for (const part of [rows.filter((r: any) => r.ch), rows.filter((r: any) => !r.ch)])
+    for (let i = 0; i < part.length; i += 200) { const r = await sb.from("jp_videos").upsert(part.slice(i, i + 200), { onConflict: "id" }); if (r.error) throw r.error; }
 }
 
 async function syncSource(src: any, mode: string, deadline: number) {
@@ -204,7 +225,7 @@ async function syncSource(src: any, mode: string, deadline: number) {
     token = fp.cont;
   }
   while (token && Date.now() < deadline) {
-    const np = await nextPage(fp.key, fp.ver, fp.visitor, token); pages++;
+    const np = await nextPage(fp.key, fp.ver, fp.visitor, token, fp.name); pages++;
     await upsert(src, np.out); seen += np.out.length;
     token = np.cont;
     if (!np.out.length) break;
@@ -223,7 +244,7 @@ async function syncStreams(src: any, deadline: number) {
     const known = new Set((have.data || []).map((r: any) => r.id));
     await upsert(src, out); seen += out.length;
     if (!token || out.some((v) => known.has(v.id)) || Date.now() > deadline) break;
-    const np = await nextPage(fp.key, fp.ver, fp.visitor, token); out = np.out; token = np.cont;
+    const np = await nextPage(fp.key, fp.ver, fp.visitor, token, fp.name); out = np.out; token = np.cont;
     if (!out.length) break;
   }
   return { id: src.id + ":live", seen };
@@ -327,7 +348,20 @@ Deno.serve(async (req) => {
   const { data: kd } = await sb.rpc("push_keys"); const k = (Array.isArray(kd) ? kd[0] : kd) || {};
   if (!k.cron || req.headers.get("x-cron") !== k.cron) return json({ error: "forbidden" }, 403);
   const body = await req.json().catch(() => ({}));
-  const mode = ["new", "full", "retag", "fill", "schools"].includes(body.mode) ? body.mode : "new";
+  const mode = ["new", "full", "retag", "fill", "schools", "ch"].includes(body.mode) ? body.mode : "new";
+  if (mode === "ch") {
+    // 채널 이름이 빈 영상: oEmbed 로 채널 이름을 채움 (지워진 영상은 '' 로 두어 다시 묻지 않음)
+    const dl = Date.now() + 100000; let n = 0;
+    while (Date.now() < dl) {
+      const l = ((await sb.from("jp_videos").select("id,source,title").is("ch", null).limit(40)).data || []) as any[];
+      if (!l.length) break;
+      const got = await Promise.all(l.map(async (v) => { try { const r = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${v.id}&format=json`); return r.ok ? ((await r.json()).author_name || "").trim() : [400, 401, 403, 404].includes(r.status) ? "" : null; } catch (_) { return null; } }));
+      const rows = l.map((v, i) => ({ id: v.id, source: v.source, title: v.title, ch: got[i] })).filter((r) => r.ch !== null);
+      if (!rows.length) break;
+      await sb.from("jp_videos").upsert(rows, { onConflict: "id" }); n += rows.length;
+    }
+    return json({ mode, filled: n });
+  }
   await loadSchools();
   if (mode === "retag") {
     const ROLE = new Map((((await sb.from("jp_sources").select("id,role")).data || []) as any[]).map((x) => [x.id, x.role]));

@@ -630,7 +630,7 @@ async function jpLoad() {
     J.rank = {}; for (const r of (rk && rk.data) || []) J.rank[r.school_id + "|" + r.gender] = r;
     J.stars = (st && st.data) || []; J.rosters = {}; J.top = (mt && mt.data) || []; J.blockTop = (bt && bt.data) || [];
     const vids = [];
-    for (let from = 0; ; from += 1000) { const r = await sb.from("jp_videos").select("id,source,title,published,year,tourn,gender,rnd,schools").order("added_at", { ascending: false }).range(from, from + 999); if (r.error) throw r.error; vids.push(...(r.data || [])); if ((r.data || []).length < 1000) break; }
+    for (let from = 0; ; from += 1000) { const r = await sb.from("jp_videos").select("id,source,title,published,year,tourn,gender,rnd,schools,ch,len").order("added_at", { ascending: false }).range(from, from + 999); if (r.error) throw r.error; vids.push(...(r.data || [])); if ((r.data || []).length < 1000) break; }
     J.schools = s.data || []; J.sources = src.data || []; J.videos = vids;
     jpLinkPref(J);
     // 한국어 제목용 바꾸기 목록 (긴 것부터)
@@ -653,32 +653,34 @@ function jpKo(title) {
   return t.replace(/【\s*/g, "[").replace(/\s*】/g, "] ").replace(/\s+([!！?？,、。)\]])/g, "$1").replace(/\(\s+/g, "(").replace(/\s+/g, " ").trim();
 }
 const jpRnd = (r, tourn) => { if (!r) return ""; return r.split(":").map(x => x === "yosen" ? jpYosenLab(tourn) : (JP_RND.find(y => y[0] === x) || ["", ""])[1]).filter(Boolean).join(" · "); };
-const jpMeta = v => [v.tourn && JP_TOURN[v.tourn] ? JP_TOURN[v.tourn] + (v.year ? " " + v.year : "") : (v.year || ""), jpRnd(v.rnd, v.tourn), v.schools && jpG(v) === "w" ? "여자" : "", (jp().sources.find(s => s.id === v.source) || {}).label || v.ch || ""].filter(Boolean).join(" · ");
+const jpMeta = v => [v.tourn && JP_TOURN[v.tourn] ? JP_TOURN[v.tourn] + (v.year ? " " + v.year : "") : (v.year || ""), jpRnd(v.rnd, v.tourn), v.schools && jpG(v) === "w" ? "여자" : "", v.ch || (jp().sources.find(s => s.id === v.source) || {}).label || ""].filter(Boolean).join(" · ");
 // 같은 경기(같은 채널 · 같은 제목)가 세트·전후편으로 나뉜 영상은 하나로 묶음
 const JP_PART = [/[\(（]?\s*第?\s*[0-9一二三四五]+(?:\s*[・,，.･•~～\-－と&]\s*[0-9一二三四五]+)*\s*セット(?:目)?(?:のみ|まで)?\s*[\)）]?/g, /(?:最終|ファイナル|ゴールデン)セット/g, /【?\s*(?:前編|中編|後編)\s*】?/g, /(?:その|Part\.?|part\.?|PART)\s*[0-9]+/g, /途中から~?|【?ノーカット版?】?|フル(?:バージョン)?/g];
 function jpPartOf(title) {
-  let t = String(title || "").normalize("NFKC").split(/[｜|]/)[0], lab = [];
+  // 「洛南①…⑤」처럼 동그라미 숫자로 나눈 영상은 세트로 (NFKC 가 ①을 1로 바꾸기 전에)
+  let t = String(title || "").replace(/[①②③④⑤⑥⑦⑧⑨]/g, c => ` 第${"①②③④⑤⑥⑦⑧⑨".indexOf(c) + 1}セット `).normalize("NFKC").split(/[｜|]/)[0], lab = [];
   for (const re of JP_PART) t = t.replace(re, m => { lab.push(m); return " "; });
-  const key = t.replace(/[()（）【】\[\]]\s*[()（）【】\[\]]/g, "").replace(/\s+/g, " ").trim();
+  const key = t.replace(/[()（）【】\[\]]\s*[()（）【】\[\]]/g, "").replace(/\s+/g, "").trim();
   let label = lab.join(" ").replace(/[()（）【】]/g, "").trim();
   label = label.replace(/第?\s*([0-9一二三四五][0-9一二三四五・,，.･•~～\-－と&\s]*)\s*セット(?:目)?(?:のみ|まで)?/g, (m, n) => n.replace(/[・,，.･•と&]/g, "·").replace(/[～~\-－]/g, "~").replace(/\s/g, "") + "세트").replace(/最終セット|ファイナルセット/, "마지막 세트").replace(/ゴールデンセット/, "골든 세트").replace("前編", "전편").replace("中編", "중편").replace("後編", "후편").replace(/途中から~?/, "중간부터").replace(/ノーカット版?|フル(?:バージョン)?/, "풀");
   const n = Number(((label.match(/[0-9]/) || [])[0]) || (/전편/.test(label) ? 1 : /중편/.test(label) ? 2 : /후편/.test(label) ? 3 : /마지막/.test(label) ? 9 : 0));
-  return { key, label: label || "", n };
+  return { key, label: label || "", n, show: t.replace(/[()（）【】\[\]]\s*[()（）【】\[\]]/g, "").replace(/\s+/g, " ").trim() };
 }
 function jpGroups(l) {
   const m = new Map();
   for (const v of l) { const p = jpPartOf(v.title), k = v.source + "|" + p.key; if (!m.has(k)) m.set(k, []); m.get(k).push({ ...v, part: p }); }
   return [...m.values()].map(g => g.sort((a, b) => a.part.n - b.part.n));
 }
-function jpRow(g) {
+function jpRow(g, head) {
   const J = jp(), v0 = g[0], cur = g.find(v => v.id === J.open), multi = g.length > 1;
-  const title = multi ? jpPartOf(v0.title).key : v0.title;
+  const title = multi ? jpPartOf(v0.title).show : v0.title;
   const frame = cur ? `<div class="vid-frame"><iframe src="https://www.youtube-nocookie.com/embed/${esc(cur.id)}?playsinline=1&rel=0&autoplay=1" title="${esc(cur.title)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div><a class="btn link small" href="https://www.youtube.com/watch?v=${esc(cur.id)}" target="_blank" rel="noopener noreferrer">유튜브에서 열기 ↗</a>` : "";
   const parts = multi ? `<div class="jp-parts">${g.map((v, i) => `<button type="button" class="chip sc-chip ${J.open === v.id ? "on" : ""}" data-act="jpplay" data-id="${esc(v.id)}">${esc(v.part.label || `영상 ${i + 1}`)}</button>`).join("")}</div>` : "";
-  return `<li class="jp-v ${cur ? "open" : ""}"><button type="button" class="jp-vh" data-act="jpplay" data-id="${esc((cur || v0).id)}"><span class="jp-ic">${svg("video")}</span><span class="jp-vt"><b>${esc(jpKo(title))}</b><span class="small muted">${esc(jpMeta(v0))}${multi ? ` · 영상 ${g.length}개` : v0.len ? " · " + esc(v0.len) : ""}</span><span class="jp-ja">${esc(title)}</span></span></button>${parts}${frame}</li>`;
+  return `<li class="jp-v ${cur ? "open" : ""}"><button type="button" class="jp-vh" data-act="jpplay" data-id="${esc((cur || v0).id)}"><span class="jp-ic">${svg("video")}</span><span class="jp-vt"><b>${esc(head || jpKo(title))}</b><span class="small muted">${esc(jpMeta(v0))}${multi ? ` · 영상 ${g.length}개` : v0.len ? " · " + esc(v0.len) : ""}</span><span class="jp-ja">${esc(title)}</span></span></button>${parts}${frame}</li>`;
 }
 // 같은 경기(같은 대회·연도·라운드·남녀·두 학교)를 여러 채널이 올렸으면 한 칸에 모아 골라 보게 함
-const jpMatchKey = v => { const sc = v.schools || []; return sc.length === 2 && v.year && ["haruko", "ih", "kokutai", "sakura", "block"].includes(v.tourn) ? [v.tourn, v.year, v.rnd || "", jpG(v), [...sc].sort().join("+")].join("|") : null; };
+// 현 예선은 제목마다 라운드 표기가 달라서(「代表決定戦」·「決勝」·없음) 라운드는 빼고 같은 해 같은 두 학교면 한 경기로
+const jpMatchKey = v => { const sc = v.schools || []; if (sc.length !== 2 || !v.year || jpIsVisit(v) || !["haruko", "ih", "kokutai", "sakura", "block"].includes(v.tourn)) return null; const r = String(v.rnd || ""); return [v.tourn, v.year, r.startsWith("yosen") ? "yosen" : r, jpG(v), [...sc].sort().join("+")].join("|"); };
 function jpMatches(l) {
   const m = new Map();
   for (const g of jpGroups(l)) { const k = jpMatchKey(g[0]) || "g|" + g[0].id; if (!m.has(k)) m.set(k, []); m.get(k).push(g); }
@@ -688,16 +690,20 @@ function jpMatches(l) {
 const jpCount = l => jpMatches(l).length;
 function jpVerLab(g, i, all) {
   const v = g[0], src = jp().sources.find(x => x.id === v.source);
-  let lab = v.source === "search" || !src ? (v.ch || "유튜브") : src.label || v.source;
-  const same = all.filter(x => (x[0].source === v.source && (v.source !== "search" || (x[0].ch || "") === (v.ch || ""))));
+  let lab = v.ch || (src && v.source !== "search" ? src.label : "") || "유튜브";
+  const same = all.filter(x => (x[0].ch || x[0].source) === (v.ch || v.source));
   if (same.length > 1) lab += " " + (same.indexOf(g) + 1);
   return lab + (g.length > 1 ? ` · ${g.length}개` : v.len ? ` · ${v.len}` : "");
 }
-function jpMatchRow(m) {
-  if (m.length === 1) return jpRow(m[0]);
-  const J = jp(), all = m.flat(), v0 = all[0], cur = all.find(v => v.id === J.open), curG = cur ? m.find(g => g.includes(cur)) : null;
+// 경기 칸 제목: 「히가시야마 vs 라쿠난」 (제목에 나온 순서대로)
+function jpVsName(v0) {
   const t0 = String(v0.title || "").normalize("NFKC"), pos = id => { const s = jpSchool(id); const i = s ? [s.name_ja, ...(s.aliases || [])].filter(n => n && !n.startsWith("re:")).map(n => t0.indexOf(n)).filter(i => i >= 0) : []; return i.length ? Math.min(...i) : 999; };
-  const names = [...v0.schools].sort((a, b) => pos(a) - pos(b)).map(id => (jpSchool(id) || {}).name_ko || id);
+  return [...v0.schools].sort((a, b) => pos(a) - pos(b)).map(id => (jpSchool(id) || {}).name_ko || id);
+}
+function jpMatchRow(m) {
+  if (m.length === 1) return jpRow(m[0], jpMatchKey(m[0][0]) ? jpVsName(m[0][0]).join(" vs ") : "");
+  const J = jp(), all = m.flat(), v0 = all[0], cur = all.find(v => v.id === J.open), curG = cur ? m.find(g => g.includes(cur)) : null;
+  const names = jpVsName(v0);
   const meta = jpMeta({ ...v0, source: null, ch: null });
   const frame = cur ? `<div class="vid-frame"><iframe src="https://www.youtube-nocookie.com/embed/${esc(cur.id)}?playsinline=1&rel=0&autoplay=1" title="${esc(cur.title)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div><p class="jp-ja jp-cur">${esc(cur.title)}</p><a class="btn link small" href="https://www.youtube.com/watch?v=${esc(cur.id)}" target="_blank" rel="noopener noreferrer">유튜브에서 열기 ↗</a>` : "";
   const vers = `<div class="jp-parts jp-vers">${m.map((g, i) => `<button type="button" class="chip sc-chip ${g === curG ? "on" : ""}" data-act="jpplay" data-id="${esc((g === curG ? cur : g[0]).id)}" data-keep="1">${esc(jpVerLab(g, i, m))}</button>`).join("")}</div>`;
@@ -770,7 +776,8 @@ const jpGoogle = q => `https://www.google.com/search?q=${encodeURIComponent(q)}`
 const jpGenderOk = (g, x) => x === "mw" || x === g;
 // 제목에 女子가 없어도 나온 학교가 모두 여자부면 여자 경기로
 const jpG = v => v.gender || ((v.schools || []).length && v.schools.every(id => (jpSchool(id) || {}).gender === "w") ? "w" : "m");
-const jpIsVisit = v => (jp().sources.find(s => s.id === v.source) || {}).role === "visit";
+// 학교 탐방: 탐방 재생목록 + 다른 채널의 잠입·밀착 영상(「연습·탐방」 태그). 대회 목록에는 안 나옴
+const jpIsVisit = v => v.tourn === "practice" || (jp().sources.find(s => s.id === v.source) || {}).role === "visit";
 function jpSchoolCount() {
   const J = jp(); if (J._cnt && J._cntK === J.videos.length) return J._cnt;
   const cnt = {}; for (const g of jpMatches(J.videos)) for (const sid of new Set(g.flat().flatMap(v => v.schools || []))) cnt[sid] = (cnt[sid] || 0) + 1;
@@ -846,7 +853,7 @@ function viewJp() {
       ${groups.length ? groups.map(([lab, x]) => `<section class="sec"><h3>${lab} <span class="small muted">${jpCount(x)}</span></h3>${jpList(x)}</section>`).join("") : emptyLine("모아 둔 영상이 없어요.")}
       ${jpSearchBox(`${JP_TOURN_Q[J.tourn] || ""} ${yr > 0 ? yr : ""} ${J.g === "w" ? "女子" : "男子"}`)}`;
   } else {
-    const l = J.videos.filter(v => (J.sources.find(s => s.id === v.source) || {}).role === "visit");
+    const l = J.videos.filter(jpIsVisit);
     const by = {}; for (const v of l) for (const s of (v.schools.length ? v.schools : ["?"])) (by[s] = by[s] || []).push(v);
     body = Object.entries(by).sort((a, b) => a[0] === "?" ? 1 : b[0] === "?" ? -1 : 0).map(([sid, x]) => { const s = jpSchool(sid);
       return `<section class="sec"><h3>${s ? `<button type="button" class="btn link" data-act="jpschool" data-id="${esc(s.id)}">${esc(s.name_ko)}</button> <span class="small muted">${JP_PREF[s.pref] ? JP_PREF[s.pref][0] : ""}</span>` : "기타"}</h3>${jpList(x)}</section>`; }).join("") || emptyLine("탐방 영상이 없어요.");
@@ -856,10 +863,10 @@ function viewJp() {
 function jpSchoolPage(s) {
   const J = jp(); if (!s) { J.school = null; return viewJp(); }
   const l = J.videos.filter(v => (v.schools || []).includes(s.id));
-  const visit = l.filter(v => (J.sources.find(x => x.id === v.source) || {}).role === "visit"), games = l.filter(v => !visit.includes(v));
+  const visit = l.filter(jpIsVisit), games = l.filter(v => !jpIsVisit(v));
   const order = ["haruko", "ih", "kokutai", "sakura", "block", "practice", "univ", "other", null];
   const isOld = v => v.year && v.year < JP_RECENT;
-  const groups = order.map(k => [k, games.filter(v => (v.tourn || null) === k && !isOld(v)).sort((a, b) => (b.year || 0) - (a.year || 0))]).filter(([, x]) => x.length);
+  const groups = order.map(k => [k, games.filter(v => (v.tourn || "other") === k && !isOld(v)).sort((a, b) => (b.year || 0) - (a.year || 0))]).filter(([, x]) => x.length);
   const olds = games.filter(isOld).sort((a, b) => b.year - a.year);
   if (olds.length) groups.push(["old", olds]);
   // 대회를 하나 골라서: 전국 본선(결승 → 1회전) → 현 예선 순
