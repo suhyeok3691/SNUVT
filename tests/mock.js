@@ -31,6 +31,9 @@ const client={auth:{getSession:async()=>({data:{session:{user:{id:me.id,email:ro
 db.jp_schools=[{id:"seifu",name_ja:"清風",name_ko:"세이후",pref:"大阪",gender:"m",aliases:[]},{id:"omi",name_ja:"近江",name_ko:"오미",pref:"滋賀",gender:"m",aliases:[]},{id:"sendai-shoko",name_ja:"川内商工",name_ko:"센다이쇼코",pref:"鹿児島",gender:"m",aliases:[]}];
 db.jp_videos=[{id:"test0000001",source:"search",title:"清風 vs 近江 | 春高 決勝",year:2026,tourn:"haruko",gender:"m",rnd:"F",schools:["seifu","omi"],ch:"test",len:"1:00:00",noembed:false},{id:"test0000002",source:"search",title:"川内商工 練習",year:2026,tourn:"practice",gender:"m",rnd:null,schools:["sendai-shoko"],ch:"test",len:"20:00",noembed:false}];
 for (const t of ["jp_pref_top","jp_sources","jp_results","jp_matches","jp_block_top","jp_rank","jp_stars","jp_roster","guest_votes"]) db[t]=[];
+// 전력분석(예전 프로그램): 등번호로 넣는 경기 하나 (분석 팀 A대 vs B대, 6인제, 1세트 라인업)
+db.scout_matches=[{id:"m1",title:"테스트 경기",date:"2026-10-30",team:"A대",opponent:"B대",division:"6",stage:"예선",lineup:{us:{slots:[1,2,3,4,5,6],pos:["S","OH","MB","OP","OH","MB"],libero:[7]},opp:{slots:[11,12,13,14,15,16],pos:["S","OH","MB","OP","OH","MB"],libero:[17]},sets:{1:{rot:1,opp_rot:1,serve:"us"}}}}];
+db.scout_events=[]; db.scout_points=[];
 db.friendlies=[{id:"f1",team_id:"men",date:"2026-11-08",opponent:"연세대",format:"6",start_time:"14:00",end_time:"17:00",vote_to:["p1"]}];
 // 여자부 (다른 팀) 일정 재료 · 우리 팀 훈련에 오는 여자부
 const GUEST_CAL={team:{id:"women",label:"여자부",swap_days:true},events:[],off:["2026-11-09"],times:[{key:"2026-11-12",start:"19:00",end:"21:00"}],fr:["2026-11-05"]};

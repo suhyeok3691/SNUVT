@@ -135,6 +135,29 @@ const SUITES = {
     assert.deepStrictEqual(ren, { court: "S1 12 MB1 OP1 OH2 MB2", lib: "7", map: { OH1: "12", Li: "7" } });
     clean(a); await a.ctx.close();
   },
+  // 전력분석 = 예전 프로그램: 선수 → Attack → Spike Kill → 떨어진 자리 누르기 → 점수 · x/y/구역 저장, 분석 탭에 점
+  async scout(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await a.go("scout"); await p.waitForTimeout(300);
+    assert.match(await a.text("main"), /전력분석/);
+    await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(400);
+    await p.click('.ct-court .ct-p.us[data-v="2"]'); await p.waitForTimeout(150);
+    await p.click('[data-act="ctcat"][data-v="attack"]'); await p.click('[data-act="ctact"][data-a="kill"]'); await p.waitForTimeout(150);
+    assert.ok(await p.isVisible("#ctCourtTap"), "떨어진 자리 그림");
+    const box = await p.locator("#ctCourtTap").boundingBox();
+    await p.mouse.click(box.x + box.width * 0.8, box.y + box.height * 0.15); await p.waitForTimeout(300); // 오른쪽 위 = 상대 뒤 왼쪽(5번)
+    const ev = (await a.writes("scout_events")).map(x => x[2]);
+    assert.strictEqual(ev.length, 1);
+    assert.deepStrictEqual({ action: ev[0].action, opp_no: ev[0].opp_no, point: ev[0].point, zone: ev[0].zone, x: ev[0].x, y: ev[0].y }, { action: "kill", opp_no: 2, point: "us", zone: 5, x: 20, y: 85 });
+    assert.match(await a.text(".ct-score"), /1 : 0/);
+    // 범실(이유가 있는 것)은 자리 단계 없이, Hit In Play 는 건너뛰기
+    await p.click('.ct-court .ct-p.opp[data-v="12"]'); await p.click('[data-act="ctcat"][data-v="attack"]'); await p.click('[data-act="ctact"][data-a="inplay"]');
+    await p.click('[data-act="ctnospot"]'); await p.waitForTimeout(200);
+    assert.strictEqual((await a.writes("scout_events"))[1][2].x, null);
+    await p.click('[data-act="sctab"][data-k="stats"]'); await p.waitForTimeout(300);
+    assert.strictEqual(await p.evaluate(() => document.querySelectorAll(".ct-spots circle").length), 1, "분석 탭에 점 하나");
+    clean(a); await a.ctx.close();
+  },
   // 훈련 계획: 기본 틀이 드릴 목록 이름과 맞고, 드릴 설명이 뜸
   async practice(b) {
     const L = require("../js/library.js"), names = new Set(L.DRILL_LIB.map(x => x.n));

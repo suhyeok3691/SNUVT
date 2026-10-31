@@ -987,6 +987,16 @@ sub { font-size: 10px; color: var(--muted); }
 .lvr-tools .btn.rot { flex: 0 0 28px; padding: 6px 0; font-size: 15px; }
 @media (max-width: 459px) { .lvr-w { display: none; } }
 @media (max-width: 345px) { .lvr-tools { gap: 2px; } .lvr-tools .btn { font-size: 10.5px; padding: 6px 2px; letter-spacing: -.05em; } .lvr-tools .btn.rot { flex-basis: 24px; } }
+/* 전력분석(예전 프로그램): 공격이 떨어진 자리 */
+.ct-spot { max-width: 360px; margin: 4px auto 10px; }
+.ct-zl { font: 700 30px var(--f-data); fill: var(--ink); opacity: .13; text-anchor: middle; pointer-events: none; }
+.ct-spot-h span { opacity: .8; }
+.ct-spots { display: grid; gap: 16px; }
+@media (min-width: 760px) { .ct-spots { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.ct-spot-team { display: grid; gap: 8px; min-width: 0; }
+.ct-spot-team h4 { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.ct-spot-team .lv-cwrap { max-width: 280px; }
+.lv-dot-k.ct-k-in { background: var(--surface); box-shadow: inset 0 0 0 2px #6b7280; }
 /* 교류전 투표 대상 (전체 / 지정) */
 .vote-pick.sm span { padding: 8px 0; font-size: 14px; font-weight: 700; border-radius: 9px; color: var(--ink); }
 .vote-pick.sm input:checked + span { background: var(--blue); border-color: var(--blue); color: var(--surface); }
@@ -1197,8 +1207,8 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 <script src="js/guide.js?v=194"></script>
 <script src="js/library.js?v=196"></script>
 <script src="js/campus.js?v=196"></script>
-<script src="js/court.js?v=194"></script>
+<script src="js/court.js?v=203"></script>
 <script src="js/live.js?v=202"></script>
-<script src="js/app.js?v=196"></script>
+<script src="js/app.js?v=203"></script>
 </body>
 </html>

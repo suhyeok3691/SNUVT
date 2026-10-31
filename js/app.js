@@ -2129,19 +2129,11 @@ const scSeg = (act, list, cur) => `<div class="seg fill sc-tabs" role="tablist">
 const scChip = (act, v, cur, l) => `<button type="button" class="chip sc-chip ${String(v) === String(cur) ? "on" : ""}" data-act="${act}" data-v="${esc(v)}">${l}</button>`;
 const scPct = (a, b) => b ? Math.round(100 * a / b) + "%" : "—";
 const scCnt = (l, sk, g) => l.filter(e => e.skill === sk && (!g || g.includes(e.grade))).length;
-// 전력분석 두 갈래: 영상 분석(예전 프로그램 · 코트) / 실시간 경기 분석(버튼판)
-// 전력분석 = 경기 하나에 방식(실시간 전체 기록 · Lite · 영상 분석)을 골라 기록. 예전 영상 분석(코트 · scout_matches)은 화면에서 뺌 (court.js는 엑셀 동작 이름 · 기록지 계산에 씀)
-const scTrack = () => `<div class="row"><button class="btn link small" type="button" data-act="sctrack" data-k="live">‹ 전력분석</button></div>`;
+// 전력분석 = 예전 전력분석 프로그램(VolleyballLogger)을 그대로 옮기고 화면만 정리 + 공격이 떨어진 자리
+// (실시간 경기 분석 live.js 는 전력분석 화면에서 뺌. 대회·교류전 페이지의 실시간 기록에만 남음)
 function viewScout() {
   const S = sc();
-  S.track = "live";
-  {
-    const L = lv(), g = L.open ? lvGame() : null;
-    if (g) return lvPage({ ...lvRefOf(g), name: "목록" });
-    if (L.open && !L.games["scout:all"]) { if (L.games["scout:all"] === undefined) lvLoadAll(); return loaderHtml(); }
-    L.open = null;
-    return `<section class="sec"><div class="sec-head"><h2>전력분석</h2>${lvCan() ? `<button class="btn add" type="button" data-act="lvnew" data-k="scout:-">+ 경기</button>` : ""}</div>${lvScoutList()}</section>`;
-  }
+  S.track = "video";
   if (!S.loaded) { scoutLoad(); return loaderHtml(); }
   const m = scMatch();
   if (!m) return scoutList();
@@ -2155,14 +2147,14 @@ function viewScout() {
     ${!ev ? loaderHtml(true) : S.tab === "stats" ? scoutStats(ev, S.points[m.id] || []) : ctPad(m, ev)}</section>`;
 }
 function scoutList() {
-  const S = sc(), head = `<div class="sec-head"><h2>예전 영상 분석</h2><span class="row nowrap">${S.matches.length ? `<button class="btn link small" type="button" data-act="scxlsx" data-id="">엑셀</button>` : ""}${can("analysis") ? `<button class="btn add" type="button" data-act="scnew">+ 경기</button>` : ""}</span></div>`;
-  if (!S.matches.length) return `<section class="sec">${scTrack()}${head}${emptyLine(can("analysis") ? "경기 영상을 추가하면 다 같이 보면서 입력할 수 있어요." : "아직 분석할 경기가 없어요.")}</section>`;
+  const S = sc(), head = `<div class="sec-head"><h2>전력분석</h2><span class="row nowrap">${S.matches.length ? `<button class="btn link small" type="button" data-act="scxlsx" data-id="">엑셀</button>` : ""}${can("analysis") ? `<button class="btn add" type="button" data-act="scnew">+ 경기</button>` : ""}</span></div>`;
+  if (!S.matches.length) return `<section class="sec">${head}${emptyLine(can("analysis") ? "경기 영상을 추가하면 다 같이 보면서 입력할 수 있어요." : "아직 분석할 경기가 없어요.")}</section>`;
   const tabs = scSeg("scltab", [["match", "경기"], ["season", "시즌"], ["opp", "팀별"]], S.ltab);
   let body;
   if (S.ltab === "match") body = `<div class="sc-list">${S.matches.map(x => `<button type="button" class="panel sc-card" data-act="scopen" data-id="${esc(x.id)}"><b>${esc(x.title)}</b><span class="small muted">${scMeta(x)}</span><span class="go">›</span></button>`).join("")}</div>`;
   else if (S.all !== true) { scoutAll(); body = loaderHtml(true); }
   else body = S.ltab === "season" ? scoutSeason() : scoutOpp();
-  return `<section class="sec">${scTrack()}${head}${tabs}${body}</section>`;
+  return `<section class="sec">${head}${tabs}${body}</section>`;
 }
 // 치지직 다시보기는 앱 안에 못 띄워서(퍼가기 없음) 새 창으로 열고, 영상 시계를 맞춰 두면 기록마다 그 시간이 붙음
 const parseVod = u => { const x = /^(?:https?:\/\/)?(?:m\.)?chzzk\.naver\.com\/video\/(\d+)/.exec(String(u || "").trim()); return x ? `https://chzzk.naver.com/video/${x[1]}` : null; };
@@ -2226,6 +2218,7 @@ function scoutStats(ev, pts) {
   return `<div class="sc-row"><span class="sc-k">세트</span>${[0, 1, 2, 3, 4, 5].map(n => scChip("scfset", n, S.fset, n || "전체")).join("")}</div>
     <section class="sec"><h3>${esc(ctTA(m))}</h3>${ctSheetTable(all, "us")}</section>
     <section class="sec"><h3>${esc((m && m.opponent) || "상대")}</h3>${ctSheetTable(all, "opp")}</section>
+    <section class="sec"><h3>공격이 떨어진 자리</h3>${ctSpotStats(all)}</section>
     ${ctNine(m) ? "" : `<section class="sec"><h3>로테이션별 득실 · ${esc(ctTA(m))}</h3>${scRotTable(pl)}</section>
     <section class="sec"><h3>로테이션별 득실 · ${esc((m && m.opponent) || "상대")}</h3>${ctOppRotTable(pl)}</section>`}`;
 }
@@ -3089,7 +3082,6 @@ document.addEventListener("click", async ev => {
     if (act === "scxlsx") return scoutXlsx(b.dataset.id);
     if (act === "sctab") S.tab = b.dataset.k;
     else if (act === "scltab") S.ltab = b.dataset.k;
-    else if (act === "sctrack") { S.track = b.dataset.k; if (state.live) state.live.open = null; }
     else if (act === "scmetric") S.metric = v;
     else if (act === "scset") x.set = Number(v);
     else if (act === "scfset") S.fset = Number(v);

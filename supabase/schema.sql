@@ -2328,3 +2328,7 @@ begin
 end $$;
 revoke all on function public.live_rename(uuid, text, jsonb) from public, anon;
 grant execute on function public.live_rename(uuid, text, jsonb) to authenticated;
+
+-- ========== 전력분석: 공격이 떨어진 자리 (2026-11-01) ==========
+alter table public.scout_events add column x smallint, add column y smallint;
+alter table public.scout_events add constraint scout_events_xy_check check ((x is null or x between 0 and 100) and (y is null or y between 0 and 100));
