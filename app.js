@@ -782,7 +782,7 @@ const jpList = l => l.length ? `<ul class="jp-list">${jpMatches(l).map(jpMatchRo
 // 대회 성적: 위키백과(일본어) 역대 결과표로 만든 jp_results (영상 제목으로 짐작하지 않음)
 const JP_PLACE = { 1: "우승", 2: "준우승", 3: "4강" };
 const JP_RECENT = 2019; // 학교 페이지: 이 해부터는 연도별로, 그 전은 '그 외'
-const JP_CHIP_FROM = 2020; // 대회 탭: 이 해부터 연도 칩, 그 전은 「그 외」 안에
+const JP_CHIP_FROM = 2020, JP_MID_FROM = 2012; // 대회 탭: 2020~ 바로, 「+」 안에 2012~2019, 그 안 「그 외」에 그 전
 // 고교 랭킹 (jp_rank): 전국대회에서 간 곳(16강·8강 포함) + 현 대회 4강 이상, 최근 결과일수록 크게
 const JP_LVL = { 7: "우승", 6: "준우승", 5: "4강", 4: "8강", 3: "16강", 2: "32강", 1: "출전", 0: "출전" };
 const jpRank = (id, g) => (jp().rank || {})[id + "|" + g] || null;
@@ -908,11 +908,12 @@ function viewJp() {
     // 연도: 결과·영상이 있는 해 모두. JP_CHIP_FROM 이후는 바로 칩, 그 전 해와 해 모르는 영상은 「그 외」를 누르면 나옴
     const resY = isB ? (J.blockTop || []).filter(r => r.gender === J.g && (rg == null || JP_BLOCK_RG[r.region] === rg)).map(r => r.year) : jpResYears(J.tourn, J.g);
     const years = [...new Set([...inT.map(v => v.year), ...resY].filter(Boolean))].sort((a, b) => b - a);
-    const recentY = years.filter(y => y >= JP_CHIP_FROM), oldY = years.filter(y => y < JP_CHIP_FROM);
-    const hasOld = oldY.length > 0 || inT.some(v => !v.year);
+    // 2020~ 바로, 「+」를 누르면 2012~2019, 거기서 「그 외」를 누르면 2011년 이전과 연도 모르는 영상
+    const recentY = years.filter(y => y >= JP_CHIP_FROM), midY = years.filter(y => y < JP_CHIP_FROM && y >= JP_MID_FROM), oldY = years.filter(y => y < JP_MID_FROM);
+    const hasOld = oldY.length > 0 || inT.some(v => !v.year), hasMore = midY.length > 0 || hasOld;
     const hasHist = !isB && resY.length > 1;
-    const yr = J.year === -1 && hasOld ? -1 : J.year === -2 && hasHist ? -2 : years.includes(J.year) ? J.year : recentY[0] || oldY[0] || (hasOld ? -1 : 0);
-    const inOld = yr === -1 || oldY.includes(yr);
+    const yr = J.year === -1 && hasOld ? -1 : J.year === -2 && hasHist ? -2 : years.includes(J.year) ? J.year : recentY[0] || midY[0] || oldY[0] || (hasOld ? -1 : 0);
+    const inOld = yr === -1 || oldY.includes(yr), inMore = J.yearMore || inOld || midY.includes(yr);
     const l = yr === -2 ? [] : inT.filter(v => yr === -1 ? !v.year : !yr || v.year === yr);
     const resCard = isB ? (rg != null && yr > 0 ? jpBlockResults(rg, yr, J.g) : "") : yr === -2 ? jpResultHistory(J.tourn, J.g) : yr > 0 ? jpResultCard(J.tourn, yr, J.g) : "";
     const rgSel = isB ? `<div class="sc-row"><span class="sc-k">지역</span><button type="button" class="chip sc-chip ${rg == null ? "on" : ""}" data-act="jprg" data-v="">전체</button>${JP_REGIONS.map((n, i) => `<button type="button" class="chip sc-chip ${rg === i ? "on" : ""}" data-act="jprg" data-v="${i}">${n}</button>`).join("")}</div>` : "";
@@ -921,7 +922,8 @@ function viewJp() {
     const groups = isB ? JP_BLOCK_KIND.map(([lab, re]) => [lab, l.filter(v => jpBlockKind(v) === lab).sort((a, b) => (RK[jpRndKey(a)] ?? 99) - (RK[jpRndKey(b)] ?? 99))]).filter(([, x]) => x.length) : jpRoundSections(l, ["haruko", "ih", "kokutai"].includes(J.tourn), J.tourn);
     body = `<div class="sc-row">${T.map(k => `<button type="button" class="chip sc-chip ${J.tourn === k ? "on" : ""}" data-act="jptourn" data-v="${k}">${JP_TOURN[k]}</button>`).join("")}</div>${gsel}
       ${rgSel}
-      ${years.length || hasOld ? `<div class="sc-row"><span class="sc-k">연도</span>${hasHist ? `<button type="button" class="chip sc-chip ${yr === -2 ? "on" : ""}" data-act="jpyear" data-v="-2">역대</button>` : ""}${recentY.map(y => `<button type="button" class="chip sc-chip ${yr === y ? "on" : ""}" data-act="jpyear" data-v="${y}">${y}</button>`).join("")}${hasOld ? `<button type="button" class="chip sc-chip ${inOld ? "on" : ""}" data-act="jpyear" data-v="-1">그 외</button>` : ""}</div>` : ""}
+      ${years.length || hasOld ? `<div class="sc-row"><span class="sc-k">연도</span>${hasHist ? `<button type="button" class="chip sc-chip ${yr === -2 ? "on" : ""}" data-act="jpyear" data-v="-2">역대</button>` : ""}${recentY.map(y => `<button type="button" class="chip sc-chip ${yr === y ? "on" : ""}" data-act="jpyear" data-v="${y}">${y}</button>`).join("")}${hasMore ? `<button type="button" class="chip sc-chip ${inMore ? "on" : ""}" data-act="jpyearmore" aria-expanded="${inMore}" aria-label="이전 연도">${inMore ? "−" : "+"}</button>` : ""}</div>` : ""}
+      ${inMore ? `<div class="sc-row"><span class="sc-k"></span>${midY.map(y => `<button type="button" class="chip sc-chip ${yr === y ? "on" : ""}" data-act="jpyear" data-v="${y}">${y}</button>`).join("")}${hasOld ? `<button type="button" class="chip sc-chip ${inOld ? "on" : ""}" data-act="jpyear" data-v="-1">그 외</button>` : ""}</div>` : ""}
       ${inOld && oldY.length ? `<div class="sc-row"><span class="sc-k"></span>${oldY.map(y => `<button type="button" class="chip sc-chip ${yr === y ? "on" : ""}" data-act="jpyear" data-v="${y}">${y}</button>`).join("")}</div>` : ""}
       ${resCard}
       ${yr === -2 ? "" : groups.length ? groups.map(([lab, x]) => `<section class="sec"><h3>${yr === -1 ? "연도 모름 · " : ""}${lab} <span class="small muted">${jpCount(x)}</span></h3>${jpList(x)}</section>`).join("") : yr === -1 ? "" : emptyLine("모아 둔 영상이 없어요.")}
@@ -2996,9 +2998,10 @@ document.addEventListener("click", async ev => {
     else if (act === "jpsyear") J.syear = v ? Number(v) : null;
     else if (act === "jpschool") { if (!J.school) pushInner(); J.school = b.dataset.id; J.open = null; J.stourn = null; J.syear = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
     else if (act === "jpback") { if (history.state && history.state.inner) return history.back(); J.school = null; J.open = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
-    else if (act === "jptourn") { J.tourn = v; J.year = 0; }
+    else if (act === "jptourn") { J.tourn = v; J.year = 0; J.yearMore = false; }
     else if (act === "jprg") { J.rg = v === "" ? null : Number(v); J.year = 0; }
-    else if (act === "jpyear") J.year = Number(v);
+    else if (act === "jpyear") { J.year = Number(v); if (J.year === -2 || J.year >= JP_CHIP_FROM) J.yearMore = false; }
+    else if (act === "jpyearmore") { const J0 = jp(); if (J0.yearMore || J0.year === -1 || (J0.year > 0 && J0.year < JP_CHIP_FROM)) { J0.yearMore = false; J0.year = 0; } else J0.yearMore = true; }
     else if (act === "jpsearch") return jpSearch(b.dataset.base, b.dataset.k);
     else if (act === "jpsync") { try { ok(await sb.rpc("jp_sync_now")); toast("가져오는 중이에요. 몇 분 뒤 다시 열어 보세요."); } catch (e) { toast(failMsg(e)); } return; }
     else if (act === "jpsrcdel") {
