@@ -331,16 +331,29 @@ async function fill(deadline: number) {
 // 일본어 위키백과에 그 현의 「○○高等学校」 글이 있고 글 제목의 핵심 이름이 후보와 같을 때만 읽기(히라가나)와 함께 jp_schools 에 넣음 (note 'auto')
 const PREF_FULL = (p: string) => p === "北海道" ? p : p === "東京" ? "東京都" : /^(京都|大阪)$/.test(p) ? p + "府" : p + "県";
 const WUA = { "User-Agent": "SNUVT-team-tool/1.0 (school name readings; contact via github.com/suhyeok3691/SNUVT)" };
-async function wapi(q: string) { try { const r = await fetch("https://ja.wikipedia.org/w/api.php?format=json&formatversion=2&origin=*&" + q, { headers: WUA }); return r.ok ? await r.json() : null; } catch (_) { return null; } }
+async function wapi(q: string) {
+  for (let i = 0; i < 3; i++) {
+    try { const r = await fetch("https://ja.wikipedia.org/w/api.php?format=json&formatversion=2&maxlag=5&" + q, { headers: WUA }); if (r.ok) return await r.json(); } catch (_) { /* 다시 */ }
+    await new Promise((r) => setTimeout(r, 1500 * (i + 1)));
+  }
+  return null;
+}
 async function wikiSchool(name: string, pref: string) {
-  const s = await wapi(`action=query&list=search&srlimit=6&srsearch=${encodeURIComponent(`${name}高等学校 ${PREF_FULL(pref)}`)}`);
-  const titles: string[] = ((s && s.query && s.query.search) || []).map((x: any) => x.title).filter((t: string) => /高等学校/.test(t) && !/一覧|中学校$|大学$/.test(t));
-  for (const title of titles) {
+  // 글 제목을 바로 맞혀 보고(「埼玉県立深谷高等学校」「深谷高等学校」), 없으면 제목 검색(intitle)
+  const PF = PREF_FULL(pref);
+  const direct = [`${PF}立${name}高等学校`, `${name}高等学校`, `${PF}${name}高等学校`];
+  const s = await wapi(`action=query&list=search&srlimit=8&srsearch=${encodeURIComponent(`intitle:${name}高等学校`)}`);
+  const found: string[] = ((s && s.query && s.query.search) || []).map((x: any) => x.title);
+  const titles = [...new Set([...direct, ...found])].filter((t) => /高等学校/.test(t) && !/一覧|中学校$|大学$/.test(t));
+  const e = await wapi(`action=query&prop=extracts&exintro=1&explaintext=1&redirects=1&titles=${encodeURIComponent(titles.slice(0, 12).join("|"))}`);
+  if (!s || !e) return undefined; // 위키백과가 응답하지 않음(요청 제한 등): 다음에 다시
+  // 「○○県立…」 글을 먼저, 「深谷高等学校（…）は、日本の高等学校。」 같은 동음이의 글은 건너뜀
+  const pages: any[] = ((e && e.query && e.query.pages) || []).sort((a: any, b: any) => Number((b.title || "").startsWith(PF)) - Number((a.title || "").startsWith(PF)));
+  for (const pg of pages) {
+    if (!pg || pg.missing || !pg.extract || /は、日本の(高等)?学校。/.test(pg.extract)) continue;
+    const title: string = pg.title, ex: string = pg.extract;
     const core = title.replace(/^.*?[都道府県市町村]立/, "").replace(/高等学校.*$/, "");
-    if (core !== name) continue;
-    const e = await wapi(`action=query&prop=extracts&exintro=1&explaintext=1&redirects=1&titles=${encodeURIComponent(title)}`);
-    const pg = e && e.query && e.query.pages && e.query.pages[0], ex: string = (pg && pg.extract) || "";
-    if (!ex.includes(PREF_FULL(pref))) continue; // 다른 현의 같은 이름 학교는 건너뜀
+    if (core !== name || !ex.includes(PF)) continue; // 다른 현의 같은 이름 학교는 건너뜀
     const m = ex.match(/[（(]([ぁ-ゖー・\s、]+)[、,）)]/); if (!m) continue;
     const kana = m[1].replace(/[\s・、]/g, "").replace(/^.*?(けんりつ|ふりつ|とりつ|どうりつ|しりつ|ちょうりつ|そんりつ)/, "").replace(/こうとうがっこう.*$/, "");
     if (kana.length < 2) continue;
@@ -419,9 +432,12 @@ async function newSchools(deadline: number) {
   const todo = ((await sb.from("jp_school_cand").select("name,pref,g").is("status", null).order("n", { ascending: false }).limit(60)).data || []) as any[];
   const have = ((await sb.from("jp_schools").select("id,name_ja,pref,wiki")).data || []) as any[];
   const ids = new Set(have.map((s) => s.id)); let added = 0, none = 0;
-  for (let i = 0; i < todo.length && Date.now() < deadline; i += 6) {
-    await Promise.all(todo.slice(i, i + 6).map(async (c) => {
+  // 위키백과는 한 번에 하나씩 (동시에 많이 물으면 요청 제한에 걸림)
+  for (const c of todo) {
+    if (Date.now() > deadline) break;
+    await (async () => {
       const w = await wikiSchool(c.name, c.pref);
+      if (w === undefined) { await new Promise((r) => setTimeout(r, 1500)); return; }
       // 이미 있는 학교(같은 위키 글이거나 같은 현의 같은 이름)는 넣지 않음
       const dup = w && have.find((s) => (s.wiki || "").split("|")[0] === w.title || (s.pref === c.pref && norm(s.name_ja).replace(/(高等学校|高校)$/, "") === c.name));
       if (dup) { await sb.from("jp_school_cand").update({ status: "dup", school_id: dup.id, tried_at: new Date().toISOString() }).eq("name", c.name).eq("pref", c.pref); return; }
@@ -432,7 +448,7 @@ async function newSchools(deadline: number) {
       const r = await sb.from("jp_schools").insert(row);
       await sb.from("jp_school_cand").update({ status: r.error ? "error" : "added", school_id: r.error ? null : id, wiki: `${w.title}|${w.kana}`, tried_at: new Date().toISOString() }).eq("name", c.name).eq("pref", c.pref);
       if (!r.error) added++;
-    }));
+    })();
   }
   return { cands: rows.length, tried: todo.length, added, none };
 }
