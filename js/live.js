@@ -157,7 +157,7 @@ function lvCourtOn(g, side, s, setNo) {
 }
 const lvPosSel = (cls, cur) => `<select class="${cls}" aria-label="포지션"><option value="">포지션</option>${LV_POS.map(p => `<option ${p === cur ? "selected" : ""}>${p}</option>`).join("")}</select>`;
 const lvRosRow = x => `<div class="lvr-row"><input class="lvr-n" maxlength="4" autocapitalize="characters" autocomplete="off" placeholder="번호 · OH1" value="${x ? esc(x.no) : ""}" aria-label="번호">${lvPosSel("lvr-p", x ? x.pos : "")}<button type="button" class="btn small danger" data-act="lvrosdel" aria-label="지우기">✕</button></div>`;
-// 명단 · 로테 창: 명단(번호 + 포지션, 줄마다 지우기) → "자동 배치"로 S 1번 서브 자리 기준 기본 로테(S · OH · MB · OP · OH · MB) → OH끼리 · MB끼리 · S↔OP 바꾸기, 한 칸씩 돌리기, 칸 직접 고치기
+// 명단 · 로테 창: 명단(번호 + 포지션, 줄마다 지우기) → "자동 배치"로 S 1번 서브 자리 기준 기본 로테(S · OH · MB · OP · OH · MB) → OH끼리 · MB끼리 · S↔OP · OH↔MB(순서) 바꾸기, 한 칸씩 돌리기, 칸 직접 고치기
 // 세트 처음(기록 없음)에 저장하면 S 자리로 로테 번호도 맞춤 (S 1번 = R1, 6번 = R2, 5번 = R3, 4번 = R4, 3번 = R5, 2번 = R6)
 const LV_SROT = { 1: 1, 6: 2, 5: 3, 4: 4, 3: 5, 2: 6 };
 const lvRefKey = g => [g.ref_kind, g.ref_id];
@@ -172,7 +172,7 @@ function lvRosSheet() {
     <form class="f" id="lvRosForm">
       ${snu ? "" : `<h4>명단</h4><div class="lvr-list" id="lvrList">${ros.map(lvRosRow).join("")}${lvRosRow(null)}</div><div class="sc-row">${["OH", "MB", "OP", "S", "Li"].map(t => `<button type="button" class="btn small" data-act="lvrostag" data-v="${t}">+ ${t}</button>`).join("")}</div>`}
       <h4>${L.set}세트 코트 <span class="small muted" id="lvrInfo"></span></h4>
-      <div class="sc-row"><button type="button" class="btn small primary" data-act="lvauto">자동 배치</button><button type="button" class="btn small" data-act="lvswap" data-v="OH">OH 바꾸기</button><button type="button" class="btn small" data-act="lvswap" data-v="MB">MB 바꾸기</button><button type="button" class="btn small" data-act="lvswap" data-v="S|OP">S ↔ OP</button><button type="button" class="btn small" data-act="lvturn" data-d="1" aria-label="로테 한 칸">↻</button><button type="button" class="btn small" data-act="lvturn" data-d="-1" aria-label="반대로 한 칸">↺</button></div>
+      <div class="sc-row"><button type="button" class="btn small primary" data-act="lvauto">자동 배치</button><button type="button" class="btn small" data-act="lvswap" data-v="OH">OH 바꾸기</button><button type="button" class="btn small" data-act="lvswap" data-v="MB">MB 바꾸기</button><button type="button" class="btn small" data-act="lvswap" data-v="S|OP">S ↔ OP</button><button type="button" class="btn small" data-act="lvswap" data-v="OH~MB">OH ↔ MB</button><button type="button" class="btn small" data-act="lvturn" data-d="1" aria-label="로테 한 칸">↻</button><button type="button" class="btn small" data-act="lvturn" data-d="-1" aria-label="반대로 한 칸">↺</button></div>
       <div class="ct-lu"><span class="ct-netl">네트</span>${[4, 3, 2, 5, 6, 1].map(cell).join("")}</div>
       <div class="fields"><label class="fl">리베로${snu
         ? `<select id="lvrLib"><option value="">없음</option>${sortedPlayers().filter(p => !p.military).sort((a, b) => (lvNormPos(b.pos) === "L") - (lvNormPos(a.pos) === "L")).map(p => `<option value="${esc(p.id)}" ${String(lib ?? "") === String(p.id) ? "selected" : ""}>${esc(pNo(p) + p.name)}${lvNormPos(p.pos) === "L" ? " · L" : ""}</option>`).join("")}</select>`
@@ -229,6 +229,21 @@ function lvRosAuto() {
 // pos "OH" · "MB": 같은 포지션 둘끼리 / "S|OP": 세터와 아포짓(대각) 자리 바꾸기
 function lvRosSwap(pos) {
   const arr = lvCourtRead();
+  // "OH~MB": 로테 순서에서 붙어 있는 OH · MB 짝을 모두 맞바꿈 (S OH MB OP OH MB ↔ S MB OH OP MB OH). 둘 다 규칙상 가능
+  if (pos === "OH~MB") {
+    const used = new Set(); let n = 0;
+    arr.forEach((x, i) => {
+      if (x.pos !== "OH" || used.has(i)) return;
+      const j = [(i + 1) % 6, (i + 5) % 6].find(k => arr[k].pos === "MB" && !used.has(k)); if (j == null) return;
+      used.add(i); used.add(j); n++;
+    });
+    if (!n) return toast("코트에 OH 옆에 MB가 있어야 해요");
+    const out = arr.slice(), pairs = [...used].sort((a, b) => a - b);
+    // 짝마다 두 자리를 맞바꿈
+    const done = new Set();
+    for (const i of pairs) { if (done.has(i) || arr[i].pos !== "OH") continue; const j = [(i + 1) % 6, (i + 5) % 6].find(k => used.has(k) && arr[k].pos === "MB" && !done.has(k)); out[i] = arr[j]; out[j] = arr[i]; done.add(i); done.add(j); }
+    return lvCourtWrite(out);
+  }
   if (pos.includes("|")) {
     const [a, b] = pos.split("|"), i = arr.findIndex(x => x.pos === a), j = arr.findIndex(x => x.pos === b);
     if (i < 0 || j < 0) return toast(`코트에 ${a}와 ${b}가 있어야 해요`);

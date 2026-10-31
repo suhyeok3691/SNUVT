@@ -104,7 +104,7 @@ const SUITES = {
     assert.deepStrictEqual((await c.writes("friendlies"))[0][2].vote_to, ["p2"]);
     clean(c); await c.ctx.close();
   },
-  // 전력분석 명단·로테: 자동 배치 뒤 S ↔ OP 맞바꿈 (다른 팀 = 번호 입력 방식)
+  // 전력분석 명단·로테: S ↔ OP 맞바꿈, OH ↔ MB 순서 바꾸기(두 번 누르면 원래대로) (다른 팀 = 번호 입력 방식)
   async rotation(b) {
     const a = await openApp(b, "coach"), p = a.page;
     const ok = await p.evaluate(() => {
@@ -116,6 +116,12 @@ const SUITES = {
       return [1, 2, 3, 4, 5, 6].map(z => document.querySelector(`.lvr-c[data-z="${z}"]`).value).join(" ");
     });
     assert.strictEqual(ok, "OP1 OH1 MB1 S1 OH2 MB2");
+    const ord = await p.evaluate(() => {
+      const tag = ["S1", "OH1", "MB1", "OP1", "OH2", "MB2"], read = () => [1, 2, 3, 4, 5, 6].map(z => document.querySelector(`.lvr-c[data-z="${z}"]`).value).join(" ");
+      tag.forEach((v, i) => { document.querySelector(`.lvr-c[data-z="${i + 1}"]`).value = v; });
+      lvRosSwap("OH~MB"); const one = read(); lvRosSwap("OH~MB"); return [one, read()];
+    });
+    assert.deepStrictEqual(ord, ["S1 MB1 OH1 OP1 MB2 OH2", "S1 OH1 MB1 OP1 OH2 MB2"]);
     clean(a); await a.ctx.close();
   },
   // 훈련 계획: 기본 틀이 드릴 목록 이름과 맞고, 드릴 설명이 뜸
