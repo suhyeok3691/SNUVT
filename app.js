@@ -582,19 +582,31 @@ function jpTeamChip(name, pref, g, tourn, cls) {
   else { sch = jpFindSchool(name, pref, g); lab = sch ? sch.name_ko : name; }
   return sch ? `<button type="button" class="chip ${cls}" data-act="jpschool" data-id="${esc(sch.id)}">${esc(lab)}</button>` : `<span class="chip ${cls}">${esc(lab)}</span>`;
 }
-// 대회 결과 상자: 대진(결승·4강·3위전·8강)이 있으면 그걸로, 없으면 역대 4강 표(jp_results)
-function jpResultCard(tourn, yr, g) {
-  const J = jp(), ms = (J.top || []).filter(m => m.tourn === tourn && m.year === yr && m.gender === g && m.a_sets !== m.b_sets);
+// 대회 결과 상자: 영상과 상관없이 검색으로 모은 결과로. 대진(jp_matches: 결승·3위전·4강·8강)을 먼저 쓰고, 빈 칸은 역대 결과표(jp_results: 우승·준우승·4강)로 채움
+function jpResRows(tourn, yr, g) {
+  const J = jp(), ms = (J.top || []).filter(m => m.tourn === tourn && m.year === yr && m.gender === g && m.a_sets != null && m.a_sets !== m.b_sets);
   const W = m => m.a_sets > m.b_sets ? [m.a_name, m.a_pref] : [m.b_name, m.b_pref], L = m => m.a_sets > m.b_sets ? [m.b_name, m.b_pref] : [m.a_name, m.a_pref];
+  const res = (J.results || []).filter(r => r.tourn === tourn && r.gender === g && r.year === yr);
+  const seen = new Set(), key = n => jpNorm(n).replace(/\(.*$/, "").replace(/(高等学校|高校|高)$/, "");
+  const chip = (it, cls) => { const k = key(it.n); if (seen.has(k)) return ""; seen.add(k); if (it.sid) { const s = jpSchool(it.sid); return `<button type="button" class="chip ${cls}" data-act="jpschool" data-id="${esc(it.sid)}">${esc(s ? s.name_ko : it.n)}</button>`; } return jpTeamChip(it.n, it.p, g, tourn, cls); };
+  const fromM = l => l.map(([n, p]) => ({ n, p })), fromR = pl => res.filter(r => r.place === pl).map(r => ({ n: r.name_ja || r.school_id, sid: r.school_id }));
+  const f = ms.find(m => m.rnd === "F"), th = ms.find(m => m.rnd === "3rd"), sf = ms.filter(m => m.rnd === "SF"), qf = ms.filter(m => m.rnd === "QF");
   const rows = [];
-  const f = ms.find(m => m.rnd === "F"), th = ms.find(m => m.rnd === "3rd");
-  if (f) { rows.push(["우승", [W(f)], "warn"]); rows.push(["준우승", [L(f)], ""]); }
-  if (th) { rows.push(["3위", [W(th)], ""]); rows.push(["4위", [L(th)], ""]); } else { const sf = ms.filter(m => m.rnd === "SF").map(L); if (sf.length) rows.push(["4강", sf, ""]); }
-  const qf = ms.filter(m => m.rnd === "QF").map(L); if (qf.length) rows.push(["8강", qf, ""]);
-  if (rows.length) return `<div class="panel jp-honor"><b>${JP_TOURN[tourn]} ${yr} 결과${tourn === "kokutai" ? ` <span class="small muted">현 대표 (학교)</span>` : ""}</b>${rows.map(([lab, l, c]) => `<div class="jp-res"><span class="jp-rl">${lab}</span><div class="jp-chips">${l.map(([n, p]) => jpTeamChip(n, p, g, tourn, c)).join("")}</div></div>`).join("")}</div>`;
-  const res = (J.results || []).filter(r => r.tourn === tourn && r.gender === g && r.year === yr).sort((a, b) => a.place - b.place);
-  return res.length ? `<div class="panel jp-honor"><b>${JP_TOURN[tourn]} ${yr} 결과</b><div class="jp-chips">${[1, 2, 3].map(pl => res.filter(r => r.place === pl).map(r => { const s = jpSchool(r.school_id); return `<button type="button" class="chip ${pl === 1 ? "warn" : ""}" data-act="jpschool" data-id="${esc(r.school_id)}">${JP_PLACE[pl]} ${esc(s ? s.name_ko : r.name_ja)}</button>`; }).join("")).join("")}</div></div>` : "";
+  const add = (lab, items, cls) => { const h = items.map(it => chip(it, cls)).join(""); if (h) rows.push([lab, h]); };
+  add("우승", f ? fromM([W(f)]) : fromR(1), "warn");
+  add("준우승", f ? fromM([L(f)]) : fromR(2), "");
+  if (th) { add("3위", fromM([W(th)]), ""); add("4위", fromM([L(th)]), ""); }
+  else add("4강", sf.length ? fromM(sf.map(L)) : fromR(3), "");
+  add("8강", fromM(qf.map(L)), "");
+  return rows;
 }
+const jpResYears = (tourn, g) => { const J = jp(); return [...new Set([...(J.results || []), ...(J.top || [])].filter(r => r.tourn === tourn && r.gender === g).map(r => r.year))].sort((a, b) => b - a); };
+function jpResultCard(tourn, yr, g, head) {
+  const rows = jpResRows(tourn, yr, g);
+  return rows.length ? `<div class="panel jp-honor"><b>${head || `${JP_TOURN[tourn]} ${yr} 결과`}${tourn === "kokutai" ? ` <span class="small muted">현 대표 (학교)</span>` : ""}</b>${rows.map(([lab, h]) => `<div class="jp-res"><span class="jp-rl">${lab}</span><div class="jp-chips">${h}</div></div>`).join("")}</div>` : "";
+}
+// 역대 결과: 해마다 한 상자
+const jpResultHistory = (tourn, g) => { const ys = jpResYears(tourn, g); return ys.length ? `<div class="boxes box-cols">${ys.map(y => jpResultCard(tourn, y, g, `${y}`)).join("")}</div>` : emptyLine("모아 둔 결과가 없어요."); };
 // 지역 대회: 제목의 지역 이름 → 없으면 나온 학교들의 지역
 const JP_BLOCK_RG = { 北海道: 0, 東北: 0, 関東: 1, 北信越: 2, 東海: 3, 中部日本: 3, 近畿: 4, 中国: 5, 四国: 6, 九州: 7 };
 function jpRegionOf(v) {
@@ -872,21 +884,23 @@ function viewJp() {
     const T = ["haruko", "ih", "kokutai", "sakura", "block"];
     const isB = J.tourn === "block", rg = isB && J.rg != null ? J.rg : null;
     const inT = J.videos.filter(v => v.tourn === J.tourn && jpG(v) === J.g && !jpIsVisit(v) && (rg == null || jpRegionOf(v) === rg));
-    const resY = isB ? (J.blockTop || []).filter(r => r.gender === J.g && (rg == null || JP_BLOCK_RG[r.region] === rg)).map(r => r.year) : [...(J.results || []), ...(J.top || [])].filter(r => r.tourn === J.tourn && r.gender === J.g).map(r => r.year);
-    const years = [...new Set([...inT.map(v => v.year), ...resY].filter(y => y && y >= JP_RECENT))].sort((a, b) => b - a);
-    const hasOld = inT.some(v => !v.year || v.year < JP_RECENT);
-    const yr = J.year === -1 && hasOld ? -1 : years.includes(J.year) ? J.year : years[0] || (hasOld ? -1 : 0);
-    const l = inT.filter(v => yr === -1 ? !v.year || v.year < JP_RECENT : !yr || v.year === yr);
-    const resCard = isB ? (rg != null && yr > 0 ? jpBlockResults(rg, yr, J.g) : "") : yr > 0 ? jpResultCard(J.tourn, yr, J.g) : "";
+    // 연도: 결과가 있는 해는 영상이 없어도 모두, 영상만 있는 해는 최근(JP_RECENT~)만. 나머지 영상은 「그 외」
+    const resY = isB ? (J.blockTop || []).filter(r => r.gender === J.g && (rg == null || JP_BLOCK_RG[r.region] === rg)).map(r => r.year) : jpResYears(J.tourn, J.g);
+    const years = [...new Set([...inT.map(v => v.year).filter(y => y >= JP_RECENT), ...resY].filter(Boolean))].sort((a, b) => b - a);
+    const hasOld = inT.some(v => !v.year || !years.includes(v.year));
+    const hasHist = !isB && resY.length > 1;
+    const yr = J.year === -1 && hasOld ? -1 : J.year === -2 && hasHist ? -2 : years.includes(J.year) ? J.year : years[0] || (hasOld ? -1 : 0);
+    const l = yr === -2 ? [] : inT.filter(v => yr === -1 ? !v.year || !years.includes(v.year) : !yr || v.year === yr);
+    const resCard = isB ? (rg != null && yr > 0 ? jpBlockResults(rg, yr, J.g) : "") : yr === -2 ? jpResultHistory(J.tourn, J.g) : yr > 0 ? jpResultCard(J.tourn, yr, J.g) : "";
     const rgSel = isB ? `<div class="sc-row"><span class="sc-k">지역</span><button type="button" class="chip sc-chip ${rg == null ? "on" : ""}" data-act="jprg" data-v="">전체</button>${JP_REGIONS.map((n, i) => `<button type="button" class="chip sc-chip ${rg === i ? "on" : ""}" data-act="jprg" data-v="${i}">${n}</button>`).join("")}</div>` : "";
     // 지역 대회는 대회 종류별(총체·종합·선발·신인전)로 나누고, 안에서는 결승 → 예선 순
     const RK = Object.fromEntries(JP_RND.map(([k], i) => [k, i]));
     const groups = isB ? JP_BLOCK_KIND.map(([lab, re]) => [lab, l.filter(v => jpBlockKind(v) === lab).sort((a, b) => (RK[jpRndKey(a)] ?? 99) - (RK[jpRndKey(b)] ?? 99))]).filter(([, x]) => x.length) : jpRoundSections(l, ["haruko", "ih", "kokutai"].includes(J.tourn), J.tourn);
     body = `<div class="sc-row">${T.map(k => `<button type="button" class="chip sc-chip ${J.tourn === k ? "on" : ""}" data-act="jptourn" data-v="${k}">${JP_TOURN[k]}</button>`).join("")}</div>${gsel}
       ${rgSel}
-      ${years.length || hasOld ? `<div class="sc-row"><span class="sc-k">연도</span>${years.map(y => `<button type="button" class="chip sc-chip ${yr === y ? "on" : ""}" data-act="jpyear" data-v="${y}">${y}</button>`).join("")}${hasOld ? `<button type="button" class="chip sc-chip ${yr === -1 ? "on" : ""}" data-act="jpyear" data-v="-1">그 외</button>` : ""}</div>` : ""}
+      ${years.length || hasOld ? `<div class="sc-row"><span class="sc-k">연도</span>${hasHist ? `<button type="button" class="chip sc-chip ${yr === -2 ? "on" : ""}" data-act="jpyear" data-v="-2">역대</button>` : ""}${years.map(y => `<button type="button" class="chip sc-chip ${yr === y ? "on" : ""}" data-act="jpyear" data-v="${y}">${y}</button>`).join("")}${hasOld ? `<button type="button" class="chip sc-chip ${yr === -1 ? "on" : ""}" data-act="jpyear" data-v="-1">그 외</button>` : ""}</div>` : ""}
       ${resCard}
-      ${groups.length ? groups.map(([lab, x]) => `<section class="sec"><h3>${lab} <span class="small muted">${jpCount(x)}</span></h3>${jpList(x)}</section>`).join("") : emptyLine("모아 둔 영상이 없어요.")}
+      ${yr === -2 ? "" : groups.length ? groups.map(([lab, x]) => `<section class="sec"><h3>${lab} <span class="small muted">${jpCount(x)}</span></h3>${jpList(x)}</section>`).join("") : emptyLine("모아 둔 영상이 없어요.")}
       ${jpSearchBox(`${JP_TOURN_Q[J.tourn] || ""} ${yr > 0 ? yr : ""} ${J.g === "w" ? "女子" : "男子"}`)}`;
   } else {
     const l = J.videos.filter(jpIsVisit);

@@ -2235,3 +2235,15 @@ alter table public.jp_school_cand enable row level security;
 
 -- jp_videos.seen_at: published(「N か月前」)를 읽은 때. 제목에 해가 없는 영상은 이것으로 대회 해를 짐작 (그해 전국 대진에 두 학교가 맞붙었을 때만)
 alter table public.jp_videos add column if not exists seen_at timestamptz;
+
+-- jp-standings 에지 함수 호출 (하루코·인터하이 역대 결과표 갱신)
+create or replace function private.jp_standings_call(body jsonb default '{}'::jsonb)
+returns bigint language sql security definer set search_path to '' as $$
+  select net.http_post(
+    url := 'https://juhcaodotxspzzzfzrnt.supabase.co/functions/v1/jp-standings',
+    body := body,
+    headers := jsonb_build_object('Content-Type', 'application/json',
+      'x-cron', (select decrypted_secret from vault.decrypted_secrets where name = 'push_cron')),
+    timeout_milliseconds := 150000)
+$$;
+revoke all on function private.jp_standings_call(jsonb) from public, anon, authenticated;

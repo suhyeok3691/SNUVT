@@ -124,6 +124,7 @@
 | `jp-roster` | 예약 작업 | 하루코 출전 명단 모으기 (春高バレー.online 명단 페이지) |
 | `jp-pref` | 예약 작업 | 현 대회 결과 모으기 (koko-volley.com 현별 글) |
 | `jp-nat` | 예약 작업 | 전국대회 대진 모으기 (하루코·인터하이·국민스포츠대회) |
+| `jp-standings` | 예약 작업 | 하루코·인터하이 역대 결과표(위키백과) 새 해 넣기 |
 | `jp-search` | 앱(로그인) | 유튜브 검색 결과만 돌려줌 (저장 안 함) |
 
 예약 작업 (pg_cron, 한국 시간):
@@ -133,7 +134,7 @@
 - 매시 40분: `jp-fill-am`(짝수 시)·`jp-fill-pm`(홀수 시) — 한 번에 검색 25번까지라 매시간 나눠 돎
 - 매시 10분: `jp-sync-full-hourly` — 새로 더한 채널의 영상 목록을 이어 읽기(다 읽은 채널은 건너뜀), `jp-chans-daily` 06:15
 - 저녁에 한 번 더: `jp-sync-new-pm` 18:00, `jp-schools-pm` 18:20, `jp-ch-daily` 18:55(채널 이름 채우기)
-- 매주 화요일 새벽: `jp-nat-weekly` 04:00 → `jp-block-weekly` 04:10 → `jp-pref-weekly` 04:15 → `jp-roster-weekly` 04:20
+- 매주 화요일 새벽: `jp-nat-weekly` 04:00 → `jp-standings-weekly` 04:05 → `jp-block-weekly` 04:10 → `jp-pref-weekly` 04:15 → `jp-roster-weekly` 04:20
 
 예약 작업은 `private.*_call()` 함수가 vault의 `push_cron` 비밀값을 `x-cron` 헤더에 넣어 부르고, 서버 함수는 그 값이 맞을 때만 동작해요.
 
@@ -198,7 +199,11 @@
    - 인터하이 명단은 월간배구 사이트가 전재를 금지해서 저장하지 않고, 학교 페이지에서 그 페이지로 가는 링크만 둬요.
    - 새 하루코 명단이 올라오면(12월쯤) `jp-roster`의 PAGES에 그해 페이지를 넣고 `select private.jp_roster_call();`
    - 새 대표·수상 선수는 `jp_stars`에 한 줄씩 (senior_year = 3학년이 되는 학년도)
-11. **대회 성적** (`jp_results`): 일본어 위키백과 역대 결과표(우승·준우승·4강). 학교 페이지 성적은 랭킹의 전국대회 기록(16강·8강 포함)을 보여 줘요.
+11. **대회 결과** (대회 탭의 결과 상자, 영상과 상관없이): 결과가 있는 해는 영상이 없어도 연도 칩에 나오고, 「역대」 칩은 해마다 한 상자로 모아 보여요.
+   - 우승·준우승·4강·8강은 대진(`jp_matches`의 결승·3위전·준결승·준준결승)에서, 빈 칸은 역대 결과표(`jp_results`: 우승·준우승·4강)로 채워요.
+   - `jp_results`: 일본어 위키백과 하루코·인터하이 글의 「結果」 표. `jp-standings`(매주 화요일 04:05)가 새 해를 넣어요.
+   - 사이트(koko-volley 등)에 없는 해의 8강은 검색해서 `jp_matches`에 `src` `manual:출처`로 넣어 두고, `jp-nat`이 다시 모아도 지우지 않아요.
+   - 학교 페이지 성적은 랭킹의 전국대회 기록(16강·8강 포함)을 보여 줘요.
 
 손볼 때:
 - 학교 사전을 고친 뒤: `select private.jp_sync_call('retag'); select private.jp_rank_refresh();`

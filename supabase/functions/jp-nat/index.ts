@@ -1,5 +1,6 @@
 // 전국대회(춘고·인터하이) 대진 모으기: koko-volley.com 의 '日程・結果' 글에서 모든 경기(라운드·학교·현)를 읽어 jp_matches 에 저장.
 // jp-sync 가 이 표로 영상이 전국 본선인지 현 예선인지, 몇 회전인지 정함. 서버 예약 작업(x-cron)만 부를 수 있음.
+// 사이트에 없는 해의 8강 등은 검색으로 찾아 src 'manual:출처' 로 넣어 둠 — 다시 모을 때 지우지 않음
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 const json = (o: unknown, status = 200) => new Response(JSON.stringify(o), { status, headers: { "Content-Type": "application/json" } });
@@ -85,7 +86,7 @@ Deno.serve(async (req) => {
   for (const [page, e] of found) {
     const rows = parse(await get(page)).map((r) => ({ ...r, tourn: e.tourn, gender: e.gender, year: e.year, src: BASE + page }));
     if (!rows.length) { res.push({ page, ...e, n: 0 }); continue; }
-    await sb.from("jp_matches").delete().eq("tourn", e.tourn).eq("gender", e.gender).eq("year", e.year);
+    await sb.from("jp_matches").delete().eq("tourn", e.tourn).eq("gender", e.gender).eq("year", e.year).not("src", "like", "manual:%");
     const ins = await sb.from("jp_matches").insert(rows);
     res.push({ page, tourn: e.tourn, gender: e.gender, year: e.year, n: rows.length, err: ins.error ? ins.error.message : undefined });
   }
@@ -99,7 +100,7 @@ Deno.serve(async (req) => {
       if (have.has(`haruko|${g}|${y}`)) continue;
       const l = rows.filter((x) => x.gender === g).map((x) => ({ ...x, tourn: "haruko", year: y, src: `${XN}haruko-volleyball-${y}/` }));
       if (!l.length) continue;
-      await sb.from("jp_matches").delete().eq("tourn", "haruko").eq("gender", g).eq("year", y);
+      await sb.from("jp_matches").delete().eq("tourn", "haruko").eq("gender", g).eq("year", y).not("src", "like", "manual:%");
       const ins = await sb.from("jp_matches").insert(l);
       res.push({ page: `xn haruko ${y}`, tourn: "haruko", gender: g, year: y, n: l.length, err: ins.error ? ins.error.message : undefined } as any);
     }
@@ -110,7 +111,7 @@ Deno.serve(async (req) => {
     const rows = r.ok ? parseKokutai(await r.text()) : [];
     for (const y of [...new Set(rows.map((x) => x.year))]) for (const g of ["m", "w"]) {
       const l = rows.filter((x) => x.year === y && x.gender === g); if (!l.length) continue;
-      await sb.from("jp_matches").delete().eq("tourn", "kokutai").eq("gender", g).eq("year", y);
+      await sb.from("jp_matches").delete().eq("tourn", "kokutai").eq("gender", g).eq("year", y).not("src", "like", "manual:%");
       const ins = await sb.from("jp_matches").insert(l);
       res.push({ page: "zutto kokutai", tourn: "kokutai", gender: g, year: y, n: l.length, err: ins.error ? ins.error.message : undefined } as any);
     }
