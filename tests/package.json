@@ -1,0 +1,7 @@
+{
+  "name": "snuvt-tests",
+  "private": true,
+  "description": "SNUVT 화면 테스트 (Playwright, 가짜 Supabase)",
+  "scripts": { "test": "node run.js" },
+  "devDependencies": { "playwright": "^1.45.0" }
+}

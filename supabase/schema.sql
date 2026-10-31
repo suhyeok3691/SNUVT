@@ -2298,3 +2298,12 @@ create function public.guest_list() returns table (date date, name text, pos tex
 $$;
 revoke all on function public.guest_list() from public, anon;
 grant execute on function public.guest_list() to authenticated;
+
+-- ========== 교류전 지정 투표 서버 검사 (2026-11-01) ==========
+create or replace function private.fr_vote_ok(fid uuid, pid uuid) returns boolean language sql stable security definer set search_path = '' as $$
+  select coalesce((select f.vote_to is null or pid = any (f.vote_to) from public.friendlies f where f.id = fid), true)
+$$;
+create policy "friendly target add" on public.event_votes as restrictive for insert to authenticated
+  with check (kind <> 'friendly' or private.fr_vote_ok(ref_id, player_id));
+create policy "friendly target edit" on public.event_votes as restrictive for update to authenticated
+  using (true) with check (kind <> 'friendly' or private.fr_vote_ok(ref_id, player_id));

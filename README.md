@@ -33,6 +33,8 @@ js/                     화면 동작 스크립트
 img/                    로고 · 아이콘
 supabase/schema.sql     DB 전체 정의 (표·함수·정책·트리거·예약 작업)
 supabase/functions/*    서버 함수 (아래 5절)
+tests/                  화면 테스트 (Playwright · 가짜 Supabase, 7절)
+.vercelignore           tests/ · supabase/ · README.md 는 사이트에 안 올림
 ```
 
 | `js/` 파일 | 역할 |
@@ -245,6 +247,7 @@ supabase/functions/*    서버 함수 (아래 5절)
 
 ## 6-0. 교류전 투표 대상
 - 교류전 추가·수정 창의 "투표 대상": 전체(기본, 군 복무 빼고 모두) / 지정(선수를 골라 그 사람만). 수정할 때는 "주전 N명"·"엔트리 N명" 버튼으로 한 번에 고름 → `friendlies.vote_to`(uuid[], 비면 전체)
+- 서버도 막음: `event_votes`의 restrictive 정책(`private.fr_vote_ok`)이 지정에서 빠진 사람의 교류전 투표 넣기·바꾸기를 거절
 - 지정에서 빠진 사람: 투표 버튼 대신 "대상 아님", 내 투표에 안 뜸, 그날 프로그램은 교류전이 아니라 정규 훈련 없는 날처럼(골라서 하는 날)
 - 참·불참·미응답 숫자와 명단, 오늘 불참자도 지정한 사람 기준
 
@@ -350,6 +353,10 @@ supabase/functions/*    서버 함수 (아래 5절)
    - `supabase/schema.sql`의 해당 부분도 같이 고쳐요.
    - 이 문서의 4절(표)과 3절(권한)도 맞춰요.
 4. 서버 함수를 바꾸면 `supabase/functions/<이름>/index.ts`도 같이 올려요.
+5. 올리기 전에 테스트: `cd tests && npm install && npm test` (처음 한 번 `npx playwright install chromium`). 하나만은 `node run.js guest`
+   - 진짜 서버에 안 붙고 `tests/mock.js`의 가짜 데이터(2026년 10~11월, 코치 p1 · 부원 p2)로 돌아요. 브라우저 시계는 2026-11-01로 고정
+   - `smoke` 모든 화면 × 코치·부원 + 새로고침, 화면 오류·없는 파일이 있으면 실패 / `picker` 날짜·시간 고르기 / `guest` 다른 팀 훈련 합류 / `friendly` 교류전 투표 대상 / `practice` 훈련 계획 기본 틀·드릴 목록
+   - 새 기능을 만들면 `run.js`의 `SUITES`에 하나 더하고, 필요한 가짜 데이터는 `mock.js`에
 
 ## 8. 지켜야 할 것
 
