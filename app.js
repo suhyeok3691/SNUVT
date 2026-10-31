@@ -635,26 +635,46 @@ const JP_GLOSS = [["春の高校バレー", "하루코"], ["春高バレー", "�
   ["潜入してみた", "잠입해 봤다"], ["潜入", "잠입"], ["密着", "밀착"], ["前編", "전편"], ["後編", "후편"], ["強豪", "강호"], ["超名門", "초명문"], ["名門", "명문"], ["全国", "전국"], ["日本一", "일본 1위"], ["準優勝", "준우승"], ["優勝", "우승"], ["代表", "대표"], ["県", "현"], ["途中から", "중간부터"]];
 const jp = () => state.jp || (state.jp = { loaded: false, schools: [], videos: [], sources: [], tab: "school", g: "m", school: null, tourn: "haruko", year: 0, open: null, search: null });
 const jpSchool = id => jp().schools.find(s => s.id === id);
+// 일본 고교 데이터: 한 번에 받기(영상은 jp_videos_pack 한 번) + 기기에 저장해 두었다가 다음엔 바로 보여 주고 뒤에서 새로 받음
+const JP_CACHE = "snuvt-jp-v1";
+function jpIdb() { return new Promise((ok, no) => { try { const r = indexedDB.open("snuvt", 1); r.onupgradeneeded = () => r.result.createObjectStore("kv"); r.onsuccess = () => ok(r.result); r.onerror = () => no(r.error); } catch (e) { no(e); } }); }
+async function jpCacheGet() { try { const db = await jpIdb(); return await new Promise(ok => { const q = db.transaction("kv").objectStore("kv").get(JP_CACHE); q.onsuccess = () => ok(q.result || null); q.onerror = () => ok(null); }); } catch (e) { return null; } }
+async function jpCacheDel() { try { const db = await jpIdb(); db.transaction("kv", "readwrite").objectStore("kv").delete(JP_CACHE); } catch (e) { /* 없음 */ } }
+async function jpCacheSet(d) { try { const db = await jpIdb(); db.transaction("kv", "readwrite").objectStore("kv").put(d, JP_CACHE); } catch (e) { /* 저장 못 해도 이번엔 보임 */ } }
+async function jpFetch() {
+  const [s, src, res, pt, rk, st, mt, bt, vp] = await Promise.all([sb.from("jp_schools").select("*"), sb.from("jp_sources").select("id,kind,ref,label,role,full_done,synced_at"), sb.from("jp_results").select("tourn,gender,year,place,school_id,name_ja"), sb.from("jp_pref_top").select("pref,gender,tourn,year,name,place"), sb.from("jp_rank").select("school_id,gender,pts,rk,best_tourn,best_year,best_lvl,hist"), sb.from("jp_stars").select("school_id,gender,name,name_ko,roman,pos,team_pos,height,senior_year,tags"), sb.from("jp_matches").select("tourn,gender,year,rnd,a_name,a_pref,b_name,b_pref,a_sets,b_sets").in("rnd", ["F", "SF", "3rd", "QF"]), sb.from("jp_block_top").select("region,kind,year,gender,name,pref,place,school_id"), sb.rpc("jp_videos_pack")]);
+  for (const r of [s, vp]) if (r.error) throw r.error;
+  return { at: Date.now(), schools: s.data || [], sources: src.data || [], results: res.data || [], prefTop: pt.data || [], rank: rk.data || [], stars: st.data || [], top: mt.data || [], blockTop: bt.data || [], vids: vp.data || [] };
+}
+const JP_VCOLS = ["id", "source", "title", "published", "year", "tourn", "gender", "rnd", "schools", "ch", "len", "noembed"];
+function jpApply(J, d) {
+  J.results = d.results; J.prefTop = d.prefTop; J.stars = d.stars; J.top = d.top; J.blockTop = d.blockTop; J.rosters = J.rosters || {};
+  J.rank = {}; for (const r of d.rank) J.rank[r.school_id + "|" + r.gender] = r;
+  J.schools = d.schools; J.sources = d.sources;
+  J.videos = d.vids.map(a => { const v = {}; JP_VCOLS.forEach((k, i) => { v[k] = a[i]; }); v.schools = v.schools || []; return v; });
+  jpLinkPref(J);
+  // 한국어 제목용 바꾸기 목록 (긴 것부터)
+  const rep = [];
+  for (const x of J.schools) { for (const n of [x.name_ja, ...(x.aliases || [])]) { if (!n) continue; if (n.startsWith("re:")) { try { rep.push([new RegExp(n.slice(3), "g"), x.name_ko, 99]); } catch (e) {} } else rep.push([n, x.name_ko, n.length]); } }
+  for (const [ja, [ko]] of Object.entries(JP_PREF)) rep.push([ja, ko, ja.length]);
+  rep.push(["東京都", "도쿄도", 3]);
+  J.rep = rep.sort((a, b) => b[2] - a[2]);
+  J.loaded = true;
+}
 async function jpLoad() {
   const J = jp(); if (J.loading) return; J.loading = true;
+  const show = () => { if (state.view === "jp") { state.dirty = false; render(); } };
+  // 1) 기기에 저장해 둔 것이 있으면 바로
+  const c = J.loaded ? null : await jpCacheGet();
+  if (c && c.vids && !J.loaded) { try { jpApply(J, c); show(); } catch (e) { /* 저장본이 깨졌으면 새로 받음 */ } }
+  // 2) 새로 받아서 바뀌었으면 다시 그림(영상을 보는 중이면 화면은 그대로 두고 데이터만)
   try {
-    const [s, src, res, pt, rk, st, mt, bt] = await Promise.all([sb.from("jp_schools").select("*"), sb.from("jp_sources").select("id,kind,ref,label,role,full_done,synced_at"), sb.from("jp_results").select("tourn,gender,year,place,school_id,name_ja"), sb.from("jp_pref_top").select("pref,gender,tourn,year,name,place"), sb.from("jp_rank").select("school_id,gender,pts,rk,best_tourn,best_year,best_lvl,hist"), sb.from("jp_stars").select("school_id,gender,name,name_ko,roman,pos,team_pos,height,senior_year,tags"), sb.from("jp_matches").select("tourn,gender,year,rnd,a_name,a_pref,b_name,b_pref,a_sets,b_sets").in("rnd", ["F", "SF", "3rd", "QF"]), sb.from("jp_block_top").select("region,kind,year,gender,name,pref,place,school_id")]);
-    J.results = (res && res.data) || []; J.prefTop = (pt && pt.data) || [];
-    J.rank = {}; for (const r of (rk && rk.data) || []) J.rank[r.school_id + "|" + r.gender] = r;
-    J.stars = (st && st.data) || []; J.rosters = {}; J.top = (mt && mt.data) || []; J.blockTop = (bt && bt.data) || [];
-    const vids = [];
-    for (let from = 0; ; from += 1000) { const r = await sb.from("jp_videos").select("id,source,title,published,year,tourn,gender,rnd,schools,ch,len,noembed").order("added_at", { ascending: false }).range(from, from + 999); if (r.error) throw r.error; vids.push(...(r.data || [])); if ((r.data || []).length < 1000) break; }
-    J.schools = s.data || []; J.sources = src.data || []; J.videos = vids;
-    jpLinkPref(J);
-    // 한국어 제목용 바꾸기 목록 (긴 것부터)
-    const rep = [];
-    for (const x of J.schools) { for (const n of [x.name_ja, ...(x.aliases || [])]) { if (!n) continue; if (n.startsWith("re:")) { try { rep.push([new RegExp(n.slice(3), "g"), x.name_ko, 99]); } catch (e) {} } else rep.push([n, x.name_ko, n.length]); } }
-    for (const [ja, [ko]] of Object.entries(JP_PREF)) rep.push([ja, ko, ja.length]);
-    rep.push(["東京都", "도쿄도", 3]);
-    J.rep = rep.sort((a, b) => b[2] - a[2]);
-    J.loaded = true;
-  } catch (e) { J.err = failMsg(e); }
-  J.loading = false; if (state.view === "jp") { state.dirty = false; render(); }
+    const d = await jpFetch();
+    const same = c && c.vids.length === d.vids.length && JSON.stringify(c.vids[0]) === JSON.stringify(d.vids[0]) && c.top.length === d.top.length && c.results.length === d.results.length && c.schools.length === d.schools.length;
+    jpCacheSet(d);
+    if (!same || !J.loaded) { jpApply(J, d); if (!J.open) show(); }
+  } catch (e) { if (!J.loaded) J.err = failMsg(e); }
+  J.loading = false; if (!J.loaded) show();
 }
 function jpKo(title) {
   let t = String(title || "").normalize("NFKC").replace(/#[^\s#]+/g, "").replace(/[｜|]\s*$/, "").replace(/\s+/g, " ").trim();
@@ -847,7 +867,7 @@ function jpSearchSchools(q) {
 }
 function viewJp() {
   const J = jp();
-  if (!J.loaded) { jpLoad(); return J.err ? `<div class="panel empty"><strong>불러오지 못했어요</strong><span>${esc(J.err)}</span></div>` : loaderHtml(); }
+  if (!J.loaded) { if (!J.err) jpLoad(); return J.err ? `<div class="panel empty"><strong>불러오지 못했어요</strong><span>${esc(J.err)}</span></div>` : loaderHtml(); }
   if (J.school) return jpSchoolPage(jpSchool(J.school));
   const seg = `<div class="seg fill sc-tabs" role="tablist">${[["school", "학교"], ["tourn", "대회"], ["visit", "학교 탐방"]].map(([k, l]) => `<button type="button" class="seg-tab ${J.tab === k ? "on solid" : ""}" role="tab" aria-selected="${J.tab === k}" data-act="jptab" data-k="${k}">${l}</button>`).join("")}</div>`;
   const gsel = `<div class="sc-row">${[["m", "남자"], ["w", "여자"]].map(([k, l]) => `<button type="button" class="chip sc-chip ${J.g === k ? "on" : ""}" data-act="jpg" data-v="${k}">${l}</button>`).join("")}</div>`;
@@ -2922,7 +2942,7 @@ document.addEventListener("click", async ev => {
     if (!await confirmDel("팀에서 탈퇴할까요?\n계정, 연락처·키·몸무게, 측정·운동 기록, 컨디션·통증, 훈련 노트가 모두 지워지고 되돌릴 수 없어요.")) return;
     const r = await sb.rpc("leave_team");
     if (r.error) { toast(r.error.code === "42501" ? r.error.message : failMsg(r.error)); return; }
-    closeSettings(); lsDel(snapKey()); try { await sb.auth.signOut({ scope: "local" }); } catch (e) {} toast("탈퇴했어요. 그동안 고마웠어요"); return;
+    closeSettings(); lsDel(snapKey()); jpCacheDel(); try { await sb.auth.signOut({ scope: "local" }); } catch (e) {} toast("탈퇴했어요. 그동안 고마웠어요"); return;
   }
   if (act === "delopen") {
     if (!await confirmDel("이 자율 훈련을 취소할까요?")) return;
@@ -2946,7 +2966,7 @@ document.addEventListener("click", async ev => {
     else { toast(all ? "모두 지웠어요" : "졸업 처리했어요"); state.editPid = null; }
     state.dirty = false; return loadAll();
   }
-  if (act === "logout") { closeSettings(); lsDel(snapKey()); await pushOff(true); await sb.auth.signOut(); return; }
+  if (act === "logout") { closeSettings(); lsDel(snapKey()); jpCacheDel(); await pushOff(true); await sb.auth.signOut(); return; }
   if (act === "drawer") return openDrawer();
   if (act === "settings") { closeDrawer(); return openSettings(); }
   if (act === "setclose") return closeSettings();

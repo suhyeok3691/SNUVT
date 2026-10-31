@@ -2247,3 +2247,12 @@ returns bigint language sql security definer set search_path to '' as $$
     timeout_milliseconds := 150000)
 $$;
 revoke all on function private.jp_standings_call(jsonb) from public, anon, authenticated;
+
+-- 일본 고교 영상 전체를 한 번에(배열로 줄여서). RLS 그대로(부르는 사람 권한)
+create or replace function public.jp_videos_pack()
+returns json language sql stable security invoker set search_path to '' as $$
+  select coalesce(json_agg(json_build_array(v.id, v.source, v.title, v.published, v.year, v.tourn, v.gender, v.rnd, v.schools, v.ch, v.len, v.noembed) order by v.added_at desc), '[]'::json)
+  from public.jp_videos v
+$$;
+revoke all on function public.jp_videos_pack() from public, anon;
+grant execute on function public.jp_videos_pack() to authenticated;
