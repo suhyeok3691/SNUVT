@@ -158,6 +158,20 @@ const SUITES = {
     assert.strictEqual(await p.evaluate(() => document.querySelectorAll(".ct-spots circle").length), 1, "분석 탭에 점 하나");
     clean(a); await a.ctx.close();
   },
+  // 리베로 자동 교대: 1번 자리 MB 가 서브하다 서브권을 잃으면 그 자리에 리베로, 서브권을 다시 따서 로테가 돌면 MB 는 6번(뒷줄) 그대로 리베로
+  async libero(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    const r = await p.evaluate(() => {
+      const m = { id: "x", team: "A", division: "6", lineup: { us: { slots: [1, 2, 3, 4, 5, 6], pos: ["S", "OH", "MB", "OP", "OH", "MB"], libero: [7] }, opp: { slots: [11, 12, 13, 14, 15, 16], pos: ["S", "OH", "MB", "OP", "OH", "MB"], libero: [17] }, sets: { 1: { rot: 3, opp_rot: 1, serve: "us" } } } };
+      const e = o => ({ set_no: 1, side: "us", action: "x", ...o }), lose = e({ skill: "serve", action: "serr", point: "opp" }), win = e({ skill: "attack", action: "kill", point: "us" });
+      const at = (ev, z) => { const s = ctState(m, ev, 1), x = ctSideAt(s, "us", z); return x.v + (x.lib ? "L" : ""); };
+      const g = { team: "A", opponent: "B", roster: { us: [{ no: 3, pos: "MB" }, { no: 7, pos: "L" }], opp: [] }, sets: { 1: { rot: 3, orot: 1, serve: "us", lu: { us: { rot: 3, slots: [3, 4, 5, 6, 1, 2], lib: 7 } } } } };
+      const lz = rs => lvCourtOn(g, "us", lvState(g, rs, 1), 1).vals[0];
+      return { court: [at([], 1), at([lose], 1), at([lose, win], 6)], live: [lz([]), lz([{ set_no: 1, kind: "srv", side: "us", point: "opp" }])] };
+    });
+    assert.deepStrictEqual(r, { court: ["3", "7L", "7L"], live: [3, 7] });
+    clean(a); await a.ctx.close();
+  },
   // 대회 페이지 실시간 기록: 방식 고르기 없이 Lite 로만 만듦
   async lite(b) {
     const a = await openApp(b, "coach"), p = a.page;

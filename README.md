@@ -357,7 +357,7 @@ tests/                  화면 테스트 (Playwright · 가짜 Supabase, 7절)
 4. 서버 함수를 바꾸면 `supabase/functions/<이름>/index.ts`도 같이 올려요.
 5. 올리기 전에 테스트: `cd tests && npm install && npm test` (처음 한 번 `npx playwright install chromium`). 하나만은 `node run.js guest`
    - 진짜 서버에 안 붙고 `tests/mock.js`의 가짜 데이터(2026년 10~11월, 코치 p1 · 부원 p2)로 돌아요. 브라우저 시계는 2026-11-01로 고정
-   - `smoke` 모든 화면 × 코치·부원 + 새로고침, 화면 오류·없는 파일이 있으면 실패 / `picker` 날짜·시간 고르기 / `guest` 다른 팀 훈련 합류 / `friendly` 교류전 투표 대상 / `rotation` 전력분석 로테 S ↔ OP / `scout` 전력분석(예전 프로그램) 공격 떨어진 자리 / `practice` 훈련 계획 기본 틀·드릴 목록
+   - `smoke` 모든 화면 × 코치·부원 + 새로고침, 화면 오류·없는 파일이 있으면 실패 / `picker` 날짜·시간 고르기 / `guest` 다른 팀 훈련 합류 / `friendly` 교류전 투표 대상 / `rotation` 전력분석 로테 S ↔ OP / `libero` MB 서브 뒤 서브권 잃으면 리베로 자동 교대(전력분석·실시간 기록) / `scout` 전력분석(예전 프로그램) 공격 떨어진 자리 / `practice` 훈련 계획 기본 틀·드릴 목록
    - 새 기능을 만들면 `run.js`의 `SUITES`에 하나 더하고, 필요한 가짜 데이터는 `mock.js`에
 
 ## 8. 지켜야 할 것
