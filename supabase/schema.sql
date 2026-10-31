@@ -2225,3 +2225,10 @@ alter table public.live_games add column if not exists vod text check (vod is nu
 alter table public.jp_videos add column if not exists ch text;
 -- 일본 고교 영상: 다른 사이트 재생이 막힌 영상 (oEmbed 401/403/404)
 alter table public.jp_videos add column if not exists noembed boolean;
+-- 일본 고교: 경기마다 영상 찾아본 시각, 빠진 상대 학교 후보
+alter table public.jp_matches add column if not exists searched_at timestamptz;
+create table if not exists public.jp_school_cand (
+  name text not null, pref text not null, n int not null default 0, g text, status text, wiki text, school_id text, tried_at timestamptz,
+  primary key (name, pref)
+);
+alter table public.jp_school_cand enable row level security;
