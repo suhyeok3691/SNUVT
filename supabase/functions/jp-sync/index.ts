@@ -1,6 +1,6 @@
 // 일본 고교 배구 영상 모으기: 등록한 유튜브 채널·재생목록의 영상 목록을 읽어 jp_videos 에 쌓고,
 // 제목에서 학교(jp_schools 이름·별칭)·대회·연도·라운드·남녀를 찾아 붙임. 서버 예약 작업(x-cron)만 부를 수 있음.
-// mode: new(새 영상만, 기본) · full(처음부터 끝까지, 이어서) · retag(태그만 다시) · fill(전국 경기마다 더 찾기) · schools(학교별 검색) · ch(채널 이름·재생 가능 여부) · newschools(빠진 상대 학교 넣기)
+// mode: new(새 영상만, 기본) · full(처음부터 끝까지, 이어서) · retag(태그만 다시) · fill(전국 경기마다 더 찾기) · schools(학교별 검색) · ch(채널 이름·재생 가능 여부) · newschools(빠진 상대 학교 넣기) · chans(전국 경기 풀영상을 여러 개 올린 채널을 출처로 더하기)
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 
 const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
@@ -225,17 +225,20 @@ function notMatch(title: string, len: string | null) {
   const s = secs(len); return s !== null && s < 480;
 }
 // 「연습·탐방」은 학교 탐방(잠입·밀착)만 둠. 스파이크 연습 같은 짧은 연습 영상은 뺌
-const keepRow = (role: string | undefined, r: { title: string; len: string | null; tourn: string | null }) => role === "visit" || (r.tourn === "practice" ? VISIT.test(norm(r.title)) : !notMatch(r.title, r.len));
+// 자동으로 더한 채널(id 'a-…', 아래 roleOf 로 'auto')은 배구 말고 다른 영상도 올리므로 고교 대회로 읽히고 학교가 나오는 영상만
+const keepRow = (role: string | undefined, r: { title: string; len: string | null; tourn: string | null; schools?: string[] }) => role === "visit" || (role === "auto" ? !!r.tourn && !["other", "univ", "practice"].includes(r.tourn) && !!(r.schools || []).length && !notMatch(r.title, r.len) : r.tourn === "practice" ? VISIT.test(norm(r.title)) : !notMatch(r.title, r.len));
 
+const roleOf = (src: { id: string; role?: string }) => src.id.startsWith("a-") ? "auto" : src.role;
 async function upsert(src: any, vs: V[]) {
   if (!vs.length) return;
   const now = new Date().toISOString();
-  const rows = vs.filter((v) => v.id && v.title).map((v) => ({ id: v.id, source: src.id, title: v.title, published: v.published, seen_at: now, len: v.len, ...(v.ch ? { ch: v.ch } : {}), ...tag(v.title, v.published) })).filter((r) => keepRow(src.role, r));
+  const rows = vs.filter((v) => v.id && v.title).map((v) => ({ id: v.id, source: src.id, title: v.title, published: v.published, seen_at: now, len: v.len, ...(v.ch ? { ch: v.ch } : {}), ...tag(v.title, v.published) })).filter((r) => keepRow(roleOf(src), r));
   // 채널 이름을 모르는 영상은 ch 를 덮어쓰지 않게 따로
   for (const part of [rows.filter((r: any) => r.ch), rows.filter((r: any) => !r.ch)])
     for (let i = 0; i < part.length; i += 200) { const r = await sb.from("jp_videos").upsert(part.slice(i, i + 200), { onConflict: "id" }); if (r.error) throw r.error; }
 }
 
+let PAGES = 0;
 async function syncSource(src: any, mode: string, deadline: number) {
   const fp = await firstPage(src);
   let seen = 0, pages = 1, token: string | null;
@@ -246,11 +249,12 @@ async function syncSource(src: any, mode: string, deadline: number) {
     const have = await sb.from("jp_videos").select("id").in("id", fp.out.map((v) => v.id));
     const known = new Set((have.data || []).map((r: any) => r.id));
     await upsert(src, fp.out); seen += fp.out.length;
-    if (mode === "new" && src.full_done && fp.out.some((v) => known.has(v.id))) { await sb.from("jp_sources").update({ synced_at: new Date().toISOString() }).eq("id", src.id); return { id: src.id, seen, pages, done: true }; }
+    if (mode === "new" && (!src.full_done || fp.out.some((v) => known.has(v.id)))) { await sb.from("jp_sources").update({ synced_at: new Date().toISOString() }).eq("id", src.id); return { id: src.id, seen, pages, done: true }; }
     token = fp.cont;
   }
-  while (token && Date.now() < deadline) {
-    const np = await nextPage(fp.key, fp.ver, fp.visitor, token, fp.name); pages++;
+  // 한 번에 읽는 쪽 수를 제한 (CPU 한도). 다 못 읽으면 cursor 로 다음 번에 이어서
+  while (token && Date.now() < deadline && PAGES < 45) {
+    const np = await nextPage(fp.key, fp.ver, fp.visitor, token, fp.name); pages++; PAGES++;
     await upsert(src, np.out); seen += np.out.length;
     token = np.cont;
     if (!np.out.length) break;
@@ -268,8 +272,8 @@ async function syncStreams(src: any, deadline: number) {
     const have = out.length ? await sb.from("jp_videos").select("id").in("id", out.map((v) => v.id)) : { data: [] };
     const known = new Set((have.data || []).map((r: any) => r.id));
     await upsert(src, out); seen += out.length;
-    if (!token || out.some((v) => known.has(v.id)) || Date.now() > deadline) break;
-    const np = await nextPage(fp.key, fp.ver, fp.visitor, token, fp.name); out = np.out; token = np.cont;
+    if (!token || out.some((v) => known.has(v.id)) || Date.now() > deadline || PAGES >= 45) break;
+    const np = await nextPage(fp.key, fp.ver, fp.visitor, token, fp.name); out = np.out; token = np.cont; PAGES++;
     if (!out.length) break;
   }
   return { id: src.id + ":live", seen };
@@ -301,7 +305,7 @@ async function fill(deadline: number, only = "") {
   const byTY = new Map<string, any[]>();
   const addTY = (v: any) => { v.nt = norm(v.title); const k = v.tourn + "|" + v.year; if (!byTY.has(k)) byTY.set(k, []); byTY.get(k)!.push(v); };
   vids.forEach(addTY);
-  let searched = 0, added = 0, matches = 0, nOther = 0; const rej = { tourn: 0, year: 0, pair: 0, other: 0, clip: 0, known: 0 };
+  let searched = 0, added = 0, matches = 0, nOther = 0; const clipS: string[] = []; const rej = { tourn: 0, year: 0, pair: 0, other: 0, clip: 0, known: 0 };
   const order: Record<string, number> = { F: 0, SF: 1, "3rd": 2, QF: 3, R5: 4, R4: 5, R3: 6, R2: 7, R1: 8 };
   ms.sort((a, b) => (a.searched_at || "").localeCompare(b.searched_at || "") || b.year - a.year || (order[a.rnd] ?? 9) - (order[b.rnd] ?? 9));
   // 'fill:haruko:2026' 처럼 대회·해를 좁혀 바로 돌릴 수도 있음. 한 번에 검색 25번까지(CPU 한도 2초), 나머지는 다음 번에
@@ -328,10 +332,12 @@ async function fill(deadline: number, only = "") {
     const kw = m.tourn === "haruko" ? "春高" : m.tourn === "ih" ? "インターハイ" : m.year >= 2024 ? "国スポ" : "国体";
     const qs = m.tourn === "kokutai"
       ? [`${kw}${m.year} 少年${g} ${A[0]} ${B[0]} ${rj}`, `${kw}${m.year} バレー ${A[A.length - 1]} ${B[B.length - 1]}`]
-      : [...new Set([`${kw}${m.year} ${g} ${m.a_name} ${m.b_name} ${rj}`, `${ca} ${cb} ${kw} ${m.year}`, m.tourn === "haruko" ? `${ca} ${cb} 春高バレー ${g}` : `${ca} ${cb} インハイ バレー ${g}`])];
+      : [...new Set([`${kw}${m.year} ${g} ${m.a_name} ${m.b_name} ${rj}`, `${ca} ${cb} ${kw} ${m.year}`, m.tourn === "haruko" ? `${ca} ${cb} 春高バレー ${g}` : `${ca} ${cb} インハイ バレー ${g}`,
+        // 한쪽 학교만으로도(상대 이름을 줄여 쓰거나 다르게 쓴 제목), 결승~8강은 라운드만으로도(같은 해 다른 경기 영상도 함께 들어옴)
+        `${ca} ${kw}${m.year} ${g} バレー`, `${cb} ${kw}${m.year} ${g} バレー`, ...(rj ? [`${m.tourn === "haruko" ? "春の高校バレー" : "インターハイ"}${m.year} ${g}${rj}`] : [])])];
     let ok: V[] = [], extra: V[] = [];
     for (const q of qs) {
-      if (Date.now() > deadline || ok.length >= 4 - chans.size + 2) break;
+      if (Date.now() > deadline || ok.length >= 4 - chans.size + 2 || searched >= 25) break;
       const items = await ytSearch(q.trim()); searched++;
       for (const x of items) {
         if (known.has(x.id) || ok.some((o) => o.id === x.id)) { rej.known++; continue; }
@@ -342,7 +348,7 @@ async function fill(deadline: number, only = "") {
         if (tg.year !== m.year) { rej.year++; continue; }
         if (m.tourn !== "haruko" && !/バレー|volley/i.test(t) && !tg.schools.length) continue;
         if (/成年|剣道|テニス|バスケ|サッカー|ハンド|ソフトボール|ビーチ/.test(t) || /予選|代表決定|ブロック/.test(t)) { rej.other++; continue; }
-        if (notMatch(x.title, x.len)) { rej.clip++; continue; }
+        if (notMatch(x.title, x.len)) { rej.clip++; if (clipS.length < 12 && tg.schools.length >= 2) clipS.push(`${x.len || "?"} ${x.title}`.slice(0, 90)); continue; }
         if (ys.length && !ys.includes(m.year) && !ys.includes(m.year - 1)) continue;
         // 같은 해 다른 전국 경기 영상(대진에서 라운드가 붙은 두 학교)도 버리지 않고 넣음
         if (!pair(x.title, tg.schools)) { if (tg.schools.length === 2 && tg.rnd && !tg.rnd.startsWith("yosen") && !extra.some((o) => o.id === x.id)) extra.push(x); else rej.pair++; continue; }
@@ -359,7 +365,33 @@ async function fill(deadline: number, only = "") {
     }
     if (ok.length) { await upsert({ id: "search" }, ok); added += ok.length; ok.forEach((x) => { known.add(x.id); const tg = tag(x.title, x.published); addTY({ id: x.id, title: x.title, tourn: tg.tourn, year: tg.year, rnd: tg.rnd, schools: tg.schools, source: "search", ch: x.ch }); }); }
   }
-  return { searched, added, otherMatch: nOther, matches, rej };
+  return { searched, added, otherMatch: nOther, matches, rej, clipS };
+}
+
+// ---------- 채널 더하기 (mode 'chans') ----------
+// 검색으로 모은 영상 중 전국 본선 경기 풀영상을 3개 이상 올린 채널을 출처(id 'a-…')로 더함 → 'full' 이 그 채널의 영상 목록을 끝까지 읽음
+async function addChans() {
+  const cnt = new Map<string, { n: number; vid: string }>();
+  for (let from = 0; ; from += 1000) {
+    const r = await sb.from("jp_videos").select("id,ch,rnd").eq("source", "search").in("tourn", ["haruko", "ih", "kokutai"]).not("ch", "is", null).range(from, from + 999); const l = (r.data || []) as any[];
+    for (const v of l) { if (!v.ch || !v.rnd || String(v.rnd).startsWith("yosen")) continue; const o = cnt.get(v.ch) || { n: 0, vid: v.id }; o.n++; cnt.set(v.ch, o); }
+    if (l.length < 1000) break;
+  }
+  const srcs = ((await sb.from("jp_sources").select("id,ref,label")).data || []) as any[];
+  const refs = new Set(srcs.map((s) => String(s.ref).toLowerCase())), labels = new Set(srcs.map((s) => s.label).filter(Boolean));
+  const todo = [...cnt.entries()].filter(([ch, o]) => o.n >= 3 && !labels.has(ch)).sort((a, b) => b[1].n - a[1].n).slice(0, 40);
+  const added: string[] = [];
+  for (const [ch, o] of todo) {
+    // oEmbed 의 author_url(https://www.youtube.com/@handle)로 채널 주소를 앎
+    let url = ""; try { const r = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${o.vid}&format=json`); if (r.ok) url = (await r.json()).author_url || ""; } catch (_) { /* 건너뜀 */ }
+    const ref = decodeURIComponent((url.match(/youtube\.com\/(@[^/?#]+|channel\/[^/?#]+)/) || [])[1] || "");
+    if (!ref || refs.has(ref.toLowerCase())) continue;
+    refs.add(ref.toLowerCase());
+    const id = "a-" + ref.replace(/^@|^channel\//, "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24) + (/[^\x00-\x7f]/.test(ref) ? "-" + o.vid.slice(0, 4) : "");
+    const r = await sb.from("jp_sources").insert({ id, kind: "channel", ref, label: ch, role: "match", full_done: false });
+    if (!r.error) added.push(ch);
+  }
+  return { cands: todo.length, added };
 }
 
 // ---------- 빠진 상대 학교 넣기 (mode 'newschools') ----------
@@ -447,10 +479,11 @@ function oppOf(title: string, known: string) {
   return out;
 }
 async function newSchools(deadline: number) {
-  // 1) 후보 모으기
+  // 1) 후보 모으기 (CPU 한도: 아직 안 본 후보가 20개 넘게 남았으면 건너뛰고 확인만)
+  const pend = (await sb.from("jp_school_cand").select("name", { count: "exact", head: true }).is("status", null)).count || 0;
   const cnt = new Map<string, { name: string; pref: string; n: number; g: Set<string> }>();
   const addC = (name: string, pref: string, g: string | null) => { const k = name + "|" + pref; const o = cnt.get(k) || { name, pref, n: 0, g: new Set<string>() }; o.n++; if (g) o.g.add(g); cnt.set(k, o); };
-  for (let from = 0; ; from += 1000) {
+  for (let from = 0; pend < 20; from += 1000) {
     const r = await sb.from("jp_videos").select("title,tourn,rnd,gender,schools").range(from, from + 999); const l = (r.data || []) as any[];
     for (const v of l) {
       if ((v.schools || []).length !== 1 || !String(v.rnd || "").split(":").includes("yosen") || v.tourn === "kokutai") continue;
@@ -461,7 +494,7 @@ async function newSchools(deadline: number) {
   }
   const cy = new Date().getFullYear();
   const mt = ((await sb.from("jp_matches").select("tourn,gender,a_name,a_pref,b_name,b_pref").in("tourn", ["haruko", "ih"]).gte("year", cy - 8).limit(5000)).data || []) as any[];
-  for (const x of mt) for (const [nm, pf] of [[x.a_name, x.a_pref], [x.b_name, x.b_pref]]) if (pf && JP_PREF_OK(pf) && !idsOf(nm).length) { const b = norm(nm).replace(/(高等学校|高校)$/, ""); if (/^[一-龥々ヶぁ-んァ-ヴー]{2,8}$/.test(b)) addC(b, pf, x.gender); }
+  if (pend < 20) for (const x of mt) for (const [nm, pf] of [[x.a_name, x.a_pref], [x.b_name, x.b_pref]]) if (pf && JP_PREF_OK(pf) && !idsOf(nm).length) { const b = norm(nm).replace(/(高等学校|高校)$/, ""); if (/^[一-龥々ヶぁ-んァ-ヴー]{2,8}$/.test(b)) addC(b, pf, x.gender); }
   const rows = [...cnt.values()].map((o) => ({ name: o.name, pref: o.pref, n: o.n, g: o.g.size === 1 ? [...o.g][0] : "mw" }));
   for (let i = 0; i < rows.length; i += 200) await sb.from("jp_school_cand").upsert(rows.slice(i, i + 200), { onConflict: "name,pref" });
   // 2) 아직 안 본 후보를 위키백과로 확인해 넣기
@@ -486,7 +519,7 @@ async function newSchools(deadline: number) {
       if (!r.error) added++;
     })();
   }
-  return { cands: rows.length, tried: todo.length, added, none };
+  return { cands: rows.length, pend, tried: todo.length, added, none };
 }
 const PREF_KANA: Record<string, string> = { 北海道: "ほっかいどう", 青森: "あおもり", 岩手: "いわて", 宮城: "みやぎ", 秋田: "あきた", 山形: "やまがた", 福島: "ふくしま", 茨城: "いばらき", 栃木: "とちぎ", 群馬: "ぐんま", 埼玉: "さいたま", 千葉: "ちば", 東京: "とうきょう", 神奈川: "かながわ", 新潟: "にいがた", 富山: "とやま", 石川: "いしかわ", 福井: "ふくい", 山梨: "やまなし", 長野: "ながの", 岐阜: "ぎふ", 静岡: "しずおか", 愛知: "あいち", 三重: "みえ", 滋賀: "しが", 京都: "きょうと", 大阪: "おおさか", 兵庫: "ひょうご", 奈良: "なら", 和歌山: "わかやま", 鳥取: "とっとり", 島根: "しまね", 岡山: "おかやま", 広島: "ひろしま", 山口: "やまぐち", 徳島: "とくしま", 香川: "かがわ", 愛媛: "えひめ", 高知: "こうち", 福岡: "ふくおか", 佐賀: "さが", 長崎: "ながさき", 熊本: "くまもと", 大分: "おおいた", 宮崎: "みやざき", 鹿児島: "かごしま", 沖縄: "おきなわ" };
 const JP_PREF_OK = (p: string) => p in PREF_KANA;
@@ -527,8 +560,8 @@ async function schoolsFill(deadline: number, limit = 60) {
 Deno.serve(async (req) => {
   const { data: kd } = await sb.rpc("push_keys"); const k = (Array.isArray(kd) ? kd[0] : kd) || {};
   if (!k.cron || req.headers.get("x-cron") !== k.cron) return json({ error: "forbidden" }, 403);
-  const body = await req.json().catch(() => ({}));
-  const mode = ["new", "full", "retag", "fill", "schools", "ch", "newschools"].includes(body.mode) || /^fill:[a-z]+(:\d{4})?$/.test(body.mode || "") ? body.mode : "new";
+  const body = await req.json().catch(() => ({})); PAGES = 0;
+  const mode = ["new", "full", "retag", "fill", "schools", "ch", "newschools", "chans"].includes(body.mode) || /^fill:[a-z]+(:\d{4})?$/.test(body.mode || "") ? body.mode : "new";
   if (mode === "ch") {
     // 채널 이름이 비었거나 퍼가기 여부를 아직 모르는 영상: oEmbed 로 채움
     // 200 = 채널 이름, 401/403 = 채널 주인이 다른 사이트 재생을 막음(noembed), 404 = 지워졌거나 비공개(noembed)
@@ -542,9 +575,10 @@ Deno.serve(async (req) => {
     }
     return json({ mode, filled: n });
   }
+  if (mode === "chans") return json({ mode, ...(await addChans()) });
   await loadSchools();
   if (mode === "retag") {
-    const ROLE = new Map((((await sb.from("jp_sources").select("id,role")).data || []) as any[]).map((x) => [x.id, x.role]));
+    const ROLE = new Map((((await sb.from("jp_sources").select("id,role")).data || []) as any[]).map((x) => [x.id, roleOf(x)]));
     let n = 0; const drop: string[] = [];
     for (let from = 0; ; from += 1000) {
       const r = await sb.from("jp_videos").select("id,source,title,len,published,added_at,seen_at").order("id").range(from, from + 999);
@@ -570,6 +604,7 @@ Deno.serve(async (req) => {
   for (const s of srcs) {
     if (Date.now() > deadline) break;
     if (mode === "full" && s.full_done) continue;
+    if (PAGES >= 45) break;
     try { res.push(await syncSource(s, mode, deadline)); } catch (e) { res.push({ id: s.id, error: String((e as Error).message || e).slice(0, 200) }); }
     if (s.kind === "channel" && Date.now() < deadline) { try { res.push(await syncStreams(s, deadline)); } catch (e) { res.push({ id: s.id + ":live", error: String((e as Error).message || e).slice(0, 200) }); } }
   }
