@@ -613,6 +613,47 @@ i.dot.k-off { background: none; border: 1px dashed var(--muted); }
 .fields .pair .fl, .fields .fl { min-width: 0; }
 input[type="time"] { -webkit-appearance: none; appearance: none; display: block; min-width: 0; max-width: 100%; min-height: 36px; text-align: left; }
 input[type="time"]::-webkit-date-and-time-value { text-align: left; }
+/* 날짜·시간 고르기 (js/picker.js): 진짜 input 은 숨기고 버튼 + 달력·시간 창 */
+.dtp { position: relative; display: block; min-width: 0; }
+.dtp-raw { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+.dtp-btn { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; min-width: 0; min-height: 36px; font: inherit; font-size: 15px; color: var(--ink); background: var(--surface-2); border: 1px solid var(--line); border-radius: 7px; padding: 6px 9px; text-align: left; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+.dtp-btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dtp-btn .ph { color: var(--muted); }
+.dtp-btn svg { flex: none; width: 17px; height: 17px; fill: none; stroke: var(--muted); stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.dtp-btn:hover:not(:disabled), .dtp-btn.on { border-color: var(--blue); }
+.dtp-btn.on { box-shadow: 0 0 0 3px var(--blue-soft); }
+.dtp-btn.on svg { stroke: var(--blue); }
+.dtp-btn:disabled { opacity: .55; cursor: default; }
+.dtp-bg { position: fixed; inset: 0; z-index: 65; }
+.dtp-pop { position: fixed; width: 300px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 16px 40px rgba(10, 16, 30, .2), 0 2px 6px rgba(10, 16, 30, .06); padding: 12px 10px 10px; animation: dtp-in .16s ease-out; }
+@keyframes dtp-in { from { opacity: 0; transform: translateY(-4px); } }
+.dtp-bg.sheetish { background: rgba(10, 16, 30, .45); display: flex; align-items: flex-end; justify-content: center; animation: fade-in .18s ease-out; }
+.dtp-bg.sheetish .dtp-pop { position: static; width: 100%; max-width: 560px; border: 0; border-radius: 16px 16px 0 0; padding: 16px 14px calc(14px + env(safe-area-inset-bottom, 0px)); animation: sheet-up .26s cubic-bezier(.2, .8, .2, 1); }
+.dtp-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 2px; margin-bottom: 8px; }
+.dtp-top b { font-family: var(--f-display); font-weight: 400; font-size: 19px; }
+.dtp-nav { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink); font: inherit; font-size: 20px; line-height: 1; cursor: pointer; display: grid; place-items: center; padding: 0 0 2px; }
+.dtp-nav:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); }
+.dtp-nav:disabled { opacity: .35; cursor: default; }
+.dtp-dow, .dtp-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.dtp-dow span { text-align: center; font-size: 12px; font-weight: 600; color: var(--muted); padding: 2px 0 6px; }
+.dtp-days { row-gap: 2px; }
+.dtp-days button { justify-self: center; width: 38px; height: 38px; border: 0; border-radius: 50%; background: none; font: inherit; font-size: 14.5px; font-weight: 500; color: var(--ink); cursor: pointer; font-variant-numeric: tabular-nums; transition: background .12s; }
+.dtp-dow .sun, .dtp-days .sun { color: var(--crit); }
+.dtp-days .out { opacity: .4; }
+.dtp-days button:hover:not(:disabled) { background: var(--surface-2); }
+.dtp-days .today { color: var(--blue); font-weight: 700; box-shadow: inset 0 0 0 1.5px var(--blue); }
+.dtp-days .sel, .dtp-days .sel:hover:not(:disabled) { background: var(--brand); color: #fff; font-weight: 700; box-shadow: none; opacity: 1; }
+.dtp-days button:disabled { opacity: .22; cursor: default; }
+.dtp-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; padding: 10px 2px 0; border-top: 1px solid var(--line); }
+.dtp-times { max-height: 252px; overflow-y: auto; overscroll-behavior: contain; display: grid; gap: 6px; padding: 2px; }
+.dtp-h { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.dtp-h button { font: inherit; font-family: var(--f-data); font-size: 14px; padding: 9px 0; border-radius: 8px; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); cursor: pointer; font-variant-numeric: tabular-nums; }
+.dtp-h .t0 { color: var(--ink); font-weight: 600; background: var(--surface); }
+.dtp-h button:hover { border-color: var(--blue); color: var(--blue); }
+.dtp-h .hint { border-color: var(--blue); }
+.dtp-h .sel, .dtp-h .sel:hover { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 700; }
+.dtp-pop button:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+@media (max-width: 599px) { .dtp-days button { width: 42px; height: 42px; font-size: 15.5px; } .dtp-times { max-height: 46vh; } .dtp-h button { padding: 11px 0; font-size: 15px; } }
 /* 일정·훈련 관리: 섹션마다 박스 */
 .cols > .col > .sec, .sched-cols > .sec { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 14px; }
 .cols > .col > .sec + .sec { margin-top: 14px; }
@@ -1129,6 +1170,7 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="js/config.js"></script>
+<script src="js/picker.js?v=1"></script>
 <script src="js/program.js?v=194"></script>
 <script src="js/guide.js?v=194"></script>
 <script src="js/library.js?v=196"></script>
