@@ -2307,3 +2307,24 @@ create policy "friendly target add" on public.event_votes as restrictive for ins
   with check (kind <> 'friendly' or private.fr_vote_ok(ref_id, player_id));
 create policy "friendly target edit" on public.event_votes as restrictive for update to authenticated
   using (true) with check (kind <> 'friendly' or private.fr_vote_ok(ref_id, player_id));
+
+-- ========== 전력분석 명단 번호 바꾸기 → 기록도 같이 (2026-11-01) ==========
+create or replace function public.live_rename(gid uuid, side_ text, m jsonb) returns integer language plpgsql security definer set search_path = '' as $$
+declare n integer := 0; k integer;
+begin
+  if not exists (select 1 from public.live_games g where g.id = gid and g.team_id = private.my_team())
+     or not (private.can('analysis') or private.can('schedule')) then raise exception 'forbidden'; end if;
+  update public.live_rallies r set
+    opp_no = case when x.v ~ '^\d{1,4}$' then x.v::smallint else null end,
+    tag = case when x.v ~ '^\d{1,4}$' then null else x.v end
+  from jsonb_each_text(m) as x(k, v)
+  where r.game_id = gid and r.side = side_ and coalesce(r.opp_no::text, r.tag) = x.k and x.v <> '';
+  get diagnostics k = row_count; n := n + k;
+  update public.live_rallies r set setter = x.v
+  from jsonb_each_text(m) as x(k, v)
+  where r.game_id = gid and r.side = side_ and r.setter = x.k and x.v <> '';
+  get diagnostics k = row_count; n := n + k;
+  return n;
+end $$;
+revoke all on function public.live_rename(uuid, text, jsonb) from public, anon;
+grant execute on function public.live_rename(uuid, text, jsonb) to authenticated;

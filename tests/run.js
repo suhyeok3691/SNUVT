@@ -104,7 +104,7 @@ const SUITES = {
     assert.deepStrictEqual((await c.writes("friendlies"))[0][2].vote_to, ["p2"]);
     clean(c); await c.ctx.close();
   },
-  // 전력분석 명단·로테: S ↔ OP 맞바꿈, OH ↔ MB 순서 바꾸기(두 번 누르면 원래대로) (다른 팀 = 번호 입력 방식)
+  // 전력분석 명단·로테: S ↔ OP 맞바꿈, OH ↔ MB 순서 바꾸기(두 번 누르면 원래대로), 명단 번호 고치면 코트도 (다른 팀 = 번호 입력 방식)
   async rotation(b) {
     const a = await openApp(b, "coach"), p = a.page;
     const ok = await p.evaluate(() => {
@@ -122,6 +122,17 @@ const SUITES = {
       lvRosSwap("OH~MB"); const one = read(); lvRosSwap("OH~MB"); return [one, read()];
     });
     assert.deepStrictEqual(ord, ["S1 MB1 OH1 OP1 MB2 OH2", "S1 OH1 MB1 OP1 OH2 MB2"]);
+    // 명단에서 번호를 고치면 코트 · 리베로 칸도 같이 (치는 중 "1" → "12" 도 따라감), 저장할 때 {옛: 새}
+    const ren = await p.evaluate(() => {
+      const f = document.getElementById("lvRosForm");
+      f.innerHTML = ["OH1", "MB1", "Li"].map(no => lvRosRow({ no, pos: "" })).join("") + [1, 2, 3, 4, 5, 6].map(z => `<input class="lvr-c" data-z="${z}">`).join("") + `<input id="lvrLib">`;
+      ["S1", "OH1", "MB1", "OP1", "OH2", "MB2"].forEach((v, i) => { f.querySelector(`.lvr-c[data-z="${i + 1}"]`).value = v; }); f.querySelector("#lvrLib").value = "Li";
+      const n = f.querySelectorAll(".lvr-n");
+      for (const v of ["", "1", "12"]) { n[0].value = v; lvRosRename(n[0]); }
+      n[2].value = "7"; lvRosRename(n[2]);
+      return { court: [1, 2, 3, 4, 5, 6].map(z => f.querySelector(`.lvr-c[data-z="${z}"]`).value).join(" "), lib: f.querySelector("#lvrLib").value, map: lvRosRenames(f) };
+    });
+    assert.deepStrictEqual(ren, { court: "S1 12 MB1 OP1 OH2 MB2", lib: "7", map: { OH1: "12", Li: "7" } });
     clean(a); await a.ctx.close();
   },
   // 훈련 계획: 기본 틀이 드릴 목록 이름과 맞고, 드릴 설명이 뜸

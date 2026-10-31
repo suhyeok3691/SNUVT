@@ -156,7 +156,8 @@ function lvCourtOn(g, side, s, setNo) {
   return { vals, libZ };
 }
 const lvPosSel = (cls, cur) => `<select class="${cls}" aria-label="포지션"><option value="">포지션</option>${LV_POS.map(p => `<option ${p === cur ? "selected" : ""}>${p}</option>`).join("")}</select>`;
-const lvRosRow = x => `<div class="lvr-row"><input class="lvr-n" maxlength="4" autocapitalize="characters" autocomplete="off" placeholder="번호 · OH1" value="${x ? esc(x.no) : ""}" aria-label="번호">${lvPosSel("lvr-p", x ? x.pos : "")}<button type="button" class="btn small danger" data-act="lvrosdel" aria-label="지우기">✕</button></div>`;
+// data-orig: 창을 열 때 번호 · data-cur: 지금 코트에 쓰인 번호 (명단에서 고치면 코트 · 리베로 칸도 같이 바뀜)
+const lvRosRow = x => `<div class="lvr-row" data-orig="${x ? esc(String(x.no)) : ""}" data-cur="${x ? esc(String(x.no)) : ""}"><input class="lvr-n" maxlength="4" autocapitalize="characters" autocomplete="off" placeholder="번호 · OH1" value="${x ? esc(x.no) : ""}" aria-label="번호">${lvPosSel("lvr-p", x ? x.pos : "")}<button type="button" class="btn small danger" data-act="lvrosdel" aria-label="지우기">✕</button></div>`;
 // 명단 · 로테 창: 명단(번호 + 포지션, 줄마다 지우기) → "자동 배치"로 S 1번 서브 자리 기준 기본 로테(S · OH · MB · OP · OH · MB) → OH끼리 · MB끼리 · S↔OP · OH↔MB(순서) 바꾸기, 한 칸씩 돌리기, 칸 직접 고치기
 // 세트 처음(기록 없음)에 저장하면 S 자리로 로테 번호도 맞춤 (S 1번 = R1, 6번 = R2, 5번 = R3, 4번 = R4, 3번 = R5, 2번 = R6)
 const LV_SROT = { 1: 1, 6: 2, 5: 3, 4: 4, 3: 5, 2: 6 };
@@ -183,6 +184,16 @@ function lvRosSheet() {
   f.addEventListener("input", e => lvRosInfo(e)); f.addEventListener("change", e => lvRosInfo(e));
   lvRosInfo();
 }
+// 명단 줄의 번호를 고치면 코트 6칸 · 리베로 칸에서 옛 번호를 새 번호로 (치는 중 빈 칸·틀린 값이면 그대로 두고 기다림)
+function lvRosRename(inp) {
+  const row = inp.closest(".lvr-row"); if (!row) return;
+  const cur = row.dataset.cur || "", raw = inp.value.trim(); if (!cur || raw === "" || !lvOkId(raw)) return;
+  const nu = String(lvNormId(raw)); if (nu === cur) return;
+  document.querySelectorAll("#lvRosForm .lvr-c, #lvRosForm #lvrLib").forEach(c => { if (c.tagName === "INPUT" && c.value.trim() !== "" && String(lvNormId(c.value)) === cur) c.value = raw; });
+  row.dataset.cur = nu;
+}
+// 저장할 때: 창을 연 뒤 바뀐 번호 {옛: 새}
+const lvRosRenames = f => { const m = {}; f.querySelectorAll(".lvr-row").forEach(r => { const o = r.dataset.orig || "", raw = r.querySelector(".lvr-n").value.trim(); if (o && raw !== "" && lvOkId(raw) && String(lvNormId(raw)) !== o) m[o] = String(lvNormId(raw)); }); return m; };
 // 창 안: 명단 포지션 · 코트 읽기/쓰기
 const lvRosMap = () => { const m = {}; document.querySelectorAll("#lvRosForm .lvr-row").forEach(r => { const n = r.querySelector(".lvr-n").value.trim(); if (n !== "") m[String(lvNormId(n))] = r.querySelector(".lvr-p").value || lvTagPos(n); }); return m; };
 function lvCourtRead() {
@@ -195,7 +206,7 @@ function lvCourtWrite(arr) { arr.forEach((x, i) => { const el = document.querySe
 function lvRosInfo(ev) {
   const le = document.getElementById("lvrLib");
   if (le && ev && ev.target === le) le.dataset.touched = "1";
-  if (ev && ev.target && ev.target.classList.contains("lvr-n")) { const ps = ev.target.parentNode.querySelector(".lvr-p"), tp = lvTagPos(ev.target.value); if (ps && tp && !ps.value) ps.value = tp; } // OH3 → OH
+  if (ev && ev.target && ev.target.classList.contains("lvr-n")) { const ps = ev.target.parentNode.querySelector(".lvr-p"), tp = lvTagPos(ev.target.value); if (ps && tp && !ps.value) ps.value = tp; lvRosRename(ev.target); } // OH3 → OH
   { const l = document.getElementById("lvrList"); if (l) { const rows = l.querySelectorAll(".lvr-row"), last = rows[rows.length - 1]; if (!last || last.querySelector(".lvr-n").value.trim() !== "") l.insertAdjacentHTML("beforeend", lvRosRow(null)); } } // 마지막 줄에 쓰면 빈 줄이 저절로
   if (le && le.tagName === "INPUT" && !le.dataset.touched && le.value === "") { const m = lvRosMap(), n = Object.keys(m).find(k => lvNormPos(m[k]) === "L"); if (n != null) le.value = n; } // 명단에 L이 있으면 리베로 칸에 저절로
   const arr = lvCourtRead(), sz = arr.findIndex(x => x.pos === "S") + 1;
@@ -308,8 +319,23 @@ async function lvRosSave(f) {
   if (lib !== "" && filled.some(x => String(x) === String(lib))) { toast("리베로는 코트 6명과 다른 선수로 넣어 주세요"); return; }
   if (filled.length) lu[side] = { rot: fresh && sz ? LV_SROT[sz] : (side === "us" ? s.rot : s.orot), slots, lib }; else delete lu[side];
   st.lu = lu; sets[L.set] = st;
+  // 번호를 바꿨으면 다른 세트 코트 · 리베로, 이미 넣은 기록도 같이
+  const ren = snu ? {} : lvRosRenames(f), rn = v => v !== "" && v != null && ren[String(v)] != null ? lvNormId(ren[String(v)]) : v;
+  if (Object.keys(ren).length) for (const k of Object.keys(sets)) { if (Number(k) === L.set) continue; const x = ((sets[k] || {}).lu || {})[side]; if (!x) continue;
+    sets[k] = { ...sets[k], lu: { ...sets[k].lu, [side]: { ...x, slots: (x.slots || []).map(rn), lib: rn(x.lib) } } }; }
   try { ok(await sb.from("live_games").update({ roster, sets }).eq("id", g.id)); } catch (e) { toast(failMsg(e)); return; }
-  g.roster = roster; g.sets = sets; closeSheet(); state.dirty = false; render();
+  g.roster = roster; g.sets = sets;
+  const rs = L.rallies[g.id] || [];
+  if (Object.keys(ren).length && rs.some(r => r.side === side && (ren[lvIdOf(r)] != null || (r.setter && ren[r.setter] != null)))) {
+    try {
+      ok(await sb.rpc("live_rename", { gid: g.id, side_: side, m: ren }));
+      for (const r of rs) { if (r.side !== side) continue; const id = lvIdOf(r);
+        if (ren[id] != null) { const v = ren[id]; if (lvIdNum(v)) { r.opp_no = Number(v); r.tag = null; } else { r.opp_no = null; r.tag = v; } }
+        if (r.setter && ren[r.setter] != null) r.setter = ren[r.setter]; }
+      toast("명단 · 코트 · 기록의 번호를 바꿨어요");
+    } catch (e) { toast("명단은 저장했지만 기록 번호는 못 바꿨어요"); }
+  }
+  closeSheet(); state.dirty = false; render();
 }
 const lvRefOf = g => g.ref_kind === "scout" ? { kind: "scout", id: "-", name: "목록" } : (cupItems().find(y => y.kind === g.ref_kind && String(y.id) === String(g.ref_id)) || { kind: g.ref_kind, id: g.ref_id, name: "목록" });
 // 세트 하나 다시 따라가기: 점수 · 서브권 · 우리 로테 · 연속 득실
