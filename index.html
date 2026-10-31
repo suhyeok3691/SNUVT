@@ -981,6 +981,14 @@ sub { font-size: 10px; color: var(--muted); }
 .vote-pick span.go { color: var(--good); } .vote-pick span.no { color: var(--crit); }
 .vote-pick input:checked + .go { background: var(--good); border-color: var(--good); color: #fff; }
 .vote-pick input:checked + .no { background: var(--crit); border-color: var(--crit); color: #fff; }
+/* 교류전 투표 대상 (전체 / 지정) */
+.vote-pick.sm span { padding: 8px 0; font-size: 14px; font-weight: 700; border-radius: 9px; color: var(--ink); }
+.vote-pick.sm input:checked + span { background: var(--blue); border-color: var(--blue); color: var(--surface); }
+.fr-to { display: grid; gap: 8px; grid-column: 1 / -1; }
+.fr-to .vote-pick { max-width: 260px; }
+.fr-to > span:first-child { font-size: 13px; color: var(--muted); }
+.fr-to-tools { display: flex; flex-wrap: wrap; gap: 6px; }
+.fr-to-tools[hidden], #fr-to-list[hidden] { display: none; }
 .cmp-day.go { background: var(--good); border-color: var(--good); color: #fff; text-decoration: none; }
 .cmp-day.no { background: var(--crit-soft); border-color: var(--crit); color: var(--crit); text-decoration: none; }
 .cmp-av-btn { margin-left: auto; }
@@ -1182,9 +1190,9 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 <script src="js/program.js?v=194"></script>
 <script src="js/guide.js?v=194"></script>
 <script src="js/library.js?v=196"></script>
-<script src="js/campus.js?v=194"></script>
+<script src="js/campus.js?v=196"></script>
 <script src="js/court.js?v=194"></script>
 <script src="js/live.js?v=195"></script>
-<script src="js/app.js?v=195"></script>
+<script src="js/app.js?v=196"></script>
 </body>
 </html>

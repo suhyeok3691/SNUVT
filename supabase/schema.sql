@@ -2280,3 +2280,21 @@ revoke all on function public.guest_cal() from public, anon;
 revoke all on function public.guest_list() from public, anon;
 grant execute on function public.guest_cal() to authenticated;
 grant execute on function public.guest_list() to authenticated;
+
+-- ========== 교류전 투표 대상 · 합류 시간 (2026-11-01) ==========
+alter table public.friendlies add column vote_to uuid[];
+alter table public.guest_votes add column start_time time, add column end_time time;
+alter table public.guest_votes add constraint guest_votes_time_check check (end_time is null or start_time is null or end_time > start_time);
+create policy "guest own edit" on public.guest_votes for update to authenticated
+  using (player_id = (select private.my_player_id()))
+  with check (player_id = (select private.my_player_id()) and host_team <> (select private.my_team()));
+grant update on public.guest_votes to authenticated;
+drop function public.guest_list();
+create function public.guest_list() returns table (date date, name text, pos text, team text, start_time text, end_time text) language sql stable security definer set search_path = '' as $$
+  select g.date, pl.name, pl.pos, pl.team_id, to_char(g.start_time, 'HH24:MI'), to_char(g.end_time, 'HH24:MI')
+  from public.guest_votes g join public.players pl on pl.id = g.player_id
+  where g.host_team = private.my_team() and private.can('attend') and g.date >= current_date - 14
+  order by g.date, g.start_time nulls first, pl.name
+$$;
+revoke all on function public.guest_list() from public, anon;
+grant execute on function public.guest_list() to authenticated;

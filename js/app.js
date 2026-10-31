@@ -239,6 +239,7 @@ const absOf = (pid, date) => (state.absences[pid] || {})[date] || null;
 const isTeamDay = i => (i.slot === "team" && !i.teamOff) || i.slot === "friendly";
 function infoFor(pid, date) {
   const i = infoOn(date);
+  if (pid && i.slot === "friendly" && i.friendly && !frIn(i.friendly, pid)) return { ...i, slot: "team", teamOff: true, teamOffNote: "교류전 대상 아님", near: [infoOn(dAdd(date, -1)).slot, infoOn(dAdd(date, 1)).slot] };
   let a = pid ? absOf(pid, date) : null;
   // 교류전에 불참 투표를 했으면 그날은 불참과 같게
   if (!a && pid && i.slot === "friendly" && i.friendly && i.friendly.id) { const v = evVotesOf("friendly", i.friendly.id)[pid]; if (v && !v.going) a = { reason: v.reason || "etc", note: v.note || "" }; }
@@ -1787,7 +1788,7 @@ function viewSeason() {
 }
 // 달력: 정규 훈련 · 자율 훈련 · 교류전 · 대회 색을 나눠서 한 달을 한눈에
 const CAL_KIND = (i, d) => i.cup ? "cup" : i.ob ? "ob" : i.slot === "match" ? "match" : i.slot === "friendly" ? "fr" : i.slot === "tryout" ? "try" : i.slot === "team" && !i.teamOff ? "team" : state.guestMine && state.guestMine.has(d) && guestOn(d) ? "guest" : opensOn(d).length ? "open" : i.slot === "team" ? "off" : "";
-const CAL_LABEL = { team: "정규 훈련", open: "자율 훈련", fr: "교류전", match: "대회", try: "트라이아웃", off: "훈련 없음", cup: "교내 대회", ob: "OB전", guest: "다른 팀 훈련" };
+const CAL_LABEL = { team: "정규 훈련", open: "자율 훈련", fr: "교류전", match: "대회", try: "트라이아웃", off: "훈련 없음", cup: "교내 대회", ob: "OB전", guest: "다른 팀 훈련 합류" };
 const CAL_SHORT = (k, i) => k === "cup" ? CUP_SHORT[i.cup.kind] || "교내" : k === "guest" ? (state.guest ? state.guest.team.label : "같이") : { team: "훈련", open: "자율", fr: "교류전", match: "대회", try: "트라이", ob: "OB전" }[k] || "";
 function calHtml(me) {
   const t = iso(today()), ym = state.calMonth || t.slice(0, 7), [y, m] = ym.split("-").map(Number);
@@ -1822,7 +1823,7 @@ function viewComps() {
       ${list.length ? `<ul class="ev-list boxes">${list.map(e => `<li class="${e.end < t ? "past" : ""}"><span class="num">${range(e)}</span><span class="ev-main"><b>${esc(e.name)}</b> <span class="chip ${e.kind === "major" ? "warn" : ""}">${esc(EVENT_KINDS[e.kind] || e.kind)}</span>${e.kind === "ob" ? `<span class="small"><span class="chip ok">전원 참</span> <span class="muted">경조사는 개별 연락</span></span>` : ""}${e.note ? `<span class="small muted">${esc(e.note)}</span>` : ""}${e.id && (e.kind === "major" || e.kind === "minor") && e.end >= t ? voteBox("event", e.id) : ""}</span>${can("schedule") && e.id ? `<span class="ev-acts"><button class="btn link small" type="button" data-act="editevent" data-id="${esc(e.id)}">수정</button></span>` : ""}</li>`).join("")}</ul>` : emptyLine("등록된 일정이 없어요.")}
     </section>
     <section class="sec"><div class="sec-head"><h3>교류전</h3>${can("schedule") ? addBtn("friendly", "교류전") : ""}</div>
-      ${frs.length ? `<ul class="ev-list boxes">${frs.map(([d, f]) => `<li class="${d < t ? "past" : ""}"><span class="num">${md(parseD(d))} (${DOW_KO[parseD(d).getDay()]})</span><span class="ev-main"><b>${esc(frName(f.opponent))}</b> <span class="chip">${fmtKo(f)}</span><span class="small muted">${esc([f.start && f.start + (f.end ? "–" + f.end : ""), f.place, f.note].filter(Boolean).join(" · "))}</span>${d >= t ? voteBox("friendly", f.id) : ""}</span>${can("schedule") ? `<span class="ev-acts"><button class="btn link small" type="button" data-act="editfriendly" data-id="${esc(f.id)}">수정</button></span>` : ""}</li>`).join("")}</ul>` : emptyLine("잡힌 교류전이 없어요.")}
+      ${frs.length ? `<ul class="ev-list boxes">${frs.map(([d, f]) => `<li class="${d < t ? "past" : ""}"><span class="num">${md(parseD(d))} (${DOW_KO[parseD(d).getDay()]})</span><span class="ev-main"><b>${esc(frName(f.opponent))}</b> <span class="chip">${fmtKo(f)}</span>${f.to ? ` <span class="chip">지정 ${f.to.length}명</span>` : ""}<span class="small muted">${esc([f.start && f.start + (f.end ? "–" + f.end : ""), f.place, f.note].filter(Boolean).join(" · "))}</span>${d >= t ? voteBox("friendly", f.id) : ""}</span>${can("schedule") ? `<span class="ev-acts"><button class="btn link small" type="button" data-act="editfriendly" data-id="${esc(f.id)}">수정</button></span>` : ""}</li>`).join("")}</ul>` : emptyLine("잡힌 교류전이 없어요.")}
     </section>
     <section class="sec"><div class="sec-head"><h3>교내 대회</h3>${can("schedule") ? `<button class="btn add" type="button" data-act="cmpform" data-f="cup">+ 교내 대회</button>` : ""}</div>
       ${(state.cups || []).length ? `<ul class="ev-list boxes">${state.cups.slice().sort((a, b) => a.start.localeCompare(b.start)).map(c => `<li class="${c.end < t ? "past" : ""}"><span class="num">${md(parseD(c.start))} – ${md(parseD(c.end))}</span><span class="ev-main"><b>${esc(c.name)}</b> <span class="chip">${esc(CUP_KIND[c.kind] || "")}</span>${c.place ? `<span class="small muted">${esc(c.place)}</span>` : ""}</span><span class="ev-acts"><button class="btn link small" type="button" data-act="cmpgo" data-id="${c.id}">보기</button>${can("schedule") ? `<button class="btn link small" type="button" data-act="cmpform" data-f="cup" data-id="${c.id}">수정</button>` : ""}</span></li>`).join("")}</ul>` : emptyLine("등록된 교내 대회가 없어요.")}
@@ -1891,6 +1892,9 @@ const FORMS = {
       <div class="pair"><label class="fl">시작<input type="time" id="fr-start"></label><label class="fl">끝<input type="time" id="fr-end"></label></div>
       <label class="fl">장소<input id="fr-place" maxlength="60" placeholder="예: 상대 학교 체육관"></label>
       <label class="fl wide">메모<input id="fr-note" maxlength="200"></label>
+      <div class="fl wide fr-to"><span>투표 대상</span>
+        <div class="vote-pick sm" role="radiogroup" aria-label="투표 대상"><label><input type="radio" name="fr-to" value="all" checked><span>전체</span></label><label><input type="radio" name="fr-to" value="pick"><span>지정</span></label></div>
+        <span class="small muted" id="fr-to-n"></span><div class="fr-to-tools" id="fr-to-tools" hidden></div><div id="fr-to-list" class="jp-chips" hidden></div></div>
     </div><div class="row"><button class="btn primary" type="submit">추가</button></div>
     </form>`],
   notice: ["공지 올리기", `<form class="f" id="noticeForm" data-close="1">
@@ -1918,15 +1922,37 @@ function openEditForm(k, id) {
   const el = document.getElementById("sheet"), f = el.querySelector("form"), set = (i, v) => { const x = document.getElementById(i); if (x && v != null) x.value = v; };
   if (k === "event") { const e = (state.events || []).find(x => x.id === id); if (!e) return; set("ev-name", e.name); set("ev-kind", e.kind); set("ev-fmt", e.format || "6"); set("ev-start", e.start); set("ev-end", e.end); set("ev-note", e.note || ""); }
   else { let fr = null; for (const [d, fs] of Object.entries(state.friendlies)) { const x = fs.find(y => y.id === id); if (x) fr = { ...x, date: d }; } if (!fr) return;
-    set("fr-date", fr.date); set("fr-opp", fr.opponent); set("fr-fmt", fr.format === "9" ? "9" : "6"); set("fr-start", fr.start); set("fr-end", fr.end); set("fr-place", fr.place); set("fr-note", fr.note); }
+    set("fr-date", fr.date); set("fr-opp", fr.opponent); set("fr-fmt", fr.format === "9" ? "9" : "6"); set("fr-start", fr.start); set("fr-end", fr.end); set("fr-place", fr.place); set("fr-note", fr.note); frToInit(fr.to, fr.id); }
   f.dataset.id = id; el.querySelector("h3").textContent = k === "event" ? "일정 수정" : "교류전 수정"; f.querySelector('button[type="submit"]').textContent = "저장";
   addDelZone(`data-act="del${k}" data-id="${esc(id)}"`, k === "event" ? "일정 삭제" : "교류전 삭제");
 }
+// 교류전 투표 대상: 전체 / 지정 (주전·필요한 사람만). 지정이면 그 사람들만 투표하고, 나머지는 그날 교류전이 일정에 없음
+function frToInit(sel, fid) {
+  const box = document.getElementById("fr-to-list"); if (!box) return;
+  const ps = sortedPlayers().filter(p => !p.military), on = new Set(sel || []);
+  box.innerHTML = ps.map(p => `<label class="chip-check"><input type="checkbox" value="${esc(p.id)}" ${on.has(p.id) ? "checked" : ""}><span>${pNo(p)}${esc(p.name)}</span></label>`).join("");
+  const en = fid ? entryOf("friendly", fid) : new Set(), st = fid ? startersOf("friendly", fid) : new Set();
+  document.getElementById("fr-to-tools").innerHTML = [st.size ? `<button type="button" class="btn small" data-act="frtopick" data-ids="${esc([...st].join(","))}">주전 ${st.size}명</button>` : "", en.size ? `<button type="button" class="btn small" data-act="frtopick" data-ids="${esc([...en].join(","))}">엔트리 ${en.size}명</button>` : "", `<button type="button" class="btn link small" data-act="frtopick" data-ids="">모두 빼기</button>`].join("");
+  const r = document.querySelector(`input[name="fr-to"][value="${sel ? "pick" : "all"}"]`); if (r) r.checked = true;
+  frToSync();
+}
+function frToSync() {
+  const box = document.getElementById("fr-to-list"), n = document.getElementById("fr-to-n"); if (!box || !n) return;
+  const pick = (document.querySelector('input[name="fr-to"]:checked') || {}).value === "pick", c = box.querySelectorAll("input:checked").length;
+  box.hidden = !pick; document.getElementById("fr-to-tools").hidden = !pick;
+  n.textContent = pick ? `${c}명 지정 · 지정한 사람만 투표하고 일정에 떠요` : "부원 모두 투표해요 (군 복무 빼고)";
+}
+document.addEventListener("change", e => { const x = e.target; if (x && (x.name === "fr-to" || (x.closest && x.closest("#fr-to-list")))) frToSync(); });
+const frById = id => { for (const fs of Object.values(state.friendlies || {})) { const f = fs.find(x => x.id === id); if (f) return f; } return null; };
+const frIn = (f, pid) => !f || !f.to || f.to.includes(pid);
+// 투표할 사람: 교류전은 지정했으면 그 사람만
+const votersOf = (kind, id) => { const ps = sortedPlayers().filter(p => !p.military), f = kind === "friendly" ? frById(id) : null; return f && f.to ? ps.filter(p => f.to.includes(p.id)) : ps; };
 function openForm(k) {
   const [title, html] = FORMS[k] || []; if (!title) return;
   const el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${title}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>${html}`;
   el.hidden = false; document.body.classList.add("noscroll");
+  if (k === "friendly") frToInit(null, null);
   const first = el.querySelector("input"); if (first && matchMedia("(min-width: 760px)").matches) first.focus();
 }
 
@@ -1934,7 +1960,7 @@ function openForm(k) {
 function teamDays(from, n) { const out = []; for (let k = 0; k < n; k++) { const d = dAdd(from, k), i = infoOn(d); if (isTeamDay(i)) out.push({ date: d, i }); } return out; }
 // 정규 훈련·교류전 + 자율 훈련, 날짜순
 const opensOn = d => state.opens[d] || [];
-/* 다른 팀 정규 훈련 같이 하기 (남자부 ↔ 여자부)
+/* 다른 팀 정규 훈련 합류 (남자부 ↔ 여자부): 날짜마다 몇 시부터 몇 시까지 함께할지 남김
  * - 그 팀 일정은 guest_cal 로 날짜만 받아서 우리와 같은 규칙(seasonDay)으로 계산: 정규 훈련 날 − 훈련 없음 − 교류전·OB전·대회·교내 대회
  * - 우리 팀 일정(교류전·대회·교내 대회·OB전·정규 훈련)이 있는 날은 우리 일정이 먼저라 안 보임
  * - 누가 오는지는 그 팀의 관리자·주장·부주장·훈련 담당만 봄 (guest_list) */
@@ -1942,9 +1968,10 @@ function buildGuest(raw) {
   const c = raw.guest_cal, t = c && c.team;
   state.guest = t ? { team: t, events: (c.events || []).map(e => ({ id: e.id, name: e.name, kind: e.kind, start: e.start, end: e.end })), off: new Set(c.off || []), fr: new Set(c.fr || []),
     times: Object.fromEntries((c.times || []).map(x => [x.key, { start: x.start, end: x.end || "" }])) } : null;
-  state.guestMine = new Set((raw.guest_votes || []).map(r => r.date));
+  const hm = v => v ? String(v).slice(0, 5) : "";
+  state.guestMine = new Map((raw.guest_votes || []).map(r => [r.date, { start: hm(r.start_time), end: hm(r.end_time) }]));
   const gl = {};
-  for (const r of raw.guest_list || []) (gl[r.date] = gl[r.date] || []).push({ name: r.name, pos: r.pos });
+  for (const r of raw.guest_list || []) (gl[r.date] = gl[r.date] || []).push({ name: r.name, pos: r.pos, start: hm(r.start_time), end: hm(r.end_time) });
   state.guestList = gl;
 }
 const guestEvents = g => { const base = g.events; return [...base, ...termEvents().filter(x => !base.some(e => e.kind === x.kind && e.start === x.start))]; };
@@ -1956,7 +1983,22 @@ function guestOn(date) {
   if (i.slot !== "team" || g.off.has(date) || g.fr.has(date) || cupOn(date) || g.events.some(e => e.kind === "ob" && e.start <= date && date <= e.end)) return null;
   const mine = infoOn(date);
   if (isTeamDay(mine) || mine.cup || ["match", "tryout"].includes(mine.slot)) return null;
-  return { team: g.team.id, label: g.team.label, time: timeTxt(g.times[date] || { start: "18:00", end: "21:00" }) };
+  const tt = g.times[date] || { start: "18:00", end: "21:00" };
+  return { team: g.team.id, label: g.team.label, start: tt.start, end: tt.end, time: timeTxt(tt) };
+}
+const guestTime = x => x && x.start ? `${x.start}${x.end ? "–" + x.end : "~"}` : "";
+// 합류 창: 그 팀 훈련 시간 안에서 몇 시부터 몇 시까지
+function openGuest(date) {
+  const g = guestOn(date); if (!g) return;
+  const mine = state.guestMine.get(date), el = document.getElementById("sheet");
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${esc(g.label)} 훈련 합류</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <p class="small muted">${longDate(parseD(date))} · ${esc(g.label)} 정규 훈련 ${esc(g.time)}</p>
+    <form class="f" id="guestForm" data-d="${date}" data-team="${esc(g.team)}" data-close="1"><div class="fields">
+      <div class="pair"><label class="fl">부터<input type="time" id="gs-s" required value="${esc((mine && mine.start) || g.start)}"></label><label class="fl">까지<input type="time" id="gs-e" value="${esc(mine ? mine.end : g.end)}"></label></div>
+    </div><p class="small muted">${esc(g.label)} 관리자·주장·부주장·훈련 담당만 봐요.</p>
+    <div class="row"><button class="btn primary" type="submit">${mine ? "저장" : "합류"}</button></div></form>`;
+  if (mine) addDelZone(`data-act="guestdel" data-d="${date}" data-team="${esc(g.team)}"`, "합류 취소");
+  el.hidden = false; document.body.classList.add("noscroll");
 }
 const guestLabel = g => `${g.label} 정규 훈련 · ${g.time}`;
 function upcoming(from, n) {
@@ -1992,13 +2034,13 @@ function attendLi({ date, i, open, guest }, me) {
   const t = iso(today());
   return (() => {
     if (guest) {
-      const on = state.guestMine.has(date);
+      const on = state.guestMine.get(date);
       return `<li class="guest"><div class="at-when"><b>${longDate(parseD(date))}</b><span class="small muted"><i class="dot k-guest"></i>${esc(guestLabel(guest))}</span></div>
-        <div class="at-side">${on ? `<span class="chip ok">같이 해요</span>` : ""}${me && date >= t ? `<button type="button" class="btn small vote-btn ${on ? "" : "primary"}" data-act="guestgo" data-d="${date}" data-team="${esc(guest.team)}">${on ? "취소" : "같이 하기"}</button>` : ""}</div></li>`;
+        <div class="at-side">${on ? `<span class="chip ok">합류 ${esc(guestTime(on))}</span>` : ""}${me && date >= t ? `<button type="button" class="btn small vote-btn ${on ? "" : "primary"}" data-act="guestgo" data-d="${date}">${on ? "수정" : "합류"}</button>` : ""}</div></li>`;
     }
     const gs = !open && can("attend") ? state.guestList[date] || [] : [];
     const when = `<div class="at-when"><b>${longDate(parseD(date))}</b><span class="small muted">${esc(open ? openLabel(open) : tdLabel(i))}</span>${!open && state.practice[date] ? `<button type="button" class="btn link small pr-link" data-act="prgo" data-d="${date}">훈련 계획</button>` : ""}</div>`;
-    const guestHtml = gs.length ? `<p class="at-names small"><span class="chip">${esc(state.guest ? state.guest.team.label : "다른 팀")} ${gs.length}</span> ${gs.map(x => `${esc(x.name)}${x.pos ? ` <span class="muted">${esc(x.pos)}</span>` : ""}`).join(" · ")}</p>` : "";
+    const guestHtml = gs.length ? `<p class="at-names small"><span class="chip">${esc(state.guest ? state.guest.team.label : "다른 팀")} ${gs.length}</span> ${gs.map(x => `${esc(x.name)}${x.pos ? ` <span class="muted">${esc(x.pos)}</span>` : ""}${x.start ? ` <span class="muted">${esc(guestTime(x))}</span>` : ""}`).join(" · ")}</p>` : "";
     if (open) {
       const going = sortedPlayers().filter(p => open.votes[p.id] === true), mine = me ? open.votes[me.id] : undefined;
       const btns = me && date >= t ? voteBtn("open", open.id, mine === true ? "go" : mine === false ? "no" : "") : "";
@@ -2007,9 +2049,9 @@ function attendLi({ date, i, open, guest }, me) {
     // 교류전은 참가 투표 (정규 훈련은 기본 참석 · 불참만)
     if (i.ob) return `<li>${when}<div class="at-side"><span class="chip ok">전원 참</span></div><p class="at-names small muted">경조사는 개별 연락</p></li>`;
     if (i.slot === "friendly" && i.friendly && i.friendly.id) {
-      const fid = i.friendly.id, vs = evVotesOf("friendly", fid), ps = sortedPlayers().filter(p => !p.military);
+      const fid = i.friendly.id, vs = evVotesOf("friendly", fid), ps = votersOf("friendly", fid), mineIn = me && frIn(i.friendly, me.id);
       const yes = ps.filter(p => vs[p.id] && vs[p.id].going), no = ps.filter(p => vs[p.id] && !vs[p.id].going), mine = me ? vs[me.id] : null;
-      return `<li>${when}<div class="at-side">${seeVotes() ? `<span class="small muted">참 ${yes.length} · 불참 ${no.length}</span>` : ""}${me && date >= t ? voteBtn("friendly", fid, mine ? (mine.going ? "go" : "no") : "") : ""}</div>
+      return `<li>${when}<div class="at-side">${i.friendly.to ? `<span class="chip">지정 ${i.friendly.to.length}명</span>` : ""}${seeVotes() ? `<span class="small muted">참 ${yes.length} · 불참 ${no.length}</span>` : ""}${mineIn && date >= t ? voteBtn("friendly", fid, mine ? (mine.going ? "go" : "no") : "") : me && !mineIn ? `<span class="small muted">대상 아님</span>` : ""}</div>
         ${can("attend") && no.length ? `<ul class="at-list">${no.map(p => `<li><b>${esc(p.name)}</b> <span class="small">${esc(ABS_REASONS[vs[p.id].reason] || "")}${vs[p.id].note ? ` · ${esc(vs[p.id].note)}` : ""}</span></li>`).join("")}</ul>` : ""}</li>`;
     }
     if (can("attend")) {
@@ -2388,11 +2430,12 @@ function voteItems() {
 // 참·불참 숫자·명단은 일정·출석 담당과 관리자만 바로 보고, 일반 부원은 투표 창을 열어야 보임
 const seeVotes = () => can("schedule") || can("attend");
 function voteBox(kind, id) {
-  const vs = evVotesOf(kind, id), ps = sortedPlayers().filter(p => !p.military), mine = state.myPid ? vs[state.myPid] : null;
+  const vs = evVotesOf(kind, id), ps = votersOf(kind, id), mine = state.myPid ? vs[state.myPid] : null, f = kind === "friendly" ? frById(id) : null;
+  if (f && f.to && !seeVotes() && !f.to.includes(state.myPid)) return `<div class="ev-vote"><span class="small muted">투표 대상: 지정 ${f.to.length}명 (나는 대상 아님)</span></div>`;
   const yes = ps.filter(p => vs[p.id] && vs[p.id].going).length, no = ps.filter(p => vs[p.id] && !vs[p.id].going).length, none = ps.length - yes - no;
   // 명단은 투표 창에서 (목록에는 숫자만)
   if (!seeVotes()) return state.myPid ? `<div class="ev-vote">${voteBtn(kind, id, mine ? (mine.going ? "go" : "no") : "")}</div>` : "";
-  return `<div class="ev-vote">${state.myPid ? voteBtn(kind, id, mine ? (mine.going ? "go" : "no") : "") : ""}<button type="button" class="ev-cnt" data-act="voteopen" data-type="${kind}" data-id="${esc(id)}"><span class="c-go">참 ${yes}</span><span class="c-no">불참 ${no}</span><span class="muted">미응답 ${none}</span></button></div>`;
+  return `<div class="ev-vote">${f && f.to ? `<span class="chip">지정 ${f.to.length}명</span>` : ""}${state.myPid && frIn(f, state.myPid) ? voteBtn(kind, id, mine ? (mine.going ? "go" : "no") : "") : ""}<button type="button" class="ev-cnt" data-act="voteopen" data-type="${kind}" data-id="${esc(id)}"><span class="c-go">참 ${yes}</span><span class="c-no">불참 ${no}</span><span class="muted">미응답 ${none}</span></button></div>`;
 }
 // 투표 창 아래 명단: 참 · 불참(사유는 일정 담당만) · 미응답
 function voteWhoHtml(type, id) {
@@ -2402,7 +2445,7 @@ function voteWhoHtml(type, id) {
     const av = Object.values(availOf(c, d)).sort((a, b) => a.name.localeCompare(b.name, "ko")); go = av.filter(v => v.going).map(v => ({ n: v.name, t: v.team })); no = av.filter(v => !v.going).map(v => ({ n: v.name, t: v.team, r: rs(v) })); }
   else { const ps = sortedPlayers().filter(p => !p.military);
     if (type === "open") { const o = Object.values(state.opens).flat().find(x => x.id === id) || { votes: {} }; go = ps.filter(p => o.votes[p.id] === true).map(p => ({ n: p.name })); no = ps.filter(p => o.votes[p.id] === false).map(p => ({ n: p.name })); none = ps.filter(p => o.votes[p.id] === undefined).map(p => ({ n: p.name })); }
-    else { const vs = evVotesOf(type, id); go = ps.filter(p => vs[p.id] && vs[p.id].going).map(p => ({ n: p.name })); no = ps.filter(p => vs[p.id] && !vs[p.id].going).map(p => ({ n: p.name, r: rs(vs[p.id]) })); none = ps.filter(p => !vs[p.id]).map(p => ({ n: p.name })); } }
+    else { const vs = evVotesOf(type, id), ps2 = votersOf(type, id); go = ps2.filter(p => vs[p.id] && vs[p.id].going).map(p => ({ n: p.name })); no = ps2.filter(p => vs[p.id] && !vs[p.id].going).map(p => ({ n: p.name, r: rs(vs[p.id]) })); none = ps2.filter(p => !vs[p.id]).map(p => ({ n: p.name })); } }
   const me = (playerOf(state.myPid) || {}).name;
   const chip = x => `<span class="who-c ${x.n === me ? "me" : ""}">${x.t === "women" ? "<em>여</em>" : x.t === "men" && type === "cup" ? "<em>남</em>" : ""}${esc(x.n)}${x.r ? `<small>${esc(x.r)}</small>` : ""}</span>`;
   const grp = (cls, lab, l) => l.length ? `<div class="who-g ${cls}"><b>${lab} ${l.length}</b><div>${l.map(chip).join("")}</div></div>` : "";
@@ -2423,7 +2466,7 @@ function todayAbsHtml() {
   const rows = [];
   if (isTeamDay(i)) {
     const fv = i.slot === "friendly" && i.friendly && i.friendly.id ? evVotesOf("friendly", i.friendly.id) : null;
-    const abs = ps.map(p => [p, fv ? (fv[p.id] && !fv[p.id].going ? fv[p.id] : null) : absOf(p.id, t)]).filter(([, a]) => a);
+    const abs = (fv ? ps.filter(p => frIn(i.friendly, p.id)) : ps).map(p => [p, fv ? (fv[p.id] && !fv[p.id].going ? fv[p.id] : null) : absOf(p.id, t)]).filter(([, a]) => a);
     rows.push(`<div class="ta-h"><b>${esc(tdLabel(i))}</b><span class="chip ${abs.length ? "warn" : "ok"}">불참 ${abs.length}</span></div>${abs.length ? `<ul class="at-list">${abs.map(([p, a]) => `<li><b>${esc(p.name)}</b> <span class="small">${esc(ABS_REASONS[a.reason] || "")}${a.note ? ` · ${esc(a.note)}` : ""}</span></li>`).join("")}</ul>` : ""}`);
   }
   for (const o of opens) {
@@ -2974,16 +3017,12 @@ document.addEventListener("click", async ev => {
   }
   if (act === "calmonth") { state.calMonth = b.dataset.m; state.calDay = null; state.dirty = false; return render(); }
   if (act === "calday") { state.calDay = b.dataset.d; state.dirty = false; return render(); }
-  if (act === "guestgo") {
-    const d = b.dataset.d, team = b.dataset.team, on = state.guestMine.has(d), lab = state.guest ? state.guest.team.label : "다른 팀";
-    if (!state.myPid) return;
-    b.disabled = true;
-    try {
-      ok(on ? await sb.from("guest_votes").delete().eq("host_team", team).eq("date", d).eq("player_id", state.myPid)
-        : await sb.from("guest_votes").insert({ host_team: team, date: d, player_id: state.myPid }));
-      if (on) state.guestMine.delete(d); else state.guestMine.add(d);
-      render(); toast(on ? "같이 하기를 취소했어요" : `${lab} 훈련에 같이 한다고 남겼어요`);
-    } catch (e) { b.disabled = false; toast(failMsg(e)); }
+  if (act === "frtopick") { const ids = new Set((b.dataset.ids || "").split(",").filter(Boolean)); document.querySelectorAll("#fr-to-list input").forEach(x => { x.checked = ids.has(x.value); }); frToSync(); return; }
+  if (act === "guestgo") return openGuest(b.dataset.d);
+  if (act === "guestdel") {
+    if (!await confirmDel("합류를 취소할까요?", "네, 취소")) return;
+    try { ok(await sb.from("guest_votes").delete().eq("host_team", b.dataset.team).eq("date", b.dataset.d).eq("player_id", state.myPid)); state.guestMine.delete(b.dataset.d); closeSheet(); render(); toast("합류를 취소했어요"); }
+    catch (e) { toast(failMsg(e)); }
     return;
   }
   if (act === "alumdel") {
@@ -3244,6 +3283,17 @@ document.addEventListener("submit", async ev => {
   ev.preventDefault();
   const f = ev.target;
   if (!sb) return toast("서버에 연결되어 있지 않아요.");
+  if (f.id === "guestForm") {
+    const st = txt("gs-s"), en = txt("gs-e") || null, d = f.dataset.d, btn = f.querySelector('button[type="submit"]');
+    if (en && en <= st) { toast("끝 시간이 시작보다 앞이에요."); return; }
+    btn.disabled = true;
+    try {
+      ok(await sb.from("guest_votes").upsert({ host_team: f.dataset.team, date: d, player_id: state.myPid, start_time: st, end_time: en }, { onConflict: "host_team,date,player_id" }));
+      const had = state.guestMine.has(d); state.guestMine.set(d, { start: st, end: en || "" });
+      closeSheet(); render(); toast(had ? "합류 시간을 바꿨어요" : `${state.guest ? state.guest.team.label : "다른 팀"} 훈련 합류를 남겼어요`);
+    } catch (e) { toast(failMsg(e)); } finally { btn.disabled = false; }
+    return;
+  }
   if (f.id === "runForm") {
     const r = state.run, btn = f.querySelector('button[type="submit"]'); btn.disabled = true;
     try {
@@ -3507,7 +3557,9 @@ document.addEventListener("submit", async ev => {
     } else if (f.id === "friendlyForm") {
       const st = txt("fr-start") || null, en = txt("fr-end") || null;
       if (st && en && en <= st) { toast("끝 시간이 시작보다 앞이에요."); return; }
-      const row = { date: txt("fr-date"), opponent: txt("fr-opp"), format: document.getElementById("fr-fmt").value, start_time: st, end_time: en, place: txt("fr-place") || null, note: txt("fr-note") || null };
+      const pick = (f.querySelector('[name="fr-to"]:checked') || {}).value === "pick", to = pick ? [...f.querySelectorAll("#fr-to-list input:checked")].map(x => x.value) : null;
+      if (pick && !to.length) { toast("투표할 사람을 골라 주세요."); return; }
+      const row = { date: txt("fr-date"), opponent: txt("fr-opp"), format: document.getElementById("fr-fmt").value, start_time: st, end_time: en, place: txt("fr-place") || null, note: txt("fr-note") || null, vote_to: to };
       ok(f.dataset.id ? await sb.from("friendlies").update(row).eq("id", f.dataset.id) : await sb.from("friendlies").insert(row));
       toast(f.dataset.id ? "저장했어요" : "교류전을 넣었어요 · 그 주 프로그램이 맞춰졌어요");
     } else if (f.id === "openForm") {
@@ -3730,7 +3782,7 @@ async function loadAll(soft) {
       sb.from("cup_photos").select("*"),
       sb.from("terms").select("*"),
       sb.rpc("guest_cal"),
-      sb.from("guest_votes").select("host_team,date").gte("date", iso(addDays(today(), -14))),
+      sb.from("guest_votes").select("host_team,date,start_time,end_time").gte("date", iso(addDays(today(), -14))),
       sb.rpc("guest_list"),
     ];
     if (state.coach) q.push(sb.from("profiles").select("*").order("created_at"));
@@ -3763,7 +3815,7 @@ function buildState(raw) {
   state.lifts = lif;
   state.teamOff = Object.fromEntries((raw.team_off || []).map(r => [r.date, { note: r.note }]));
   const fr = {};
-  for (const r of raw.friendlies || []) (fr[r.date] = fr[r.date] || []).push({ id: r.id, opponent: r.opponent, format: r.format, start: r.start_time ? String(r.start_time).slice(0, 5) : "", end: r.end_time ? String(r.end_time).slice(0, 5) : "", place: r.place || "", note: r.note || "" });
+  for (const r of raw.friendlies || []) (fr[r.date] = fr[r.date] || []).push({ id: r.id, opponent: r.opponent, format: r.format, start: r.start_time ? String(r.start_time).slice(0, 5) : "", end: r.end_time ? String(r.end_time).slice(0, 5) : "", place: r.place || "", note: r.note || "", to: Array.isArray(r.vote_to) && r.vote_to.length ? r.vote_to : null });
   state.friendlies = fr;
   const op = {}, vt = {};
   for (const r of raw.open_votes || []) (vt[r.session_id] = vt[r.session_id] || {})[r.player_id] = !!r.going;

@@ -238,6 +238,7 @@ function myVotesHtml() {
   const t = iso(today()), rows = [];
   const line = (name, when, right) => `<span class="mv-n"><b>${esc(name)}</b> <span class="small muted">${esc(when)}</span></span>${right}`;
   for (const x of voteItems()) {
+    if (x.kind === "friendly" && !frIn(frById(x.id), me.id)) continue; // 지정 투표에서 빠진 교류전
     const v = evVotesOf(x.kind, x.id)[me.id];
     rows.push({ d: x.d, todo: !v, html: line(x.name, x.when, voteBtn(x.kind, x.id, v ? (v.going ? "go" : "no") : "")) });
   }
