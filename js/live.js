@@ -588,7 +588,7 @@ function lvForm(key, gid) {
   const el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${g ? "경기 수정" : "경기 추가"}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="lvForm" data-k="${esc(key)}" data-id="${esc(gid || "")}"><div class="fields">
-      ${g ? "" : `<label class="fl wide">방식<select id="lv-mode"><option value="lite" selected>실시간 Lite</option><option value="full">실시간 전체</option><option value="video">영상 분석</option></select></label>`}
+      ${g ? "" : `<p class="small muted wide">실시간 Lite: 현장에서 서브 · 공격 · 블로킹 · 디그 · 범실만 빠르게 (영상 분석은 전력분석 탭)</p>`}
       <div class="fl wide lv-vid" id="lvVid" ${g && lvVideo(g) ? "" : "hidden"}><label class="fl">유튜브<input id="lv-yt" maxlength="200" value="${esc(g ? g.yt || "" : "")}" placeholder="https://youtu.be/..."></label>
         <label class="fl">치지직 다시보기<input id="lv-vod" maxlength="200" value="${esc(g ? g.vod || "" : "")}" placeholder="chzzk.naver.com/video/… 또는 naver.me/…"></label></div>
       <label class="fl">경기<input id="lv-label" maxlength="40" value="${esc(g ? g.label || "" : "")}" placeholder="예선 1경기 · 8강"></label>
@@ -600,7 +600,6 @@ function lvForm(key, gid) {
     </div><div class="row"><button class="btn primary" type="submit">${g ? "저장" : "시작"}</button></div></form>`;
   if (g) addDelZone(`data-act="lvdel" data-id="${esc(g.id)}"`, "경기 삭제");
   el.hidden = false; document.body.classList.add("noscroll");
-  const md = document.getElementById("lv-mode"); if (md) md.addEventListener("change", () => { document.getElementById("lvVid").hidden = md.value !== "video"; });
 }
 // 영상 링크 (영상 분석 방식): 유튜브 확인, 치지직은 naver.me 공유 주소를 서버에서 풀어 줌
 async function lvLinks() {
@@ -633,8 +632,8 @@ async function lvSubmit(f) {
       const lk = g && lvVideo(g) ? await lvLinks() : {}; if (!lk) return;
       ok(await sb.from("live_games").update({ label: v("lv-label").trim() || null, team, opponent: v("lv-opp").trim(), ...lk }).eq("id", f.dataset.id)); if (g) Object.assign(g, lk); }
     else {
-      const lk = v("lv-mode") === "video" ? await lvLinks() : {}; if (!lk) return;
-      const r = await sb.from("live_games").insert({ ...lk, ref_kind: kind, ref_id: id, label: v("lv-label").trim() || null, team, opponent: v("lv-opp").trim(), mode: ["lite", "video"].includes(v("lv-mode")) ? v("lv-mode") : "full", sets: { 1: { serve: v("lv-serve") || "us", rot: Number(v("lv-rot")) || 1, orot: Number(v("lv-orot")) || 1 } } }).select().maybeSingle(); ok(r);
+      const lk = {};
+      const r = await sb.from("live_games").insert({ ...lk, ref_kind: kind, ref_id: id, label: v("lv-label").trim() || null, team, opponent: v("lv-opp").trim(), mode: "lite" /* 실시간 기록은 Lite 만 (전체 · 영상 분석 방식은 2026-11-01 뺌) */, sets: { 1: { serve: v("lv-serve") || "us", rot: Number(v("lv-rot")) || 1, orot: Number(v("lv-orot")) || 1 } } }).select().maybeSingle(); ok(r);
       if (r.data) { L.open = r.data.id; L.set = 1; L.side = "us"; L.pick = null; L.rallies[r.data.id] = []; pushInner(); }
     }
     closeSheet();

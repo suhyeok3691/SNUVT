@@ -158,6 +158,18 @@ const SUITES = {
     assert.strictEqual(await p.evaluate(() => document.querySelectorAll(".ct-spots circle").length), 1, "분석 탭에 점 하나");
     clean(a); await a.ctx.close();
   },
+  // 대회 페이지 실시간 기록: 방식 고르기 없이 Lite 로만 만듦
+  async lite(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await p.evaluate(() => lvForm("event:e1")).catch(() => {});
+    await p.waitForTimeout(300);
+    if (!(await p.$("#lvForm"))) { await a.ctx.close(); throw new Error("실시간 기록 경기 추가 창을 못 엶 (lvForm)"); }
+    assert.strictEqual(await p.$("#lv-mode"), null, "방식 고르기 없음");
+    await p.evaluate(() => { document.getElementById("lv-opp").value = "B대"; });
+    await p.click("#lvForm button[type=submit]"); await p.waitForTimeout(300);
+    assert.strictEqual((await a.writes("live_games"))[0][2].mode, "lite");
+    clean(a); await a.ctx.close();
+  },
   // 훈련 계획: 기본 틀이 드릴 목록 이름과 맞고, 드릴 설명이 뜸
   async practice(b) {
     const L = require("../js/library.js"), names = new Set(L.DRILL_LIB.map(x => x.n));
