@@ -981,6 +981,12 @@ sub { font-size: 10px; color: var(--muted); }
 .vote-pick span.go { color: var(--good); } .vote-pick span.no { color: var(--crit); }
 .vote-pick input:checked + .go { background: var(--good); border-color: var(--good); color: #fff; }
 .vote-pick input:checked + .no { background: var(--crit); border-color: var(--crit); color: #fff; }
+/* 전력분석 명단·로테: 배치 버튼 7개를 한 줄로 */
+.lvr-tools { display: flex; flex-wrap: nowrap; gap: 3px; margin: 2px 0 8px; min-width: 0; contain: inline-size; }
+.lvr-tools .btn { flex: 1 1 auto; min-width: 0; overflow: hidden; padding: 6px 3px; font-size: clamp(11px, 3.4vw, 13px); white-space: nowrap; letter-spacing: -.03em; }
+.lvr-tools .btn.rot { flex: 0 0 28px; padding: 6px 0; font-size: 15px; }
+@media (max-width: 459px) { .lvr-w { display: none; } }
+@media (max-width: 345px) { .lvr-tools { gap: 2px; } .lvr-tools .btn { font-size: 10.5px; padding: 6px 2px; letter-spacing: -.05em; } .lvr-tools .btn.rot { flex-basis: 24px; } }
 /* 교류전 투표 대상 (전체 / 지정) */
 .vote-pick.sm span { padding: 8px 0; font-size: 14px; font-weight: 700; border-radius: 9px; color: var(--ink); }
 .vote-pick.sm input:checked + span { background: var(--blue); border-color: var(--blue); color: var(--surface); }
@@ -1192,7 +1198,7 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 <script src="js/library.js?v=196"></script>
 <script src="js/campus.js?v=196"></script>
 <script src="js/court.js?v=194"></script>
-<script src="js/live.js?v=198"></script>
+<script src="js/live.js?v=201"></script>
 <script src="js/app.js?v=196"></script>
 </body>
 </html>
