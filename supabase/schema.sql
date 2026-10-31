@@ -1071,35 +1071,6 @@ begin
   if uids is not null then delete from auth.users where id = any(uids); end if;
 end $function$;
 
-CREATE OR REPLACE FUNCTION public.set_member_media(target uuid, on_ boolean)
- RETURNS void
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO ''
-AS $function$
-begin
-  if not private.is_coach() then raise exception '관리자·주장만 할 수 있어요' using errcode = '42501'; end if;
-  if private.player_team(target) is distinct from private.my_team() then raise exception '다른 팀 선수예요' using errcode = '42501'; end if;
-  update public.players set media = coalesce(on_, false) where id = target;
-end $function$;
-
-CREATE OR REPLACE FUNCTION public.set_member_title(target uuid, new_title text)
- RETURNS void
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO ''
-AS $function$
-declare v_role text;
-begin
-  if not private.is_coach() then raise exception '관리자·주장만 할 수 있어요' using errcode = '42501'; end if;
-  if private.player_team(target) is distinct from private.my_team() then raise exception '다른 팀 선수예요' using errcode = '42501'; end if;
-  if new_title is not null and new_title not in ('admin', 'captain', 'vice', 'ops', 'treasurer', 'trainer', 'analyst') then raise exception '직책을 확인해 주세요' using errcode = '23514'; end if;
-  v_role := case when new_title in ('admin', 'captain') then 'coach' else 'player' end;
-  if target = private.my_player_id() and v_role <> 'coach' then raise exception '내 관리자 권한은 여기서 내려놓을 수 없어요' using errcode = '42501'; end if;
-  update public.players set title = new_title where id = target;
-  update public.profiles set role = v_role where player_id = target and role in ('player', 'coach');
-end $function$;
-
 CREATE OR REPLACE FUNCTION public.submit_my_info(info jsonb)
  RETURNS uuid
  LANGUAGE plpgsql
@@ -1251,8 +1222,6 @@ grant execute on function public.leave_team() to authenticated;
 grant execute on function public.push_pubkey() to authenticated;
 grant execute on function public.remove_member(uuid) to authenticated;
 grant execute on function public.retire_member(uuid, boolean) to authenticated;
-grant execute on function public.set_member_media(uuid, boolean) to authenticated;
-grant execute on function public.set_member_title(uuid, text) to authenticated;
 grant execute on function public.submit_my_info(jsonb) to authenticated;
 grant execute on function public.switch_team(text) to authenticated;
 grant execute on function public.update_my_injuries(jsonb) to authenticated;
@@ -2270,4 +2239,10 @@ create index if not exists live_rallies_player on public.live_rallies (player_id
 create index if not exists scout_points_event on public.scout_points (event_id);
 alter policy "members add cup_photos" on public.cup_photos with check (private.is_member() and author = (select auth.uid()));
 alter policy "owner or schedule delete cup_photos" on public.cup_photos using (author = (select auth.uid()) or private.can('schedule'));
-alter function private.urlenc(text) set search_path = '';
+
+-- 안 쓰는 것 지움 (2026-10-31): 임시 표·함수, 예전 RPC
+drop table if exists private.wiki_req1;
+drop function if exists private.urlenc(text);
+drop function if exists private.jp_yomi_call(integer);
+drop function if exists public.set_member_media(uuid, boolean);
+drop function if exists public.set_member_title(uuid, text);
