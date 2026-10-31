@@ -781,7 +781,8 @@ function jpMatchRow(m) {
 const jpList = l => l.length ? `<ul class="jp-list">${jpMatches(l).map(jpMatchRow).join("")}</ul>` : emptyLine("영상이 없어요.");
 // 대회 성적: 위키백과(일본어) 역대 결과표로 만든 jp_results (영상 제목으로 짐작하지 않음)
 const JP_PLACE = { 1: "우승", 2: "준우승", 3: "4강" };
-const JP_RECENT = 2019; // 이 해부터는 연도별로, 그 전은 '그 외'
+const JP_RECENT = 2019; // 학교 페이지: 이 해부터는 연도별로, 그 전은 '그 외'
+const JP_CHIP_FROM = 2020; // 대회 탭: 이 해부터 연도 칩, 그 전은 「그 외」 안에
 // 고교 랭킹 (jp_rank): 전국대회에서 간 곳(16강·8강 포함) + 현 대회 4강 이상, 최근 결과일수록 크게
 const JP_LVL = { 7: "우승", 6: "준우승", 5: "4강", 4: "8강", 3: "16강", 2: "32강", 1: "출전", 0: "출전" };
 const jpRank = (id, g) => (jp().rank || {})[id + "|" + g] || null;
@@ -904,13 +905,15 @@ function viewJp() {
     const T = ["haruko", "ih", "kokutai", "sakura", "block"];
     const isB = J.tourn === "block", rg = isB && J.rg != null ? J.rg : null;
     const inT = J.videos.filter(v => v.tourn === J.tourn && jpG(v) === J.g && !jpIsVisit(v) && (rg == null || jpRegionOf(v) === rg));
-    // 연도: 결과가 있는 해는 영상이 없어도 모두, 영상만 있는 해는 최근(JP_RECENT~)만. 나머지 영상은 「그 외」
+    // 연도: 결과·영상이 있는 해 모두. JP_CHIP_FROM 이후는 바로 칩, 그 전 해와 해 모르는 영상은 「그 외」를 누르면 나옴
     const resY = isB ? (J.blockTop || []).filter(r => r.gender === J.g && (rg == null || JP_BLOCK_RG[r.region] === rg)).map(r => r.year) : jpResYears(J.tourn, J.g);
-    const years = [...new Set([...inT.map(v => v.year).filter(y => y >= JP_RECENT), ...resY].filter(Boolean))].sort((a, b) => b - a);
-    const hasOld = inT.some(v => !v.year || !years.includes(v.year));
+    const years = [...new Set([...inT.map(v => v.year), ...resY].filter(Boolean))].sort((a, b) => b - a);
+    const recentY = years.filter(y => y >= JP_CHIP_FROM), oldY = years.filter(y => y < JP_CHIP_FROM);
+    const hasOld = oldY.length > 0 || inT.some(v => !v.year);
     const hasHist = !isB && resY.length > 1;
-    const yr = J.year === -1 && hasOld ? -1 : J.year === -2 && hasHist ? -2 : years.includes(J.year) ? J.year : years[0] || (hasOld ? -1 : 0);
-    const l = yr === -2 ? [] : inT.filter(v => yr === -1 ? !v.year || !years.includes(v.year) : !yr || v.year === yr);
+    const yr = J.year === -1 && hasOld ? -1 : J.year === -2 && hasHist ? -2 : years.includes(J.year) ? J.year : recentY[0] || oldY[0] || (hasOld ? -1 : 0);
+    const inOld = yr === -1 || oldY.includes(yr);
+    const l = yr === -2 ? [] : inT.filter(v => yr === -1 ? !v.year : !yr || v.year === yr);
     const resCard = isB ? (rg != null && yr > 0 ? jpBlockResults(rg, yr, J.g) : "") : yr === -2 ? jpResultHistory(J.tourn, J.g) : yr > 0 ? jpResultCard(J.tourn, yr, J.g) : "";
     const rgSel = isB ? `<div class="sc-row"><span class="sc-k">지역</span><button type="button" class="chip sc-chip ${rg == null ? "on" : ""}" data-act="jprg" data-v="">전체</button>${JP_REGIONS.map((n, i) => `<button type="button" class="chip sc-chip ${rg === i ? "on" : ""}" data-act="jprg" data-v="${i}">${n}</button>`).join("")}</div>` : "";
     // 지역 대회는 대회 종류별(총체·종합·선발·신인전)로 나누고, 안에서는 결승 → 예선 순
@@ -918,9 +921,10 @@ function viewJp() {
     const groups = isB ? JP_BLOCK_KIND.map(([lab, re]) => [lab, l.filter(v => jpBlockKind(v) === lab).sort((a, b) => (RK[jpRndKey(a)] ?? 99) - (RK[jpRndKey(b)] ?? 99))]).filter(([, x]) => x.length) : jpRoundSections(l, ["haruko", "ih", "kokutai"].includes(J.tourn), J.tourn);
     body = `<div class="sc-row">${T.map(k => `<button type="button" class="chip sc-chip ${J.tourn === k ? "on" : ""}" data-act="jptourn" data-v="${k}">${JP_TOURN[k]}</button>`).join("")}</div>${gsel}
       ${rgSel}
-      ${years.length || hasOld ? `<div class="sc-row"><span class="sc-k">연도</span>${hasHist ? `<button type="button" class="chip sc-chip ${yr === -2 ? "on" : ""}" data-act="jpyear" data-v="-2">역대</button>` : ""}${years.map(y => `<button type="button" class="chip sc-chip ${yr === y ? "on" : ""}" data-act="jpyear" data-v="${y}">${y}</button>`).join("")}${hasOld ? `<button type="button" class="chip sc-chip ${yr === -1 ? "on" : ""}" data-act="jpyear" data-v="-1">그 외</button>` : ""}</div>` : ""}
+      ${years.length || hasOld ? `<div class="sc-row"><span class="sc-k">연도</span>${hasHist ? `<button type="button" class="chip sc-chip ${yr === -2 ? "on" : ""}" data-act="jpyear" data-v="-2">역대</button>` : ""}${recentY.map(y => `<button type="button" class="chip sc-chip ${yr === y ? "on" : ""}" data-act="jpyear" data-v="${y}">${y}</button>`).join("")}${hasOld ? `<button type="button" class="chip sc-chip ${inOld ? "on" : ""}" data-act="jpyear" data-v="-1">그 외</button>` : ""}</div>` : ""}
+      ${inOld && oldY.length ? `<div class="sc-row"><span class="sc-k"></span>${oldY.map(y => `<button type="button" class="chip sc-chip ${yr === y ? "on" : ""}" data-act="jpyear" data-v="${y}">${y}</button>`).join("")}</div>` : ""}
       ${resCard}
-      ${yr === -2 ? "" : groups.length ? groups.map(([lab, x]) => `<section class="sec"><h3>${lab} <span class="small muted">${jpCount(x)}</span></h3>${jpList(x)}</section>`).join("") : emptyLine("모아 둔 영상이 없어요.")}
+      ${yr === -2 ? "" : groups.length ? groups.map(([lab, x]) => `<section class="sec"><h3>${yr === -1 ? "연도 모름 · " : ""}${lab} <span class="small muted">${jpCount(x)}</span></h3>${jpList(x)}</section>`).join("") : yr === -1 ? "" : emptyLine("모아 둔 영상이 없어요.")}
       ${jpSearchBox(`${JP_TOURN_Q[J.tourn] || ""} ${yr > 0 ? yr : ""} ${J.g === "w" ? "女子" : "男子"}`)}`;
   } else {
     const l = J.videos.filter(jpIsVisit);
