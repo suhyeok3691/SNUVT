@@ -1101,6 +1101,9 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 .lv-score b { font-size: 30px; font-weight: 800; } .lv-t1, .lv-t2 { font-weight: 700; } .lv-t2 { text-align: right; } .lv-score small { color: var(--muted); font-weight: 600; }
 .lv-t1.srv::after { content: " ●"; color: var(--yellow); } .lv-t2.srv::before { content: "● "; color: var(--yellow); }
 .lv-run { grid-column: 1 / -1; justify-self: center; }
+.lv-t1, .lv-t2 { display: flex; align-items: center; gap: 6px; } .lv-t2 { justify-content: flex-end; } .lv-t1.srv::after { order: 2; } .lv-t1 .lv-plus { order: 3; } .lv-t2 .lv-plus { order: -1; }
+.lv-plus { width: 28px; height: 28px; flex: none; border-radius: 50%; border: 1.5px solid var(--line); background: var(--surface); color: var(--muted); font: 700 17px/1 var(--f-data); display: inline-grid; place-items: center; cursor: pointer; padding: 0; }
+.lv-plus:hover, .lv-plus:active { border-color: var(--blue); color: var(--blue); }
 .lv-pad { display: grid; gap: 8px; padding: 10px 12px; }
 .lv-b { font-weight: 700; border: 1.5px solid var(--line); color: var(--ink); background: var(--surface); }
 .lv-b.best { background: color-mix(in srgb, #1e8e4e 13%, var(--surface)); border-color: color-mix(in srgb, #1e8e4e 45%, var(--line)); color: color-mix(in srgb, #1e8e4e 70%, var(--ink)); }
@@ -1205,12 +1208,12 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
-<script src="program.js?v=182"></script>
-<script src="guide.js?v=182"></script>
-<script src="library.js?v=182"></script>
-<script src="campus.js?v=182"></script>
-<script src="court.js?v=182"></script>
-<script src="live.js?v=182"></script>
-<script src="app.js?v=182"></script>
+<script src="program.js?v=183"></script>
+<script src="guide.js?v=183"></script>
+<script src="library.js?v=183"></script>
+<script src="campus.js?v=183"></script>
+<script src="court.js?v=183"></script>
+<script src="live.js?v=183"></script>
+<script src="app.js?v=183"></script>
 </body>
 </html>
