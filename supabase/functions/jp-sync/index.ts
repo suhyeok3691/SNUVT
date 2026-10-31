@@ -31,8 +31,8 @@ function walk(o: any, out: V[], cont: { t: string | null }) {
   for (const k in o) if (k !== "frameworkUpdates") walk(o[k], out, cont);
 }
 
-async function firstPage(src: any) {
-  const url = src.kind === "channel" ? `https://www.youtube.com/${encodeURI(src.ref)}/videos?hl=ja&gl=JP` : `https://www.youtube.com/playlist?list=${encodeURIComponent(src.ref)}&hl=ja&gl=JP`;
+async function firstPage(src: any, tab = "videos") {
+  const url = src.kind === "channel" ? `https://www.youtube.com/${encodeURI(src.ref)}/${tab}?hl=ja&gl=JP` : `https://www.youtube.com/playlist?list=${encodeURIComponent(src.ref)}&hl=ja&gl=JP`;
   const html = await (await fetch(url, { headers: UA })).text();
   const key = (html.match(/"INNERTUBE_API_KEY":"([^"]+)"/) || [])[1];
   const ver = (html.match(/"INNERTUBE_CLIENT_VERSION":"([^"]+)"/) || [])[1];
@@ -174,8 +174,8 @@ async function loadSchools() {
 
 // 경기 직캠·중계 풀영상만: 인터뷰·하이라이트·공식연습·선수 소개·뉴스·짧은 클립(8분 미만)은 안 담음
 // (탐방 재생목록과 「연습·탐방」으로 태그된 영상은 그대로)
-const HARD = /インタビュー|会見|取材|試合後|表彰|閉会式|開会式|入場行進|ハイライト|ダイジェスト|shorts|切り抜き|名場面|好プレー|スーパープレー|プレー集|(スパイク|レシーブ|ブロック|サーブ|アタック|トス|ディグ)集|まとめ|highlight|優勝の瞬間|ラストポイント|勝ち上がり|予告|特集|ニュース|応援団|応援合戦|振り返り/i;
-const SOFT = /公式練習|スパイク練習|サーブ練習|フリースパイク|メンバー紹介|選手紹介|サービスエース|マッチポイント|ウォーミングアップ/;
+const HARD = /インタビュー|会見|取材|試合後|表彰|閉会式|開会式|入場行進|ハイライト|ダイジェスト|shorts|切り抜き|名場面|好プレー|スーパープレー|プレー集|(スパイク|レシーブ|ブロック|サーブ|アタック|トス|ディグ)集|まとめ|highlight|優勝の瞬間|ラストポイント|勝ち上がり|予告|特集|ニュース|応援団|応援合戦|応援歌|応援メドレー|応援風景|振り返[りる]|校歌|斉唱|カモンロッソ|パブリックビューイング/i;
+const SOFT = /公式練習|スパイク練習|サーブ練習|フリースパイク|メンバー紹介|選手紹介|サービスエース|マッチポイント|ウォーミングアップ|応援/;
 const secs = (len: string | null) => { if (!len) return null; const p = len.split(":").map(Number); return p.some(isNaN) ? null : p.reduce((a, x) => a * 60 + x, 0); };
 function notMatch(title: string, len: string | null) {
   const t = norm(title);
@@ -212,6 +212,21 @@ async function syncSource(src: any, mode: string, deadline: number) {
   const done = !token;
   await sb.from("jp_sources").update({ cursor: done ? null : token, full_done: src.full_done || done, synced_at: new Date().toISOString() }).eq("id", src.id);
   return { id: src.id, seen, pages, done };
+}
+// 채널의 「ライブ」 탭: 대표 결정전 같은 경기를 라이브로 올리면 동영상 탭에 안 나옴. 이미 있는 영상이 나올 때까지 읽음
+async function syncStreams(src: any, deadline: number) {
+  let fp;
+  try { fp = await firstPage(src, "streams"); } catch (_) { return { id: src.id + ":live", seen: 0 }; }
+  let out = fp.out, token = fp.cont, seen = 0;
+  while (true) {
+    const have = out.length ? await sb.from("jp_videos").select("id").in("id", out.map((v) => v.id)) : { data: [] };
+    const known = new Set((have.data || []).map((r: any) => r.id));
+    await upsert(src, out); seen += out.length;
+    if (!token || out.some((v) => known.has(v.id)) || Date.now() > deadline) break;
+    const np = await nextPage(fp.key, fp.ver, fp.visitor, token); out = np.out; token = np.cont;
+    if (!out.length) break;
+  }
+  return { id: src.id + ":live", seen };
 }
 
 // ---------- 전국 대진의 결승·4강·8강 영상이 없으면 유튜브 검색으로 채움 (source 'search') ----------
@@ -341,6 +356,7 @@ Deno.serve(async (req) => {
     if (Date.now() > deadline) break;
     if (mode === "full" && s.full_done) continue;
     try { res.push(await syncSource(s, mode, deadline)); } catch (e) { res.push({ id: s.id, error: String((e as Error).message || e).slice(0, 200) }); }
+    if (s.kind === "channel" && Date.now() < deadline) { try { res.push(await syncStreams(s, deadline)); } catch (e) { res.push({ id: s.id + ":live", error: String((e as Error).message || e).slice(0, 200) }); } }
   }
   return json({ mode, res });
 });
