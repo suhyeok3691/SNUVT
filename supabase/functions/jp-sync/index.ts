@@ -66,13 +66,25 @@ let schoolNames = new Map<string, string>();
 type Side = { ids: string[]; raw: string };
 let MATCH = new Map<string, { rnd: string; gender: string; a: Side; b: Side }[]>();
 let RESULT = new Map<string, { place: number; id: string | null; g: string }[]>();
-const idsOf = (name: string) => { const n = norm(name); return schools.filter((s) => s.res.some((re) => { re.lastIndex = 0; return re.test(n); })).map((s) => s.id); };
+// 같은 이름을 여러 번 찾으므로 결과를 기억 (CPU 한도)
+const IDS = new Map<string, string[]>();
+const idsOf = (name: string) => { const n = norm(name); let r = IDS.get(n); if (!r) { r = schools.filter((s) => s.res.some((re) => { re.lastIndex = 0; return re.test(n); })).map((s) => s.id); IDS.set(n, r); } return r; };
 const rawOf = (name: string) => norm(name).replace(/(高等学校|高校)$/, "");
 const norm = (s: string) => s.normalize("NFKC").replace(/\s+/g, "");
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 // 제목 본문: 「｜」 뒤는 보통 선수 이름이라 빼지만, 「第1セット｜金蘭会 - 就実《決勝》…」처럼 앞이 세트 표시뿐이면 뒤를 씀
 const mainOf = (title: string) => { const sg = title.split(/[｜|]/); return sg.length > 1 && /^\s*(第?\s*[0-9０-９一二三四五]+\s*セット目?|[0-9]+(st|nd|rd|th)?\s*set|フル|ノーカット)\s*$/i.test(sg[0]) ? sg.slice(1).join(" ") : sg[0]; };
-function tag(title: string) {
+// 올린 때(「9 か月前」「1 年前」)로 대회 해 후보: 하루코는 1월, 인터하이는 8월 대회
+function pubYears(pub: string | null | undefined, tourn: string, at: string | null = null) {
+  const m = (pub || "").replace(/\s/g, "").match(/(\d+)(年|か月|ヶ月|カ月|週間|日|時間|分)前/); if (!m) return [];
+  const n = Number(m[1]), d = at ? new Date(at) : new Date();
+  if (m[2] === "年") return [d.getFullYear() - n, d.getFullYear() - n - 1];
+  if (/月/.test(m[2])) d.setMonth(d.getMonth() - n); else if (m[2] === "週間") d.setDate(d.getDate() - 7 * n); else if (m[2] === "日") d.setDate(d.getDate() - n);
+  const y = d.getFullYear(), mo = d.getMonth() + 1;
+  return tourn === "haruko" ? (mo >= 11 ? [y + 1, y] : [y, y - 1]) : [y, y - 1];
+}
+// pub: 유튜브의 「N か月前」, at: 그 글을 읽은 때(없으면 지금)
+function tag(title: string, pub: string | null = null, at: string | null = null) {
   const t = norm(title);
   const body = norm(mainOf(title).replace(/#[^\s#]+/g, " "));
   let tourn: string | null = null;
@@ -111,6 +123,7 @@ function tag(title: string) {
   const y = (dm ? t.replace(dm[0], " ") : t).match(/(20[0-3]\d)/);
   if (y) year = Number(y[1]);
   else if (dateY) year = dateY;
+  else if (t.match(/第(\d{2})回(全日本バレーボール高等学校選手権|全日本高等学校バレーボール選手権|全日本高校バレー|春の高校バレー|春高)/)) { const n = Number(t.match(/第(\d{2})回(全日本|春)/)![1]); year = tourn === "haruko" && n >= 45 ? n + 1948 : null; }
   else if (t.match(/令和(元|\d{1,2})年/)) { const n = t.match(/令和(元|\d{1,2})年(度)?/)!; year = 2018 + (n[1] === "元" ? 1 : Number(n[1])) + (n[2] && tourn === "haruko" ? 1 : 0); }
   else if (t.match(/平成(\d{1,2})年/)) { const n = t.match(/平成(\d{1,2})年(度)?/)!; year = 1988 + Number(n[1]) + (n[2] && tourn === "haruko" ? 1 : 0); }
   // 「第N回」은 전국대회 회차일 때만 연도로 (「第74回長崎県高等学校総合体育大会」 같은 현 대회 회차는 다름)
@@ -147,6 +160,11 @@ function tag(title: string) {
     const found = ms.filter((m) => hit(m.a) && hit(m.b) && (!gender || m.gender === gender));
     if (found.length) { const m = found.find((f) => (rnd || "").split(":").includes(f.rnd)) || found[0]; rnd = m.rnd; gender = gender || m.gender; }
   }
+  // 제목에 해가 없으면 올린 때로 짐작한 해 중, 그해 전국 대진에 두 학교가 맞붙은 경기가 있을 때만 그 해로
+  if (!year && pub && (tourn === "haruko" || tourn === "ih") && ids.length === 2 && !prefLocal && rnd !== "yosen" && !(rnd || "").startsWith("yosen")) {
+    const set = new Set(ids);
+    for (const cy of pubYears(pub, tourn, at)) if ((MATCH.get(`${tourn}|${cy}`) || []).some((m) => m.a.ids.some((i) => set.has(i)) && m.b.ids.some((i) => set.has(i)) && (!gender || m.gender === gender))) { year = cy; break; }
+  }
   if ((tourn === "haruko" || tourn === "ih") && year && ids.length > 2) {
     // 학교가 셋 이상 나오면 한 경기 영상이 아님(예고·모음·두 경기 묶음): 대진으로 라운드를 붙이지 않고 제목 그대로
   } else if ((tourn === "haruko" || tourn === "ih") && year) {
@@ -180,7 +198,7 @@ async function loadSchools() {
   const r = await sb.from("jp_schools").select("id,name_ja,aliases,pref");
   schoolNames = new Map(((r.data || []) as any[]).map((s) => [s.id, s.name_ja]));
   schools = ((r.data || []) as (S & { pref: string })[]).map((s) => ({ id: s.id, pref: s.pref, res: [s.name_ja, ...(s.aliases || [])].filter(Boolean).map((x) => x.startsWith("re:") ? new RegExp(x.slice(3), "g") : new RegExp(esc(norm(x)), "g")) }));
-  MATCH = new Map(); RESULT = new Map();
+  MATCH = new Map(); RESULT = new Map(); IDS.clear();
   for (let from = 0; ; from += 1000) {
     const m = await sb.from("jp_matches").select("tourn,year,gender,rnd,a_name,b_name,a_pref,b_pref").range(from, from + 999);
     for (const x of m.data || []) {
@@ -211,7 +229,8 @@ const keepRow = (role: string | undefined, r: { title: string; len: string | nul
 
 async function upsert(src: any, vs: V[]) {
   if (!vs.length) return;
-  const rows = vs.filter((v) => v.id && v.title).map((v) => ({ id: v.id, source: src.id, title: v.title, published: v.published, len: v.len, ...(v.ch ? { ch: v.ch } : {}), ...tag(v.title) })).filter((r) => keepRow(src.role, r));
+  const now = new Date().toISOString();
+  const rows = vs.filter((v) => v.id && v.title).map((v) => ({ id: v.id, source: src.id, title: v.title, published: v.published, seen_at: now, len: v.len, ...(v.ch ? { ch: v.ch } : {}), ...tag(v.title, v.published) })).filter((r) => keepRow(src.role, r));
   // 채널 이름을 모르는 영상은 ch 를 덮어쓰지 않게 따로
   for (const part of [rows.filter((r: any) => r.ch), rows.filter((r: any) => !r.ch)])
     for (let i = 0; i < part.length; i += 200) { const r = await sb.from("jp_videos").upsert(part.slice(i, i + 200), { onConflict: "id" }); if (r.error) throw r.error; }
@@ -271,18 +290,25 @@ async function ytSearch(q: string) {
 }
 const RND_JA: Record<string, string> = { F: "決勝", SF: "準決勝", QF: "準々決勝", "3rd": "3位決定戦" };
 const KW: Record<string, RegExp> = { haruko: /春高|春の高校バレー|高校選手権/, ih: /インターハイ|インハイ|総体/, kokutai: /国スポ|国体|国民スポーツ大会|国民体育大会/ };
-async function fill(deadline: number) {
+async function fill(deadline: number, only = "") {
   // 전국 대진(1회전~결승) 경기마다 검색어를 여러 개로 찾아, 채널이 4곳 될 때까지 영상을 더함. 오래 안 찾아본 경기부터, 같으면 최근 해·큰 라운드부터
   const cy = new Date().getFullYear();
   const ms = ((await sb.from("jp_matches").select("id,tourn,year,gender,rnd,a_name,b_name,a_pref,b_pref,searched_at").gte("year", cy - 7).limit(5000)).data || []) as any[];
   const vids: any[] = [];
   for (let from = 0; ; from += 1000) { const r = await sb.from("jp_videos").select("id,title,tourn,year,rnd,schools,source,ch").in("tourn", ["haruko", "ih", "kokutai"]).gte("year", cy - 7).range(from, from + 999); vids.push(...(r.data || [])); if ((r.data || []).length < 1000) break; }
   const known = new Set(vids.map((v) => v.id));
-  let searched = 0, added = 0, matches = 0;
+  // 제목 정규화는 한 번만 (경기마다 다시 하면 CPU 한도를 넘음)
+  const byTY = new Map<string, any[]>();
+  const addTY = (v: any) => { v.nt = norm(v.title); const k = v.tourn + "|" + v.year; if (!byTY.has(k)) byTY.set(k, []); byTY.get(k)!.push(v); };
+  vids.forEach(addTY);
+  let searched = 0, added = 0, matches = 0; const rej = { tourn: 0, year: 0, pair: 0, other: 0, clip: 0, known: 0 };
   const order: Record<string, number> = { F: 0, SF: 1, "3rd": 2, QF: 3, R5: 4, R4: 5, R3: 6, R2: 7, R1: 8 };
   ms.sort((a, b) => (a.searched_at || "").localeCompare(b.searched_at || "") || b.year - a.year || (order[a.rnd] ?? 9) - (order[b.rnd] ?? 9));
+  // 'fill:haruko:2026' 처럼 대회·해를 좁혀 바로 돌릴 수도 있음. 한 번에 검색 25번까지(CPU 한도 2초), 나머지는 다음 번에
+  const [ot, oy] = only.split(":");
   for (const m of ms) {
-    if (Date.now() > deadline) break;
+    if (Date.now() > deadline || searched >= 25) break;
+    if ((ot && m.tourn !== ot) || (oy && m.year !== Number(oy))) continue;
     await sb.from("jp_matches").update({ searched_at: new Date().toISOString() }).eq("id", m.id); matches++;
     // 두 팀을 알아보는 말: 하루코·인터하이는 학교 이름(사전의 학교로도), 국민스포츠대회는 현 이름이나 학교 이름
     const inParen = (name: string) => (name.match(/\(([^)]+)\)/) || [])[1] || "";
@@ -290,30 +316,34 @@ async function fill(deadline: number) {
     const idsOfSide = (name: string) => m.tourn === "kokutai" ? (inParen(name) ? idsOf(inParen(name)) : []) : idsOf(name);
     const A = names(m.a_name, m.a_pref), B = names(m.b_name, m.b_pref), Ai = idsOfSide(m.a_name), Bi = idsOfSide(m.b_name);
     const hitS = (ids: string[], raws: string[], sc: string[], t: string) => ids.some((i) => sc.includes(i)) || raws.some((x) => x.length >= 2 && t.includes(x));
-    const pair = (title: string, sc: string[]) => { const t = norm(title); return hitS(Ai, A, sc, t) && hitS(Bi, B, sc, t); };
-    const have = vids.filter((v) => v.tourn === m.tourn && v.year === m.year && pair(v.title, v.schools || []) && (m.tourn !== "kokutai" || v.rnd === m.rnd));
+    const pairN = (t: string, sc: string[]) => hitS(Ai, A, sc, t) && hitS(Bi, B, sc, t);
+    const pair = (title: string, sc: string[]) => pairN(norm(title), sc);
+    const have = (byTY.get(m.tourn + "|" + m.year) || []).filter((v) => pairN(v.nt, v.schools || []) && (m.tourn !== "kokutai" || v.rnd === m.rnd));
     const chans = new Set(have.map((v) => v.ch || v.source));
     if (chans.size >= 4) continue;
     const g = m.gender === "w" ? "女子" : "男子", rj = RND_JA[m.rnd] || "";
-    // 사전의 정식 이름(「市尼崎」→「市立尼崎」)으로도 찾음
+    // 사전의 정식 이름(「市尼崎」→「市立尼崎」)으로도 찾음. 제목에 해가 없는 영상도 있어 마지막 검색어는 해 없이(해는 올린 때로 맞춤)
     const canon = (ids: string[], raw: string) => { const s = ids.length ? schoolNames.get(ids[0]) : null; return s ? s.replace(/(高等学校|高校)$/, "") : raw; };
     const ca = canon(Ai, m.a_name), cb = canon(Bi, m.b_name);
     const kw = m.tourn === "haruko" ? "春高" : m.tourn === "ih" ? "インターハイ" : m.year >= 2024 ? "国スポ" : "国体";
     const qs = m.tourn === "kokutai"
       ? [`${kw}${m.year} 少年${g} ${A[0]} ${B[0]} ${rj}`, `${kw}${m.year} バレー ${A[A.length - 1]} ${B[B.length - 1]}`]
-      : [...new Set([`${kw}${m.year} ${g} ${m.a_name} ${m.b_name} ${rj}`, `${ca} ${cb} ${kw} ${m.year}`, m.tourn === "haruko" ? `春の高校バレー ${m.year} ${ca} vs ${cb}` : `インハイ ${m.year} ${ca} ${cb} バレー`])];
+      : [...new Set([`${kw}${m.year} ${g} ${m.a_name} ${m.b_name} ${rj}`, `${ca} ${cb} ${kw} ${m.year}`, m.tourn === "haruko" ? `${ca} ${cb} 春高バレー ${g}` : `${ca} ${cb} インハイ バレー ${g}`])];
     let ok: V[] = [];
     for (const q of qs) {
       if (Date.now() > deadline || ok.length >= 4 - chans.size + 2) break;
       const items = await ytSearch(q.trim()); searched++;
       for (const x of items) {
-        if (known.has(x.id) || ok.some((o) => o.id === x.id)) continue;
+        if (known.has(x.id) || ok.some((o) => o.id === x.id)) { rej.known++; continue; }
         const t = norm(x.title), ys = [...t.matchAll(/20[0-3]\d/g)].map((y) => Number(y[0]));
         // 같은 대회·같은 해로 읽히는 배구 경기 풀영상만 (국체·인터하이는 다른 종목도 있음)
-        const tg = tag(x.title);
-        if (tg.tourn !== m.tourn || tg.year !== m.year || !pair(x.title, tg.schools)) continue;
+        const tg = tag(x.title, x.published);
+        if (tg.tourn !== m.tourn) { rej.tourn++; continue; }
+        if (tg.year !== m.year) { rej.year++; continue; }
+        if (!pair(x.title, tg.schools)) { rej.pair++; continue; }
         if (m.tourn !== "haruko" && !/バレー|volley/i.test(t) && !tg.schools.length) continue;
-        if (/成年|剣道|テニス|バスケ|サッカー|ハンド|ソフトボール|ビーチ/.test(t) || /予選|代表決定|ブロック/.test(t) || notMatch(x.title, x.len)) continue;
+        if (/成年|剣道|テニス|バスケ|サッカー|ハンド|ソフトボール|ビーチ/.test(t) || /予選|代表決定|ブロック/.test(t)) { rej.other++; continue; }
+        if (notMatch(x.title, x.len)) { rej.clip++; continue; }
         if ((ys.length && !ys.includes(m.year) && !ys.includes(m.year - 1)) || (m.gender === "m" && /女子/.test(t)) || (m.gender === "w" && /男子/.test(t))) continue;
         ok.push(x);
       }
@@ -323,9 +353,9 @@ async function fill(deadline: number) {
       const ex = new Set(((await sb.from("jp_videos").select("id").in("id", ok.map((x) => x.id))).data || []).map((r: any) => r.id));
       ok = ok.filter((x) => !ex.has(x.id)).slice(0, 6);
     }
-    if (ok.length) { await upsert({ id: "search" }, ok); added += ok.length; ok.forEach((x) => { known.add(x.id); vids.push({ id: x.id, title: x.title, tourn: m.tourn, year: m.year, rnd: m.rnd, schools: tag(x.title).schools, source: "search", ch: x.ch }); }); }
+    if (ok.length) { await upsert({ id: "search" }, ok); added += ok.length; ok.forEach((x) => { known.add(x.id); addTY({ id: x.id, title: x.title, tourn: m.tourn, year: m.year, rnd: m.rnd, schools: tag(x.title, x.published).schools, source: "search", ch: x.ch }); }); }
   }
-  return { searched, added, matches };
+  return { searched, added, matches, rej };
 }
 
 // ---------- 빠진 상대 학교 넣기 (mode 'newschools') ----------
@@ -470,7 +500,7 @@ async function schoolsFill(deadline: number, limit = 60) {
     for (const g of gs) {
       const items = await ytSearch(`${s.pref} ${base} 高校 バレー ${g}`); searched++;
       ok.push(...items.filter((x) => {
-        const t = norm(x.title), sec = secs(x.len), tg = tag(x.title);
+        const t = norm(x.title), sec = secs(x.len), tg = tag(x.title, x.published);
         if (!tg.schools.includes(s.id) || tg.tourn === "univ" || tg.tourn === "other") return false;
         if (notMatch(x.title, x.len)) return false;
         if (/成年|剣道|テニス|バスケ|サッカー|ハンド|ソフトボール|ビーチ|野球|ラグビー|卓球|中学/.test(t)) return false;
@@ -494,7 +524,7 @@ Deno.serve(async (req) => {
   const { data: kd } = await sb.rpc("push_keys"); const k = (Array.isArray(kd) ? kd[0] : kd) || {};
   if (!k.cron || req.headers.get("x-cron") !== k.cron) return json({ error: "forbidden" }, 403);
   const body = await req.json().catch(() => ({}));
-  const mode = ["new", "full", "retag", "fill", "schools", "ch", "newschools"].includes(body.mode) ? body.mode : "new";
+  const mode = ["new", "full", "retag", "fill", "schools", "ch", "newschools"].includes(body.mode) || /^fill:[a-z]+(:\d{4})?$/.test(body.mode || "") ? body.mode : "new";
   if (mode === "ch") {
     // 채널 이름이 비었거나 퍼가기 여부를 아직 모르는 영상: oEmbed 로 채움
     // 200 = 채널 이름, 401/403 = 채널 주인이 다른 사이트 재생을 막음(noembed), 404 = 지워졌거나 비공개(noembed)
@@ -513,9 +543,9 @@ Deno.serve(async (req) => {
     const ROLE = new Map((((await sb.from("jp_sources").select("id,role")).data || []) as any[]).map((x) => [x.id, x.role]));
     let n = 0; const drop: string[] = [];
     for (let from = 0; ; from += 1000) {
-      const r = await sb.from("jp_videos").select("id,source,title,len").order("id").range(from, from + 999);
+      const r = await sb.from("jp_videos").select("id,source,title,len,published,added_at,seen_at").order("id").range(from, from + 999);
       const l = r.data || []; if (!l.length) break;
-      const all = l.map((v: any) => ({ id: v.id, source: v.source, title: v.title, len: v.len, ...tag(v.title) }));
+      const all = l.map((v: any) => ({ id: v.id, source: v.source, title: v.title, len: v.len, ...tag(v.title, v.published, v.seen_at || v.added_at) }));
       // 규칙이 바뀌어 이제 경기 풀영상이 아닌 것은 지움
       const bad = all.filter((v) => !keepRow(ROLE.get(v.source), v)).map((v) => v.id);
       const rows = all.filter((v) => !bad.includes(v.id)).map(({ len: _l, ...v }) => v);
@@ -528,7 +558,7 @@ Deno.serve(async (req) => {
     return json({ mode, retagged: n, removed: gone });
   }
   const deadline = Date.now() + 110000;
-  if (mode === "fill") return json({ mode, ...(await fill(deadline)) });
+  if (mode.startsWith("fill")) return json({ mode, ...(await fill(deadline, mode.slice(5))) });
   if (mode === "schools") return json({ mode, ...(await schoolsFill(deadline)) });
   if (mode === "newschools") return json({ mode, ...(await newSchools(deadline)) });
   const srcs = ((await sb.from("jp_sources").select("*")).data || []).filter((s: any) => s.kind !== "search");

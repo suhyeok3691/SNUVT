@@ -2232,3 +2232,6 @@ create table if not exists public.jp_school_cand (
   primary key (name, pref)
 );
 alter table public.jp_school_cand enable row level security;
+
+-- jp_videos.seen_at: published(「N か月前」)를 읽은 때. 제목에 해가 없는 영상은 이것으로 대회 해를 짐작 (그해 전국 대진에 두 학교가 맞붙었을 때만)
+alter table public.jp_videos add column if not exists seen_at timestamptz;
