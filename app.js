@@ -1961,18 +1961,17 @@ const scChip = (act, v, cur, l) => `<button type="button" class="chip sc-chip ${
 const scPct = (a, b) => b ? Math.round(100 * a / b) + "%" : "—";
 const scCnt = (l, sk, g) => l.filter(e => e.skill === sk && (!g || g.includes(e.grade))).length;
 // 전력분석 두 갈래: 영상 분석(예전 프로그램 · 코트) / 실시간 경기 분석(버튼판)
-// 전력분석 = 경기 하나에 방식(전체 기록 · 라이트 · 영상 분석)을 골라 기록. 예전 영상 분석(코트 · 예전 프로그램 방식)은 맨 아래 "예전 영상 분석"으로 (track = "video")
+// 전력분석 = 경기 하나에 방식(실시간 전체 기록 · 라이트 · 영상 분석)을 골라 기록. 예전 영상 분석(코트 · scout_matches)은 화면에서 뺌 (court.js는 엑셀 동작 이름 · 기록지 계산에 씀)
 const scTrack = () => `<div class="row"><button class="btn link small" type="button" data-act="sctrack" data-k="live">‹ 전력분석</button></div>`;
 function viewScout() {
   const S = sc();
-  if (S.track !== "video") {
+  S.track = "live";
+  {
     const L = lv(), g = L.open ? lvGame() : null;
     if (g) return lvPage({ ...lvRefOf(g), name: "목록" });
     if (L.open && !L.games["scout:all"]) { if (L.games["scout:all"] === undefined) lvLoadAll(); return loaderHtml(); }
     L.open = null;
-    if (!S.loaded) scoutLoad();
-    return `<section class="sec"><div class="sec-head"><h2>전력분석</h2>${lvCan() ? `<button class="btn add" type="button" data-act="lvnew" data-k="scout:-">+ 경기</button>` : ""}</div>${lvScoutList()}
-      ${S.matches.length || can("analysis") ? `<div class="row"><button class="btn link small" type="button" data-act="sctrack" data-k="video">예전 영상 분석 (코트 방식)${S.matches.length ? ` ${S.matches.length}` : ""} ›</button></div>` : ""}</section>`;
+    return `<section class="sec"><div class="sec-head"><h2>전력분석</h2>${lvCan() ? `<button class="btn add" type="button" data-act="lvnew" data-k="scout:-">+ 경기</button>` : ""}</div>${lvScoutList()}</section>`;
   }
   if (!S.loaded) { scoutLoad(); return loaderHtml(); }
   const m = scMatch();
