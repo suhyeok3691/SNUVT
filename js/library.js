@@ -250,18 +250,19 @@ const DRILL_LIB = [
 const drillOf = n => DRILL_LIB.find(x => x.n === n);
 // 포지션별 그룹 (블록을 나눌 때)
 const PRACTICE_GROUPS = [["세터", ["S"]], ["아웃사이드·아포짓", ["OH", "OP"]], ["미들", ["MB"]], ["리베로", ["Li"]]];
-// 기본 틀 (정규 훈련 3시간 안쪽)
+// 기본 틀 (정규 훈련 3시간 안쪽) — 일본 고교 학교 탐방(세이후·오미·센다이쇼코) 흐름:
+// 볼 게임으로 시작 → 가슴 디그·대인 → 레셉션을 길게(세터·미들은 따로) → 실전 수비 → 블록 약속 → 공격 연계 → 5점 로테 게임
 const PRACTICE_TEMPLATE = () => [
-  { title: "볼 체조 · 워밍업", minutes: 15, groups: [{ name: "공통", pos: [], drills: [{ n: "볼 체조 (돌리기·튕기기·한 손 캐치)", m: 5 }, { n: "캐치볼 (한 손·점프·등 뒤)", m: 5 }, { n: "풋워크 (사이드스텝·크로스·백스텝)", m: 5 }] }] },
-  { title: "대인", minutes: 20, groups: [{ name: "공통", pos: [], drills: [{ n: "대인 리시브 (거리 4→6→9m)", m: 6 }, { n: "제한 시간 대인 리시브 (전원 동시)", m: 8 }, { n: "3인 대인 (히터·세터·리시버)", m: 6 }] }] },
-  { title: "리시브 (시트)", minutes: 20, groups: [{ name: "공통", pos: [], drills: [{ n: "시트 리시브 (토털 디펜스)", m: 12 }, { n: "3인 리시브 (양쪽 교대 스파이크)", m: 8 }] }] },
-  { title: "포지션별", minutes: 25, groups: [
-    { name: "세터", pos: ["S"], drills: [{ n: "이동 토스 (리시브 위치 → 세팅)", m: 10 }, { n: "토스 반복 (레프트·라이트·백)", m: 15 }] },
-    { name: "아웃사이드·아포짓", pos: ["OH", "OP"], drills: [{ n: "2단 토스 때려내기 (블록 2장)", m: 13 }, { n: "코스 선언 스파이크 (존 1–6)", m: 12 }] },
-    { name: "미들", pos: ["MB"], drills: [{ n: "속공 (A·B 퀵) 타이밍", m: 12 }, { n: "1대1 블록 (실전 대결)", m: 13 }] },
-    { name: "리베로", pos: ["Li"], drills: [{ n: "원맨 리시브", m: 10 }, { n: "서브 리시브 A·B 채점", m: 15 }] }] },
-  { title: "서브 · 서브 리시브", minutes: 25, groups: [{ name: "공통", pos: [], drills: [{ n: "목표 서브 (존 1·5·짧게)", m: 10 }, { n: "서브 리시브 A·B 채점", m: 15 }] }] },
-  { title: "게임형", minutes: 40, groups: [{ name: "공통", pos: [], drills: [{ n: "3대3 · 5대5 게임 (볼 터치 늘리기)", m: 20 }, { n: "사이드아웃 1개 승부", m: 12 }, { n: "1점 승부 (긴장 상황)", m: 8 }] }] },
+  { title: "워밍업", minutes: 20, groups: [{ name: "공통", pos: [], drills: [{ n: "조깅 · 동적 스트레칭", m: 5 }, { n: "볼 2개 게임 (점수 차등)", m: 10 }, { n: "물구나무서기 (벽 → 혼자 → 걷기)", m: 5 }] }] },
+  { title: "대인 · 가슴 디그", minutes: 15, groups: [{ name: "공통", pos: [], drills: [{ n: "가슴 높이 디그", m: 6 }, { n: "제한 시간 대인 리시브 (전원 동시)", m: 9 }] }] },
+  { title: "레셉션", minutes: 30, groups: [
+    { name: "리시브", pos: ["OH", "OP", "Li"], drills: [{ n: "레셉션 집중 (1인 50개)", m: 30, note: "A·B패스 개수 세기" }] },
+    { name: "세터", pos: ["S"], drills: [{ n: "목표물 토스 (같은 동작 배분)", m: 10 }, { n: "점프 롱 토스 (먼 곳 → 레프트)", m: 10 }, { n: "토스 반복 (레프트·라이트·백)", m: 10, note: "리시브된 공으로" }] },
+    { name: "미들", pos: ["MB"], drills: [{ n: "점프 서브 · 플로터 서브", m: 30, note: "리시브 조에 서브" }] }] },
+  { title: "실전 수비", minutes: 20, groups: [{ name: "공통", pos: [], drills: [{ n: "1인 3개 성공 수비 (레프트·라이트 강타)", m: 15 }, { n: "숨찬 상태 서브", m: 5 }] }] },
+  { title: "블록", minutes: 15, groups: [{ name: "공통", pos: [], drills: [{ n: "블록 약속 (2장은 손 앞으로, 1장은 잡기)", m: 3 }, { n: "좌우 연속 블록 6회", m: 12 }] }] },
+  { title: "공격 연계", minutes: 20, groups: [{ name: "공통", pos: [], drills: [{ n: "리바운드 → 블록 아웃 (블록 상대)", m: 10 }, { n: "2인 공격 (퀵 + 사이드) vs 블록", m: 10 }] }] },
+  { title: "게임형", minutes: 25, groups: [{ name: "공통", pos: [], drills: [{ n: "5점 선취 로테 게임", m: 25 }] }] },
   { title: "마무리", minutes: 10, groups: [{ name: "공통", pos: [], drills: [{ n: "쿨다운 스트레칭", m: 5 }, { n: "미팅 · 훈련 노트", m: 5 }] }] },
 ];
 if (typeof module !== "undefined") module.exports = { BOX_LIB, DRILL_LIB, DRILL_SRC, PRACTICE_GROUPS, PRACTICE_TEMPLATE };
