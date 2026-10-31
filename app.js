@@ -567,6 +567,7 @@ const JP_TOURN_Q = { haruko: "春高バレー", ih: "インターハイ バレ�
 const JP_RND = [["F", "결승"], ["SF", "준결승 (4강)"], ["3rd", "3위 결정전"], ["QF", "준준결승 (8강)"], ["R5", "5회전"], ["R4", "4회전"], ["R3", "3회전 (16강)"], ["R2", "2회전"], ["R1", "1회전"], ["rep", "패자부활전"], ["group", "예선 리그"], ["", "본선 (라운드 모름)"], ["yosen", "현 예선"]];
 const jpRndKey = v => { const r = (v.rnd || "").split(":"); if (r.includes("yosen")) return "yosen"; const k = JP_RND.find(([kk]) => kk && kk !== "yosen" && r.includes(kk)); return k ? k[0] : ""; };
 // 현 예선 안에서는 결승·준결승 순
+const jpPrefIdx = v => { const k = jpVidPref(v), i = k ? Object.keys(JP_PREF).indexOf(k) : -1; return i < 0 ? 99 : i; };
 const jpYosenOrder = v => { const r = (v.rnd || "").split(":"); const i = JP_RND.findIndex(([kk]) => kk && kk !== "yosen" && r.includes(kk)); return i < 0 ? 99 : i; };
 const jpYosenLab = tourn => tourn === "kokutai" ? "블록 예선" : "현 예선";
 // 대진 이름 → 학교 (같은 현에서 이름·별칭으로). 국민스포츠대회는 「熊本(鎮西高)」 = 현 대표(단독 학교), 괄호 없으면 선발팀
@@ -611,7 +612,7 @@ function jpBlockResults(rg, yr, g) {
 }
 function jpRoundSections(l, national, tourn) {
   // national=false 면(사쿠라·지역 대회 등) 라운드만으로. 국민스포츠대회 예선은 블록 예선
-  return JP_RND.map(([k, lab]) => [k === "yosen" ? jpYosenLab(tourn) : k === "" ? (national ? "본선 (라운드 모름)" : "기타") : lab, l.filter(v => jpRndKey(v) === k).sort((a, b) => k === "yosen" ? jpYosenOrder(a) - jpYosenOrder(b) : 0)]).filter(([, x]) => x.length);
+  return JP_RND.map(([k, lab]) => [k === "yosen" ? jpYosenLab(tourn) : k === "" ? (national ? "본선 (라운드 모름)" : "기타") : lab, l.filter(v => jpRndKey(v) === k).sort((a, b) => k === "yosen" ? jpPrefIdx(a) - jpPrefIdx(b) || jpYosenOrder(a) - jpYosenOrder(b) : 0)]).filter(([, x]) => x.length);
 }
 const JP_GLOSS = [["春の高校バレー", "하루코"], ["春高バレー", "하루코"], ["春高", "하루코"], ["インターハイ", "인터하이"], ["インハイ", "인터하이"], ["国民スポーツ大会", "국민스포츠대회"], ["国スポ", "국민스포츠대회"], ["国民体育大会", "국민체육대회"], ["国体", "국민체육대회"], ["さくらバレー", "사쿠라 발리"], ["全国私立高等学校", "전국 사립고"],
   ["準々決勝", "준준결승"], ["準決勝", "준결승"], ["決勝戦", "결승"], ["決勝", "결승"], ["代表決定戦", "대표 결정전"], ["位決定戦", "위 결정전"], ["回戦", "회전"], ["予選", "예선"], ["グループ", "그룹"], ["トーナメント", "토너먼트"],
@@ -630,7 +631,7 @@ async function jpLoad() {
     J.rank = {}; for (const r of (rk && rk.data) || []) J.rank[r.school_id + "|" + r.gender] = r;
     J.stars = (st && st.data) || []; J.rosters = {}; J.top = (mt && mt.data) || []; J.blockTop = (bt && bt.data) || [];
     const vids = [];
-    for (let from = 0; ; from += 1000) { const r = await sb.from("jp_videos").select("id,source,title,published,year,tourn,gender,rnd,schools,ch,len").order("added_at", { ascending: false }).range(from, from + 999); if (r.error) throw r.error; vids.push(...(r.data || [])); if ((r.data || []).length < 1000) break; }
+    for (let from = 0; ; from += 1000) { const r = await sb.from("jp_videos").select("id,source,title,published,year,tourn,gender,rnd,schools,ch,len,noembed").order("added_at", { ascending: false }).range(from, from + 999); if (r.error) throw r.error; vids.push(...(r.data || [])); if ((r.data || []).length < 1000) break; }
     J.schools = s.data || []; J.sources = src.data || []; J.videos = vids;
     jpLinkPref(J);
     // 한국어 제목용 바꾸기 목록 (긴 것부터)
@@ -652,8 +653,18 @@ function jpKo(title) {
   t = t.replace(/(?<=[\p{Script=Hangul}\s\]!！?？])[のにがをはでとへも](?=[\p{Script=Hangul}\s\[!！A-Za-z0-9])/gu, " ");
   return t.replace(/【\s*/g, "[").replace(/\s*】/g, "] ").replace(/\s+([!！?？,、。)\]])/g, "$1").replace(/\(\s+/g, "(").replace(/\s+/g, " ").trim();
 }
-const jpRnd = (r, tourn) => { if (!r) return ""; return r.split(":").map(x => x === "yosen" ? jpYosenLab(tourn) : (JP_RND.find(y => y[0] === x) || ["", ""])[1]).filter(Boolean).join(" · "); };
-const jpMeta = v => [v.tourn && JP_TOURN[v.tourn] ? JP_TOURN[v.tourn] + (v.year ? " " + v.year : "") : (v.year || ""), jpRnd(v.rnd, v.tourn), v.schools && jpG(v) === "w" ? "여자" : "", v.ch || (jp().sources.find(s => s.id === v.source) || {}).label || ""].filter(Boolean).join(" · ");
+const jpRnd = (r, tourn, pf) => { if (!r) return ""; return r.split(":").map(x => x === "yosen" ? (pf && JP_PREF[pf] ? JP_PREF[pf][0] + " 예선" : jpYosenLab(tourn)) : (JP_RND.find(y => y[0] === x) || ["", ""])[1]).filter(Boolean).join(" · "); };
+// 현 예선 영상의 현: 제목의 「山梨県」「京都府代表」…, 없으면 나온 학교들의 현(모두 같을 때)
+const JP_PREF_KEYS = () => jp()._pk || (jp()._pk = Object.keys(JP_PREF).sort((a, b) => b.length - a.length));
+function jpVidPref(v) {
+  if (v._pf !== undefined) return v._pf;
+  const t = String(v.title || "").normalize("NFKC").replace(/\s+/g, "");
+  let k = JP_PREF_KEYS().find(p => new RegExp(p + "(県|府|都|代表|予選|大会|決勝|男子|女子|新人)").test(t));
+  if (!k) { const ps = [...new Set((v.schools || []).map(id => (jpSchool(id) || {}).pref).filter(Boolean))]; if (ps.length === 1) k = ps[0]; }
+  return (v._pf = k && JP_PREF[k] ? k : null);
+}
+const jpIsYosen = v => String(v.rnd || "").split(":").includes("yosen") && v.tourn !== "kokutai";
+const jpMeta = v => [v.tourn && JP_TOURN[v.tourn] ? JP_TOURN[v.tourn] + (v.year ? " " + v.year : "") : (v.year || ""), jpRnd(v.rnd, v.tourn, jpIsYosen(v) ? jpVidPref(v) : null), v.schools && jpG(v) === "w" ? "여자" : "", v.ch || (jp().sources.find(s => s.id === v.source) || {}).label || ""].filter(Boolean).join(" · ");
 // 같은 경기(같은 채널 · 같은 제목)가 세트·전후편으로 나뉜 영상은 하나로 묶음
 const JP_PART = [/[\(（]?\s*第?\s*[0-9一二三四五]+(?:\s*[・,，.･•~～\-－と&]\s*[0-9一二三四五]+)*\s*セット(?:目)?(?:のみ|まで)?\s*[\)）]?/g, /(?:最終|ファイナル|ゴールデン)セット/g, /【?\s*(?:前編|中編|後編)\s*】?/g, /(?:その|Part\.?|part\.?|PART)\s*[0-9]+/g, /途中から~?|【?ノーカット版?】?|フル(?:バージョン)?/g];
 function jpPartOf(title) {
@@ -671,12 +682,18 @@ function jpGroups(l) {
   for (const v of l) { const p = jpPartOf(v.title), k = v.source + "|" + p.key; if (!m.has(k)) m.set(k, []); m.get(k).push({ ...v, part: p }); }
   return [...m.values()].map(g => g.sort((a, b) => a.part.n - b.part.n));
 }
+// 채널 주인이 다른 사이트 재생을 막은 영상(noembed)은 앱 안에서 안 틀고 유튜브로 바로 엶
+const jpYt = id => `https://www.youtube.com/watch?v=${esc(id)}`;
+const jpPlay = (v, cls, inner, extra = "") => v.noembed ? `<a class="${cls}" href="${jpYt(v.id)}" target="_blank" rel="noopener noreferrer">${inner}</a>` : `<button type="button" class="${cls}" data-act="jpplay" data-id="${esc(v.id)}"${extra}>${inner}</button>`;
+const jpYtMark = v => v.noembed ? ` <span class="jp-ytm">유튜브 ↗</span>` : "";
+const jpFrame = cur => !cur ? "" : cur.noembed ? `<a class="btn small jp-ytb" href="${jpYt(cur.id)}" target="_blank" rel="noopener noreferrer">유튜브에서 보기 ↗</a>` : `<div class="vid-frame"><iframe src="https://www.youtube-nocookie.com/embed/${esc(cur.id)}?playsinline=1&rel=0&autoplay=1" title="${esc(cur.title)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div><a class="btn link small" href="${jpYt(cur.id)}" target="_blank" rel="noopener noreferrer">유튜브에서 열기 ↗</a>`;
 function jpRow(g, head) {
-  const J = jp(), v0 = g[0], cur = g.find(v => v.id === J.open), multi = g.length > 1;
+  const J = jp(), v0 = g[0], cur = g.find(v => v.id === J.open && !v.noembed), multi = g.length > 1;
   const title = multi ? jpPartOf(v0.title).show : v0.title;
-  const frame = cur ? `<div class="vid-frame"><iframe src="https://www.youtube-nocookie.com/embed/${esc(cur.id)}?playsinline=1&rel=0&autoplay=1" title="${esc(cur.title)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div><a class="btn link small" href="https://www.youtube.com/watch?v=${esc(cur.id)}" target="_blank" rel="noopener noreferrer">유튜브에서 열기 ↗</a>` : "";
-  const parts = multi ? `<div class="jp-parts">${g.map((v, i) => `<button type="button" class="chip sc-chip ${J.open === v.id ? "on" : ""}" data-act="jpplay" data-id="${esc(v.id)}">${esc(v.part.label || `영상 ${i + 1}`)}</button>`).join("")}</div>` : "";
-  return `<li class="jp-v ${cur ? "open" : ""}"><button type="button" class="jp-vh" data-act="jpplay" data-id="${esc((cur || v0).id)}"><span class="jp-ic">${svg("video")}</span><span class="jp-vt"><b>${esc(head || jpKo(title))}</b><span class="small muted">${esc(jpMeta(v0))}${multi ? ` · 영상 ${g.length}개` : v0.len ? " · " + esc(v0.len) : ""}</span><span class="jp-ja">${esc(title)}</span></span></button>${parts}${frame}</li>`;
+  const frame = jpFrame(cur);
+  const parts = multi ? `<div class="jp-parts">${g.map((v, i) => jpPlay(v, `chip sc-chip ${J.open === v.id ? "on" : ""}`, esc(v.part.label || `영상 ${i + 1}`) + (v.noembed ? " ↗" : ""))).join("")}</div>` : "";
+  const inner = `<span class="jp-ic">${svg("video")}</span><span class="jp-vt"><b>${esc(head || jpKo(title))}</b><span class="small muted">${esc(jpMeta(v0))}${multi ? ` · 영상 ${g.length}개` : v0.len ? " · " + esc(v0.len) : ""}${jpYtMark(v0)}</span><span class="jp-ja">${esc(title)}</span></span>`;
+  return `<li class="jp-v ${cur ? "open" : ""}">${multi && v0.noembed ? `<div class="jp-vh">${inner}</div>` : jpPlay(cur || v0, "jp-vh", inner)}${parts}${frame}</li>`;
 }
 // 같은 경기(같은 대회·연도·라운드·남녀·두 학교)를 여러 채널이 올렸으면 한 칸에 모아 골라 보게 함
 // 현 예선은 제목마다 라운드 표기가 달라서(「代表決定戦」·「決勝」·없음) 라운드는 빼고 같은 해 같은 두 학교면 한 경기로
@@ -684,8 +701,10 @@ const jpMatchKey = v => { const sc = v.schools || []; if (sc.length !== 2 || !v.
 function jpMatches(l) {
   const m = new Map();
   for (const g of jpGroups(l)) { const k = jpMatchKey(g[0]) || "g|" + g[0].id; if (!m.has(k)) m.set(k, []); m.get(k).push(g); }
+  // 같은 경기 안에서 같은 채널 영상은 제목이 조금 달라도(선수 이름 해시태그 등) 한 채널 칩으로 합쳐 세트 순서대로
+  const merge = x => { const by = new Map(); for (const g of x) { const c = g[0].source + "|" + (g[0].ch || ""); if (!by.has(c)) by.set(c, []); by.get(c).push(...g); } return [...by.values()].map(g => g.sort((a, b) => a.part.n - b.part.n)); };
   // 한 영상으로 된 것(경기 통째)을 앞에, 나머지는 나뉜 개수가 많은 순
-  return [...m.values()].map(x => x.sort((a, b) => (a.length === 1 ? 0 : 1) - (b.length === 1 ? 0 : 1) || b.length - a.length));
+  return [...m.values()].map(x => (x.length > 1 ? merge(x) : x).sort((a, b) => (a.length === 1 ? 0 : 1) - (b.length === 1 ? 0 : 1) || b.length - a.length));
 }
 const jpCount = l => jpMatches(l).length;
 function jpVerLab(g, i, all) {
@@ -700,15 +719,30 @@ function jpVsName(v0) {
   const t0 = String(v0.title || "").normalize("NFKC"), pos = id => { const s = jpSchool(id); const i = s ? [s.name_ja, ...(s.aliases || [])].filter(n => n && !n.startsWith("re:")).map(n => t0.indexOf(n)).filter(i => i >= 0) : []; return i.length ? Math.min(...i) : 999; };
   return [...v0.schools].sort((a, b) => pos(a) - pos(b)).map(id => (jpSchool(id) || {}).name_ko || id);
 }
+// 현 예선은 제목 앞에 어느 현의 어느 라운드인지: 「야마나시 결승 · 니혼코쿠 vs 닛카와」
+function jpHead(v0, names) {
+  const vs = names.join(" vs ");
+  if (!jpIsYosen(v0)) return vs;
+  const pf = jpVidPref(v0), r = String(v0.rnd || "").split(":").find(x => x !== "yosen"), rl = r ? (JP_RND.find(y => y[0] === r) || ["", ""])[1].replace(/ \(.*\)$/, "") : "";
+  const pre = [pf ? JP_PREF[pf][0] : "", rl].filter(Boolean).join(" ");
+  return pre ? `${pre} · ${vs}` : vs;
+}
 function jpMatchRow(m) {
-  if (m.length === 1) return jpRow(m[0], jpMatchKey(m[0][0]) ? jpVsName(m[0][0]).join(" vs ") : "");
+  if (m.length === 1) return jpRow(m[0], jpMatchKey(m[0][0]) ? jpHead(m[0][0], jpVsName(m[0][0])) : "");
   const J = jp(), all = m.flat(), v0 = all[0], cur = all.find(v => v.id === J.open), curG = cur ? m.find(g => g.includes(cur)) : null;
   const names = jpVsName(v0);
-  const meta = jpMeta({ ...v0, source: null, ch: null });
-  const frame = cur ? `<div class="vid-frame"><iframe src="https://www.youtube-nocookie.com/embed/${esc(cur.id)}?playsinline=1&rel=0&autoplay=1" title="${esc(cur.title)}" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div><p class="jp-ja jp-cur">${esc(cur.title)}</p><a class="btn link small" href="https://www.youtube.com/watch?v=${esc(cur.id)}" target="_blank" rel="noopener noreferrer">유튜브에서 열기 ↗</a>` : "";
-  const vers = `<div class="jp-parts jp-vers">${m.map((g, i) => `<button type="button" class="chip sc-chip ${g === curG ? "on" : ""}" data-act="jpplay" data-id="${esc((g === curG ? cur : g[0]).id)}" data-keep="1">${esc(jpVerLab(g, i, m))}</button>`).join("")}</div>`;
-  const parts = curG && curG.length > 1 ? `<div class="jp-parts">${curG.map((v, i) => `<button type="button" class="chip sc-chip ${J.open === v.id ? "on" : ""}" data-act="jpplay" data-id="${esc(v.id)}">${esc(v.part.label || `영상 ${i + 1}`)}</button>`).join("")}</div>` : "";
-  return `<li class="jp-v jp-m ${cur ? "open" : ""}"><button type="button" class="jp-vh" data-act="jpplay" data-id="${esc((cur || m[0][0]).id)}"><span class="jp-ic">${svg("video")}</span><span class="jp-vt"><b>${esc(names.join(" vs "))}</b><span class="small muted">${esc(meta)} · 채널 ${m.length}곳</span></span></button>${vers}${parts}${frame}</li>`;
+  // 라운드가 적힌 영상(「決勝」)을 대표로
+  const vr = all.find(v => String(v.rnd || "").split(":").some(x => x && x !== "yosen")) || v0;
+  const meta = jpMeta({ ...vr, source: null, ch: null });
+  const play = cur && !cur.noembed ? cur : null;
+  const frame = play ? jpFrame(play).replace("</iframe></div>", `</iframe></div><p class="jp-ja jp-cur">${esc(play.title)}</p>`) : "";
+  // 채널 칩: 막힌 영상 하나짜리는 바로 유튜브로, 나뉜 채널은 누르면 세트 칩이 나옴(J.open 을 그 채널 첫 영상으로)
+  const vers = `<div class="jp-parts jp-vers">${m.map((g, i) => { const lab = esc(jpVerLab(g, i, m)), on = g === curG ? "on" : "", t = g === curG && cur ? cur : g[0];
+    return g.length === 1 ? jpPlay(t, `chip sc-chip ${on}`, lab + (t.noembed ? " ↗" : ""), ' data-keep="1"') : `<button type="button" class="chip sc-chip ${on}" data-act="jpplay" data-id="${esc(t.id)}" data-keep="1">${lab}</button>`; }).join("")}</div>`;
+  const parts = curG && curG.length > 1 ? `<div class="jp-parts">${curG.map((v, i) => jpPlay(v, `chip sc-chip ${J.open === v.id ? "on" : ""}`, esc(v.part.label || `영상 ${i + 1}`) + (v.noembed ? " ↗" : ""))).join("")}</div>` : "";
+  const first = m.map(g => g[0]).find(v => !v.noembed);
+  const inner = `<span class="jp-ic">${svg("video")}</span><span class="jp-vt"><b>${esc(jpHead(vr, names))}</b><span class="small muted">${esc(meta)} · 채널 ${m.length}곳</span></span>`;
+  return `<li class="jp-v jp-m ${play ? "open" : ""}">${first || cur ? `<button type="button" class="jp-vh" data-act="jpplay" data-id="${esc((cur || first).id)}">${inner}</button>` : `<div class="jp-vh">${inner}</div>`}${vers}${parts}${frame}</li>`;
 }
 const jpList = l => l.length ? `<ul class="jp-list">${jpMatches(l).map(jpMatchRow).join("")}</ul>` : emptyLine("영상이 없어요.");
 // 대회 성적: 위키백과(일본어) 역대 결과표로 만든 jp_results (영상 제목으로 짐작하지 않음)

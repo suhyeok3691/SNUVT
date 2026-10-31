@@ -122,16 +122,18 @@ function tag(title: string) {
   // 아직 열리지 않은 대회 연도는 버림 (하루코는 다음 해 대회의 현 예선이 가을에 열려서 +1까지)
   if (year && year > new Date().getFullYear() + (tourn === "haruko" ? 1 : 0)) year = null;
   let gender: string | null = /女子|女バレ|ガールズ/.test(t) ? "w" : /男子|男バレ/.test(t) ? "m" : null;
+  // 학교 이름은 띄어쓰기·「対」를 구분자(・)로 바꾼 제목에서 찾음: 「代表決定戦 相馬 対 郡山北工業」처럼 앞뒤가 한자여도 별칭 경계(앞이 한자가 아님)가 맞게
+  const bodyS = title.split(/[｜|]/)[0].replace(/#[^\s#]+/g, " ").normalize("NFKC").trim().replace(/\s+/g, "・").replace(/対/g, "・対・");
   const hits: { id: string; a: number; b: number }[] = [];
-  for (const s of schools) for (const re of s.res) { re.lastIndex = 0; let m; while ((m = re.exec(body))) { hits.push({ id: s.id, a: m.index, b: m.index + m[0].length }); if (!m[0].length) break; } }
+  for (const s of schools) for (const re of s.res) { re.lastIndex = 0; let m; while ((m = re.exec(bodyS))) { hits.push({ id: s.id, a: m.index, b: m.index + m[0].length }); if (!m[0].length) break; } }
   const keep = hits.filter((h) => !hits.some((o) => o.id !== h.id && o.a <= h.a && o.b >= h.b && (o.b - o.a) > (h.b - h.a)));
   const ids = [...new Set(keep.map((h) => h.id))];
   // 지역 대회인데 고교가 하나도 안 나오면 실업·대학 대회(「近畿総合 サントリー vs 堺」)
   if (tourn === "block" && !ids.length && !/高校|高等学校/.test(t)) tourn = "other";
   // ---- 위계: 전국 본선 vs 현 예선 ----
   // 학교 이름을 뺀 제목에 「鹿児島県男子」「県大会」「県高校総体」 같은 말이 있으면 현 대회
-  let rest = body; for (const h of [...keep].sort((x, y) => y.a - x.a)) rest = rest.slice(0, h.a) + " " + rest.slice(h.b);
-  const prefLocal = /[県都府](男子|女子|高等学校|高校総体|総体|大会|予選|代表|決勝|準決勝|準々決勝|バレー|新人)/.test(rest);
+  let rest = bodyS; for (const h of [...keep].sort((x, y) => y.a - x.a)) rest = rest.slice(0, h.a) + " " + rest.slice(h.b);
+  const prefLocal = /[県都府](男子|女子|高等学校|高校総体|総体|大会|予選|代表|決勝|準決勝|準々決勝|バレー|新人)/.test(rest.replace(/・/g, ""));
   if ((tourn === "haruko" || tourn === "ih") && !year && prefLocal) rnd = ["yosen", (rnd || "").split(":").filter((x) => x && x !== "yosen").join(":")].filter(Boolean).join(":");
   // 국스포 블록 예선(「国スポ2025九州ブロック」·ミニ国体)은 본선 대진에 넣지 않음
   if (tourn === "kokutai" && /ブロック|予選|ミニ国体/.test(body)) rnd = ["yosen", (rnd || "").split(":").filter((x) => x && x !== "yosen").join(":")].filter(Boolean).join(":");
@@ -350,15 +352,15 @@ Deno.serve(async (req) => {
   const body = await req.json().catch(() => ({}));
   const mode = ["new", "full", "retag", "fill", "schools", "ch"].includes(body.mode) ? body.mode : "new";
   if (mode === "ch") {
-    // 채널 이름이 빈 영상: oEmbed 로 채널 이름을 채움 (지워진 영상은 '' 로 두어 다시 묻지 않음)
-    const dl = Date.now() + 100000; let n = 0;
+    // 채널 이름이 비었거나 퍼가기 여부를 아직 모르는 영상: oEmbed 로 채움
+    // 200 = 채널 이름, 401/403 = 채널 주인이 다른 사이트 재생을 막음(noembed), 404 = 지워졌거나 비공개(noembed)
+    const dl = Date.now() + 100000; let n = 0; const skip = new Set<string>();
     while (Date.now() < dl) {
-      const l = ((await sb.from("jp_videos").select("id,source,title").is("ch", null).limit(40)).data || []) as any[];
+      const l = ((await sb.from("jp_videos").select("id,source,title,ch").or("ch.is.null,noembed.is.null").limit(60)).data || []).filter((v: any) => !skip.has(v.id)) as any[];
       if (!l.length) break;
-      const got = await Promise.all(l.map(async (v) => { try { const r = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${v.id}&format=json`); return r.ok ? ((await r.json()).author_name || "").trim() : [400, 401, 403, 404].includes(r.status) ? "" : null; } catch (_) { return null; } }));
-      const rows = l.map((v, i) => ({ id: v.id, source: v.source, title: v.title, ch: got[i] })).filter((r) => r.ch !== null);
-      if (!rows.length) break;
-      await sb.from("jp_videos").upsert(rows, { onConflict: "id" }); n += rows.length;
+      const got = await Promise.all(l.map(async (v) => { try { const r = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${v.id}&format=json`); return r.ok ? { ch: ((await r.json()).author_name || "").trim(), no: false } : [400, 401, 403, 404].includes(r.status) ? { ch: null, no: true } : null; } catch (_) { return null; } }));
+      const rows = l.map((v, i) => got[i] ? { id: v.id, source: v.source, title: v.title, ch: got[i]!.ch || v.ch || "", noembed: got[i]!.no } : (skip.add(v.id), null)).filter(Boolean);
+      if (rows.length) { await sb.from("jp_videos").upsert(rows, { onConflict: "id" }); n += rows.length; }
     }
     return json({ mode, filled: n });
   }

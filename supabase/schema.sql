@@ -2223,3 +2223,5 @@ alter table public.live_games add column if not exists vod text check (vod is nu
 
 -- 일본 고교 영상: 채널 이름 (2026-10-31)
 alter table public.jp_videos add column if not exists ch text;
+-- 일본 고교 영상: 다른 사이트 재생이 막힌 영상 (oEmbed 401/403/404)
+alter table public.jp_videos add column if not exists noembed boolean;
