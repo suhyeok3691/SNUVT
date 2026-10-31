@@ -350,4 +350,5 @@
 - **코드**: 안 쓰는 함수·상수·지역 변수와 CSS 규칙(약 80개)을 지웠어요. 모든 스크립트를 이어 붙여 `no-undef` 검사로 지운 이름을 아무 데서도 안 쓰는지 확인했어요.
 - **DB**: 외래 키 칸 인덱스 10개, `cup_photos` RLS 의 `auth.uid()`를 `(select auth.uid())`로(뜻 같음, 줄마다 다시 안 부름), `private.urlenc` 검색 경로 고정.
 - **예약 작업**: 매시간 도는 것과 겹치던 `jp-sync-full`(하루 1번) 지움, `jp-fill-am/pm` → `jp-fill-hourly` 하나로.
-- **지운 것**: 임시 표 `private.wiki_req1`, 함수 `private.urlenc`·`private.jp_yomi_call`, 앱에서 안 부르는 RPC `set_member_media`·`set_member_title`(직책은 `set_member_titles`), 서버 함수 `jp-yomi`(읽기 채우기 한 번 쓰고 끝, 대시보드에서 지움), `supabase/k2h.py`(같은 규칙이 `jp-sync`의 `k2h()`).
+- **지운 것**: 임시 표 `private.wiki_req1`, 함수 `private.urlenc`·`private.jp_yomi_call`, 앱에서 안 부르는 RPC `set_member_media`·`set_member_title`(직책은 `set_member_titles`), 서버 함수 `jp-yomi` 코드(읽기 채우기 한 번 쓰고 끝. 배포된 함수는 Supabase 대시보드 → Edge Functions → jp-yomi → Delete 로 지움), `supabase/k2h.py`(같은 규칙이 `jp-sync`의 `k2h()`).
+- **이미지**: `logo.png`·`logo-white.png` 390px·256색(152KB → 30KB·19KB), 아이콘·파비콘 무손실 압축(30% 안팎 감소). 바꾸면 `?v=` 올림.
