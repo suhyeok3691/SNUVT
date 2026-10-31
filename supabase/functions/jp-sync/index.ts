@@ -172,9 +172,21 @@ async function loadSchools() {
   for (const x of rr.data || []) { const k = `${x.tourn}|${x.year}`; if (!RESULT.has(k)) RESULT.set(k, []); RESULT.get(k)!.push({ place: x.place, id: x.school_id, g: x.gender }); }
 }
 
+// 경기 직캠·중계 풀영상만: 인터뷰·하이라이트·공식연습·선수 소개·뉴스·짧은 클립(8분 미만)은 안 담음
+// (탐방 재생목록과 「연습·탐방」으로 태그된 영상은 그대로)
+const HARD = /インタビュー|会見|取材|試合後|表彰|閉会式|開会式|入場行進|ハイライト|ダイジェスト|shorts|切り抜き|名場面|好プレー|スーパープレー|プレー集|(スパイク|レシーブ|ブロック|サーブ|アタック|トス|ディグ)集|まとめ|highlight|優勝の瞬間|ラストポイント|勝ち上がり|予告|特集|ニュース|応援団|応援合戦|振り返り/i;
+const SOFT = /公式練習|スパイク練習|サーブ練習|フリースパイク|メンバー紹介|選手紹介|サービスエース|マッチポイント|ウォーミングアップ/;
+const secs = (len: string | null) => { if (!len) return null; const p = len.split(":").map(Number); return p.some(isNaN) ? null : p.reduce((a, x) => a * 60 + x, 0); };
+function notMatch(title: string, len: string | null) {
+  const t = norm(title);
+  if (HARD.test(t) || (SOFT.test(t) && !/セット|フル|全試合|full/i.test(t))) return true;
+  const s = secs(len); return s !== null && s < 480;
+}
+const keepRow = (role: string | undefined, r: { title: string; len: string | null; tourn: string | null }) => role === "visit" || r.tourn === "practice" || !notMatch(r.title, r.len);
+
 async function upsert(src: any, vs: V[]) {
   if (!vs.length) return;
-  const rows = vs.filter((v) => v.id && v.title).map((v) => ({ id: v.id, source: src.id, title: v.title, published: v.published, len: v.len, ...tag(v.title) }));
+  const rows = vs.filter((v) => v.id && v.title).map((v) => ({ id: v.id, source: src.id, title: v.title, published: v.published, len: v.len, ...tag(v.title) })).filter((r) => keepRow(src.role, r));
   for (let i = 0; i < rows.length; i += 200) { const r = await sb.from("jp_videos").upsert(rows.slice(i, i + 200), { onConflict: "id" }); if (r.error) throw r.error; }
 }
 
@@ -216,9 +228,6 @@ async function ytSearch(q: string) {
   return out;
 }
 const RND_JA: Record<string, string> = { F: "決勝", SF: "準決勝", QF: "準々決勝", "3rd": "3位決定戦" };
-// 직캠·중계 풀영상만: 하이라이트·쇼츠·모음은 빼고, 길이를 알면 8분 이상
-const NOT_FULL = /ハイライト|ダイジェスト|shorts|切り抜き|名場面|好プレー|スーパープレー|まとめ|highlight/i;
-const secs = (len: string | null) => { if (!len) return null; const p = len.split(":").map(Number); return p.some(isNaN) ? null : p.reduce((a, x) => a * 60 + x, 0); };
 const KW: Record<string, RegExp> = { haruko: /春高|春の高校バレー|高校選手権/, ih: /インターハイ|インハイ|総体/, kokutai: /国スポ|国体|国民スポーツ大会|国民体育大会/ };
 async function fill(deadline: number) {
   const cy = new Date().getFullYear();
@@ -251,7 +260,7 @@ async function fill(deadline: number) {
         if (tg.tourn !== m.tourn || tg.year !== m.year) return false;
         if (m.tourn !== "haruko" && !/バレー|volley/i.test(t) && !tg.schools.length) return false;
         if (/成年|剣道|テニス|バスケ|サッカー|ハンド|ソフトボール|ビーチ/.test(t)) return false;
-        return !known.has(x.id) && pair(x.title) && KW[m.tourn].test(t) && !/予選|代表決定|ブロック/.test(t) && !NOT_FULL.test(t) && (sec === null || sec >= 480)
+        return !known.has(x.id) && pair(x.title) && KW[m.tourn].test(t) && !/予選|代表決定|ブロック/.test(t) && !notMatch(x.title, x.len)
           && (!ys.length || ys.includes(m.year)) && !(m.gender === "m" && /女子/.test(t)) && !(m.gender === "w" && /男子/.test(t));
       }).slice(0, 6);
       if (ok.length) {
@@ -281,7 +290,7 @@ async function schoolsFill(deadline: number, limit = 60) {
       ok.push(...items.filter((x) => {
         const t = norm(x.title), sec = secs(x.len), tg = tag(x.title);
         if (!tg.schools.includes(s.id) || tg.tourn === "univ" || tg.tourn === "other") return false;
-        if (NOT_FULL.test(t) || (sec !== null && sec < 480)) return false;
+        if (notMatch(x.title, x.len)) return false;
         if (/成年|剣道|テニス|バスケ|サッカー|ハンド|ソフトボール|ビーチ|野球|ラグビー|卓球|中学/.test(t)) return false;
         if (s.gender === "m" && /女子/.test(t)) return false;
         if (s.gender === "w" && /男子/.test(t)) return false;
@@ -306,15 +315,22 @@ Deno.serve(async (req) => {
   const mode = ["new", "full", "retag", "fill", "schools"].includes(body.mode) ? body.mode : "new";
   await loadSchools();
   if (mode === "retag") {
-    let n = 0;
+    const ROLE = new Map((((await sb.from("jp_sources").select("id,role")).data || []) as any[]).map((x) => [x.id, x.role]));
+    let n = 0; const drop: string[] = [];
     for (let from = 0; ; from += 1000) {
-      const r = await sb.from("jp_videos").select("id,source,title").order("id").range(from, from + 999);
+      const r = await sb.from("jp_videos").select("id,source,title,len").order("id").range(from, from + 999);
       const l = r.data || []; if (!l.length) break;
-      const rows = l.map((v: any) => ({ id: v.id, source: v.source, title: v.title, ...tag(v.title) }));
+      const all = l.map((v: any) => ({ id: v.id, source: v.source, title: v.title, len: v.len, ...tag(v.title) }));
+      // 규칙이 바뀌어 이제 경기 풀영상이 아닌 것은 지움
+      const bad = all.filter((v) => !keepRow(ROLE.get(v.source), v)).map((v) => v.id);
+      const rows = all.filter((v) => !bad.includes(v.id)).map(({ len: _l, ...v }) => v);
       for (let i = 0; i < rows.length; i += 200) await sb.from("jp_videos").upsert(rows.slice(i, i + 200), { onConflict: "id" });
-      n += l.length; if (l.length < 1000) break;
+      drop.push(...bad); n += l.length; if (l.length < 1000) break;
     }
-    return json({ mode, retagged: n });
+    // 다 읽은 뒤에 지움 (읽는 중에 지우면 다음 쪽이 밀림)
+    for (let i = 0; i < drop.length; i += 200) await sb.from("jp_videos").delete().in("id", drop.slice(i, i + 200));
+    const gone = drop.length;
+    return json({ mode, retagged: n, removed: gone });
   }
   const deadline = Date.now() + 110000;
   if (mode === "fill") return json({ mode, ...(await fill(deadline)) });
