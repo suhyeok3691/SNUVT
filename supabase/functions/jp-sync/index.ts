@@ -301,7 +301,7 @@ async function fill(deadline: number, only = "") {
   const byTY = new Map<string, any[]>();
   const addTY = (v: any) => { v.nt = norm(v.title); const k = v.tourn + "|" + v.year; if (!byTY.has(k)) byTY.set(k, []); byTY.get(k)!.push(v); };
   vids.forEach(addTY);
-  let searched = 0, added = 0, matches = 0; const rej = { tourn: 0, year: 0, pair: 0, other: 0, clip: 0, known: 0 };
+  let searched = 0, added = 0, matches = 0, nOther = 0; const rej = { tourn: 0, year: 0, pair: 0, other: 0, clip: 0, known: 0 };
   const order: Record<string, number> = { F: 0, SF: 1, "3rd": 2, QF: 3, R5: 4, R4: 5, R3: 6, R2: 7, R1: 8 };
   ms.sort((a, b) => (a.searched_at || "").localeCompare(b.searched_at || "") || b.year - a.year || (order[a.rnd] ?? 9) - (order[b.rnd] ?? 9));
   // 'fill:haruko:2026' 처럼 대회·해를 좁혀 바로 돌릴 수도 있음. 한 번에 검색 25번까지(CPU 한도 2초), 나머지는 다음 번에
@@ -329,7 +329,7 @@ async function fill(deadline: number, only = "") {
     const qs = m.tourn === "kokutai"
       ? [`${kw}${m.year} 少年${g} ${A[0]} ${B[0]} ${rj}`, `${kw}${m.year} バレー ${A[A.length - 1]} ${B[B.length - 1]}`]
       : [...new Set([`${kw}${m.year} ${g} ${m.a_name} ${m.b_name} ${rj}`, `${ca} ${cb} ${kw} ${m.year}`, m.tourn === "haruko" ? `${ca} ${cb} 春高バレー ${g}` : `${ca} ${cb} インハイ バレー ${g}`])];
-    let ok: V[] = [];
+    let ok: V[] = [], extra: V[] = [];
     for (const q of qs) {
       if (Date.now() > deadline || ok.length >= 4 - chans.size + 2) break;
       const items = await ytSearch(q.trim()); searched++;
@@ -340,22 +340,26 @@ async function fill(deadline: number, only = "") {
         const tg = tag(x.title, x.published);
         if (tg.tourn !== m.tourn) { rej.tourn++; continue; }
         if (tg.year !== m.year) { rej.year++; continue; }
-        if (!pair(x.title, tg.schools)) { rej.pair++; continue; }
         if (m.tourn !== "haruko" && !/バレー|volley/i.test(t) && !tg.schools.length) continue;
         if (/成年|剣道|テニス|バスケ|サッカー|ハンド|ソフトボール|ビーチ/.test(t) || /予選|代表決定|ブロック/.test(t)) { rej.other++; continue; }
         if (notMatch(x.title, x.len)) { rej.clip++; continue; }
-        if ((ys.length && !ys.includes(m.year) && !ys.includes(m.year - 1)) || (m.gender === "m" && /女子/.test(t)) || (m.gender === "w" && /男子/.test(t))) continue;
+        if (ys.length && !ys.includes(m.year) && !ys.includes(m.year - 1)) continue;
+        // 같은 해 다른 전국 경기 영상(대진에서 라운드가 붙은 두 학교)도 버리지 않고 넣음
+        if (!pair(x.title, tg.schools)) { if (tg.schools.length === 2 && tg.rnd && !tg.rnd.startsWith("yosen") && !extra.some((o) => o.id === x.id)) extra.push(x); else rej.pair++; continue; }
+        if ((m.gender === "m" && /女子/.test(t)) || (m.gender === "w" && /男子/.test(t))) continue;
         ok.push(x);
       }
     }
+    ok = [...ok.slice(0, 6), ...extra.filter((x) => !ok.some((o) => o.id === x.id))];
     if (ok.length) {
       // 다른 채널에서 이미 모은 영상이면 출처를 바꾸지 않음
       const ex = new Set(((await sb.from("jp_videos").select("id").in("id", ok.map((x) => x.id))).data || []).map((r: any) => r.id));
-      ok = ok.filter((x) => !ex.has(x.id)).slice(0, 6);
+      ok = ok.filter((x) => !ex.has(x.id));
+      nOther += ok.filter((x) => extra.includes(x)).length;
     }
-    if (ok.length) { await upsert({ id: "search" }, ok); added += ok.length; ok.forEach((x) => { known.add(x.id); addTY({ id: x.id, title: x.title, tourn: m.tourn, year: m.year, rnd: m.rnd, schools: tag(x.title, x.published).schools, source: "search", ch: x.ch }); }); }
+    if (ok.length) { await upsert({ id: "search" }, ok); added += ok.length; ok.forEach((x) => { known.add(x.id); const tg = tag(x.title, x.published); addTY({ id: x.id, title: x.title, tourn: tg.tourn, year: tg.year, rnd: tg.rnd, schools: tg.schools, source: "search", ch: x.ch }); }); }
   }
-  return { searched, added, matches, rej };
+  return { searched, added, otherMatch: nOther, matches, rej };
 }
 
 // ---------- 빠진 상대 학교 넣기 (mode 'newschools') ----------
