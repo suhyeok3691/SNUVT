@@ -2,7 +2,7 @@
  * 앱의 모든 <input type="date"> · <input type="time"> 을 앱 디자인의 고르기 창으로 바꾼다.
  * - 값은 그대로 YYYY-MM-DD · HH:MM (다른 코드는 .value 를 지금처럼 읽고 씀, required·min·max 도 그대로)
  * - 날짜: 달력 (오늘 표시, 값이 없으면 이번 달부터)
- * - 시간: 15분 간격, 한 줄에 한 시간 (정각이 먼저). 값이 없으면 지금 시각의 정각 줄부터 보임 */
+ * - 시간: 시 · 분 두 줄을 굴려 고르고 '확인' (분은 00·15·30·45). 값이 없으면 지금 시각의 정각부터 */
 (() => {
   const DOW = ["일", "월", "화", "수", "목", "금", "토"];
   const P = n => String(n).padStart(2, "0");
@@ -99,13 +99,15 @@
     pop.addEventListener("click", onPop);
     window.addEventListener("resize", place); window.addEventListener("keydown", onKey, true);
     draw(); place();
-    if (kind === "time") scrollHour();
-    const focus = pop.querySelector(".sel") || pop.querySelector(".today:not(:disabled)") || pop.querySelector(".hint");
+    if (kind === "time") wheelInit();
+    const focus = kind === "time" ? pop.querySelector(".dtp-ok") : pop.querySelector(".sel") || pop.querySelector(".today:not(:disabled)");
     if (focus) focus.focus({ preventScroll: true });
   }
   function onPop(e) {
     const b = e.target.closest("button"); if (!b || b.disabled) return;
     if (b.dataset.m) { const m = cur.month; cur.month = new Date(m.getFullYear(), m.getMonth() + Number(b.dataset.m), 1); draw(); place(); return; }
+    if (b.dataset.i != null) { const col = b.parentElement; col.scrollTo({ top: Number(b.dataset.i) * ROW, behavior: "smooth" }); return; }
+    if (b.dataset.ok != null) return pick(`${P(cur.h)}:${P(cur.mi)}`);
     if (b.dataset.v != null) return pick(b.dataset.v);
     if (b.dataset.today != null) return pick(isoD(new Date()));
     if (b.dataset.clear != null) return pick("");
@@ -114,9 +116,10 @@
   function draw() {
     const { pop, inp, kind } = cur, v = VAL.get.call(inp), clear = !inp.required && v ? `<button type="button" class="btn link small" data-clear>지우기</button>` : "";
     if (kind === "time") {
-      let rows = "";
-      for (let h = 0; h < 24; h++) rows += `<div class="dtp-h" data-h="${h}">${[0, 15, 30, 45].map(m => { const t = `${P(h)}:${P(m)}`; return `<button type="button" class="t${m} ${t === v ? "sel" : ""}" data-v="${t}">${t}</button>`; }).join("")}</div>`;
-      pop.innerHTML = `<div class="dtp-top"><b>시간</b><span class="small muted">15분 간격</span></div><div class="dtp-times">${rows}</div>${clear ? `<div class="dtp-foot">${clear}</div>` : ""}`;
+      const col = (k, n, f) => `<div class="dtp-col" data-k="${k}">${Array.from({ length: n }, (_, i) => `<button type="button" data-i="${i}" tabindex="-1">${f(i)}</button>`).join("")}</div>`;
+      pop.innerHTML = `<div class="dtp-top"><b>시간</b><span class="small muted">분은 15분 간격</span></div>
+        <div class="dtp-wheel"><div class="dtp-band"></div>${col("h", 24, P)}<span class="dtp-colon">:</span>${col("m", 4, i => P(i * 15))}</div>
+        <div class="dtp-foot">${clear || "<span></span>"}<button type="button" class="btn primary small dtp-ok" data-ok>확인</button></div>`;
       return;
     }
     const m = cur.month, y = m.getFullYear(), mo = m.getMonth(), todayS = isoD(new Date());
@@ -134,17 +137,24 @@
       <div class="dtp-days">${cells}</div>
       <div class="dtp-foot"><button type="button" class="btn small" data-today ${todayOk ? "" : "disabled"}>오늘</button>${clear}</div>`;
   }
-  // 시간: 고른 값 → 같은 칸(쌍)의 시작 시간 → 지금 시각, 그 정각 줄이 맨 위에 오게
-  function scrollHour() {
-    const { pop, inp } = cur, list = pop.querySelector(".dtp-times");
-    let h = null; const v = VAL.get.call(inp);
-    if (v) h = +v.slice(0, 2);
+  // 시간: 시·분 바퀴. 처음 위치는 고른 값 → 같은 칸(쌍)의 시작 시간 + 1시간 → 지금 시각, 분은 00
+  const ROW = 40;
+  function wheelInit() {
+    const { pop, inp } = cur, v = VAL.get.call(inp);
+    if (v) { cur.h = +v.slice(0, 2); cur.mi = Math.floor(+v.slice(3, 5) / 15) * 15; }
     else {
       const pair = inp.closest(".pair"), other = pair && [...pair.querySelectorAll('input[data-dtp="time"]')].find(x => x !== inp && VAL.get.call(x));
-      h = other ? Math.min(23, +VAL.get.call(other).slice(0, 2) + 1) : new Date().getHours();
+      cur.h = other ? Math.min(23, +VAL.get.call(other).slice(0, 2) + 1) : new Date().getHours(); cur.mi = 0;
     }
-    const row = list.querySelector(`[data-h="${h}"]`); if (row) list.scrollTop = row.offsetTop - list.offsetTop - 4;
-    row && row.querySelector(".t0").classList.add("hint");
+    pop.querySelectorAll(".dtp-col").forEach(col => {
+      const isH = col.dataset.k === "h", idx = () => Math.max(0, Math.min(col.children.length - 1, Math.round(col.scrollTop / ROW)));
+      const mark = () => { const i = idx(); [...col.children].forEach((x, j) => x.classList.toggle("sel", j === i)); if (isH) cur.h = i; else cur.mi = i * 15; };
+      col.scrollTop = (isH ? cur.h : cur.mi / 15) * ROW; mark();
+      let t; col.addEventListener("scroll", () => { clearTimeout(t); t = setTimeout(mark, 60); }, { passive: true });
+      // 키보드: 위·아래로 한 칸
+      col.tabIndex = 0; col.setAttribute("role", "listbox"); col.setAttribute("aria-label", isH ? "시" : "분");
+      col.addEventListener("keydown", e => { if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return; e.preventDefault(); col.scrollTo({ top: (idx() + (e.key === "ArrowUp" ? -1 : 1)) * ROW, behavior: "smooth" }); });
+    });
   }
 
   scan(document);
