@@ -168,6 +168,10 @@ const SUITES = {
     await p.evaluate(() => { document.getElementById("lv-opp").value = "B대"; });
     await p.click("#lvForm button[type=submit]"); await p.waitForTimeout(300);
     assert.strictEqual((await a.writes("live_games"))[0][2].mode, "lite");
+    // 교류전은 경기 이름 칸 없음 (상대는 교류전 상대로 채워짐)
+    await p.evaluate(() => lvForm("friendly:f1")); await p.waitForTimeout(200);
+    assert.strictEqual(await p.$("#lv-label"), null, "교류전 경기 이름 칸 없음");
+    assert.strictEqual(await p.evaluate(() => document.getElementById("lv-opp").value), "연세대");
     clean(a); await a.ctx.close();
   },
   // 훈련 계획: 기본 틀이 드릴 목록 이름과 맞고, 드릴 설명이 뜸

@@ -569,9 +569,10 @@ async function lvUndo() {
 // 대회 · 교류전 페이지 안 목록
 function lvSection(x) {
   const L = lv(), key = x.kind + ":" + x.id, gs = L.games[key];
-  if (gs === undefined) { lvLoadGames(x); return `<section class="panel sec"><div class="sec-head"><h3>실시간 경기 분석</h3></div>${loaderHtml(true)}</section>`; }
-  const list = (gs || []).map(g => `<button type="button" class="box lv-g" data-act="lvopen" data-id="${esc(g.id)}"><span class="bn"><b>${esc(g.label || "경기")}</b> ${g.team ? `${esc(g.team)} ` : ""}vs ${esc(g.opponent)}</span><span class="go">›</span></button>`).join("");
-  return `<section class="panel sec"><div class="sec-head"><h3>실시간 경기 분석</h3>${lvCan() ? `<button class="btn add" type="button" data-act="lvnew" data-k="${esc(key)}">+ 경기</button>` : ""}</div>${list ? `<div class="boxes">${list}</div>` : emptyLine("아직 기록한 경기가 없어요.")}</section>`;
+  if (gs === undefined) { lvLoadGames(x); return `<section class="panel sec"><div class="sec-head"><h3>실시간 기록</h3></div>${loaderHtml(true)}</section>`; }
+  // 교류전은 경기 이름 없이 순서대로 1경기 · 2경기
+  const list = (gs || []).map((g, i) => `<button type="button" class="box lv-g" data-act="lvopen" data-id="${esc(g.id)}"><span class="bn"><b>${esc(g.label || `${i + 1}경기`)}</b> ${g.team ? `${esc(g.team)} ` : ""}vs ${esc(g.opponent)}</span><span class="go">›</span></button>`).join("");
+  return `<section class="panel sec"><div class="sec-head"><h3>실시간 기록</h3>${lvCan() ? `<button class="btn add" type="button" data-act="lvnew" data-k="${esc(key)}">+ 경기</button>` : ""}</div>${list ? `<div class="boxes">${list}</div>` : emptyLine("아직 기록한 경기가 없어요.")}</section>`;
 }
 // 전력분석 · 실시간 경기 분석 목록
 function lvScoutList() {
@@ -588,10 +589,9 @@ function lvForm(key, gid) {
   const el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${g ? "경기 수정" : "경기 추가"}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="lvForm" data-k="${esc(key)}" data-id="${esc(gid || "")}"><div class="fields">
-      ${g ? "" : `<p class="small muted wide">실시간 기록: 현장에서 서브 · 공격 · 블로킹 · 디그 · 범실만 빠르게 (영상 분석은 전력분석 탭)</p>`}
       <div class="fl wide lv-vid" id="lvVid" ${g && lvVideo(g) ? "" : "hidden"}><label class="fl">유튜브<input id="lv-yt" maxlength="200" value="${esc(g ? g.yt || "" : "")}" placeholder="https://youtu.be/..."></label>
         <label class="fl">치지직 다시보기<input id="lv-vod" maxlength="200" value="${esc(g ? g.vod || "" : "")}" placeholder="chzzk.naver.com/video/… 또는 naver.me/…"></label></div>
-      <label class="fl">경기<input id="lv-label" maxlength="40" value="${esc(g ? g.label || "" : "")}" placeholder="예선 1경기 · 8강"></label>
+      ${kind === "friendly" ? "" : `<label class="fl">경기<input id="lv-label" maxlength="40" value="${esc(g ? g.label || "" : "")}" placeholder="예선 1경기 · 8강"></label>`}
       <label class="fl">분석 팀<input id="lv-team" maxlength="60" value="${esc(g ? g.team || "" : "")}" placeholder="SNU"></label>
       <label class="fl">상대 팀<input id="lv-opp" required maxlength="60" value="${esc(g ? g.opponent : fr.opponent || "")}"></label>
       ${g ? "" : `<label class="fl">첫 서브<select id="lv-serve"><option value="us">분석 팀</option><option value="opp">상대 팀</option></select></label>
