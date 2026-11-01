@@ -1001,6 +1001,29 @@ sub { font-size: 10px; color: var(--muted); }
 .ct-spot-team h4 { margin: 0; display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
 .ct-spot-team .lv-cwrap { max-width: 280px; }
 .lv-dot-k.ct-k-in { background: var(--surface); box-shadow: inset 0 0 0 2px #6b7280; }
+/* 아침 컨디션: 항목마다 5칸 (1 나쁨 → 5 좋음), 네 개 다 고르면 저장 */
+.wl-form { display: grid; gap: 10px; margin-top: 6px; }
+.wl-row { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: 8px; }
+.wl-k { display: grid; font-size: 14px; font-weight: 700; line-height: 1.25; } .wl-k small { font-size: 11.5px; font-weight: 500; color: var(--muted); min-height: 14px; }
+.wl-pick { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 5px; }
+.wl-pick label { position: relative; }
+.wl-pick input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.wl-pick span { display: grid; place-items: center; height: 40px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); font: 700 15px var(--f-data); color: var(--muted); }
+.wl-pick input:focus-visible + span { outline: 2px solid var(--blue); outline-offset: 2px; }
+.wl-pick input:checked + span { color: #fff; border-color: transparent; }
+.wl-pick input:checked + .v1 { background: #c0392b; } .wl-pick input:checked + .v2 { background: #d9822b; } .wl-pick input:checked + .v3 { background: #6b7280; } .wl-pick input:checked + .v4 { background: #1f9d6b; } .wl-pick input:checked + .v5 { background: #1f7a4d; }
+.wl-hint { margin: 0; }
+/* 홈 맨 위: 오늘 할 것 · 알림 안내 */
+.todo-card { display: grid; gap: 10px; }
+.todo-card h3 { margin: 0; }
+.td-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); font: inherit; font-size: 14px; color: var(--ink); text-align: left; width: 100%; }
+button.td-row { cursor: pointer; } button.td-row:hover { border-color: var(--blue); } .td-row .go { color: var(--muted); }
+.td-well { display: grid; gap: 4px; padding: 10px 12px; border: 1.5px solid var(--blue); border-radius: 10px; }
+#pushNudge:empty { display: none; }
+.nudge { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-color: var(--blue); background: var(--blue-soft); }
+.nudge > div:first-child { display: grid; gap: 2px; }
+/* 달력 날짜를 누르면 위에 날짜가 있으니 줄마다 날짜는 숨김 */
+.cal-detail .attend .at-when > b:first-child { display: none; }
 /* 교류전 투표 대상 (전체 / 지정) */
 .vote-pick.sm span { padding: 8px 0; font-size: 14px; font-weight: 700; border-radius: 9px; color: var(--ink); }
 .vote-pick.sm input:checked + span { background: var(--blue); border-color: var(--blue); color: var(--surface); }
@@ -1128,9 +1151,9 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 .lv-n b { font: 800 16px var(--f-data); } .lv-n span { font-size: 12px; } .lv-n.sub { opacity: .75; }
 .lv-n.us.on { background: color-mix(in srgb, var(--blue) 14%, var(--surface)); border: 2px solid var(--blue); color: var(--ink); } .lv-n.opp.on { background: color-mix(in srgb, #c0392b 12%, var(--surface)); border: 2px solid #c0392b; color: var(--ink); }
 .lv-row { display: grid; grid-template-columns: 52px 1fr; gap: 6px; align-items: center; } .lv-rk { font-size: 12.5px; font-weight: 700; color: var(--muted); }
-.lv-row.gap { margin-top: 18px; } .lv-rb.c5 .lv-b { font-size: 12.5px; letter-spacing: -.03em; white-space: nowrap; padding-left: 0; padding-right: 0; } .lv-vid { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; } .lv-vid[hidden] { display: none; }
+.lv-row.gap { margin-top: 18px; } .lv-rb.c5 .lv-b { font-size: 12.5px; letter-spacing: -.03em; white-space: nowrap; padding-left: 0; padding-right: 0; }
 .lv-row.want { background: color-mix(in srgb, var(--blue) 8%, transparent); border-radius: 10px; box-shadow: 0 0 0 5px color-mix(in srgb, var(--blue) 8%, transparent); } .lv-row.want .lv-rk { color: var(--blue); }
-.lv-todo { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 999px; margin-left: 4px; vertical-align: 1px; } .lv-todo.srv { background: color-mix(in srgb, var(--yellow) 35%, transparent); color: var(--ink); } .lv-todo.rcv { background: color-mix(in srgb, var(--blue) 15%, transparent); color: var(--blue); } .lv-rkb { display: flex; align-items: center; gap: 3px; min-height: 44px; padding: 0 0 0 2px; border: 0; background: none; font-family: inherit; text-align: left; cursor: pointer; } .lv-rkb i { font-style: normal; font-size: 10px; } .lv-rkb.on { color: var(--blue); }
+.lv-rkb { display: flex; align-items: center; gap: 3px; min-height: 44px; padding: 0 0 0 2px; border: 0; background: none; font-family: inherit; text-align: left; cursor: pointer; } .lv-rkb i { font-style: normal; font-size: 10px; } .lv-rkb.on { color: var(--blue); }
 .lv-rb { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 5px; } .lv-b { min-height: 44px; padding: 4px 2px; font-size: 14px; }
 .lv-at { display: flex; flex-wrap: wrap; gap: 5px; } .lv-at .chip { justify-content: center; font-size: 12.5px; }
 .lv-at .chip kbd { font: 600 10px var(--f-data); margin-left: 4px; padding: 0 3px; border: 1px solid currentColor; border-radius: 4px; opacity: .7; }
@@ -1233,7 +1256,7 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 <script src="js/library.js?v=196"></script>
 <script src="js/campus.js?v=196"></script>
 <script src="js/court.js?v=209"></script>
-<script src="js/live.js?v=206"></script>
-<script src="js/app.js?v=207"></script>
+<script src="js/live.js?v=212"></script>
+<script src="js/app.js?v=212"></script>
 </body>
 </html>

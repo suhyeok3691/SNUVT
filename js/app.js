@@ -1098,8 +1098,19 @@ function viewHome() {
   ].join("");
   const tm = can("schedule") ? termsMissing() : [];
   const termPill = tm.length ? `<button type="button" class="pending-pill" data-act="termedit" data-id="${tm[0]}"><span class="chip warn">학사일정</span><span class="small">${termLab(tm[0])} 개강·종강 넣기 ›</span></button>` : "";
-  return `${pendingHtml()}${termPill}${noticesHtml()}${myVotesHtml()}<section class="panel home-cal">${calHtml(me)}</section>${todayAbsHtml()}${can("full") || can("training") ? teamStatusHtml() : ""}
-    <nav class="tiles-grid" aria-label="기능">${tiles}</nav>`;
+  return `${pendingHtml()}${termPill}<div id="pushNudge"></div>${me ? todoHtml(me) : ""}${noticesHtml()}${myVotesHtml()}<section class="panel home-cal">${calHtml(me)}</section>${todayAbsHtml()}${can("full") || can("training") ? teamStatusHtml() : ""}
+    ${!me && state.admin ? `<nav class="tiles-grid" aria-label="기능">${tiles}</nav>` : ""}`;
+}
+// 홈 맨 위: 오늘 할 것 — 아침 컨디션(안 넣었으면 바로 여기서) · 오늘 피지컬 · 오늘 팀 훈련(훈련 계획)
+function todoHtml(me) {
+  const t = iso(today()), w = wellOn(me.id, t), i = infoFor(me.id, t);
+  let plan = null; try { plan = planOn(me, t); } catch (e) { /* 계산 실패 */ }
+  const team = isTeamDay(i) ? `<div class="td-row"><span><b>${esc(tdLabel(i))}</b>${i.absent ? ` <span class="chip warn">불참</span>` : ""}</span>${state.practice[t] && state.practice[t].published !== false ? `<button type="button" class="btn link small" data-act="prgo" data-d="${t}">훈련 계획 ›</button>` : ""}</div>` : "";
+  return `<section class="panel todo-card"><div class="row between"><h3>오늘 할 것</h3><span class="small muted">${longDate(today())}</span></div>
+    ${w ? `<div class="td-row"><span>아침 컨디션 <span class="chip ok">${wellSum(w)}/20</span></span><button type="button" class="btn link small" data-act="view" data-v="train">수정 ›</button></div>`
+      : `<div class="td-well"><b>아침 컨디션</b>${wellForm(me, null)}</div>`}
+    ${plan && plan.slot !== "rest" ? `<button type="button" class="td-row td-go" data-act="view" data-v="train"><span>피지컬 · <b>${esc(plan.title)}</b></span><span class="go">›</span></button>` : ""}
+    ${team}</section>`;
 }
 // 피지컬 · 오늘
 function viewTrain() {
@@ -1111,19 +1122,27 @@ function viewTrain() {
   else if (!state.admin) parts.push(`<div class="panel empty"><strong>계정이 선수와 연결되지 않았어요</strong><span>관리자에게 연결을 요청해 주세요.</span></div>`);
   return parts.join("");
 }
+// 아침 컨디션: 항목마다 5칸 버튼(1 나쁨 → 5 좋음). 4개를 다 고르면 바로 저장 (드롭다운 없이 10초)
+function wellForm(p, w) {
+  const row = (k, l) => { const cur = w ? Number(w[k]) : null;
+    return `<div class="wl-row"><span class="wl-k">${l}<small id="wl-${k}-t">${cur ? WELL_OPTS[k][cur - 1] : ""}</small></span>
+      <div class="wl-pick" role="radiogroup" aria-label="${l}">${[1, 2, 3, 4, 5].map(v => `<label><input type="radio" name="wl-${k}" value="${v}" ${cur === v ? "checked" : ""} aria-label="${WELL_OPTS[k][v - 1]}"><span class="v${v}">${v}</span></label>`).join("")}</div></div>`; };
+  return `<form class="f wl-form" id="wellForm" data-pid="${esc(p.id)}">${WELL_KEYS.map(([k, l]) => row(k, l)).join("")}
+    <p class="small muted wl-hint">1 나쁨 · 5 좋음 · 네 개 다 고르면 저장돼요</p></form>`;
+}
 function wellnessHtml(p) {
   const t = iso(today()), w = wellOn(p.id, t), why = readiness(w, lastRpeBefore(p.id, t));
-  const sel = (k, l) => `<label class="fl">${l}<select id="wl-${k}">${[5, 4, 3, 2, 1].map(v => `<option value="${v}" ${(w ? Number(w[k]) : 3) === v ? "selected" : ""}>${WELL_OPTS[k][v - 1]}</option>`).join("")}</select></label>`;
   const key = "well-form";
   return `<section class="panel well-card">
     <div class="row between"><h3>아침 컨디션</h3>${w ? `<span class="chip ${why.length ? "warn" : ""}">${wellSum(w)}/20</span>` : why.length ? `<span class="chip warn">가볍게</span>` : ""}</div>
-    <details data-keep="${key}" ${keepOpen(key, !w)}><summary class="small muted">${w ? "수정" : "입력"}</summary>
-    <form class="f" id="wellForm" data-pid="${esc(p.id)}">
-      <div class="fields well">${WELL_KEYS.map(([k, l]) => sel(k, l)).join("")}</div>
-      <div class="row"><button class="btn primary small" type="submit">저장</button></div>
-    </form></details>
+    ${w ? `<details data-keep="${key}" ${keepOpen(key, false)}><summary class="small muted">수정</summary>${wellForm(p, w)}</details>` : wellForm(p, null)}
   </section>`;
 }
+document.addEventListener("change", e => {
+  const x = e.target; if (!x || !x.name || !/^wl-/.test(x.name)) return;
+  const f = x.closest("#wellForm"), k = x.name.slice(3), t = document.getElementById(`wl-${k}-t`); if (t) t.textContent = WELL_OPTS[k][Number(x.value) - 1];
+  if (f && WELL_KEYS.every(([kk]) => f.querySelector(`[name="wl-${kk}"]:checked`))) f.requestSubmit();
+});
 // 오늘 할 것: 권장가 표시되고, 눌러서 바꿈 (권장를 다시 누르면 원래대로)
 function picksHtml(plan, pid, date) {
   if (!plan.choices) return "";
@@ -2369,9 +2388,8 @@ async function scoutXlsx(mid) {
 let scPlayer = null;
 async function scoutDock() {
   const dock = document.getElementById("dock"); if (!dock) return;
-  // 영상: 예전 영상 분석 경기 · 영상 분석 방식 실시간 경기 (유튜브)
-  const lg = state.live && state.live.open && lvView() ? lvGame() : null;
-  const m = lg && lvVideo(lg) && lg.yt ? lg : state.view === "scout" && sc().track === "video" ? scMatch() : null, y = m && m.yt ? parseYt(m.yt) : null;
+  // 영상: 전력분석 경기의 유튜브 (실시간 기록은 영상 없음)
+  const m = state.view === "scout" && sc().track === "video" ? scMatch() : null, y = m && m.yt ? parseYt(m.yt) : null;
   if (!y) { if (dock.dataset.mid) { dock.innerHTML = ""; dock.dataset.mid = ""; scPlayer = null; } dock.hidden = true; return; }
   dock.hidden = false;
   const hd = document.querySelector("header.top"); dock.style.top = (hd ? hd.offsetHeight : 0) + "px";
@@ -2836,6 +2854,7 @@ function render(soft) {
   navSave();
   refreshSettings();
   scoutDock();
+  pushNudge();
 }
 // 화면 넘김: 새 화면만 짧게 서서히 나타남 (투명도만 바꿔서 휴대폰에서도 가볍게)
 const reduceMotion = () => { try { return matchMedia("(prefers-reduced-motion: reduce)").matches; } catch (e) { return false; } };
@@ -3169,6 +3188,8 @@ document.addEventListener("click", async ev => {
   }
   if (act === "xlsx") return exportXlsx(state.repSy || seasonRange().sy);
   if (act === "pushon") return pushOn();
+  if (act === "nudgeon") return pushOn({ m: true, e: true, nt: true, mh: 8, eh: 22 });
+  if (act === "nudgeoff") { lsSet(NUDGE_KEY(), 1); return pushNudge(); }
   if (act === "pushoff") return pushOff();
   if (act === "rolepick") { closeDrawer(); closeSettings(); return openRolePick(); }
   if (act === "viewas") return setView(b.dataset.k);
@@ -3584,7 +3605,7 @@ document.addEventListener("submit", async ev => {
       closeSheet(); toast("불참을 냈어요");
     } else if (f.id === "wellForm") {
       const row = { player_id: f.dataset.pid, date: iso(today()) };
-      for (const [k] of WELL_KEYS) row[k] = Number(document.getElementById("wl-" + k).value);
+      for (const [k] of WELL_KEYS) row[k] = Number((f.querySelector(`[name="wl-${k}"]:checked`) || {}).value || 3);
       row.stress = row.mood; // 기분·스트레스를 한 문항으로
       state.openKeys["well-form"] = false;
       await dbWrite("wellness", "upsert", row, { onConflict: "player_id,date" });
@@ -3902,9 +3923,11 @@ async function fillPushBox() {
     <div class="row"><button class="btn primary" type="button" data-act="pushon">${on ? "저장" : "알림 켜기"}</button>${on ? `<button class="btn" type="button" data-act="pushoff">끄기</button>` : ""}</div>
     <p class="small muted">${on ? "이 기기에서 알림을 받고 있어요." : "기기마다 따로 켜요."}</p>`;
 }
-async function pushOn() {
-  const m = document.getElementById("pu-m").checked, e = document.getElementById("pu-e").checked, nt = document.getElementById("pu-n").checked;
-  const mh = Number(document.getElementById("pu-mh").value), eh = Number(document.getElementById("pu-eh").value);
+// o 가 없으면 설정 창의 칸에서, 홈 안내에서 켜면 기본값(컨디션 오전 8시 · 운동 기록 오후 10시 · 공지)
+async function pushOn(o) {
+  const g = id => document.getElementById(id);
+  o = o || { m: g("pu-m").checked, e: g("pu-e").checked, nt: g("pu-n").checked, mh: Number(g("pu-mh").value), eh: Number(g("pu-eh").value) };
+  const { m, e, nt, mh, eh } = o;
   const perm = await Notification.requestPermission();
   if (perm !== "granted") { toast("알림이 허용되지 않았어요"); return fillPushBox(); }
   try {
@@ -3918,9 +3941,9 @@ async function pushOn() {
     const j = sub.toJSON();
     const r = await sb.from("push_subs").upsert({ endpoint: sub.endpoint, user_id: uid(), player_id: state.myPid, p256dh: j.keys.p256dh, auth: j.keys.auth, morning: m, evening: e, notice: nt, morning_at: mh, evening_at: eh, train_days: trainDays(state.myPid), updated_at: new Date().toISOString() }, { onConflict: "endpoint" });
     if (r.error) throw r.error;
-    lsSet(PUSH_DAY(), iso(today()));
+    lsSet(PUSH_DAY(), iso(today())); nudge.st = "none";
     toast(m || e || nt ? "알림을 켰어요" : "알림을 모두 껐어요");
-    fillPushBox();
+    fillPushBox(); pushNudge();
   } catch (err) { toast("알림을 켜지 못했어요. 잠시 뒤 다시 해 주세요"); }
 }
 async function pushOff(quiet) {
@@ -3931,6 +3954,23 @@ async function pushOff(quiet) {
   } catch (err) { if (!quiet) toast("끄지 못했어요"); }
 }
 const PUSH_DAY = () => "snuvt-pushday-" + uid();
+// 홈 맨 위 알림 안내: 이 기기에서 알림을 안 켠 부원에게만, "나중에"를 누르면 이 기기에선 다시 안 뜸 (아이폰 Safari 는 홈 화면 추가 안내)
+const NUDGE_KEY = () => "snuvt-pushnudge-" + uid(), nudge = { st: null };
+async function pushNudge() {
+  if (!document.getElementById("pushNudge")) return;
+  let st = "none";
+  if (playerOf(state.myPid) && !lsGet(NUDGE_KEY())) {
+    if (nudge.st == null) {
+      if (!pushOk()) nudge.st = isIOS() && !standalone() ? "ios" : "none";
+      else if (Notification.permission === "denied") nudge.st = "none";
+      else { const sub = await pushSub().catch(() => null); nudge.st = sub ? "none" : "ask"; }
+    }
+    st = nudge.st;
+  }
+  const el = document.getElementById("pushNudge"); if (!el) return;
+  el.innerHTML = st === "ask" ? `<section class="panel nudge"><div><b>알림 켜기</b><span class="small muted">투표 · 공지 · 아침 컨디션을 놓치지 않게 알려 드려요</span></div><div class="row nowrap"><button class="btn primary small" type="button" data-act="nudgeon">켜기</button><button class="btn link small" type="button" data-act="nudgeoff">나중에</button></div></section>`
+    : st === "ios" ? `<section class="panel nudge"><div><b>알림을 받으려면</b><span class="small muted">Safari 공유 버튼 → '홈 화면에 추가'로 설치한 뒤 그 앱에서 열어 주세요</span></div><button class="btn link small" type="button" data-act="nudgeoff">알겠어요</button></section>` : "";
+}
 // 하루 한 번: 앞으로 4주 운동 있는 날 갱신
 async function pushRefresh() {
   if (!pushOk() || !state.myPid || !navigator.onLine || Notification.permission !== "granted" || lsGet(PUSH_DAY()) === iso(today())) return;
@@ -3985,3 +4025,19 @@ if (typeof document !== "undefined" && document.getElementById("main")) {
   document.body.insertAdjacentHTML("beforeend", `<div class="drawer-bg" id="drawer" hidden data-act="drawerclose"><aside class="drawer" aria-label="전체 메뉴" data-act="noop"><div class="drawer-body"></div></aside></div>`);
   boot();
 }
+
+/* ---------- 앱 오류 기록 (client_errors): 부원 휴대폰에서 난 화면 오류를 DB에 남김 (관리자만 봄, 60일 뒤 지움)
+ * 우리 파일에서 난 것만 · 같은 오류는 한 번 · 한 번 켤 때 5개까지 · 인터넷 끊김·확장 프로그램 오류는 뺌 */
+const errSeen = new Set();
+function logClientError(msg, src, stack) {
+  try {
+    msg = String(msg || "").slice(0, 300);
+    if (!msg || errSeen.size >= 5 || errSeen.has(msg) || /ResizeObserver loop|^Script error|Failed to fetch|NetworkError|Load failed|AbortError|NotAllowedError/i.test(msg)) return;
+    errSeen.add(msg);
+    if (!sb || !state.session || navigator.onLine === false) return;
+    const ver = (((document.querySelector('script[src*="app.js"]') || {}).src || "").split("v=")[1] || "").slice(0, 20);
+    sb.from("client_errors").insert({ view: String(state.view || "").slice(0, 30), msg, src: src ? String(src).slice(0, 200) : null, stack: stack ? String(stack).slice(0, 1500) : null, ua: navigator.userAgent.slice(0, 200), ver }).then(() => {}, () => {});
+  } catch (e) { /* 기록 실패는 조용히 */ }
+}
+window.addEventListener("error", e => { if (e.filename && !e.filename.startsWith(location.origin)) return; logClientError(e.message, e.filename ? `${e.filename.replace(location.origin, "")}:${e.lineno}:${e.colno}` : "", e.error && e.error.stack); });
+window.addEventListener("unhandledrejection", e => { const r = e.reason; logClientError(r && r.message ? r.message : String(r), "promise", r && r.stack); });

@@ -158,6 +158,30 @@ const SUITES = {
     assert.strictEqual(await p.evaluate(() => document.querySelectorAll(".ct-spots circle").length), 1, "분석 탭에 점 하나");
     clean(a); await a.ctx.close();
   },
+  // 홈 '오늘 할 것': 아침 컨디션 4줄을 한 번씩 누르면 바로 저장, 큰 칸 4개(하단 탭과 같음)는 없음
+  async todo(b) {
+    const a = await openApp(b, "player"), p = a.page;
+    await a.go("home");
+    assert.match(await a.text(".todo-card"), /오늘 할 것.*아침 컨디션/);
+    assert.strictEqual(await p.$(".tiles-grid"), null, "홈 큰 칸 없음");
+    for (const [k, v] of [["sleep", 4], ["fatigue", 3], ["soreness", 2], ["mood", 5]]) await p.click(`.todo-card input[name="wl-${k}"][value="${v}"]`);
+    await p.waitForTimeout(400);
+    const w = (await a.writes("wellness")).map(x => x[2]);
+    assert.strictEqual(w.length, 1, "네 개 다 고르면 한 번 저장");
+    assert.deepStrictEqual([w[0].sleep, w[0].fatigue, w[0].soreness, w[0].mood], [4, 3, 2, 5]);
+    clean(a); await a.ctx.close();
+  },
+  // 앱 오류 기록: 우리 파일에서 난 오류는 client_errors 에 한 번만 (같은 오류 두 번이어도 하나)
+  async errors(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    // 브라우저 시계를 고정해 둬서 setTimeout 대신 스크립트를 바로 실행해 오류를 냄 (두 번)
+    await p.evaluate(() => { for (let i = 0; i < 2; i++) { const s = document.createElement("script"); s.textContent = 'throw new Error("테스트 오류")'; document.body.append(s); } });
+    await p.waitForTimeout(300);
+    const w = (await a.writes("client_errors")).map(x => x[2]);
+    assert.strictEqual(w.length, 1, JSON.stringify(w));
+    assert.match(w[0].msg, /테스트 오류/); assert.strictEqual(w[0].view, "home");
+    await a.ctx.close();
+  },
   // 휴대폰 가로: 왼쪽 팀 | 네트 | 오른쪽 팀이 화면을 꽉 채움, 왼쪽 팀은 앞줄(4·3·2)이 네트 쪽 · 4번이 위, 오른쪽 팀은 2번이 위. 세로로 돌리면 위·아래
   async landscape(b) {
     const a = await openApp(b, "coach", { width: 844, height: 390 }), p = a.page;
@@ -212,7 +236,16 @@ const SUITES = {
     await p.evaluate(() => { document.getElementById("lv-opp").value = "B대"; });
     await p.click("#lvForm button[type=submit]"); await p.waitForTimeout(300);
     assert.strictEqual((await a.writes("live_games"))[0][2].mode, "lite");
-    // 교류전은 경기 이름 칸 없음 (상대는 교류전 상대로 채워짐)
+    // 만든 경기 화면: 점수만 +1 두 번 → 2:0, 다음 세트 창이 열림
+    await a.go("cup"); await p.waitForTimeout(200);
+    await p.evaluate(() => { state.cup = state.cup || {}; state.cup.key = "event:e1"; state.live.open = state.live.open || (lv().games["event:e1"] || [])[0]?.id; render(); }); await p.waitForTimeout(400);
+    const hasPad = await p.$('[data-act="lvpt"][data-v="us"]');
+    assert.ok(hasPad, "실시간 기록 화면(점수 +1 버튼)"); { await p.click('[data-act="lvpt"][data-v="us"]'); await p.click('[data-act="lvpt"][data-v="us"]'); await p.waitForTimeout(200);
+      const rs = (await a.writes("live_rallies")).map(x => x[2]); assert.strictEqual(rs.filter(r => r.point === "us").length, 2, "점수만 +1 두 번"); }
+    await p.evaluate(() => lvSetForm(2)); await p.waitForTimeout(150);
+    assert.ok(await p.$("#lvSetForm"), "다음 세트 시작 창");
+    await p.evaluate(() => closeSheet());
+
     await p.evaluate(() => lvForm("friendly:f1")); await p.waitForTimeout(200);
     assert.strictEqual(await p.$("#lv-label"), null, "교류전 경기 이름 칸 없음");
     assert.strictEqual(await p.evaluate(() => document.getElementById("lv-opp").value), "연세대");

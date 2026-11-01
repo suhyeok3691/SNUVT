@@ -2332,3 +2332,41 @@ grant execute on function public.live_rename(uuid, text, jsonb) to authenticated
 -- ========== 전력분석: 공격이 떨어진 자리 (2026-11-01) ==========
 alter table public.scout_events add column x smallint, add column y smallint;
 alter table public.scout_events add constraint scout_events_xy_check check ((x is null or x between 0 and 100) and (y is null or y between 0 and 100));
+
+-- ========== 앱 오류 기록 · 주간 스냅샷 (2026-11-01) ==========
+create table public.client_errors (
+  id bigserial primary key,
+  at timestamptz not null default now(),
+  user_id uuid default auth.uid(),
+  team_id text default private.my_team(),
+  view text check (view is null or length(view) <= 30),
+  msg text not null check (length(msg) <= 300),
+  src text check (src is null or length(src) <= 200),
+  stack text check (stack is null or length(stack) <= 1500),
+  ua text check (ua is null or length(ua) <= 200),
+  ver text check (ver is null or length(ver) <= 20)
+);
+create index client_errors_at on public.client_errors (at desc);
+alter table public.client_errors enable row level security;
+create policy "errors add" on public.client_errors for insert to authenticated with check (user_id = (select auth.uid()));
+create policy "errors read" on public.client_errors for select to authenticated using ((select private.is_coach()));
+grant insert, select on public.client_errors to authenticated;
+grant usage on sequence public.client_errors_id_seq to authenticated;
+create table private.snapshots (id bigserial primary key, taken_at timestamptz not null default now(), tbl text not null, n integer not null, data jsonb not null);
+create index snapshots_tbl_at on private.snapshots (tbl, taken_at desc);
+create or replace function private.take_snapshot() returns integer language plpgsql security definer set search_path = '' as $$
+declare t text; k integer := 0;
+begin
+  foreach t in array array['teams','profiles','players','player_private','player_contacts','health','tests','pain_checks','wellness','lift_sets','logs','day_picks','program_edits',
+    'events','terms','team_off','practice_times','practice_plans','friendlies','event_votes','entries','lineups','absences','open_sessions','open_votes','guest_votes',
+    'notices','videos','training_notes','cups','cup_teams','cup_matches','cup_avail','cup_photos','scout_matches','scout_events','scout_points','live_games','live_rallies'] loop
+    if to_regclass('public.' || t) is null then continue; end if;
+    execute format('insert into private.snapshots (tbl, n, data) select %L, count(*), coalesce(jsonb_agg(to_jsonb(x)), ''[]''::jsonb) from public.%I x', t, t);
+    k := k + 1;
+  end loop;
+  delete from private.snapshots where taken_at < now() - interval '29 days';
+  delete from public.client_errors where at < now() - interval '60 days';
+  return k;
+end $$;
+revoke all on function private.take_snapshot() from public, anon, authenticated;
+select cron.schedule('snapshot-weekly', '30 18 * * 0', $$select private.take_snapshot()$$);
