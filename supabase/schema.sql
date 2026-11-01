@@ -2375,7 +2375,7 @@ select cron.schedule('snapshot-weekly', '30 18 * * 0', $$select private.take_sna
 select cron.schedule('push-hourly','0 * * * *', $$select private.push_call('evening');$$);
 alter table public.push_subs alter column morning set default false;
 
--- 2026-11-01 wellness 참조 빼기 (적용됨). 표 삭제(drop table public.wellness)와 take_snapshot 목록 정리는 아직: 백업 함수는 없는 표를 건너뜀
+-- 2026-11-01 wellness 참조 빼기 · 표 삭제 (사용자 승인, 표 삭제는 대시보드에서 직접 실행)
 CREATE OR REPLACE FUNCTION private.wipe_personal(pid uuid)
  RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
 AS $function$
@@ -2404,3 +2404,19 @@ AS $function$
     when 'notice' then s.notice
     else false end
 $function$;
+
+create or replace function private.take_snapshot() returns integer language plpgsql security definer set search_path = '' as $$
+declare t text; k integer := 0;
+begin
+  foreach t in array array['teams','profiles','players','player_private','player_contacts','health','tests','pain_checks','lift_sets','logs','day_picks','program_edits',
+    'events','terms','team_off','practice_times','practice_plans','friendlies','event_votes','entries','lineups','absences','open_sessions','open_votes','guest_votes',
+    'notices','videos','training_notes','cups','cup_teams','cup_matches','cup_avail','cup_photos','scout_matches','scout_events','scout_points','live_games','live_rallies'] loop
+    if to_regclass('public.' || t) is null then continue; end if;
+    execute format('insert into private.snapshots (tbl, n, data) select %L, count(*), coalesce(jsonb_agg(to_jsonb(x)), ''[]''::jsonb) from public.%I x', t, t);
+    k := k + 1;
+  end loop;
+  delete from private.snapshots where taken_at < now() - interval '29 days';
+  delete from public.client_errors where at < now() - interval '60 days';
+  return k;
+end $$;
+drop table public.wellness;

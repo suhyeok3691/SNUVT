@@ -96,7 +96,7 @@ tests/                  화면 테스트 (Playwright · 가짜 Supabase, 7절)
 | | `health` | 부상 이력·통증·재활 단계·개인 조정(`custom`은 관리자·피지컬 담당만 바꿈) |
 | 피지컬 | `tests` | 측정 (점프·근력·코어·물구나무·트라이아웃 항목) |
 | | `logs` · `lift_sets` | 세션 기록(RPE·완료율) / 웨이트 세트 기록 |
-| | `wellness` · `pain_checks` | (안 씀, 아침 컨디션 뺌 2026-11-01) / 부위별 통증 체크 |
+| | `pain_checks` | 부위별 통증 체크 |
 | | `day_picks` · `program_edits` | 그날 고른 세션 / 프로그램 운동 박스 추가·삭제 |
 | 일정·훈련 | `events` | 대회·트라이아웃·비시즌·2학기 종강 (6·9인제 표시) |
 | | `friendlies` | 교류전 |
@@ -380,10 +380,10 @@ tests/                  화면 테스트 (Playwright · 가짜 Supabase, 7절)
 
 ## 매일 쓰기 · 오류 기록 · 스냅샷 (2026-11-01)
 - **홈 맨 위 "오늘 할 것"**(부원): 오늘 피지컬(이름 → 피지컬 화면) · 오늘 팀 훈련(불참 표시 · 공개된 훈련 계획 ›). 홈 아래 큰 칸 4개(훈련 · 피지컬 · 일정 · 대회)는 하단 탭과 같아서 뺌(선수 연결 안 된 관리자만 남김)
-- **아침 컨디션 뺌**(같은 날, 과해서): 설문 · 홈/피지컬 칸 · 팀 현황/주간 요약/리포트/엑셀의 컨디션 칸 · 아침 알림 코드를 모두 지움. 피지컬 회복 버전은 이제 '어제 세션 RPE 9 이상'만 봄(`readiness(lastRpe)`). 예약 작업 `push-hourly`는 저녁 알림만, `push_subs.morning` 기본값 false. `wellness` 표(2줄)는 남겨 둠
+- **아침 컨디션 뺌**(같은 날, 과해서): 설문 · 홈/피지컬 칸 · 팀 현황/주간 요약/리포트/엑셀의 컨디션 칸 · 아침 알림 코드를 모두 지움. 피지컬 회복 버전은 이제 '어제 세션 RPE 9 이상'만 봄(`readiness(lastRpe)`). 예약 작업 `push-hourly`는 저녁 알림만, `push_subs.morning` 기본값 false. `wellness` 표도 지움(참조하던 `wipe_personal` · `push_targets` · `take_snapshot` 정리)
 - **알림 안내**: 이 기기에서 알림을 안 켠 부원 홈 맨 위에 "알림 켜기 [켜기] [나중에]". 켜기 = 운동 기록 오후 10시 · 공지(설정에서 바꿈). "나중에"는 이 기기에서 다시 안 뜸(localStorage `snuvt-pushnudge-사용자`). 아이폰 Safari(설치 전)는 "홈 화면에 추가" 안내
 - **앱 오류 기록** `client_errors`(at · user_id · team_id · view · msg · src · stack · ua · ver): 우리 파일에서 난 오류 · 처리 안 된 Promise 오류만, 같은 오류 한 번 · 앱을 켤 때마다 5개까지, 인터넷 끊김 · 확장 프로그램 오류는 뺌. 넣기는 로그인한 본인, 보기는 관리자(`is_coach`)만, 60일 뒤 지움. 확인: `select at, view, msg, src, ver from client_errors order by at desc limit 50;`
-- **주간 스냅샷** `private.snapshots`(taken_at · tbl · n · data jsonb): 예약 작업 `snapshot-weekly`(일 18:30 UTC = 월 03:30 KST)가 `private.take_snapshot()`로 팀 데이터 표 39개를 표마다 jsonb 로 복사, 29일 지난 것은 지움(4주치). 일본 고교 · 알림 구독(push_subs)은 뺌. 앱 API 로는 안 보임(private 스키마). 되살리기 예: `select jsonb_array_elements(data) from private.snapshots where tbl = 'players' order by taken_at desc limit 1;`
+- **주간 스냅샷** `private.snapshots`(taken_at · tbl · n · data jsonb): 예약 작업 `snapshot-weekly`(일 18:30 UTC = 월 03:30 KST)가 `private.take_snapshot()`로 팀 데이터 표 38개를 표마다 jsonb 로 복사, 29일 지난 것은 지움(4주치). 일본 고교 · 알림 구독(push_subs)은 뺌. 앱 API 로는 안 보임(private 스키마). 되살리기 예: `select jsonb_array_elements(data) from private.snapshots where tbl = 'players' order by taken_at desc limit 1;`
 - 코드 정리: 실시간 기록의 "전체 기록"(랠리 흐름 자동 · 자동 넘김 · 단계 표시) · "영상 분석"(서브 종류 · 서브 떨어진 자리 · 영상 링크) 코드와 전력분석의 옛 실시간 목록을 지움(`live.js` 110KB → 100KB), 쓰지 않는 CSS 정리. 테스트 13개(`smoke` · `todo` · `errors` · `lite` 등) 통과
 - 홈 달력 날짜를 누르면 날짜가 두 번 나오던 것 고침
 
