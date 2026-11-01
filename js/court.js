@@ -99,6 +99,9 @@ function ctBtn(side, v, z, serving, lib, mini, pos) {
   const n = ctName(side, v);
   return `<button type="button" class="ct-p ${side} ${serving ? "srv" : ""} ${lib ? "lib" : ""} ${mini ? "mini" : ""}" data-act="ctpick" data-side="${side}" data-v="${esc(v)}" ${z ? `data-z="${z}"` : ""}><b>${esc(n.no || "–")}</b>${n.nm ? `<span>${esc(n.nm)}</span>` : ""}${z ? `<i>${z}</i>` : ""}${pos ? `<em>${esc(pos)}</em>` : ""}</button>`;
 }
+// 휴대폰을 옆으로 눕히면(가로) 예전 프로그램처럼 왼쪽 팀 | 네트 | 오른쪽 팀, 휴대폰 가로에선 화면을 꽉 채움 (세로는 위·아래)
+const ctLand = () => matchMedia("(orientation: landscape)").matches;
+matchMedia("(orientation: landscape)").addEventListener("change", () => { if (state.view === "scout" && sc().tab === "court" && scMatch() && document.getElementById("sheet").hidden) { state.dirty = false; render(); } });
 const ctFlip = () => { try { return localStorage.getItem("snuvt-ctflip") === "1"; } catch (e) { return false; } };
 // 코트 화면
 function ctPad(m, ev) {
@@ -119,23 +122,34 @@ function ctPad(m, ev) {
   const half9 = (side, top) => { const slots = side === "us" ? s.usSlots : s.opSlots, pos = side === "us" ? s.usPos : s.opPos;
     const rows = top ? CT_ROWS9.slice().reverse().map(r => r.slice().reverse()) : CT_ROWS9;
     return `<div class="ct-half ${side} nine">${rows.map(r => `<div class="ct-row" style="grid-template-columns:repeat(${r.length},minmax(0,1fr))">${r.map(i => ctBtn(side, slots[i], 0, false, false, false, pos[i])).join("")}</div>`).join("")}</div>`; };
-  const H = s.nine ? half9 : half;
-  const court = flip ? `${H("us", true)}<div class="ct-net"><span>네트</span></div>${H("opp", false)}` : `${H("opp", true)}<div class="ct-net"><span>네트</span></div>${H("us", false)}`;
-  return `<div class="ct-wrap"><div class="panel ct-bar">
+  const H = s.nine ? half9 : half, land = ctLand(), LS = flip ? "opp" : "us", RS = ctOther(LS);
+  // 가로: 왼쪽 팀은 네트(오른쪽)를 보고 서서 위가 그 팀 왼쪽 → 열 = 뒷줄 5·6·1 | 앞줄 4·3·2, 오른쪽 팀은 반대 → 앞줄 2·3·4 | 뒷줄 1·6·5
+  const colsH = (side, left) => { const srv = s.serve === side && !s.last;
+    if (s.nine) { const slots = side === "us" ? s.usSlots : s.opSlots, pos = side === "us" ? s.usPos : s.opPos, cols = left ? CT_ROWS9.slice().reverse() : CT_ROWS9.map(r => r.slice().reverse());
+      return `<div class="ct-hh" style="grid-template-columns:repeat(3,minmax(0,1fr))">${cols.map(c => `<div class="ct-col">${c.map(i => ctBtn(side, slots[i], 0, false, false, false, pos[i])).join("")}</div>`).join("")}</div>`; }
+    return `<div class="ct-hh">${(left ? [[5, 6, 1], [4, 3, 2]] : [[2, 3, 4], [1, 6, 5]]).map(c => `<div class="ct-col">${c.map(z => { const x = ctSideAt(s, side, z); return ctBtn(side, x.v, z, srv && z === 1, x.lib, false, x.pos); }).join("")}</div>`).join("")}</div>`; };
+  // 가로 양 끝: 그 팀 이름 · 리베로 · 교체 (예전 프로그램 SUB 칸 자리)
+  const strip = side => { const slots = side === "us" ? s.usSlots : s.opSlots, cur = side === "us" ? s.lib : s.olib, l = s.nine ? [] : ctLibs(L, side).filter(x => !slots.some(y => ctSame(y, x)));
+    return `<div class="ct-side ${side}"><b class="ct-sname">${esc(ctTN(m, side))}</b>${l.map(v => ctBtn(side, v, 0, false, ctSame(v, cur), true)).join("")}<button class="btn small ct-subbtn" type="button" data-act="ctsubopen" data-side="${side}">교체</button></div>`; };
+  const court = land ? `${strip(LS)}${colsH(LS, true)}<div class="ct-netv" aria-hidden="true"><span>네트</span></div>${colsH(RS, false)}${strip(RS)}`
+    : flip ? `${H("us", true)}<div class="ct-net"><span>네트</span></div>${H("opp", false)}` : `${H("opp", true)}<div class="ct-net"><span>네트</span></div>${H("us", false)}`;
+  const tside = (side, right) => `<span class="ct-t ${right ? "opp" : "us"} ${s.serve === side ? "srv" : ""}">${right ? `${s.nine ? "" : `<small>R${side === "us" ? s.rot : s.orot}</small> `}${esc(ctTN(m, side))}` : `${esc(ctTN(m, side))}${s.nine ? "" : ` <small>R${side === "us" ? s.rot : s.orot}</small>`}`}</span>`;
+  const score = land ? `${tside(LS, false)}<b class="num">${LS === "us" ? s.us : s.op} : ${LS === "us" ? s.op : s.us}</b>${tside(RS, true)}` : "";
+  return `<div class="ct-wrap ${land ? "h" : ""}"><div class="panel ct-bar">
       <div class="sc-row"><span class="sc-k">세트</span>${[1, 2, 3, 4, 5].map(n => scChip("scset", n, setNo, n)).join("")}<span class="ct-tools">${q ? `<span class="chip warn" title="인터넷이 되면 저장돼요">대기 ${q}</span>` : ""}</span></div>
-      <div class="ct-score"><span class="ct-t us ${s.serve === "us" ? "srv" : ""}">${esc(ctTA(m))}${s.nine ? "" : ` <small>R${s.rot}</small>`}</span><b class="num">${s.us} : ${s.op}</b><span class="ct-t opp ${s.serve === "opp" ? "srv" : ""}">${s.nine ? "" : `<small>R${s.orot}</small> `}${esc(m.opponent || "상대")}</span></div>
+      <div class="ct-score">${score || `<span class="ct-t us ${s.serve === "us" ? "srv" : ""}">${esc(ctTA(m))}${s.nine ? "" : ` <small>R${s.rot}</small>`}</span><b class="num">${s.us} : ${s.op}</b><span class="ct-t opp ${s.serve === "opp" ? "srv" : ""}">${s.nine ? "" : `<small>R${s.orot}</small> `}${esc(m.opponent || "상대")}</span>`}</div>
       <div class="ct-info small muted">Set ${setNo} · ${s.nine ? "9인제" : `Rot ${s.rot}:${s.orot}`} · Rally ${s.rally}</div>
       <div class="ct-btns">
         <button class="btn small" type="button" data-act="ctundo" ${s.list.length ? "" : "disabled"}>Undo</button>
         <button class="btn small" type="button" data-act="ctcfg">Settings</button>
         <button class="btn small" type="button" data-act="ctflip">Change Court</button>
         ${can("analysis") ? `<button class="btn small" type="button" data-act="ctlineup">Edit Lineup</button>` : ""}
-        <button class="btn small" type="button" data-act="scxlsx" data-id="${esc(m.id)}">Export Excel</button>
-        ${can("analysis") ? `<button class="btn small danger" type="button" data-act="ctreset">RESET</button>` : ""}
+        <button class="btn small ct-more" type="button" data-act="scxlsx" data-id="${esc(m.id)}">Export Excel</button>
+        ${can("analysis") ? `<button class="btn small danger ct-more" type="button" data-act="ctreset">RESET</button>` : ""}
       </div>
     </div>
-    <div class="ct-court">${court}</div>
-    <div class="ct-extra">${flip ? libRow("us") + libRow("opp") : libRow("opp") + libRow("us")}</div>
+    <div class="ct-court ${land ? "h" : ""}">${court}</div>
+    ${land ? `<div class="ct-last small">${recent[0] ? ctLabel(recent[0]) : "Ready… 선수를 눌러 기록"}</div>` : `<div class="ct-extra">${flip ? libRow("us") + libRow("opp") : libRow("opp") + libRow("us")}</div>`}
     <section class="sec ct-recs"><div class="sec-head"><h3>방금 기록 <span class="small muted">${s.list.length}개</span></h3></div>
       ${recent.length ? `<ul class="watch sc-recent ct-rec">${recent.map(e => `<li class="${e._pending ? "ct-pend" : ""}"><span class="num small">${esc(e.score || "")}</span><span class="small ct-l">${ctLabel(e)}</span>${e.point ? `<span class="chip ${e.point === "us" ? "ok" : "warn"}">${esc(ctTN(m, e.point))} 점수</span>` : ""}</li>`).join("")}</ul>` : emptyLine("선수를 눌러 기록을 시작해요.")}
     </section></div>`;

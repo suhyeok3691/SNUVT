@@ -158,6 +158,20 @@ const SUITES = {
     assert.strictEqual(await p.evaluate(() => document.querySelectorAll(".ct-spots circle").length), 1, "분석 탭에 점 하나");
     clean(a); await a.ctx.close();
   },
+  // 휴대폰 가로: 왼쪽 팀 | 네트 | 오른쪽 팀이 화면을 꽉 채움, 왼쪽 팀은 앞줄(4·3·2)이 네트 쪽 · 4번이 위, 오른쪽 팀은 2번이 위. 세로로 돌리면 위·아래
+  async landscape(b) {
+    const a = await openApp(b, "coach", { width: 844, height: 390 }), p = a.page;
+    await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(400);
+    const g = await p.evaluate(() => { const r = q => document.querySelector(q).getBoundingClientRect(), w = document.querySelector(".ct-wrap.h");
+      const z = (side, n) => r(`.ct-court .ct-p.${side} i`) && [...document.querySelectorAll(`.ct-court .ct-col .ct-p.${side}`)].find(x => x.querySelector("i") && x.querySelector("i").textContent === String(n)).getBoundingClientRect();
+      return { fixed: !!w && getComputedStyle(w).position === "fixed", fill: Math.round(r(".ct-court").height), u4: z("us", 4), u2: z("us", 2), u5: z("us", 5), o2: z("opp", 2), o4: z("opp", 4), net: r(".ct-netv") }; });
+    assert.ok(g.fixed && g.fill > 280, "가로에서 코트가 화면을 채움 " + g.fill);
+    assert.ok(g.u4.top < g.u2.top && g.u4.left > g.u5.left && g.u4.right < g.net.left, "왼쪽 팀: 앞줄이 네트 쪽, 4번이 위");
+    assert.ok(g.o2.top < g.o4.top && g.o2.left > g.net.right, "오른쪽 팀: 2번이 위");
+    await p.setViewportSize({ width: 390, height: 844 }); await p.waitForTimeout(400);
+    assert.strictEqual(await p.$(".ct-wrap.h"), null, "세로로 돌리면 위·아래 코트");
+    clean(a); await a.ctx.close();
+  },
   // 서브 종류: 플로터 · 스파이크 토글 → kind 저장, 같은 선수 다음 서브는 기억, 떨어진 자리 그림엔 숫자 없음
   async serve(b) {
     const a = await openApp(b, "coach"), p = a.page;

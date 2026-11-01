@@ -1168,9 +1168,31 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 .ct-pend { opacity: .6; }
 .sc-g kbd { display: none; font: 600 10px var(--f-data); margin-right: 5px; padding: 0 4px; border: 1px solid currentColor; border-radius: 4px; opacity: .7; }
 @media (hover: hover) and (pointer: fine) { .sc-g kbd { display: inline-block; } }
-@media (orientation: landscape) and (max-height: 520px) {
-  .sc-page .ct-bar { padding: 6px 10px; gap: 5px; } .ct-score b { font-size: 22px; }
-  .ct-court { max-width: 560px; } .ct-p { min-height: 44px; padding: 3px 2px; } .ct-p b { font-size: 17px; }
+/* 가로 코트 (휴대폰을 옆으로 눕히거나 넓은 화면): 예전 프로그램처럼 왼쪽 팀 | 네트 | 오른쪽 팀, 양 끝에 리베로 · 교체 */
+.ct-court.h { max-width: 980px; display: grid; grid-template-columns: auto minmax(0, 1fr) 16px minmax(0, 1fr) auto; gap: 6px; align-items: stretch; }
+.ct-hh { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; min-width: 0; }
+.ct-col { display: grid; grid-auto-rows: minmax(0, 1fr); gap: 6px; min-width: 0; }
+.ct-court.h .ct-col .ct-p { min-height: 72px; }
+.ct-netv { position: relative; display: grid; place-items: center; }
+.ct-netv::before { content: ""; position: absolute; top: -8px; bottom: -8px; left: 50%; border-left: 3px solid var(--ink); transform: translateX(-50%); }
+.ct-netv span { position: relative; writing-mode: vertical-rl; font-size: 10px; letter-spacing: .3em; color: var(--muted); padding: 6px 0; background: color-mix(in srgb, var(--c-match) 12%, var(--surface)); }
+.ct-side { display: flex; flex-direction: column; justify-content: center; gap: 6px; width: 58px; min-width: 0; }
+.ct-sname { font-size: 12px; text-align: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct-side .ct-p.mini { justify-content: center; padding: 5px 4px; }
+.ct-side .ct-subbtn { width: 100%; padding: 6px 0; font-size: 12.5px; }
+.ct-last { text-align: center; color: var(--muted); padding: 2px 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 휴대폰 가로: 코트가 화면을 꽉 채움 (위 한 줄: 세트 · 점수 · 버튼, 아래 한 줄: 방금 기록). Export Excel · RESET 은 세로 화면에서 */
+@media (orientation: landscape) and (max-height: 540px) {
+  .ct-wrap.h { position: fixed; inset: 0; z-index: 28; background: var(--bg); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 4px;
+    padding: max(4px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left)); }
+  .ct-wrap.h .ct-bar { display: flex; align-items: center; gap: 8px; padding: 4px 8px; margin: 0; }
+  .ct-wrap.h .ct-bar > .sc-row { flex: none; gap: 4px; } .ct-wrap.h .ct-bar > .sc-row > .sc-k { display: none; }
+  .ct-wrap.h .ct-bar .sc-chip { padding: 2px 8px; }
+  .ct-wrap.h .ct-score { flex: 1; min-width: 0; } .ct-wrap.h .ct-score b { font-size: 20px; } .ct-wrap.h .ct-t { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ct-wrap.h .ct-info, .ct-wrap.h .ct-more, .ct-wrap.h .ct-recs { display: none; }
+  .ct-wrap.h .ct-btns { display: flex; flex: none; gap: 4px; } .ct-wrap.h .ct-btns .btn { padding: 6px 8px; font-size: 12px; white-space: nowrap; }
+  .ct-wrap.h .ct-court { margin: 0; max-width: none; height: 100%; min-height: 0; padding: 6px; }
+  .ct-wrap.h .ct-court .ct-col .ct-p { min-height: 0; padding: 2px; } .ct-wrap.h .ct-court .ct-p b { font-size: clamp(16px, 5.2vh, 26px); }
 }
 .ct-rec li .ct-l { flex: 1; text-align: left; } .ct-rec li .num { min-width: 34px; flex: none; }
 /* 참·불참: 목록엔 숫자만, 명단은 투표 창에서 */
@@ -1210,7 +1232,7 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 <script src="js/guide.js?v=194"></script>
 <script src="js/library.js?v=196"></script>
 <script src="js/campus.js?v=196"></script>
-<script src="js/court.js?v=207"></script>
+<script src="js/court.js?v=209"></script>
 <script src="js/live.js?v=206"></script>
 <script src="js/app.js?v=207"></script>
 </body>
