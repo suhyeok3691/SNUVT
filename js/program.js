@@ -1096,27 +1096,8 @@ function seasonDayRaw(date, events) {
   if (sem === "S1") { info.nordicHere = info.slot === "gymA"; info.noNordic = info.slot === "bwL"; }
   return info;
 }
-// 아침 컨디션 (4문항, 각 1–5 · 높을수록 좋음, 합 4–20) + 전날 세션 RPE → 오늘 회복 버전으로 바꿀지
-// Hooper·McLean 설문을 줄인 것 (기분과 스트레스는 한 문항). 선택지는 숫자 대신 말로 고름.
-// 합 9 이하이거나 수면·피로·근육통 중 하나라도 가장 나쁨, 또는 전날 RPE 9 이상
-const WELL_KEYS = [["sleep", "수면"], ["fatigue", "피로"], ["soreness", "근육통"], ["mood", "기분·스트레스"]];
-const WELL_OPTS = {
-  sleep: ["거의 못 잤어요", "설쳤어요", "보통", "잘 잤어요", "푹 잤어요"],
-  fatigue: ["아주 피곤해요", "피곤해요", "보통", "괜찮아요", "개운해요"],
-  soreness: ["많이 아파요", "꽤 뻐근해요", "조금", "거의 없어요", "없어요"],
-  mood: ["많이 힘들어요", "스트레스 있어요", "보통", "좋아요", "아주 좋아요"],
-};
-const WELL_LOW = 9;
-function readiness(well, lastRpe) {
-  const why = [];
-  if (well) {
-    const sum = WELL_KEYS.reduce((a, [k]) => a + Number(well[k] || 0), 0);
-    if (sum <= WELL_LOW) why.push(`아침 컨디션 ${sum}/20`);
-    else { const one = WELL_KEYS.filter(([k]) => ["sleep", "fatigue", "soreness"].includes(k) && Number(well[k]) <= 1).map(([, l]) => l); if (one.length) why.push(`${one.join("·")} 1점`); }
-  }
-  if (lastRpe != null && lastRpe >= 9) why.push(`어제 RPE ${lastRpe}`);
-  return why;
-}
+// 전날 세션 RPE 9 이상이면 오늘 웨이트는 회복 버전 (아침 컨디션 설문은 2026-11-01 뺌)
+function readiness(lastRpe) { return lastRpe != null && lastRpe >= 9 ? [`어제 RPE ${lastRpe}`] : []; }
 const TRAIN_SLOTS = ["gymA", "gymB", "bwU", "bwL"];
 /* 고를 수 있는 날: 웨이트·맨몸 날과 정규 훈련 없는 날(관리자 지정).
  * 그날의 '권장'를 보여 주고 선수가 바꿀 수 있다 (예: 헬스장에 못 가면 맨몸). 고른 것에 따라 그 주의 남은 날 권장가 바뀐다.
@@ -1198,8 +1179,8 @@ function planForDay(ctx, info) {
   // 개인 단계: 웨이트 입문이거나 상대 근력 0.8 미만이면 근력·파워 대신 기초 근력, 피크 대신 회복 주 (기초가 먼저)
   const weak = !!p.pos && (p.weightExp === "none" || (rel != null && rel < 0.8));
   if (weak && TRAIN_SLOTS.includes(i.slot) && (i.w === PH.POWER || i.w === PH.PEAK)) i = { ...i, w: i.w === PH.POWER ? PH.BASE : PH.DELOAD, shifted: true };
-  // 오늘 컨디션이 낮으면 회복 버전
-  const low = ctx.ready ? readiness(ctx.ready.well, ctx.ready.lastRpe) : [];
+  // 어제 세션이 아주 힘들었으면(RPE 9↑) 회복 버전
+  const low = ctx.ready ? readiness(ctx.ready.lastRpe) : [];
   if (low.length && TRAIN_SLOTS.includes(i.slot) && i.w !== PH.TAPER) i = { ...i, w: PH.DELOAD, lowReady: true };
   let out = slotPlan(ctx, i.slot, i.w, i);
   // 팀 운동이 먼저: 재활·부상 때문에 팀 블록을 바꾸지 않고, 재활은 남는 시간에 개인 칸으로 더함.
@@ -1228,8 +1209,8 @@ function planForDay(ctx, info) {
     }
     out.blocks = out.blocks.filter(b => b.items.length);
   }
-  if (i.lowReady && info.measure) out.notes.push("컨디션 낮음 · 측정 미루기");
-  if (i.lowReady) { out.title = slotPlan(ctx, i.slot, info.w, info).title + " · 가볍게"; out.notes.unshift(`컨디션 낮음 (${low.join(", ")})`); }
+  if (i.lowReady && info.measure) out.notes.push("어제 강도 높음 · 측정 미루기");
+  if (i.lowReady) { out.title = slotPlan(ctx, i.slot, info.w, info).title + " · 가볍게"; out.notes.unshift(`어제 강도 높음 (${low.join(", ")})`); }
   if (i.shifted && !i.lowReady) out.notes.unshift("기초 근력 먼저");
   // 관리자 개인 조정: 빼기 · 바꾸기 · 메모
   const cu = ctx.custom || {};
@@ -1300,4 +1281,4 @@ function daySummary(plan) {
   return { kind: plan.kind, title: plan.title, landings: plan.landings, items: main ? main.items.length : 0 };
 }
 
-if (typeof module !== "undefined") module.exports = { TEAM, setTeam, weekOf, teamDaysOf, fmtRx, painStage, normPain, PAIN_AREAS, STAGE_NAMES, STAGE_HINT, PAIN_RULE, NEXT_RULE, painLabel, dayPlan, daySummary, slotPlan, PH, PHASE_NAMES, POS_EXTRA, readiness, WELL_KEYS, WELL_OPTS, WELL_LOW, PICKS, weekFlow, resolvePick, relOf, baseName, e1rmOf, LIFT_OF, JUMP_RE, seasonDay, planForDay, measureWeeks, nextMeasure, HS_GOAL, INJ_PART_LABEL, FINGERS, PAIN_SEV, nextMajor, normEvents, mondayOf, dAdd, dDiff, SLOT_WEEK, EVENT_KINDS, HANDSTAND, HS_STAGES, effectiveModules, moduleEffects, relStrength, REHAB, REHAB_AREAS, DAYS, POS, POS_ORDER };
+if (typeof module !== "undefined") module.exports = { TEAM, setTeam, weekOf, teamDaysOf, fmtRx, painStage, normPain, PAIN_AREAS, STAGE_NAMES, STAGE_HINT, PAIN_RULE, NEXT_RULE, painLabel, dayPlan, daySummary, slotPlan, PH, PHASE_NAMES, POS_EXTRA, readiness, PICKS, weekFlow, resolvePick, relOf, baseName, e1rmOf, LIFT_OF, JUMP_RE, seasonDay, planForDay, measureWeeks, nextMeasure, HS_GOAL, INJ_PART_LABEL, FINGERS, PAIN_SEV, nextMajor, normEvents, mondayOf, dAdd, dDiff, SLOT_WEEK, EVENT_KINDS, HANDSTAND, HS_STAGES, effectiveModules, moduleEffects, relStrength, REHAB, REHAB_AREAS, DAYS, POS, POS_ORDER };

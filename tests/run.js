@@ -158,17 +158,15 @@ const SUITES = {
     assert.strictEqual(await p.evaluate(() => document.querySelectorAll(".ct-spots circle").length), 1, "분석 탭에 점 하나");
     clean(a); await a.ctx.close();
   },
-  // 홈 '오늘 할 것': 아침 컨디션 4줄을 한 번씩 누르면 바로 저장, 큰 칸 4개(하단 탭과 같음)는 없음
+  // 홈 '오늘 할 것': 아침 컨디션 설문 없음 (2026-11-01 뺌), 큰 칸 4개(하단 탭과 같음)도 없음, 알림 안내에도 컨디션 없음
   async todo(b) {
     const a = await openApp(b, "player"), p = a.page;
     await a.go("home");
-    assert.match(await a.text(".todo-card"), /오늘 할 것.*아침 컨디션/);
+    assert.strictEqual(await p.$(".wl-form, .well-card, [name^='wl-']"), null, "컨디션 설문 없음");
     assert.strictEqual(await p.$(".tiles-grid"), null, "홈 큰 칸 없음");
-    for (const [k, v] of [["sleep", 4], ["fatigue", 3], ["soreness", 2], ["mood", 5]]) await p.click(`.todo-card input[name="wl-${k}"][value="${v}"]`);
-    await p.waitForTimeout(400);
-    const w = (await a.writes("wellness")).map(x => x[2]);
-    assert.strictEqual(w.length, 1, "네 개 다 고르면 한 번 저장");
-    assert.deepStrictEqual([w[0].sleep, w[0].fatigue, w[0].soreness, w[0].mood], [4, 3, 2, 5]);
+    assert.doesNotMatch(await a.text("main"), /컨디션/);
+    await a.go("train");
+    assert.doesNotMatch(await a.text("main"), /아침 컨디션/);
     clean(a); await a.ctx.close();
   },
   // 앱 오류 기록: 우리 파일에서 난 오류는 client_errors 에 한 번만 (같은 오류 두 번이어도 하나)

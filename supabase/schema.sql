@@ -2370,3 +2370,7 @@ begin
 end $$;
 revoke all on function private.take_snapshot() from public, anon, authenticated;
 select cron.schedule('snapshot-weekly', '30 18 * * 0', $$select private.take_snapshot()$$);
+
+-- 2026-11-01 아침 컨디션 뺌: 아침 알림 끄기 (wellness 표는 남겨 둠)
+select cron.schedule('push-hourly','0 * * * *', $$select private.push_call('evening');$$);
+alter table public.push_subs alter column morning set default false;

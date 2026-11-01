@@ -80,7 +80,7 @@ tests/                  화면 테스트 (Playwright · 가짜 Supabase, 7절)
 - 정규 훈련은 참석이 기본이라 '불참'만 누르고, 자율 훈련·대회·교류전은 참·불참 투표를 해요.
 
 ### 개인정보 규칙
-- 부상·통증·컨디션·개인 조정은 본인과 관리자(관리자·주장)·피지컬 담당만 봐요.
+- 부상·통증·개인 조정은 본인과 관리자(관리자·주장)·피지컬 담당만 봐요.
 - 키·몸무게(`player_private`)는 본인과 관리자·피지컬 담당만 봐요. 여자부는 몸무게 "비공개"를 고를 수 있음(가입 정보 · 내 정보): 고르면 몸무게를 아예 저장하지 않고 `player_private.weight_private = true`(RPC `set_weight_private`), 관리자 화면·엑셀엔 "비공개". 전화번호(`player_contacts`)는 본인과 명단 담당만 봐요.
 - 체지방 순위나 감량 처방은 만들지 않아요.
 - 졸업·탈퇴하면 개인정보를 지우고(`private.wipe_personal`), 이름과 운동 기록만 남겨요.
@@ -96,7 +96,7 @@ tests/                  화면 테스트 (Playwright · 가짜 Supabase, 7절)
 | | `health` | 부상 이력·통증·재활 단계·개인 조정(`custom`은 관리자·피지컬 담당만 바꿈) |
 | 피지컬 | `tests` | 측정 (점프·근력·코어·물구나무·트라이아웃 항목) |
 | | `logs` · `lift_sets` | 세션 기록(RPE·완료율) / 웨이트 세트 기록 |
-| | `wellness` · `pain_checks` | 아침 컨디션 4문항 / 부위별 통증 체크 |
+| | `wellness` · `pain_checks` | (안 씀, 아침 컨디션 뺌 2026-11-01) / 부위별 통증 체크 |
 | | `day_picks` · `program_edits` | 그날 고른 세션 / 프로그램 운동 박스 추가·삭제 |
 | 일정·훈련 | `events` | 대회·트라이아웃·비시즌·2학기 종강 (6·9인제 표시) |
 | | `friendlies` | 교류전 |
@@ -139,7 +139,7 @@ tests/                  화면 테스트 (Playwright · 가짜 Supabase, 7절)
 | `jp-search` | 앱(로그인) | 유튜브 검색 결과만 돌려줌 (저장 안 함) |
 
 예약 작업 (pg_cron, 한국 시간):
-- `push-hourly` 매시 정각: 사람마다 고른 시각에 아침 컨디션·저녁 기록 알림
+- `push-hourly` 매시 정각: 사람마다 고른 시각에 저녁 운동 기록 알림
 - `jp-sync-new` 매일 05:00, `jp-schools-daily` 매일 06:00, `jp-rank-daily` 매일 06:50(랭킹 다시 계산)
 - 매일 아침: `jp-newschools-daily` 06:20 → `jp-retag-daily` 06:35
 - 매시 40분: `jp-fill-hourly` — 한 번에 검색 25번까지라 매시간 나눠 돎
@@ -379,9 +379,9 @@ tests/                  화면 테스트 (Playwright · 가짜 Supabase, 7절)
 - 일본어 학교 이름 같은 큰 글씨 제목은 본문 글꼴로 써요(`h2.dyn`). 제목 글꼴(Do Hyeon)에 없는 한글이 있기 때문이에요.
 
 ## 매일 쓰기 · 오류 기록 · 스냅샷 (2026-11-01)
-- **홈 맨 위 "오늘 할 것"**(부원): 아침 컨디션(안 넣었으면 홈에서 바로) · 오늘 피지컬(이름 → 피지컬 화면) · 오늘 팀 훈련(불참 표시 · 공개된 훈련 계획 ›). 홈 아래 큰 칸 4개(훈련 · 피지컬 · 일정 · 대회)는 하단 탭과 같아서 뺌(선수 연결 안 된 관리자만 남김)
-- **아침 컨디션**: 드롭다운 4개 → 항목마다 1~5 버튼(1 나쁨 빨강 · 5 좋음 초록, 고르면 옆에 말로 "잘 잤어요"). 네 개 다 고르는 순간 저장(수정도 누르면 바로 저장)
-- **알림 안내**: 이 기기에서 알림을 안 켠 부원 홈 맨 위에 "알림 켜기 [켜기] [나중에]". 켜기 = 컨디션 오전 8시 · 운동 기록 오후 10시 · 공지(설정에서 바꿈). "나중에"는 이 기기에서 다시 안 뜸(localStorage `snuvt-pushnudge-사용자`). 아이폰 Safari(설치 전)는 "홈 화면에 추가" 안내
+- **홈 맨 위 "오늘 할 것"**(부원): 오늘 피지컬(이름 → 피지컬 화면) · 오늘 팀 훈련(불참 표시 · 공개된 훈련 계획 ›). 홈 아래 큰 칸 4개(훈련 · 피지컬 · 일정 · 대회)는 하단 탭과 같아서 뺌(선수 연결 안 된 관리자만 남김)
+- **아침 컨디션 뺌**(같은 날, 과해서): 설문 · 홈/피지컬 칸 · 팀 현황/주간 요약/리포트/엑셀의 컨디션 칸 · 아침 알림 코드를 모두 지움. 피지컬 회복 버전은 이제 '어제 세션 RPE 9 이상'만 봄(`readiness(lastRpe)`). 예약 작업 `push-hourly`는 저녁 알림만, `push_subs.morning` 기본값 false. `wellness` 표(2줄)는 남겨 둠
+- **알림 안내**: 이 기기에서 알림을 안 켠 부원 홈 맨 위에 "알림 켜기 [켜기] [나중에]". 켜기 = 운동 기록 오후 10시 · 공지(설정에서 바꿈). "나중에"는 이 기기에서 다시 안 뜸(localStorage `snuvt-pushnudge-사용자`). 아이폰 Safari(설치 전)는 "홈 화면에 추가" 안내
 - **앱 오류 기록** `client_errors`(at · user_id · team_id · view · msg · src · stack · ua · ver): 우리 파일에서 난 오류 · 처리 안 된 Promise 오류만, 같은 오류 한 번 · 앱을 켤 때마다 5개까지, 인터넷 끊김 · 확장 프로그램 오류는 뺌. 넣기는 로그인한 본인, 보기는 관리자(`is_coach`)만, 60일 뒤 지움. 확인: `select at, view, msg, src, ver from client_errors order by at desc limit 50;`
 - **주간 스냅샷** `private.snapshots`(taken_at · tbl · n · data jsonb): 예약 작업 `snapshot-weekly`(일 18:30 UTC = 월 03:30 KST)가 `private.take_snapshot()`로 팀 데이터 표 39개를 표마다 jsonb 로 복사, 29일 지난 것은 지움(4주치). 일본 고교 · 알림 구독(push_subs)은 뺌. 앱 API 로는 안 보임(private 스키마). 되살리기 예: `select jsonb_array_elements(data) from private.snapshots where tbl = 'players' order by taken_at desc limit 1;`
 - 코드 정리: 실시간 기록의 "전체 기록"(랠리 흐름 자동 · 자동 넘김 · 단계 표시) · "영상 분석"(서브 종류 · 서브 떨어진 자리 · 영상 링크) 코드와 전력분석의 옛 실시간 목록을 지움(`live.js` 110KB → 100KB), 쓰지 않는 CSS 정리. 테스트 13개(`smoke` · `todo` · `errors` · `lite` 등) 통과

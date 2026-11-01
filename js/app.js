@@ -180,7 +180,7 @@ const state = {
   players: {}, tests: {}, health: {}, logs: {}, inbody: {}, events: null,
   loaded: false, offline: false, admin: false, coach: false, canWrite: null, dirty: false, armed: null,
   session: null, role: null, myPid: null, email: "", profiles: [], authMode: "login", authMsg: "", authErr: false, booting: true,
-  selfPlayer: null, selfHealth: null, editingSelf: false, painChecks: {}, openKeys: {}, wellness: {}, lifts: {}, planCtx: null, teamOff: {}, picks: {}, friendlies: {}, absences: {}, notices: [], entries: {}, ptimes: {}, contacts: {}, edits: [], title: null, staff: false, practice: {}, videos: [], notes: [], opens: {},
+  selfPlayer: null, selfHealth: null, editingSelf: false, painChecks: {}, openKeys: {}, lifts: {}, planCtx: null, teamOff: {}, picks: {}, friendlies: {}, absences: {}, notices: [], entries: {}, ptimes: {}, contacts: {}, edits: [], title: null, staff: false, practice: {}, videos: [], notes: [], opens: {},
 };
 let sb = null;
 
@@ -263,10 +263,7 @@ function viewPid() {
 }
 
 /* ---------- 프로그램 연결 ---------- */
-const wellOf = pid => state.wellness[pid] || [];
 const liftsOf = pid => state.lifts[pid] || [];
-const wellOn = (pid, date) => wellOf(pid).find(w => w.date === date) || null;
-const wellSum = w => w ? WELL_KEYS.reduce((a, [k]) => a + Number(w[k] || 0), 0) : null;
 // 전날 기록 중 가장 높은 RPE
 const lastRpeBefore = (pid, date) => { const y = dAdd(date, -1), r = logsOf(pid).filter(e => e.date === y).map(e => Number(e.rpe)); return r.length ? Math.max(...r) : null; };
 const LIFT_KO = { squat: "백스쿼트", rdl: "RDL", bench: "덤벨 벤치 (한 손)", hip: "힙 쓰러스트", clean: "행 파워 클린" };
@@ -294,7 +291,7 @@ function ctxFor(p, date) {
   const h = state.health[p.id] || {};
   const d = date || iso(today());
   return {
-    ready: { well: wellOn(p.id, d), lastRpe: lastRpeBefore(p.id, d) },
+    ready: { lastRpe: lastRpeBefore(p.id, d) },
     e1rm: e1rmMap(p.id, d), e1rmName: e1rmNameMap(p.id, d), custom: h.custom || {}, edits: state.edits.filter(e => !e.pid || e.pid === p.id),
     pick: (state.picks[p.id] || {})[d] || null,
     player: p, test: latest(p.id),
@@ -1101,16 +1098,13 @@ function viewHome() {
   return `${pendingHtml()}${termPill}<div id="pushNudge"></div>${me ? todoHtml(me) : ""}${noticesHtml()}${myVotesHtml()}<section class="panel home-cal">${calHtml(me)}</section>${todayAbsHtml()}${can("full") || can("training") ? teamStatusHtml() : ""}
     ${!me && state.admin ? `<nav class="tiles-grid" aria-label="기능">${tiles}</nav>` : ""}`;
 }
-// 홈 맨 위: 오늘 할 것 — 아침 컨디션(안 넣었으면 바로 여기서) · 오늘 피지컬 · 오늘 팀 훈련(훈련 계획)
+// 홈 맨 위: 오늘 할 것 — 오늘 피지컬 · 오늘 팀 훈련(훈련 계획). 둘 다 없으면 안 보임
 function todoHtml(me) {
-  const t = iso(today()), w = wellOn(me.id, t), i = infoFor(me.id, t);
+  const t = iso(today()), i = infoFor(me.id, t);
   let plan = null; try { plan = planOn(me, t); } catch (e) { /* 계산 실패 */ }
   const team = isTeamDay(i) ? `<div class="td-row"><span><b>${esc(tdLabel(i))}</b>${i.absent ? ` <span class="chip warn">불참</span>` : ""}</span>${state.practice[t] && state.practice[t].published !== false ? `<button type="button" class="btn link small" data-act="prgo" data-d="${t}">훈련 계획 ›</button>` : ""}</div>` : "";
-  return `<section class="panel todo-card"><div class="row between"><h3>오늘 할 것</h3><span class="small muted">${longDate(today())}</span></div>
-    ${w ? `<div class="td-row"><span>아침 컨디션 <span class="chip ok">${wellSum(w)}/20</span></span><button type="button" class="btn link small" data-act="view" data-v="train">수정 ›</button></div>`
-      : `<div class="td-well"><b>아침 컨디션</b>${wellForm(me, null)}</div>`}
-    ${plan && plan.slot !== "rest" ? `<button type="button" class="td-row td-go" data-act="view" data-v="train"><span>피지컬 · <b>${esc(plan.title)}</b></span><span class="go">›</span></button>` : ""}
-    ${team}</section>`;
+  const phys = plan && plan.slot !== "rest" ? `<button type="button" class="td-row td-go" data-act="view" data-v="train"><span>피지컬 · <b>${esc(plan.title)}</b></span><span class="go">›</span></button>` : "";
+  return phys || team ? `<section class="panel todo-card"><div class="row between"><h3>오늘 할 것</h3><span class="small muted">${longDate(today())}</span></div>${phys}${team}</section>` : "";
 }
 // 피지컬 · 오늘
 function viewTrain() {
@@ -1118,31 +1112,10 @@ function viewTrain() {
   const me = playerOf(state.myPid);
   const parts = [];
   if (state.admin && !me) parts.push(`<section class="panel row between"><div><h3>내 선수 정보가 아직 없어요</h3></div><button class="btn primary" type="button" data-act="editself">내 정보 입력</button></section>`);
-  if (me) parts.push(wellnessHtml(me), todayHtml(me), myStatusHtml(me));
+  if (me) parts.push(todayHtml(me), myStatusHtml(me));
   else if (!state.admin) parts.push(`<div class="panel empty"><strong>계정이 선수와 연결되지 않았어요</strong><span>관리자에게 연결을 요청해 주세요.</span></div>`);
   return parts.join("");
 }
-// 아침 컨디션: 항목마다 5칸 버튼(1 나쁨 → 5 좋음). 4개를 다 고르면 바로 저장 (드롭다운 없이 10초)
-function wellForm(p, w) {
-  const row = (k, l) => { const cur = w ? Number(w[k]) : null;
-    return `<div class="wl-row"><span class="wl-k">${l}<small id="wl-${k}-t">${cur ? WELL_OPTS[k][cur - 1] : ""}</small></span>
-      <div class="wl-pick" role="radiogroup" aria-label="${l}">${[1, 2, 3, 4, 5].map(v => `<label><input type="radio" name="wl-${k}" value="${v}" ${cur === v ? "checked" : ""} aria-label="${WELL_OPTS[k][v - 1]}"><span class="v${v}">${v}</span></label>`).join("")}</div></div>`; };
-  return `<form class="f wl-form" id="wellForm" data-pid="${esc(p.id)}">${WELL_KEYS.map(([k, l]) => row(k, l)).join("")}
-    <p class="small muted wl-hint">1 나쁨 · 5 좋음 · 네 개 다 고르면 저장돼요</p></form>`;
-}
-function wellnessHtml(p) {
-  const t = iso(today()), w = wellOn(p.id, t), why = readiness(w, lastRpeBefore(p.id, t));
-  const key = "well-form";
-  return `<section class="panel well-card">
-    <div class="row between"><h3>아침 컨디션</h3>${w ? `<span class="chip ${why.length ? "warn" : ""}">${wellSum(w)}/20</span>` : why.length ? `<span class="chip warn">가볍게</span>` : ""}</div>
-    ${w ? `<details data-keep="${key}" ${keepOpen(key, false)}><summary class="small muted">수정</summary>${wellForm(p, w)}</details>` : wellForm(p, null)}
-  </section>`;
-}
-document.addEventListener("change", e => {
-  const x = e.target; if (!x || !x.name || !/^wl-/.test(x.name)) return;
-  const f = x.closest("#wellForm"), k = x.name.slice(3), t = document.getElementById(`wl-${k}-t`); if (t) t.textContent = WELL_OPTS[k][Number(x.value) - 1];
-  if (f && WELL_KEYS.every(([kk]) => f.querySelector(`[name="wl-${kk}"]:checked`))) f.requestSubmit();
-});
 // 오늘 할 것: 권장가 표시되고, 눌러서 바꿈 (권장를 다시 누르면 원래대로)
 function picksHtml(plan, pid, date) {
   if (!plan.choices) return "";
@@ -1223,7 +1196,7 @@ function teamStatusHtml() {
     if (pc.length) { const c = pc.at(-1), st = painStage({ d: c.during, m: c.morning, r: c.rest }); why.push([st === 1 ? "crit" : "warn", `${AREA_KO[c.area]} ${c.rest ? "쉴 때도 아픔" : `운동 ${c.during ?? "—"} · 아침 ${c.morning ?? "—"}`} (${md(parseD(c.date))})`]); }
     for (const m of modsFor(p)) if (m.stage <= 2) why.push([m.stage === 1 ? "crit" : "warn", painLabel(m) + (m.fromCheck ? " · 체크" : "")]);
     for (const x of (state.health[p.id] || {}).injuries || []) if (x.status === "rehab") why.push(["", `${injName(x)} 재활 중`]);
-    const rw = readiness(wellOn(p.id, t), lastRpeBefore(p.id, t));
+    const rw = readiness(lastRpeBefore(p.id, t));
     if (rw.length) why.push(["warn", rw.join(" · ")]);
     const sum = m => logsOf(p.id).filter(e => mondayOf(e.date) === m).reduce((s, e) => s + (Number(e.rpe) || 0) * (Number(e.minutes) || 0), 0);
     const a = sum(mon), b = sum(dAdd(mon, -7));
@@ -1234,7 +1207,6 @@ function teamStatusHtml() {
     <h3>팀 현황</h3>
     <div class="stats">
       <div class="stat"><div class="k">오늘 기록</div><div class="v">${loggedToday} / ${ps.length}</div></div>
-      <div class="stat"><div class="k">아침 컨디션</div><div class="v">${ps.filter(p => wellOn(p.id, t)).length} / ${ps.length}</div></div>
       <div class="stat ${watch.length ? "hot" : ""}"><div class="k">확인할 선수</div><div class="v">${watch.length}</div></div>
     </div>
     ${watch.length ? `<ul class="watch">${watch.map(({ p, why }) => `<li><button type="button" class="btn link" data-act="open" data-pid="${esc(p.id)}">${esc(p.name)}</button>${chipsHtml(why)}</li>`).join("")}</ul>` : ""}
@@ -1267,7 +1239,7 @@ function viewReport() {
   return `<section class="sec"><div class="row between"><div class="row"><h2>리포트</h2>${seasonSelect()}</div><button class="btn" type="button" data-act="xlsx">엑셀 내보내기</button></div></section>
     ${weekSummaryHtml()}${ps.length ? teamReportHtml(ps) : ""}`;
 }
-// 지난주 요약 (관리 → 주간 요약): 기록 · 완료율 · 컨디션 · 통증 변화
+// 지난주 요약 (관리 → 주간 요약): 기록 · 완료율 · 통증 변화
 function weekSummaryHtml() {
   const ps = activePlayers(), mon = dAdd(thisMon(), -7), end = dAdd(mon, 6), pm = dAdd(mon, -7);
   const inW = (d, a, b) => d >= a && d <= b;
@@ -1276,24 +1248,21 @@ function weekSummaryHtml() {
     for (let i = 0; i < 7; i++) { try { const x = planOn(p, dAdd(mon, i)); if (x.slot !== "rest" && !x.optional) plan++; } catch (e) { /* 건너뜀 */ } }
     const lg = logsOf(p.id).filter(e => inW(e.date, mon, end)), days = new Set(lg.map(e => e.date)).size;
     const cl = lg.filter(e => e.completion), done = cl.length ? Math.round(100 * cl.reduce((a, e) => a + doneVal(e.completion), 0) / cl.length) : null;
-    const ws = wellOf(p.id).filter(w => inW(w.date, mon, end)).map(wellSum), low = ws.filter(v => v <= WELL_LOW).length;
-    const avg = ws.length ? Math.round(10 * ws.reduce((a, b) => a + b, 0) / ws.length) / 10 : null;
     const peak = (a, b) => { const m = {}; for (const c of checksOf(p.id)) if (inW(c.date, a, b)) m[c.area] = Math.max(m[c.area] ?? 0, Number(c.during) || 0, Number(c.morning) || 0, c.rest ? 7 : 0); return m; };
     const now = peak(mon, end), before = peak(pm, dAdd(mon, -1));
     const up = Object.entries(now).filter(([a, v]) => v >= 3 && v - (before[a] ?? 0) >= 2).map(([a, v]) => `${AREA_KO[a] || a} ${before[a] ?? 0}→${v}`);
-    const flag = { log: plan > 0 && days < plan - 1, done: done != null && done < 70, well: low >= 2 || (avg != null && avg <= WELL_LOW), pain: up.length > 0 };
-    return { p, plan, days, done, ws: ws.length, low, avg, up, flag, n: Object.values(flag).filter(Boolean).length };
+    const flag = { log: plan > 0 && days < plan - 1, done: done != null && done < 70, pain: up.length > 0 };
+    return { p, plan, days, done, up, flag, n: Object.values(flag).filter(Boolean).length };
   }).sort((a, b) => b.n - a.n);
   const c = (f, t) => `<td class="num ${f ? "cell-warn" : ""}">${t}</td>`;
   const tr = r => `<tr><td><button type="button" class="btn link" data-act="open" data-pid="${esc(r.p.id)}">${esc(r.p.name)}</button></td>
     ${c(r.flag.log, `${r.days}/${r.plan}`)}${c(r.flag.done, r.done != null ? r.done + "%" : "—")}
-    ${c(r.flag.well, r.ws ? `${r.avg}${r.low ? ` <span class="small">낮음 ${r.low}</span>` : ""}` : `<span class="small">없음</span>`)}
     ${c(r.flag.pain, r.up.length ? `<span class="small">${esc(r.up.join(", "))}</span>` : "—")}</tr>`;
-  const head = `<thead><tr><th>선수</th><th>기록</th><th>완료율</th><th>컨디션</th><th>통증↑</th></tr></thead>`;
+  const head = `<thead><tr><th>선수</th><th>기록</th><th>완료율</th><th>통증↑</th></tr></thead>`;
   const hot = rows.filter(r => r.n), rest = rows.filter(r => !r.n);
   return `<section class="panel wk-sum">
     <div class="row between"><h3>지난주 요약</h3><span class="small muted">${md(parseD(mon))} – ${md(parseD(end))}</span></div>
-    <div class="row small"><span class="chip ${rows.some(r => r.flag.log) ? "warn" : ""}">기록 부족 ${rows.filter(r => r.flag.log).length}</span><span class="chip ${rows.some(r => r.flag.well) ? "warn" : ""}">컨디션 낮음 ${rows.filter(r => r.flag.well).length}</span><span class="chip ${rows.some(r => r.flag.pain) ? "crit" : ""}">통증 늘어남 ${rows.filter(r => r.flag.pain).length}</span></div>
+    <div class="row small"><span class="chip ${rows.some(r => r.flag.log) ? "warn" : ""}">기록 부족 ${rows.filter(r => r.flag.log).length}</span><span class="chip ${rows.some(r => r.flag.pain) ? "crit" : ""}">통증 늘어남 ${rows.filter(r => r.flag.pain).length}</span></div>
     ${hot.length ? `<div class="tw"><table>${head}<tbody>${hot.map(tr).join("")}</tbody></table></div>` : `<p class="small muted">걸리는 선수 없어요</p>`}
     ${rest.length ? `<details><summary class="small muted">나머지 ${rest.length}명</summary><div class="tw"><table>${head}<tbody>${rest.map(tr).join("")}</tbody></table></div></details>` : ""}
     
@@ -1512,10 +1481,9 @@ function growthRows(pid, weight) {
 }
 function adherence(pid, days = 28) {
   const from = iso(addDays(today(), -days));
-  const ws = wellOf(pid).filter(w => w.date >= from).map(wellSum);
   const lg = logsOf(pid).filter(e => e.date >= from && e.completion);
   const done = lg.length ? Math.round(100 * lg.reduce((a, e) => a + doneVal(e.completion), 0) / lg.length) : null;
-  return { well: ws.length ? Math.round(10 * ws.reduce((a, b) => a + b, 0) / ws.length) / 10 : null, wellN: ws.length, done, logs: logsOf(pid).filter(e => e.date >= from).length };
+  return { done, logs: logsOf(pid).filter(e => e.date >= from).length };
 }
 const LOWER_BETTER = new Set(["5-10-5"]); // 기록이 줄어야 좋은 것
 function reportHtml(p) {
@@ -1525,7 +1493,6 @@ function reportHtml(p) {
     <div class="stats">
       <div class="stat"><div class="k">최근 4주 세션</div><div class="v">${a.logs}</div></div>
       <div class="stat"><div class="k">완료율</div><div class="v">${a.done != null ? a.done + "%" : "—"}</div></div>
-      <div class="stat"><div class="k">아침 컨디션 평균</div><div class="v">${a.well != null ? a.well + "/20" : "—"}</div></div>
     </div>
     ${rows.length ? `<div class="tw"><table><thead><tr><th>항목</th><th>처음</th><th>지금</th><th>변화</th></tr></thead><tbody>
       ${rows.map(([n, x, y, u]) => `<tr><td>${esc(n)}</td><td class="num">${x}${u}</td><td class="num">${y}${u}</td><td class="num">${d(x, y, n)}</td></tr>`).join("")}
@@ -1742,12 +1709,11 @@ const XL_COLS = {
     bal_l: "한 발 서기 왼", bal_r: "한 발 서기 오른", hop_l: "한 발 홉 왼", hop_r: "한 발 홉 오른", ktw_l: "무릎 벽 왼", ktw_r: "무릎 벽 오른",
     ir_d: "내회전 주손", ir_n: "내회전 반대손", er_d: "외회전 주손", er_n: "외회전 반대손", hs_stage: "핸드스탠드 단계", hs_sec: "핸드스탠드(초)", hs_walk: "핸드스탠드 걷기" },
   logs: { date: "날짜", type: "종류", minutes: "분", rpe: "RPE", completion: "완료율", jumps: "점프 수", pain_area: "통증 부위", pain: "통증", note: "메모" },
-  wellness: { date: "날짜", sleep: "수면", fatigue: "피로", soreness: "근육통", mood: "기분·스트레스" },
   lift_sets: { date: "날짜", name: "운동", kg: "kg", reps: "반복", rir: "RIR" },
   pain_checks: { date: "날짜", area: "부위", during: "운동 중", morning: "다음 날 아침", rest: "쉴 때도", note: "메모" },
   absences: { date: "날짜", reason: "사유", note: "메모" },
 };
-const XL_SHEETS = [["absences", "불참"], ["tests", "측정"], ["logs", "세션 기록"], ["wellness", "컨디션"], ["lift_sets", "무게"], ["pain_checks", "통증"]];
+const XL_SHEETS = [["absences", "불참"], ["tests", "측정"], ["logs", "세션 기록"], ["lift_sets", "무게"], ["pain_checks", "통증"]];
 function loadScript(src) {
   return new Promise((ok, no) => { const el = document.createElement("script"); el.src = src; el.onload = ok; el.onerror = no; document.head.appendChild(el); });
 }
@@ -1789,9 +1755,9 @@ async function exportXlsx(sy) {
 function teamReportHtml(ps) {
   const ch = (rows, n) => { const r = rows.find(x => x[0] === n); if (!r) return "—"; const v = Math.round((r[2] - r[1]) * 10) / 10; return `${r[2]} <small class="${(LOWER_BETTER.has(n) ? v > 0 : v < 0) ? "neg" : ""}">${v > 0 ? "+" : ""}${v}</small>`; };
   return `<section class="sec"><h3>선수별 리포트 <span class="small muted">최근 4주</span></h3>
-    <div class="tw"><table><thead><tr><th>선수</th><th>컨디션</th><th>완료율</th><th>세션</th><th>맥스 버티컬</th><th>스쿼트 1RM</th><th>사이드 스텝</th></tr></thead><tbody>
+    <div class="tw"><table><thead><tr><th>선수</th><th>완료율</th><th>세션</th><th>맥스 버티컬</th><th>스쿼트 1RM</th><th>사이드 스텝</th></tr></thead><tbody>
     ${ps.map(p => { const a = adherence(p.id), g = growthRows(p.id, p.weight);
-      return `<tr><td>${esc(p.name)} <span class="chip pos">${esc(p.pos)}</span></td><td class="num ${a.well != null && a.well <= WELL_LOW ? "cell-warn" : ""}">${a.well ?? "—"}</td><td class="num">${a.done != null ? a.done + "%" : "—"}</td><td class="num">${a.logs}</td>
+      return `<tr><td>${esc(p.name)} <span class="chip pos">${esc(p.pos)}</span></td><td class="num">${a.done != null ? a.done + "%" : "—"}</td><td class="num">${a.logs}</td>
         <td class="num">${ch(g, "맥스 버티컬")}</td><td class="num">${ch(g, `${LIFT_KO.squat} 추정 1RM`)}</td><td class="num">${ch(g, "사이드 스텝")}</td></tr>`; }).join("")}
     </tbody></table></div></section>`;
 }
@@ -3006,7 +2972,7 @@ document.addEventListener("click", async ev => {
   if (act === "pwchange") { closeSettings(); state.recovery = true; state.dirty = false; return render(); }
   if (act === "cancelpw") { state.recovery = false; state.dirty = false; return render(); }
   if (act === "leave") {
-    if (!await confirmDel("팀에서 탈퇴할까요?\n계정, 연락처·키·몸무게, 측정·운동 기록, 컨디션·통증, 훈련 노트가 모두 지워지고 되돌릴 수 없어요.")) return;
+    if (!await confirmDel("팀에서 탈퇴할까요?\n계정, 연락처·키·몸무게, 측정·운동 기록, 통증, 훈련 노트가 모두 지워지고 되돌릴 수 없어요.")) return;
     const r = await sb.rpc("leave_team");
     if (r.error) { toast(r.error.code === "42501" ? r.error.message : failMsg(r.error)); return; }
     closeSettings(); lsDel(snapKey()); jpCacheDel(); try { await sb.auth.signOut({ scope: "local" }); } catch (e) {} toast("탈퇴했어요. 그동안 고마웠어요"); return;
@@ -3188,7 +3154,7 @@ document.addEventListener("click", async ev => {
   }
   if (act === "xlsx") return exportXlsx(state.repSy || seasonRange().sy);
   if (act === "pushon") return pushOn();
-  if (act === "nudgeon") return pushOn({ m: true, e: true, nt: true, mh: 8, eh: 22 });
+  if (act === "nudgeon") return pushOn({ e: true, nt: true, eh: 22 });
   if (act === "nudgeoff") { lsSet(NUDGE_KEY(), 1); return pushNudge(); }
   if (act === "pushoff") return pushOff();
   if (act === "rolepick") { closeDrawer(); closeSettings(); return openRolePick(); }
@@ -3603,13 +3569,6 @@ document.addEventListener("submit", async ev => {
       const r = f.querySelector('input[name="abs-r"]:checked');
       ok(await sb.from("absences").upsert({ player_id: state.myPid, date: f.dataset.date, reason: r ? r.value : "etc", note: txt("abs-note") || null, author: uid() }, { onConflict: "player_id,date" }));
       closeSheet(); toast("불참을 냈어요");
-    } else if (f.id === "wellForm") {
-      const row = { player_id: f.dataset.pid, date: iso(today()) };
-      for (const [k] of WELL_KEYS) row[k] = Number((f.querySelector(`[name="wl-${k}"]:checked`) || {}).value || 3);
-      row.stress = row.mood; // 기분·스트레스를 한 문항으로
-      state.openKeys["well-form"] = false;
-      await dbWrite("wellness", "upsert", row, { onConflict: "player_id,date" });
-      toast(readiness(row, lastRpeBefore(f.dataset.pid, row.date)).length ? "저장했어요 · 오늘은 회복 버전" : "저장했어요");
     }
     state.dirty = false;
     if (f.dataset.close) closeSheet();
@@ -3670,7 +3629,7 @@ async function loadSelf() {
 }
 /* ---------- 오프라인 ----------
  * 마지막으로 불러온 데이터를 이 기기에 저장해 두고(로그아웃하면 지움), 연결이 없으면 그걸로 화면을 보여 준다.
- * 연결이 없을 때 저장한 기록(세션·통증·컨디션·세트·코어·측정)은 이 기기에 모아 뒀다가 연결되면 올린다. */
+ * 연결이 없을 때 저장한 기록(세션·통증·세트·코어·측정)은 이 기기에 모아 뒀다가 연결되면 올린다. */
 const uid = () => (state.session && state.session.user && state.session.user.id) || "anon";
 const lsGet = k => { try { return JSON.parse(localStorage.getItem(k) || "null"); } catch (e) { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
@@ -3717,7 +3676,6 @@ function withQueued(raw) {
     if (!Array.isArray(out[it.table])) return;
     const row = { id: "q" + i, created_at: new Date(it.at).toISOString(), author: uid(), ...it.row };
     let arr = out[it.table];
-    if (it.table === "wellness") arr = arr.filter(r => !(r.player_id === row.player_id && r.date === row.date));
     out[it.table] = [...arr, row];
   });
   return out;
@@ -3751,7 +3709,6 @@ async function loadAll(soft) {
       sb.from("logs").select("*").order("date"),
       sb.from("pain_checks").select("*").order("date"),
       sb.from("events").select("*").order("start_date"),
-      sb.from("wellness").select("*").order("date"),
       sb.from("lift_sets").select("*").order("date"),
       sb.from("team_off").select("*"),
       sb.from("day_picks").select("*"),
@@ -3781,11 +3738,11 @@ async function loadAll(soft) {
     ];
     if (state.coach) q.push(sb.from("profiles").select("*").order("created_at"));
     const res = await Promise.all(q);
-    const [pl, ts, hl, lg, pcs, evq, wq, lq, toq, dpq, frq, abq, nq, enq, ptq, ctq, peq, pvq, ppq, vdq, tnq, osq, ovq, vtq, cuq, ctmq, cmq, caq, cpq, tmq, gcq, gvq, glq] = res, pr = state.coach ? res[33] : null;
+    const [pl, ts, hl, lg, pcs, evq, lq, toq, dpq, frq, abq, nq, enq, ptq, ctq, peq, pvq, ppq, vdq, tnq, osq, ovq, vtq, cuq, ctmq, cmq, caq, cpq, tmq, gcq, gvq, glq] = res, pr = state.coach ? res[32] : null;
     for (const r of [pl, ts, hl, lg]) if (r.error) throw r.error;
     const rows = r => r && !r.error && Array.isArray(r.data) ? r.data : [];
     raw = { players: pl.data, tests: ts.data, health: hl.data, logs: lg.data, pain_checks: rows(pcs), events: evq && !evq.error ? evq.data : null,
-      wellness: rows(wq), lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), notices: rows(nq), entries: rows(enq), practice_times: rows(ptq), player_contacts: rows(ctq), program_edits: rows(peq), player_private: rows(pvq), practice_plans: rows(ppq), videos: rows(vdq), training_notes: rows(tnq), open_sessions: rows(osq), open_votes: rows(ovq), event_votes: rows(vtq), cups: rows(cuq), cup_teams: rows(ctmq), cup_matches: rows(cmq), cup_avail: rows(caq), cup_photos: rows(cpq), terms: rows(tmq), guest_cal: gcq && !gcq.error ? gcq.data : null, guest_votes: rows(gvq), guest_list: rows(glq), profiles: pr && !pr.error ? pr.data : [],
+      lift_sets: rows(lq), team_off: rows(toq), day_picks: rows(dpq), friendlies: rows(frq), absences: rows(abq), notices: rows(nq), entries: rows(enq), practice_times: rows(ptq), player_contacts: rows(ctq), program_edits: rows(peq), player_private: rows(pvq), practice_plans: rows(ppq), videos: rows(vdq), training_notes: rows(tnq), open_sessions: rows(osq), open_votes: rows(ovq), event_votes: rows(vtq), cups: rows(cuq), cup_teams: rows(ctmq), cup_matches: rows(cmq), cup_avail: rows(caq), cup_photos: rows(cpq), terms: rows(tmq), guest_cal: gcq && !gcq.error ? gcq.data : null, guest_votes: rows(gvq), guest_list: rows(glq), profiles: pr && !pr.error ? pr.data : [],
       me: { role: state.role, player_id: state.myPid, team: TEAM.id, super: !!state.superAdmin, teamObj: { id: TEAM.id, label: TEAM.label, net: TEAM.net, swap: TEAM.swap } } };
     // 기기에 남기는 사본에는 연락처와 다른 사람 키·몸무게를 넣지 않음
     lsSet(snapKey(), { ...raw, training_notes: (raw.training_notes || []).filter(r => r.player_id === state.myPid), player_contacts: (raw.player_contacts || []).filter(r => r.player_id === state.myPid), player_private: (raw.player_private || []).filter(r => r.player_id === state.myPid) }); state.net = true;
@@ -3801,9 +3758,6 @@ async function loadAll(soft) {
 }
 function buildState(raw) {
   const n = v => v == null ? null : Number(v);
-  const wel = {};
-  for (const r of raw.wellness || []) (wel[r.player_id] = wel[r.player_id] || []).push({ id: r.id, date: r.date, sleep: r.sleep, fatigue: r.fatigue, soreness: r.soreness, stress: r.stress, mood: r.mood });
-  state.wellness = wel;
   const lif = {};
   for (const r of raw.lift_sets || []) (lif[r.player_id] = lif[r.player_id] || []).push({ id: r.id, date: r.date, name: r.name, lift: r.lift, kg: Number(r.kg), reps: r.reps, rir: r.rir, author: r.author, created: r.created_at });
   state.lifts = lif;
@@ -3887,7 +3841,7 @@ function buildState(raw) {
   pushRefresh();
 }
 /* ---------- 알림 (휴대폰 웹 푸시) ----------
- * 아침 8시: 컨디션을 아직 안 넣었으면 · 밤 10시: 운동 있는 날 기록이 없으면 (서버 예약 작업이 보냄)
+ * 밤 10시: 운동 있는 날 기록이 없으면 (서버 예약 작업이 보냄) · 새 공지
  * 운동 있는 날은 앱이 앞으로 4주치를 계산해 하루 한 번 올려 둠 */
 const pushOk = () => typeof navigator !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window && location.protocol === "https:";
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
@@ -3913,21 +3867,21 @@ async function fillPushBox() {
   else if (Notification.permission === "denied") msg = "알림이 차단돼 있어요. 휴대폰 설정에서 이 앱(사이트) 알림을 허용해 주세요.";
   else {
     const sub = await pushSub().catch(() => null);
-    if (sub) { const r = await sb.from("push_subs").select("morning,evening,notice,morning_at,evening_at").eq("endpoint", sub.endpoint).maybeSingle(); row = r.data || null; }
+    if (sub) { const r = await sb.from("push_subs").select("evening,notice,evening_at").eq("endpoint", sub.endpoint).maybeSingle(); row = r.data || null; }
   }
   const el = document.getElementById("pushBox"); if (!el) return;
   const on = !!row, hours = (id, from, to, cur) => `<select id="${id}" class="hour-sel" aria-label="시간">${Array.from({ length: to - from + 1 }, (_, i) => from + i).map(h => `<option value="${h}" ${h === cur ? "selected" : ""}>${h < 12 ? "오전" : "오후"} ${h % 12 || 12}시</option>`).join("")}</select>`;
   const rowH = (id, v, l, sub, sel) => `<div class="push-row"><label class="check"><input type="checkbox" id="${id}" ${v ? "checked" : ""}> <span><b>${l}</b><span class="small muted">${sub}</span></span></label>${sel || ""}</div>`;
   el.innerHTML = msg ? `<p class="small">${esc(msg)}</p>` : `
-    <div class="push-rows">${rowH("pu-m", on ? row.morning : true, "컨디션", "아직 안 넣었을 때만", hours("pu-mh", 5, 12, on ? row.morning_at ?? 8 : 8))}${rowH("pu-e", on ? row.evening : true, "운동 기록", "운동 있는 날, 안 남겼을 때만", hours("pu-eh", 17, 23, on ? row.evening_at ?? 22 : 22))}${rowH("pu-n", on ? row.notice !== false : true, "공지", "새 공지가 올라오면 바로")}</div>
+    <div class="push-rows">${rowH("pu-e", on ? row.evening : true, "운동 기록", "운동 있는 날, 안 남겼을 때만", hours("pu-eh", 17, 23, on ? row.evening_at ?? 22 : 22))}${rowH("pu-n", on ? row.notice !== false : true, "공지", "새 공지가 올라오면 바로")}</div>
     <div class="row"><button class="btn primary" type="button" data-act="pushon">${on ? "저장" : "알림 켜기"}</button>${on ? `<button class="btn" type="button" data-act="pushoff">끄기</button>` : ""}</div>
     <p class="small muted">${on ? "이 기기에서 알림을 받고 있어요." : "기기마다 따로 켜요."}</p>`;
 }
-// o 가 없으면 설정 창의 칸에서, 홈 안내에서 켜면 기본값(컨디션 오전 8시 · 운동 기록 오후 10시 · 공지)
+// o 가 없으면 설정 창의 칸에서, 홈 안내에서 켜면 기본값(운동 기록 오후 10시 · 공지)
 async function pushOn(o) {
   const g = id => document.getElementById(id);
-  o = o || { m: g("pu-m").checked, e: g("pu-e").checked, nt: g("pu-n").checked, mh: Number(g("pu-mh").value), eh: Number(g("pu-eh").value) };
-  const { m, e, nt, mh, eh } = o;
+  o = o || { e: g("pu-e").checked, nt: g("pu-n").checked, eh: Number(g("pu-eh").value) };
+  const { e, nt, eh } = o;
   const perm = await Notification.requestPermission();
   if (perm !== "granted") { toast("알림이 허용되지 않았어요"); return fillPushBox(); }
   try {
@@ -3939,10 +3893,10 @@ async function pushOn(o) {
       sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u(k.data) });
     }
     const j = sub.toJSON();
-    const r = await sb.from("push_subs").upsert({ endpoint: sub.endpoint, user_id: uid(), player_id: state.myPid, p256dh: j.keys.p256dh, auth: j.keys.auth, morning: m, evening: e, notice: nt, morning_at: mh, evening_at: eh, train_days: trainDays(state.myPid), updated_at: new Date().toISOString() }, { onConflict: "endpoint" });
+    const r = await sb.from("push_subs").upsert({ endpoint: sub.endpoint, user_id: uid(), player_id: state.myPid, p256dh: j.keys.p256dh, auth: j.keys.auth, morning: false, evening: e, notice: nt, evening_at: eh, train_days: trainDays(state.myPid), updated_at: new Date().toISOString() }, { onConflict: "endpoint" });
     if (r.error) throw r.error;
     lsSet(PUSH_DAY(), iso(today())); nudge.st = "none";
-    toast(m || e || nt ? "알림을 켰어요" : "알림을 모두 껐어요");
+    toast(e || nt ? "알림을 켰어요" : "알림을 모두 껐어요");
     fillPushBox(); pushNudge();
   } catch (err) { toast("알림을 켜지 못했어요. 잠시 뒤 다시 해 주세요"); }
 }
@@ -3968,7 +3922,7 @@ async function pushNudge() {
     st = nudge.st;
   }
   const el = document.getElementById("pushNudge"); if (!el) return;
-  el.innerHTML = st === "ask" ? `<section class="panel nudge"><div><b>알림 켜기</b><span class="small muted">투표 · 공지 · 아침 컨디션을 놓치지 않게 알려 드려요</span></div><div class="row nowrap"><button class="btn primary small" type="button" data-act="nudgeon">켜기</button><button class="btn link small" type="button" data-act="nudgeoff">나중에</button></div></section>`
+  el.innerHTML = st === "ask" ? `<section class="panel nudge"><div><b>알림 켜기</b><span class="small muted">공지 · 운동 기록을 놓치지 않게 알려 드려요</span></div><div class="row nowrap"><button class="btn primary small" type="button" data-act="nudgeon">켜기</button><button class="btn link small" type="button" data-act="nudgeoff">나중에</button></div></section>`
     : st === "ios" ? `<section class="panel nudge"><div><b>알림을 받으려면</b><span class="small muted">Safari 공유 버튼 → '홈 화면에 추가'로 설치한 뒤 그 앱에서 열어 주세요</span></div><button class="btn link small" type="button" data-act="nudgeoff">알겠어요</button></section>` : "";
 }
 // 하루 한 번: 앞으로 4주 운동 있는 날 갱신
