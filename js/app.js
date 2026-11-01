@@ -1099,11 +1099,12 @@ function viewHome() {
     ${!me && state.admin ? `<nav class="tiles-grid" aria-label="기능">${tiles}</nav>` : ""}`;
 }
 // 홈 맨 위: 오늘 할 것 — 오늘 피지컬 · 오늘 팀 훈련(훈련 계획). 둘 다 없으면 안 보임
+// 피지컬이 그날 팀 훈련·교류전 그 자체면(같은 일정) 한 줄만 보임
 function todoHtml(me) {
   const t = iso(today()), i = infoFor(me.id, t);
   let plan = null; try { plan = planOn(me, t); } catch (e) { /* 계산 실패 */ }
   const team = isTeamDay(i) ? `<div class="td-row"><span><b>${esc(tdLabel(i))}</b>${i.absent ? ` <span class="chip warn">불참</span>` : ""}</span>${state.practice[t] && state.practice[t].published !== false ? `<button type="button" class="btn link small" data-act="prgo" data-d="${t}">훈련 계획 ›</button>` : ""}</div>` : "";
-  const phys = plan && plan.slot !== "rest" ? `<button type="button" class="td-row td-go" data-act="view" data-v="train"><span>피지컬 · <b>${esc(plan.title)}</b></span><span class="go">›</span></button>` : "";
+  const phys = plan && plan.slot !== "rest" && !(team && plan.slot === i.slot) ? `<button type="button" class="td-row td-go" data-act="view" data-v="train"><span>피지컬 · <b>${esc(plan.title)}</b></span><span class="go">›</span></button>` : "";
   return phys || team ? `<section class="panel todo-card"><div class="row between"><h3>오늘 할 것</h3><span class="small muted">${longDate(today())}</span></div>${phys}${team}</section>` : "";
 }
 // 피지컬 · 오늘

@@ -386,6 +386,7 @@ tests/                  화면 테스트 (Playwright · 가짜 Supabase, 7절)
 - **주간 스냅샷** `private.snapshots`(taken_at · tbl · n · data jsonb): 예약 작업 `snapshot-weekly`(일 18:30 UTC = 월 03:30 KST)가 `private.take_snapshot()`로 팀 데이터 표 38개를 표마다 jsonb 로 복사, 29일 지난 것은 지움(4주치). 일본 고교 · 알림 구독(push_subs)은 뺌. 앱 API 로는 안 보임(private 스키마). 되살리기 예: `select jsonb_array_elements(data) from private.snapshots where tbl = 'players' order by taken_at desc limit 1;`
 - 코드 정리: 실시간 기록의 "전체 기록"(랠리 흐름 자동 · 자동 넘김 · 단계 표시) · "영상 분석"(서브 종류 · 서브 떨어진 자리 · 영상 링크) 코드와 전력분석의 옛 실시간 목록을 지움(`live.js` 110KB → 100KB), 쓰지 않는 CSS 정리. 테스트 13개(`smoke` · `todo` · `errors` · `lite` 등) 통과
 - 홈 달력 날짜를 누르면 날짜가 두 번 나오던 것 고침
+- 홈 "오늘 할 것": 그날 피지컬이 팀 훈련·교류전 그 자체면 피지컬 줄은 빼고 한 줄만(예: 경희대와 교류전이 두 번 나오던 것). 피지컬 화면에는 그대로 보임 (11-02)
 
 ## 정리·최적화 (2026-10-31)
 - **앱 시작**: 이 기기에 저장해 둔 화면 자료(로그인한 사람별)가 있으면 먼저 그걸로 바로 그리고, 뒤에서 새로 받아 조용히 바꿔요. 저장본으로 그렸는데 권한이 없어졌으면 저장본을 지우고 처음부터.

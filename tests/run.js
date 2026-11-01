@@ -11,10 +11,10 @@ const NOW = new Date("2026-11-01T10:00:00+09:00");
 const VIEWS = ["home", "practice", "notes", "video", "jp", "scout", "train", "plan", "rec", "season", "comps", "cup", "fr", "campus", "sched", "report", "roster", "intake"];
 const TYPES = { js: "text/javascript", html: "text/html", css: "text/css", png: "image/png", webmanifest: "application/manifest+json", json: "application/json" };
 
-async function openApp(browser, role, { width = 390, height = 844 } = {}) {
+async function openApp(browser, role, { width = 390, height = 844, now = NOW } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height }, serviceWorkers: "block" });
   const page = await ctx.newPage(), errs = [], missing = [];
-  await page.clock.setFixedTime(NOW);
+  await page.clock.setFixedTime(now);
   await page.route("**/*", r => {
     const u = new URL(r.request().url());
     if (u.hostname === "cdn.jsdelivr.net" && u.pathname.includes("supabase")) return r.fulfill({ body: mockScript(role), contentType: "text/javascript" });
@@ -168,6 +168,15 @@ const SUITES = {
     await a.go("train");
     assert.doesNotMatch(await a.text("main"), /아침 컨디션/);
     clean(a); await a.ctx.close();
+    // 교류전 날: 홈 '오늘 할 것'에는 교류전 한 줄만 (피지컬 줄과 겹치지 않게), 피지컬 화면에는 그대로
+    const c = await openApp(b, "coach", { now: new Date("2026-11-08T10:00:00+09:00") });
+    await c.go("home");
+    const td = await c.text(".todo-card");
+    assert.strictEqual((td.match(/연세대와 교류전/g) || []).length, 1, td);
+    assert.strictEqual(await c.page.$$eval(".todo-card .td-row", x => x.length), 1);
+    await c.go("train");
+    assert.match(await c.text("main"), /연세대와 교류전/);
+    clean(c); await c.ctx.close();
   },
   // 앱 오류 기록: 우리 파일에서 난 오류는 client_errors 에 한 번만 (같은 오류 두 번이어도 하나)
   async errors(b) {
