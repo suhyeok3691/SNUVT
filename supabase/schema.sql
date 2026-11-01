@@ -2374,3 +2374,33 @@ select cron.schedule('snapshot-weekly', '30 18 * * 0', $$select private.take_sna
 -- 2026-11-01 아침 컨디션 뺌: 아침 알림 끄기 (wellness 표는 남겨 둠)
 select cron.schedule('push-hourly','0 * * * *', $$select private.push_call('evening');$$);
 alter table public.push_subs alter column morning set default false;
+
+-- 2026-11-01 wellness 참조 빼기 (적용됨). 표 삭제(drop table public.wellness)와 take_snapshot 목록 정리는 아직: 백업 함수는 없는 표를 건너뜀
+CREATE OR REPLACE FUNCTION private.wipe_personal(pid uuid)
+ RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path TO ''
+AS $function$
+begin
+  delete from public.player_contacts where player_id = pid;
+  delete from public.player_private where player_id = pid;
+  delete from public.health where player_id = pid;
+  delete from public.training_notes where player_id = pid;
+  delete from public.pain_checks where player_id = pid;
+  delete from public.absences where player_id = pid;
+  delete from public.program_edits where player_id = pid;
+  delete from public.day_picks where player_id = pid;
+  delete from public.open_votes where player_id = pid;
+  delete from public.event_votes where player_id = pid;
+  delete from public.push_subs where player_id = pid or user_id in (select id from public.profiles where player_id = pid);
+  update public.players set height = null, weight = null, adjust = '{}'::jsonb where id = pid;
+end $function$;
+CREATE OR REPLACE FUNCTION public.push_targets(kind text)
+ RETURNS TABLE(endpoint text, p256dh text, auth text) LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO ''
+AS $function$
+  with t as (select (now() at time zone 'Asia/Seoul')::date as d, extract(hour from now() at time zone 'Asia/Seoul')::int as h)
+  select s.endpoint, s.p256dh, s.auth from public.push_subs s, t
+  where case kind
+    when 'evening' then s.player_id is not null and s.evening and s.evening_at = t.h and t.d = any(s.train_days)
+      and not exists (select 1 from public.logs l where l.player_id = s.player_id and l.date = t.d)
+    when 'notice' then s.notice
+    else false end
+$function$;
