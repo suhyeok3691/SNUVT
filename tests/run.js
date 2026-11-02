@@ -105,35 +105,37 @@ const SUITES = {
     assert.deepStrictEqual((await c.writes("friendlies"))[0][2].vote_to, ["p2"]);
     clean(c); await c.ctx.close();
   },
-  // 전력분석 명단·로테: S ↔ OP 맞바꿈, OH ↔ MB 순서 바꾸기(두 번 누르면 원래대로), 명단 번호 고치면 코트도 (다른 팀 = 번호 입력 방식)
+  // 실시간 라인업 (전력분석 Edit Lineup 처럼): 두 팀 한 창, SNU 는 명단 포지션으로 자동 배치된 채로 열림, 교류전 상대는 이름표 → 번호로 바꿔 저장
   async rotation(b) {
     const a = await openApp(b, "coach"), p = a.page;
-    const ok = await p.evaluate(() => {
-      document.getElementById("sheet").querySelector(".sheet-body").innerHTML = `<form id="lvRosForm"><div class="lvr-list" id="lvrList"></div>${[1, 2, 3, 4, 5, 6].map(z => `<input class="lvr-c" data-z="${z}">`).join("")}</form>`;
-      const tag = ["S1", "OH1", "MB1", "OP1", "OH2", "MB2"];
-      tag.forEach((v, i) => { document.querySelector(`.lvr-c[data-z="${i + 1}"]`).value = v; });
-      try { lvRosInfo = () => {}; } catch (e) {}
-      lvRosSwap("S|OP");
-      return [1, 2, 3, 4, 5, 6].map(z => document.querySelector(`.lvr-c[data-z="${z}"]`).value).join(" ");
-    });
-    assert.strictEqual(ok, "OP1 OH1 MB1 S1 OH2 MB2");
-    const ord = await p.evaluate(() => {
-      const tag = ["S1", "OH1", "MB1", "OP1", "OH2", "MB2"], read = () => [1, 2, 3, 4, 5, 6].map(z => document.querySelector(`.lvr-c[data-z="${z}"]`).value).join(" ");
-      tag.forEach((v, i) => { document.querySelector(`.lvr-c[data-z="${i + 1}"]`).value = v; });
-      lvRosSwap("OH~MB"); const one = read(); lvRosSwap("OH~MB"); return [one, read()];
-    });
-    assert.deepStrictEqual(ord, ["S1 MB1 OH1 OP1 MB2 OH2", "S1 OH1 MB1 OP1 OH2 MB2"]);
-    // 명단에서 번호를 고치면 코트 · 리베로 칸도 같이 (치는 중 "1" → "12" 도 따라감), 저장할 때 {옛: 새}
-    const ren = await p.evaluate(() => {
-      const f = document.getElementById("lvRosForm");
-      f.innerHTML = ["OH1", "MB1", "Li"].map(no => lvRosRow({ no, pos: "" })).join("") + [1, 2, 3, 4, 5, 6].map(z => `<input class="lvr-c" data-z="${z}">`).join("") + `<input id="lvrLib">`;
-      ["S1", "OH1", "MB1", "OP1", "OH2", "MB2"].forEach((v, i) => { f.querySelector(`.lvr-c[data-z="${i + 1}"]`).value = v; }); f.querySelector("#lvrLib").value = "Li";
-      const n = f.querySelectorAll(".lvr-n");
-      for (const v of ["", "1", "12"]) { n[0].value = v; lvRosRename(n[0]); }
-      n[2].value = "7"; lvRosRename(n[2]);
-      return { court: [1, 2, 3, 4, 5, 6].map(z => f.querySelector(`.lvr-c[data-z="${z}"]`).value).join(" "), lib: f.querySelector("#lvrLib").value, map: lvRosRenames(f) };
-    });
-    assert.deepStrictEqual(ren, { court: "S1 12 MB1 OP1 OH2 MB2", lib: "7", map: { OH1: "12", Li: "7" } });
+    await p.evaluate(() => { // 부원 6명 더 (자동 배치가 되게)
+      [["p3", "김OH", "OH"], ["p4", "박OH", "OH"], ["p5", "이MB", "MB"], ["p6", "정OP", "OP"], ["p7", "한L", "L"], ["p8", "오S", "S"]].forEach(([id, name, pos], i) => { state.players[id] = { name, pos, number: 20 + i }; });
+      lvForm("friendly:f1"); });
+    await p.waitForTimeout(200);
+    await p.click("#lvForm button[type=submit]"); await p.waitForTimeout(300);
+    await a.go("fr"); await p.evaluate(() => { cupState().key = "friendly:f1"; state.live.open = (lv().games["friendly:f1"] || [])[0]?.id; state.dirty = false; render(); }); await p.waitForTimeout(400);
+    assert.ok(await p.$('[data-act="lvros"]'), "라인업 버튼");
+    assert.strictEqual(await p.$('[data-act="lvswap"], [data-act="lvauto"]'), null, "옛 명단 · 로테 도구 없음");
+    await p.click('[data-act="lvros"]'); await p.waitForTimeout(200);
+    const f = await p.evaluate(() => ({ us: [1, 2, 3, 4, 5, 6].map(z => document.getElementById(`lvl-us-${z}`).value), lib: document.getElementById("lvl-us-l").value,
+      opp: [1, 2, 3, 4, 5, 6].map(z => document.getElementById(`lvl-opp-${z}`).value), opos: document.getElementById("lvp-opp-1").value }));
+    assert.ok(f.us.every(Boolean) && new Set(f.us).size === 6, "SNU 6자리 자동 " + f.us);
+    assert.strictEqual(f.lib, "p7", "리베로 자동");
+    assert.deepStrictEqual(f.opp, ["S", "OH1", "MB1", "OP", "OH2", "MB2"]);
+    assert.strictEqual(f.opos, "S");
+    // 상대 1번 자리를 등번호 9(S)로, 1세트 상대 로테 3 · 첫 서브 상대
+    await p.evaluate(() => { document.getElementById("lvl-opp-1").value = "9"; document.getElementById("lvl-orot").value = "3"; document.getElementById("lvl-serve").value = "opp"; });
+    await p.click("#lvLineupForm button[type=submit]"); await p.waitForTimeout(300);
+    const g = await p.evaluate(() => { const g = lvGame(); return { st: { rot: g.sets[1].rot, orot: g.sets[1].orot, serve: g.sets[1].serve }, opp: g.sets[1].lu.opp, ros: g.roster.opp.find(x => String(x.no) === "9") }; });
+    assert.deepStrictEqual(g.st, { rot: 1, orot: 3, serve: "opp" });
+    assert.deepStrictEqual(g.opp.slots, [9, "OH1", "MB1", "OP", "OH2", "MB2"]);
+    assert.strictEqual(g.opp.rot, 3);
+    assert.deepStrictEqual(g.ros, { no: 9, pos: "S" });
+    // 6자리를 다 안 채우면 저장 안 됨
+    await p.click('[data-act="lvros"]'); await p.waitForTimeout(200);
+    await p.evaluate(() => { document.getElementById("lvl-opp-2").value = ""; });
+    await p.click("#lvLineupForm button[type=submit]"); await p.waitForTimeout(200);
+    assert.ok(await p.isVisible("#lvLineupForm"), "빈 칸 있으면 창 그대로");
     clean(a); await a.ctx.close();
   },
   // 전력분석 = 예전 프로그램: 선수 → Attack → Spike Kill → 떨어진 자리 누르기 → 점수 · x/y/구역 저장, 분석 탭에 점
