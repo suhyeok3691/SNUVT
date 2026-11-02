@@ -226,8 +226,16 @@ function ctSheet() {
 /* 저장: 화면에 먼저 넣고(바로 다음 입력) 서버에는 차례대로 보냄. 인터넷이 끊겨도 대기열에 남았다가 다시 보냄 */
 const ctQ = { list: [], busy: false, timer: null };
 const ctQKey = "snuvt-ctq";
-const ctQSave = () => { try { localStorage.setItem(ctQKey, JSON.stringify(ctQ.list.map(x => ({ ev: x.ev, pt: x.pt })))); } catch (e) {} };
-try { ctQ.list = (JSON.parse(localStorage.getItem(ctQKey) || "[]") || []).filter(x => x && x.ev); } catch (e) { ctQ.list = []; }
+// 대기열 한 줄 = 넣기 { ev, pt } 또는 지우기 { del: 기록 id, match_id } (Undo). 지우기도 대기열에 넣어야 새로고침 · 인터넷 끊김에도 끝까지 지워짐
+const ctQSave = () => { try { localStorage.setItem(ctQKey, JSON.stringify(ctQ.list.map(x => x.del ? { del: x.del, match_id: x.match_id } : { ev: x.ev, pt: x.pt }))); } catch (e) {} };
+try { ctQ.list = (JSON.parse(localStorage.getItem(ctQKey) || "[]") || []).filter(x => x && (x.ev || x.del)); } catch (e) { ctQ.list = []; }
+// 서버에서 불러온 기록에 대기열을 얹음: 지우기 기다리는 건 빼고, 아직 안 올라간 건 붙임 (새로고침해도 화면이 Undo · 입력한 그대로)
+function ctQApply(mid, ev, pt) {
+  const del = new Set(ctQ.list.filter(x => x.del && x.match_id === mid).map(x => x.del));
+  ev = ev.filter(e => !del.has(e.id)); pt = pt.filter(p => !del.has(p.event_id));
+  for (const x of ctQ.list) if (x.ev && x.ev.match_id === mid && !ev.some(e => e.id === x.ev.id)) { ev.push({ ...x.ev, _pending: true }); if (x.pt && !pt.some(p => p.id === x.pt.id)) pt.push({ ...x.pt }); }
+  return [ev, pt];
+}
 const ctRetry = err => !err || !err.code || /fetch|network|timeout|JWT|PGRST301/i.test(`${err.message || ""} ${err.code || ""}`);
 const ctClean = r => { const o = { ...r }; delete o.id; delete o._pending; delete o._done; delete o.created_at; return o; };
 async function ctFlush() {
@@ -237,6 +245,11 @@ async function ctFlush() {
   try {
     while (ctQ.list.length) {
       const it = ctQ.list[0];
+      if (it.del) { // Undo: 서버에서 지우기 (랠리 점수 scout_points 는 같이 지워짐)
+        const r = await sb.from("scout_events").delete().eq("id", it.del);
+        if (r.error) { if (ctRetry(r.error)) { clearTimeout(ctQ.timer); ctQ.timer = setTimeout(ctFlush, 4000); break; } toast(failMsg(r.error)); }
+        ctQ.list.shift(); ctQSave(); continue;
+      }
       if (!it.ev._done) {
         const r = await sb.from("scout_events").insert(ctClean(it.ev)).select("id,created_at").maybeSingle();
         if (r.error) { if (ctRetry(r.error)) { clearTimeout(ctQ.timer); ctQ.timer = setTimeout(ctFlush, 4000); break; }
@@ -306,16 +319,16 @@ async function ctUndo() {
   const S = sc(), m = scMatch(); if (!m) return;
   const l = (S.events[m.id] || []).filter(e => e.action && e.set_no === (S.sel.set || 1)), e = l[l.length - 1]; if (!e) return;
   if (!await confirmDel(`방금 기록을 지울까요?\n${ctLabel(e).replace(/<[^>]+>/g, "")}`, "네, 지울게요", true)) return;
-  const qi = ctQ.list.findIndex(x => x.ev.id === e.id);
-  if (qi >= 0) { // 아직 서버에 안 간 것
+  if (!(S.events[m.id] || []).includes(e)) return; // 그새 지워짐 (두 번 눌림)
+  const qi = ctQ.list.findIndex(x => x.ev && x.ev.id === e.id);
+  if (qi >= 0) {
     if (qi === 0 && ctQ.busy) { toast("저장 중이에요. 잠깐 뒤에 다시 눌러 주세요"); return; }
-    const it = ctQ.list.splice(qi, 1)[0]; ctQSave(); ctDrop(it); state.dirty = false; return render();
+    const it = ctQ.list.splice(qi, 1)[0]; ctDrop(it);
+    if (!it.ev._done) { ctQSave(); state.dirty = false; return render(); } // 아직 서버에 안 간 것: 대기열에서 빼면 끝
   }
-  try {
-    ok(await sb.from("scout_events").delete().eq("id", e.id)); // 랠리 점수(scout_points)는 같이 지워짐
-    S.events[m.id] = S.events[m.id].filter(x => x.id !== e.id); S.points[m.id] = (S.points[m.id] || []).filter(p => p.event_id !== e.id);
-  } catch (err) { toast(failMsg(err)); }
-  state.dirty = false; render();
+  // 서버에 있는 것: 화면에서 먼저 빼고, 지우기는 대기열로 (빨리 여러 번 눌러도 · 바로 새로고침해도 다 지워짐)
+  S.events[m.id] = (S.events[m.id] || []).filter(x => x.id !== e.id); S.points[m.id] = (S.points[m.id] || []).filter(p => p.event_id !== e.id);
+  ctQ.list.push({ del: e.id, match_id: m.id }); ctQSave(); state.dirty = false; render(); ctFlush();
 }
 // 라인업 · 세트 시작 로테 (전력분석 담당). 라인업 용지처럼 앞줄 4·3·2, 뒷줄 5·6·1 순서로 입력 (저장은 자리 1~6)
 const CT_SHEET = [3, 2, 1, 4, 5, 0];
@@ -423,7 +436,7 @@ async function ctReset() {
   const S = sc(), m = scMatch(), setNo = S.sel.set || 1;
   if (!await confirmDel(`${setNo}세트 기록을 모두 지울까요?`)) return;
   if (ctQ.busy) { toast("저장 중이에요. 잠깐 뒤에 다시 눌러 주세요"); return; }
-  ctQ.list = ctQ.list.filter(x => !(x.ev.match_id === m.id && x.ev.set_no === setNo)); ctQSave();
+  ctQ.list = ctQ.list.filter(x => x.del || !(x.ev.match_id === m.id && x.ev.set_no === setNo)); ctQSave();
   try {
     ok(await sb.from("scout_points").delete().eq("match_id", m.id).eq("set_no", setNo));
     ok(await sb.from("scout_events").delete().eq("match_id", m.id).eq("set_no", setNo));

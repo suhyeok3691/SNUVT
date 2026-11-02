@@ -17,12 +17,12 @@ const db = {
   profiles:[{id:'u1',email:'coach@snuvt.test',role:'coach',player_id:P1},{id:'u3',email:'new@snuvt.test',role:'pending',player_id:null}],
 };
 const me = role==='coach'?{id:'u1',role:'coach',player_id:P1}:{id:'u2',role:'player',player_id:P2};
-function q(t){ const res={data:db[t]||[],error:null}; const KEY={day_picks:r=>r.player_id+r.date,team_off:r=>r.date,health:r=>r.player_id}; window.__w=window.__w||[]; let del=false;
-  const o={select:()=>o,order:()=>o,gte:()=>o,lt:()=>o,limit:()=>o,range:()=>o,in:()=>o,eq:(k,v)=>{ if(del){ db[t]=(db[t]||[]).filter(r=>r[k]!==v); } return o;},
-  insert:r=>{if(window.__offline)return o; window.__w.push([t,'insert',r]); (db[t]=db[t]||[]).push({id:'n'+Math.random(),author:me.id,...r}); return o;},
+function q(t){ const res={data:db[t]||[],error:null}; const KEY={day_picks:r=>r.player_id+r.date,team_off:r=>r.date,health:r=>r.player_id}; window.__w=window.__w||[]; let del=false, ins=null;
+  const o={select:()=>o,order:()=>o,gte:()=>o,lt:()=>o,limit:()=>o,range:()=>o,in:()=>o,eq:(k,v)=>{ if(del&&!window.__offline){ db[t]=(db[t]||[]).filter(r=>r[k]!==v); } return o;},
+  insert:r=>{if(window.__offline)return o; window.__w.push([t,'insert',r]); ins={id:'n'+Math.random(),author:me.id,...r}; (db[t]=db[t]||[]).push(ins); return o;},
   upsert:(r)=>{window.__w.push([t,'upsert',r]); const kf=KEY[t]; db[t]=(db[t]||[]).filter(x=>!kf||kf(x)!==kf(r)); db[t].push({id:'n'+Math.random(),...r}); return o;},
   delete:()=>{window.__w.push([t,'delete']); del=true; return o;},
-  update:()=>o,maybeSingle:()=>Promise.resolve(window.__offline?{data:null,error:{message:'TypeError: Failed to fetch'}}:t==='profiles'?{data:me,error:null}:{data:(db[t]||[])[0]||null,error:null}),single:()=>Promise.resolve({data:{id:'x'+Math.random()},error:null}),then:(a,b)=>Promise.resolve(window.__offline?{data:null,error:{message:'TypeError: Failed to fetch'}}:res).then(a,b)}; return o;}
+  update:()=>o,maybeSingle:()=>Promise.resolve(window.__offline?{data:null,error:{message:'TypeError: Failed to fetch'}}:t==='profiles'?{data:me,error:null}:{data:ins||(db[t]||[])[0]||null,error:null}),single:()=>Promise.resolve({data:{id:'x'+Math.random()},error:null}),then:(a,b)=>Promise.resolve(window.__offline?{data:null,error:{message:'TypeError: Failed to fetch'}}:res).then(a,b)}; return o;}
 let profCalls=0;
 const client={auth:{getSession:async()=>({data:{session:{user:{id:me.id,email:role==='coach'?'coach@snuvt.test':'player@snuvt.test'}}}}),onAuthStateChange:cb=>setTimeout(()=>cb('INITIAL_SESSION'),0)},from:t=>{ if(t==='profiles'){profCalls++; const o=q(t); if(profCalls===1)return o; return {select:()=>({order:()=>Promise.resolve({data:db.profiles,error:null}),eq:()=>({maybeSingle:()=>Promise.resolve({data:me,error:null})})})};} return q(t);},rpc:async()=>({})};
 
@@ -40,5 +40,5 @@ const GUEST_LIST=role==="coach"?[{date:"2026-11-04",name:"김여부",pos:"S",tea
 const JP_COLS=["id","source","title","published","year","tourn","gender","rnd","schools","ch","len","noembed"];
 window.supabase={createClient:()=>{client.functions={invoke:async()=>({data:{}})};client.rpc=async n=>n==="jp_videos_pack"?{data:db.jp_videos.map(v=>JP_COLS.map(k=>v[k]===undefined?null:v[k])),error:null}:n==="guest_cal"?{data:GUEST_CAL,error:null}:n==="guest_list"?{data:GUEST_LIST,error:null}:{data:null,error:null};return client;}};
 `;
-const mockScript = role => `(function(){const role=${JSON.stringify(role)};${DB}})();`;
+const mockScript = role => `(function(){const role=${JSON.stringify(role)};${DB};window.__db=db;})();`; // __db: 테스트에서 가짜 서버 표 확인
 module.exports = { mockScript };

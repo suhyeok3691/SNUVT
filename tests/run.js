@@ -1,6 +1,6 @@
 /* SNUVT 화면 테스트 (Playwright · 가짜 Supabase, 진짜 서버에 안 붙음)
  *   cd tests && npm install && npm test        → 전부
- *   node run.js smoke                          → 하나만 (smoke · picker · guest · friendly · practice)
+ *   node run.js smoke                          → 하나만 (smoke · picker · guest · friendly · undo · practice …)
  * 저장소의 파일을 그대로 http://local.test 로 띄우고, CDN 의 supabase-js 자리에 mock.js 를 넣음.
  * 브라우저 시계는 2026-11-01 (일) 10:00 KST 로 고정 (mock 데이터 기준). */
 const { chromium } = require("playwright");
@@ -310,6 +310,38 @@ const SUITES = {
     await p.evaluate(() => lvForm("friendly:f1")); await p.waitForTimeout(200);
     assert.strictEqual(await p.$("#lv-label"), null, "교류전 경기 이름 칸 없음");
     assert.strictEqual(await p.evaluate(() => document.getElementById("lv-opp").value), "연세대");
+    clean(a); await a.ctx.close();
+  },
+  // Undo · 되돌리기: 빨리 여러 번 눌러도, 지우기가 서버에 가기 전에 새로고침해도 다 지워짐 (지우기도 폰 대기열에 남음)
+  async undo(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await p.evaluate(() => { window.confirmDel = async () => true; });
+    // 전력분석: Foot Fault 4개 → 서버에 4개
+    await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(300);
+    for (const v of [1, 2, 3, 4]) { await p.click(`.ct-court .ct-p.us[data-v="${v}"]`); await p.click('[data-act="ctcat"][data-v="serve"]'); await p.click('[data-act="ctact"][data-a="foot"]'); await p.waitForTimeout(120); }
+    await p.evaluate(() => ctFlush()); await p.waitForTimeout(300);
+    assert.strictEqual(await p.evaluate(() => __db.scout_events.length), 4);
+    // 인터넷 끊긴 채로 Undo 두 번 연달아 → 화면 2개, 폰 대기열에 지우기 2개
+    await p.evaluate(async () => { window.__offline = true; await ctUndo(); await ctUndo(); }); await p.waitForTimeout(300);
+    assert.strictEqual(await p.evaluate(() => sc().events.m1.length), 2, "Undo 두 번 → 화면 2개");
+    assert.strictEqual(await p.evaluate(() => JSON.parse(localStorage.getItem("snuvt-ctq")).filter(x => x.del).length), 2, "지우기 2개가 폰에 남음");
+    // 새로고침처럼 서버에서 다시 불러와도 지운 것은 안 보임
+    await p.evaluate(() => scoutEvents("m1")); await p.waitForTimeout(200);
+    assert.strictEqual(await p.evaluate(() => sc().events.m1.length), 2, "다시 불러와도 2개");
+    await p.evaluate(() => { window.__offline = false; return ctFlush(); }); await p.waitForTimeout(300);
+    assert.strictEqual(await p.evaluate(() => __db.scout_events.length), 2, "서버도 2개");
+    // 실시간: 기록 3개 → 끊긴 채로 되돌리기 두 번 → 다시 불러와도 1개 → 서버도 1개
+    await p.evaluate(() => lvForm("event:e1")); await p.waitForTimeout(200);
+    await p.evaluate(() => { document.getElementById("lv-opp").value = "B대"; }); await p.click("#lvForm button[type=submit]"); await p.waitForTimeout(300);
+    await a.go("cup"); await p.evaluate(() => lvLoadGames({ kind: "event", id: "e1" })); await p.evaluate(() => { cupState().key = "event:e1"; state.live.open = __db.live_games[0].id; state.dirty = false; render(); }); await p.waitForTimeout(300);
+    await p.evaluate(() => { for (let i = 0; i < 3; i++) lvSave("blk:touch"); return lvFlush(); }); await p.waitForTimeout(300);
+    assert.strictEqual(await p.evaluate(() => __db.live_rallies.length), 3);
+    await p.evaluate(async () => { window.__offline = true; await lvUndo(); await lvUndo(); }); await p.waitForTimeout(300);
+    const gid = await p.evaluate(() => lvGame().id);
+    await p.evaluate(gid => lvLoadRallies(gid), gid); await p.waitForTimeout(200);
+    assert.strictEqual(await p.evaluate(gid => lv().rallies[gid].filter(r => r.kind).length, gid), 1, "되돌리기 두 번 → 다시 불러와도 1개");
+    await p.evaluate(() => { window.__offline = false; return lvFlush(); }); await p.waitForTimeout(300);
+    assert.strictEqual(await p.evaluate(() => __db.live_rallies.length), 1, "서버도 1개");
     clean(a); await a.ctx.close();
   },
   // 훈련 계획: 기본 틀이 드릴 목록 이름과 맞고, 드릴 설명이 뜸

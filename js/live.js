@@ -283,8 +283,10 @@ async function lvLoadRallies(gid, quiet) {
   const L = lv();
   try {
     const r = await sb.from("live_rallies").select("*").eq("game_id", gid).order("created_at"); if (r.error) throw r.error;
-    const ids = new Set((r.data || []).map(x => x.id)), pend = (L.rallies[gid] || []).filter(x => x._pending && !ids.has(x.id));
-    L.rallies[gid] = [...(r.data || []), ...pend];
+    // 지우기 기다리는 건 빼고, 아직 안 올라간 것(화면 · 새로고침 뒤엔 폰 대기열)은 붙임
+    const del = new Set(lvQ.list.filter(x => x.del).map(x => x.del)), data = (r.data || []).filter(x => !del.has(x.id)), ids = new Set(data.map(x => x.id));
+    const pend = [...(L.rallies[gid] || []).filter(x => x._pending), ...lvQ.list.filter(x => !x.del && x.game_id === gid).map(x => ({ ...x, _pending: true }))].filter((x, i, a) => !ids.has(x.id) && a.findIndex(y => y.id === x.id) === i);
+    L.rallies[gid] = [...data, ...pend];
   } catch (e) { L.rallies[gid] = L.rallies[gid] || []; }
   if (!quiet || lvView() && L.open === gid && document.getElementById("sheet").hidden) { state.dirty = false; render(); }
 }
@@ -315,6 +317,11 @@ async function lvFlush() {
   lvQ.busy = true;
   try {
     while (lvQ.list.length) {
+      if (lvQ.list[0].del) { // 되돌리기: 서버에서 지우기 (대기열에 있어야 새로고침해도 끝까지 지워짐)
+        const d = await sb.from("live_rallies").delete().eq("id", lvQ.list[0].del);
+        if (d.error) { if (!d.error.code || /fetch|network|JWT/i.test(d.error.message || "")) { setTimeout(lvFlush, 4000); break; } toast(failMsg(d.error)); }
+        lvQ.list.shift(); lvQSave(); continue;
+      }
       const it = lvQ.list[0], row = { ...it }; if (String(row.id).startsWith("tmp")) delete row.id; delete row._pending; delete row.created_at;
       let r = await sb.from("live_rallies").insert(row).select("id,created_at").maybeSingle();
       if (r.error && r.error.code === "23505" && row.id) r = { data: { id: row.id, created_at: it.created_at }, error: null }; // 끊겼다 다시 보낸 것: 이미 들어가 있음
@@ -434,10 +441,11 @@ async function lvUndo() {
   const L = lv(), g = lvGame(); if (!g) return;
   const l = (L.rallies[g.id] || []).filter(r => r.set_no === L.set && r.kind), r = l[l.length - 1]; if (!r) return;
   if (!await confirmDel(`마지막 기록을 지울까요?\n${lvLabel(r).replace(/<[^>]+>/g, "")}`, "네, 지울게요", true)) return;
-  const qi = lvQ.list.findIndex(x => x.id === r.id);
-  if (qi >= 0) { if (qi === 0 && lvQ.busy) { toast("저장 중이에요. 잠깐 뒤에 다시 눌러 주세요"); return; } lvQ.list.splice(qi, 1); lvQSave(); }
-  else { try { ok(await sb.from("live_rallies").delete().eq("id", r.id)); } catch (e) { toast(failMsg(e)); return; } }
-  L.rallies[g.id] = L.rallies[g.id].filter(x => x !== r); state.dirty = false; render();
+  if (!(L.rallies[g.id] || []).includes(r)) return; // 그새 지워짐 (두 번 눌림)
+  const qi = lvQ.list.findIndex(x => !x.del && x.id === r.id);
+  if (qi >= 0) { if (qi === 0 && lvQ.busy) { toast("저장 중이에요. 잠깐 뒤에 다시 눌러 주세요"); return; } lvQ.list.splice(qi, 1); lvQSave(); } // 아직 안 올라간 것
+  else { lvQ.list.push({ del: r.id, game_id: g.id }); lvQSave(); } // 서버에 있는 것: 화면에서 먼저 빼고 지우기는 대기열로
+  L.rallies[g.id] = L.rallies[g.id].filter(x => x !== r); state.dirty = false; render(); lvFlush();
 }
 // 대회 · 교류전 페이지 안 목록
 function lvSection(x) {

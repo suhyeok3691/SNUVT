@@ -2094,7 +2094,7 @@ async function scoutEvents(mid) {
   const S = sc();
   try {
     const [ev, pt] = await Promise.all([scPaged("scout_events", q => q.eq("match_id", mid)), scPaged("scout_points", q => q.eq("match_id", mid))]);
-    S.events[mid] = ev; S.points[mid] = pt;
+    [S.events[mid], S.points[mid]] = ctQApply(mid, ev, pt);
   } catch (e) { S.events[mid] = S.events[mid] || []; S.points[mid] = S.points[mid] || []; }
   if (state.view === "scout" && state.scoutId === mid) render();
 }
@@ -2105,6 +2105,7 @@ async function scoutAll() {
     for (const m of S.matches) { S.events[m.id] = []; S.points[m.id] = []; }
     for (const e of ev) (S.events[e.match_id] = S.events[e.match_id] || []).push(e);
     for (const p of pt) (S.points[p.match_id] = S.points[p.match_id] || []).push(p);
+    for (const mid of Object.keys(S.events)) [S.events[mid], S.points[mid]] = ctQApply(mid, S.events[mid], S.points[mid] || []);
     S.all = true;
   } catch (e) { S.all = false; toast(failMsg(e)); return; }
   if (state.view === "scout") render();
