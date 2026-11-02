@@ -14,7 +14,7 @@ const CT_AE = ["Into Net", "Blocked", "Out"];
 const CT_MENU = [
   ["serve", "Serve", [["ace", "Ace", "#", "earned"], ["s1", "1-serve", "-"], ["s2", "2-serve", "!"], ["s3", "3-serve", "+"], ["serr", "Serve Error", "=", "error", ["Net", "Out"]], ["foot", "Foot Fault", "=", "error"]]],
   ["receive", "Receive", [["rerr", "Receive Error", "=", "error"], ["rover", "Over Pass (Play)", "-"], ["r1", "1-Receive", "!"], ["r2", "2-Receive", "+"], ["r3", "3-Receive", "#"]]],
-  ["attack", "Attack", [["kill", "Spike Kill", "#", "earned"], ["tip", "Tip Kill", "#", "earned"], ["dump", "Dump Kill", "#", "earned"], ["down", "Down Ball Kill", "#", "earned"], ["opk", "Over Pass Kill", "#", "earned"], ["inplay", "Hit In Play", "!"],
+  ["attack", "Attack", [["kill", "Spike Kill", "#", "earned"], ["tip", "Tip Kill", "#", "earned"], ["dump", "Dump Kill", "#", "earned"], ["down", "Down Ball Kill", "#", "earned"], ["opk", "Over Pass Kill", "#", "earned"], ["bout", "Block Out Kill", "#", "earned"], ["inplay", "Hit In Play", "!"],
     ["aerr", "Spike Error", "=", "error", CT_AE], ["tiperr", "Tip Error", "=", "error", CT_AE], ["dumperr", "Dump Error", "=", "error", CT_AE], ["downerr", "Down Ball Error", "=", "error", CT_AE], ["backrow", "Back Row Fault", "=", "error"]]],
   ["set", "Set", [["t1", "1-Set (In)", "!"], ["t2", "2-Set (In)", "+"], ["t3", "3-Set (In)", "#"], ["t1o", "1-Set (Out)", "!"], ["t2o", "2-Set (Out)", "+"], ["t3o", "3-Set (Out)", "#"], ["terr", "Set Error", "=", "error"]]],
   ["block", "Block", [["blk", "Block", "#", "earned"], ["bast", "Block Assist", "+"], ["binplay", "Block In Play", "!"], ["half", "half block", "!"], ["berr", "Block Error", "=", "error", ["Into Net", "Out"]]]],
@@ -188,12 +188,12 @@ function ctPad(m, ev) {
     </div>
     <div class="ct-court ${land ? "h" : ""}">${court}</div>
     ${land ? `<div class="ct-last small">${recent[0] ? ctLabel(recent[0]) : "Ready… 선수를 눌러 기록"}</div>` : `<div class="ct-extra">${flip ? libRow("us") + libRow("opp") : libRow("opp") + libRow("us")}</div>`}
-    <section class="sec ct-recs"><div class="sec-head"><h3>방금 기록 <span class="small muted">${s.list.length}개</span></h3></div>
-      ${recent.length ? `<ul class="watch sc-recent ct-rec">${recent.map(e => `<li class="${e._pending ? "ct-pend" : ""}"><span class="num small">${esc(e.score || "")}</span><span class="small ct-l">${ctLabel(e)}</span>${e.point ? `<span class="chip ${e.point === "us" ? "ok" : "warn"}">${esc(ctTN(m, e.point))} 점수</span>` : ""}</li>`).join("")}</ul>` : emptyLine("선수를 눌러 기록을 시작해요.")}
+    <section class="sec ct-recs"><div class="sec-head"><h3>${S.recAll ? `${setNo}세트 전체 기록` : "방금 기록"} <span class="small muted">${s.list.length}개</span></h3>${s.list.length ? `<button class="btn link small" type="button" data-act="ctrecall">${S.recAll ? "접기" : "전체 기록 · 고치기"}</button>` : ""}</div>
+      ${recent.length ? `<ul class="watch sc-recent ct-rec">${(S.recAll ? s.list.slice().reverse() : recent).map(e => `<li class="${e._pending ? "ct-pend" : ""}"><span class="num small">${esc(e.score || "")}</span><span class="small ct-l">${ctLabel(e)}</span>${e.point ? `<span class="chip ${e.point === "us" ? "ok" : "warn"}">${esc(ctTN(m, e.point))} 점수</span>` : ""}${ctCanEdit(e) ? `<button class="btn link small ct-ed" type="button" data-act="ctedit" data-id="${esc(e.id)}">고치기</button>` : ""}</li>`).join("")}</ul>` : emptyLine("선수를 눌러 기록을 시작해요.")}
     </section></div>`;
 }
 function ctLabel(e) {
-  const m = scMatch(), a = CT_ACT[e.action], who = ctRos(m, e.side) ? (() => { const p = playerOf(e.player_id); return p ? `${pNo(p)}${esc(p.name)}` : "SNU"; })() : `${esc(ctTN(m, e.side))} #${e.opp_no ?? "?"}`;
+  const m = scMatch(), a = CT_ACT[e.action], who = ctRos(m, e.side) ? (() => { const p = playerOf(e.player_id); return p ? `${pNo(p)}${esc(p.name)}` : "SNU"; })() : `${esc(ctTN(m, e.side))} #${e.opp_no ?? "?"}${(n => n ? ` ${esc(n)}` : "")(e.opp_no != null ? ctName(e.side, e.opp_no).nm : "")}`;
   if (e.action === CT_PT) return `${esc(ctTN(m, e.side))} 점수`;
   if (e.action === CT_LIB) return `리베로 바꿈 · ${who}`;
   if (e.action === CT_CFG) return `Settings · ${e.rot ? `Rot ${e.rot}:${e.opp_rot} · ` : ""}서브 ${esc(ctTN(m, e.serve === "opp" ? "opp" : "us"))} · Rally ${e.rally || 1}`;
@@ -368,6 +368,66 @@ async function ctUndo() {
   S.events[m.id] = (S.events[m.id] || []).filter(x => x.id !== e.id); S.points[m.id] = (S.points[m.id] || []).filter(p => p.event_id !== e.id);
   ctQ.list.push({ del: e.id, match_id: m.id }); ctQSave(); state.dirty = false; render(); ctFlush();
 }
+// 기록 고치기: 내가 넣은 기록(이 기기 · 내 계정)만. 팀 · 선수 · 동작 · 이유를 바꾸면 그 세트 점수 · 서브 · 로테 · 랠리를 처음부터 다시 따라가 바뀐 줄만 서버에 고침
+const ctCanEdit = e => !!e && !e._pending && CT_ACT[e.action] && (ctMine.has(String(e.id)) || (e.author && e.author === uid()));
+function ctEditForm(id) {
+  const S = sc(), m = scMatch(), e = (S.events[m.id] || []).find(x => String(x.id) === String(id)); if (!ctCanEdit(e)) return toast("내가 넣은 기록만 고칠 수 있어요");
+  const el = document.getElementById("sheet"), s = ctState(m, S.events[m.id] || [], e.set_no);
+  const who = side => { const slots = side === "us" ? s.usSlots : s.opSlots, libs = ctLibs(ctLu(m), side), cur = side === e.side ? (e.player_id ?? e.opp_no) : null;
+    const vals = [...new Set([...slots, ...libs, ...(S.events[m.id] || []).filter(x => x.side === side && CT_ACT[x.action]).map(x => x.player_id ?? x.opp_no), ...(cur != null ? [cur] : [])].filter(x => x != null && x !== "").map(String))];
+    return vals.map(v => { const n = ctName(side, v); return `<option value="${esc(v)}" ${String(cur) === v ? "selected" : ""}>${esc(`${n.no ? "#" + n.no : ""} ${n.nm}`.trim() || v)}</option>`; }).join(""); };
+  const acts = CT_MENU.map(([sk, l, list]) => `<optgroup label="${esc(l)}">${list.map(a => `<option value="${a[0]}" ${a[0] === e.action ? "selected" : ""}>${esc(a[1])}</option>`).join("")}</optgroup>`).join("");
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>기록 고치기</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <p class="small muted">${e.set_no}세트 · ${esc(e.score || "")} · ${ctLabel(e)}</p>
+    <form class="f" id="ctEditForm" data-id="${esc(e.id)}"><div class="fields">
+      <label class="fl">팀<select id="cte-side">${["us", "opp"].map(sd => `<option value="${sd}" ${sd === e.side ? "selected" : ""}>${esc(ctTN(m, sd))}</option>`).join("")}</select></label>
+      <label class="fl">선수<select id="cte-who" data-us="${esc(who("us"))}" data-opp="${esc(who("opp"))}">${who(e.side)}</select></label>
+      <label class="fl wide">동작<select id="cte-act">${acts}</select></label>
+      <label class="fl" id="cte-detw">이유<select id="cte-det"></select></label>
+    </div><div class="row"><button class="btn primary" type="submit">저장</button></div></form>`;
+  el.hidden = false; document.body.classList.add("noscroll");
+  const sideSel = document.getElementById("cte-side"), whoSel = document.getElementById("cte-who"), actSel = document.getElementById("cte-act"), det = document.getElementById("cte-det"), detw = document.getElementById("cte-detw");
+  const fillDet = keep => { const a = CT_ACT[actSel.value], l = (a && a.det) || []; detw.hidden = !l.length; det.innerHTML = l.map(d => `<option ${keep && d === e.detail ? "selected" : ""}>${esc(d)}</option>`).join(""); };
+  fillDet(true); actSel.addEventListener("change", () => fillDet(false));
+  sideSel.addEventListener("change", () => { whoSel.innerHTML = whoSel.dataset[sideSel.value]; });
+}
+// 세트를 처음부터 다시 따라가 점수 · 서브 · 로테 · 랠리(넣을 때 규칙 그대로: 랠리에서 처음 난 점수만)를 다시 셈 → 바뀐 기록 [{e, patch}]
+function ctReplay(m, ev, setNo) {
+  const out = [], l = ev.filter(e => e.set_no === setNo && e.action).slice().sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+  for (let i = 0; i < l.length; i++) {
+    const e = l[i]; if (e.action === CT_SUB || e.action === CT_LIB || e.action === CT_CFG) continue;
+    const a = e.action === CT_PT ? { skill: "fault", res: "earned" } : CT_ACT[e.action]; if (!a) continue;
+    const s = ctState(m, l.slice(0, i), setNo), other = e.side === "us" ? "opp" : "us";
+    const serve = a.skill === "serve" ? e.side : a.skill === "receive" ? other : s.serve, fresh = e.action === CT_PT || a.skill === "serve" || a.skill === "receive" || !s.done;
+    const point = fresh && a.res ? (a.res === "earned" ? e.side : other) : null, rally = Math.max(1, s.done && !["serve", "receive"].includes(a.skill) ? s.rally - 1 : s.rally);
+    const score = `${s.us + (point === "us" ? 1 : 0)}:${s.op + (point === "opp" ? 1 : 0)}`, want = { point, score, rot: s.rot, opp_rot: s.orot, rally, serve };
+    const patch = {}; for (const k in want) if ((e[k] ?? null) !== (want[k] ?? null)) patch[k] = want[k];
+    if (Object.keys(patch).length) { Object.assign(e, patch); out.push({ e, patch }); }
+  }
+  return out;
+}
+async function ctEditSave(f) {
+  const S = sc(), m = scMatch(), ev = S.events[m.id] || [], e = ev.find(x => String(x.id) === String(f.dataset.id)); if (!ctCanEdit(e)) return;
+  if (ctQ.busy || ctQ.list.length) return toast("저장 중인 기록이 있어요. 잠깐 뒤에 다시 눌러 주세요");
+  const v = id => (document.getElementById(id) || {}).value || "", side = v("cte-side"), who = v("cte-who"), code = v("cte-act"), a = CT_ACT[code]; if (!a) return;
+  const ros = ctRos(m, side), detail = a.det ? v("cte-det") || null : null;
+  const patch = { side, player_id: ros ? who || null : null, opp_no: ros ? null : who === "" ? null : Number(who), action: code, skill: a.skill, grade: a.skill === "attack" && detail === "Blocked" ? "/" : a.grade, detail,
+    kind: a.skill === "serve" ? e.kind || null : null, x: CT_SPOT(a) ? e.x : null, y: CT_SPOT(a) ? e.y : null, zone: CT_SPOT(a) ? e.zone : null };
+  const before = ev.map(x => ({ ...x }));
+  Object.assign(e, patch);
+  const fixes = ctReplay(m, ev, e.set_no), rows = new Map([[e.id, { ...patch }]]);
+  for (const x of fixes) rows.set(x.e.id, { ...(rows.get(x.e.id) || {}), ...x.patch });
+  try {
+    for (const [id, p] of rows) ok(await sb.from("scout_events").update(p).eq("id", id));
+    // 랠리 점수(scout_points): 점수가 생기면 넣고, 없어지면 지우고, 바뀌면 고침
+    if (!ctNine(m)) for (const [id] of rows) { const x = ev.find(y => y.id === id), pt = (S.points[m.id] || []).find(p => p.event_id === id);
+      if (x.point && !pt) { const r = await sb.from("scout_points").insert({ match_id: m.id, set_no: x.set_no, rot: x.rot, opp_rot: x.opp_rot, serve: x.serve, won: x.point === "us", t: x.t ?? null, event_id: id, author: uid() }).select("*").maybeSingle(); if (r.error) throw r.error; if (r.data) (S.points[m.id] = S.points[m.id] || []).push(r.data); }
+      else if (!x.point && pt) { ok(await sb.from("scout_points").delete().eq("id", pt.id)); S.points[m.id] = S.points[m.id].filter(p => p !== pt); }
+      else if (x.point && pt) { const up = { rot: x.rot, opp_rot: x.opp_rot, serve: x.serve, won: x.point === "us" }; if (Object.keys(up).some(k => pt[k] !== up[k])) { ok(await sb.from("scout_points").update(up).eq("id", pt.id)); Object.assign(pt, up); } } }
+    toast(fixes.length ? `고쳤어요 · 뒤 기록 ${fixes.length}개 점수 · 로테도 맞춤` : "고쳤어요");
+  } catch (err) { S.events[m.id] = before; toast(failMsg(err)); await scoutEvents(m.id); return; }
+  closeSheet(); state.dirty = false; render();
+}
 // 라인업 · 세트 시작 로테 (전력분석 담당). 라인업 용지처럼 앞줄 4·3·2, 뒷줄 5·6·1 순서로 입력 (저장은 자리 1~6)
 const CT_SHEET = [3, 2, 1, 4, 5, 0];
 // SNU 라인업이 비어 있으면: 가장 가까운 대회·교류전 주전(→ 엔트리 → 나머지 부원)을 명단 포지션으로 자동 배치 (1 S · 2 OH · 3 MB · 4 OP · 5 OH · 6 MB = R1), 리베로는 L
@@ -524,6 +584,8 @@ function courtClick(b, act) {
   if (act === "ctdet") return ctSave(S.ct.act, b.dataset.v || null);
   if (act === "ctlib") return ctLibSave(b.dataset.side || "us", b.dataset.v);
   if (act === "ctundo") return ctUndo();
+  if (act === "ctrecall") { sc().recAll = !sc().recAll; state.dirty = false; return render(); }
+  if (act === "ctedit") return ctEditForm(b.dataset.id);
   if (act === "ctlineup") return ctLineupForm();
   if (act === "ctcfg") return ctCfgForm();
   if (act === "cttrashres") return ctTrashRestore(Number(b.dataset.i));
@@ -559,7 +621,8 @@ document.addEventListener("keydown", ev => {
 /* ---------- 분석: 기록지 (예전 프로그램 엑셀 요약과 같은 항목) · 상대 로테이션별 ---------- */
 const ctReal = l => l.filter(e => e.action !== CT_PT && e.action !== CT_SUB && e.action !== CT_LIB && e.action !== CT_CFG);
 // 예전 프로그램 calculate_team_stats 그대로 (동작 이름으로 셈)
-const CT_CNT = { att_pt: ["kill", "tip", "dump", "down", "opk"], att_err: ["aerr", "tiperr", "dumperr", "downerr", "backrow"], att_in: ["inplay"],
+// bout = Block Out Kill: 공격이 블록 맞고 나감 → 공격수 득점 (2026-11-02 더함)
+const CT_CNT = { att_pt: ["kill", "tip", "dump", "down", "opk", "bout"], att_err: ["aerr", "tiperr", "dumperr", "downerr", "backrow"], att_in: ["inplay"],
   blk_pt: ["blk"], blk_eff: ["bast", "binplay"], blk_half: ["half"], blk_err: ["berr"],
   ace: ["ace"], s3: ["s3"], s2: ["s2"], s1: ["s1"], srv_err: ["serr", "foot"],
   dig_ok: ["dtip", "ddump", "ddown", "dig", "dblk"], dig_err: ["dtiperr", "ddumperr", "ddownerr", "derr"],

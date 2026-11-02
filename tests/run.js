@@ -346,6 +346,31 @@ const SUITES = {
     assert.deepStrictEqual(on.vals.slice(0, 6).map(String).filter((v, i) => !on.libZ.includes(i + 1)), w.data.lu.slots.map(String).filter((v, i) => !on.libZ.includes(i + 1)));
     clean(a); await a.ctx.close();
   },
+  // 기록 고치기: 전체 기록 보기 → 내 기록 "고치기" → 동작을 Block Out Kill(공격 득점)로 바꾸면 그 랠리 점수가 그 기록으로 옮겨지고 뒤 기록 점수도 맞춰짐
+  async edit(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(300);
+    assert.ok(await p.evaluate(() => CT_ACT.bout && CT_ACT.bout.res === "earned" && CT_CNT.att_pt.includes("bout") && CT_CNT.att_err.includes("aerr") && CT_CNT.rec_err.includes("rerr")), "Block Out Kill = 공격 득점 (다른 셈 그대로)");
+    // A: 우리 2번 Hit In Play (점수 없음) · B: 상대 12번 Spike Dig Error (우리 점수 1:0) · C: 우리 1번 서브 3-serve
+    await p.click('.ct-court .ct-p.us[data-v="2"]'); await p.click('[data-act="ctcat"][data-v="attack"]'); await p.click('[data-act="ctact"][data-a="inplay"]'); await p.click('[data-act="ctnospot"]'); await p.waitForTimeout(100);
+    await p.click('.ct-court .ct-p.opp[data-v="12"]'); await p.click('[data-act="ctcat"][data-v="dig"]'); await p.click('[data-act="ctact"][data-a="derr"]'); await p.waitForTimeout(100);
+    await p.evaluate(() => ctFlush()); await p.waitForTimeout(300);
+    assert.match(await a.text(".ct-score"), /1 : 0/);
+    await p.click('[data-act="ctrecall"]'); await p.waitForTimeout(150);
+    assert.match(await a.text(".ct-recs h3"), /1세트 전체 기록/);
+    const idA = await p.evaluate(() => sc().events.m1.find(e => e.action === "inplay").id);
+    await p.click(`[data-act="ctedit"][data-id="${idA}"]`); await p.waitForTimeout(150);
+    await p.selectOption("#cte-act", "bout"); await p.click("#ctEditForm button[type=submit]"); await p.waitForTimeout(300);
+    const ev = await p.evaluate(() => sc().events.m1.map(e => [e.action, e.point, e.score]));
+    assert.deepStrictEqual(ev, [["bout", "us", "1:0"], ["derr", null, "1:0"]]);
+    const up = (await a.writes("scout_events")).filter(x => x[1] === "update").map(x => x[2]);
+    assert.ok(up.some(u => u.action === "bout" && u.point === "us") && up.some(u => u.point === null), "서버에도 두 기록 고침");
+    assert.match(await a.text(".ct-score"), /1 : 0/);
+    // 다른 사람 기록은 고치기 버튼 없음
+    await p.evaluate(() => { sc().events.m1.push({ id: "x9", match_id: "m1", set_no: 1, side: "us", action: "kill", skill: "attack", point: null, author: "someone", created_at: "2099-01-01" }); state.dirty = false; render(); }); await p.waitForTimeout(150);
+    assert.strictEqual(await p.$('[data-act="ctedit"][data-id="x9"]'), null);
+    clean(a); await a.ctx.close();
+  },
   // 아마추어 규칙(3세트, 21 · 21 · 15) · 서울대라고 넣은 번호 팀은 부원 이름 · 포지션 · 분석 표 포지션 · 다른 기기 기록은 Undo 안 됨
   async rules(b) {
     const a = await openApp(b, "coach"), p = a.page;

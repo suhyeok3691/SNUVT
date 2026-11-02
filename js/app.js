@@ -3622,6 +3622,8 @@ document.addEventListener("submit", async ev => {
       toast("학사일정을 저장했어요 · 프로그램이 맞춰졌어요");
     } else if (f.id === "lvForm" || f.id === "lvSetForm" || f.id === "lvLineupForm") {
       await lvSubmit(f); return;
+    } else if (f.id === "ctEditForm") {
+      await ctEditSave(f); return;
     } else if (f.id === "ctCfgForm") {
       ctCfgSave(); return;
     } else if (f.id === "ctLineupForm") {
