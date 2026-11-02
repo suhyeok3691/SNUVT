@@ -425,7 +425,9 @@ function lvSave(code, extra) {
     atype: x.kind === "atk" ? lvAtCur() : null, shot: x.kind === "atk" ? lvShCur() : null, miss: null, two: x.kind === "set" ? lvTwo(g, s, side, pk) : null, stype: null, x: null, y: null, zone: null, ...(extra || {}),
     author: uid(), created_at: new Date().toISOString(), _pending: true };
   (L.rallies[g.id] = rs).push(row); const q = { ...row }; delete q._sit; lvQ.list.push(q); lvQSave();
-  L.pick = null; L.atype = null; L.shot = null; L.stype = null; L.atkOpen = false; L.atMore = false; L.spot = null; closeSheet(); state.dirty = false; render(); lvFlush();
+  L.pick = null; L.atype = null; L.shot = null; L.stype = null; L.atkOpen = false; L.atMore = false; L.spot = null;
+  if (code === "atk:in" || code === "atk:over") lvSideTo(lvOther(side)); // 공격 이어짐 · 3단 넘김 → 공이 넘어갔으니 다음은 상대 팀 화면
+  closeSheet(); state.dirty = false; render(); lvFlush();
 }
 // 코트 그림 (지키는 팀 코트). x·y는 지키는 팀 기준(네트 쪽 y=0). flip = 공격한 팀 쪽에서 봄(네트가 아래, 180° 돌림) — 득점 자리는 늘 이렇게. dots = [{x,y,c}]
 function lvCourt(dots, big, flip) {

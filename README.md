@@ -386,6 +386,7 @@ tests/                  화면 테스트 (Playwright · 가짜 Supabase, 7절)
 - **주간 스냅샷** `private.snapshots`(taken_at · tbl · n · data jsonb): 예약 작업 `snapshot-weekly`(일 18:30 UTC = 월 03:30 KST)가 `private.take_snapshot()`로 팀 데이터 표 38개를 표마다 jsonb 로 복사, 29일 지난 것은 지움(4주치). 일본 고교 · 알림 구독(push_subs)은 뺌. 앱 API 로는 안 보임(private 스키마). 되살리기 예: `select jsonb_array_elements(data) from private.snapshots where tbl = 'players' order by taken_at desc limit 1;`
 - 코드 정리: 실시간 기록의 "전체 기록"(랠리 흐름 자동 · 자동 넘김 · 단계 표시) · "영상 분석"(서브 종류 · 서브 떨어진 자리 · 영상 링크) 코드와 전력분석의 옛 실시간 목록을 지움(`live.js` 110KB → 100KB), 쓰지 않는 CSS 정리. 테스트 13개(`smoke` · `todo` · `errors` · `lite` 등) 통과
 - 홈 달력 날짜를 누르면 날짜가 두 번 나오던 것 고침
+- **실시간 기록 팀 자동 전환**(11-02): 공격 '이어짐' · '3단 넘김'을 누르면 공이 넘어간 것이니 상대 팀 화면으로 바로 바뀜(`lvSave` 끝에서 `lvSideTo`). 다른 기록은 팀 그대로
 - **전력분석 서브 자리**(11-02): 서브(Ace · 1~3-serve)를 고르면 공격처럼 상대 코트 그림에서 떨어진 자리를 누름(건너뛰기 가능, Serve Error · Foot Fault 는 자리 없이). `scout_events.x/y/zone`, 좌표는 공격과 같음(서브 팀 쪽에서 봄, 아래가 네트). 분석 탭 "서브가 떨어진 자리": 팀마다 상대 코트에 점, 색 = Ace 파랑 · 3-serve 초록 · 2-serve 주황 · 1-serve 회색, 선수 칩으로 골라 보기, 에이스 수. (리시브 자리로 잘못 만든 것은 바로 되돌림)
 - 홈 "오늘 할 것": 그날 피지컬이 팀 훈련·교류전 그 자체면 피지컬 줄은 빼고 한 줄만(예: 경희대와 교류전이 두 번 나오던 것). 피지컬 화면에는 그대로 보임 (11-02)
 

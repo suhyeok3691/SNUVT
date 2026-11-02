@@ -258,6 +258,15 @@ const SUITES = {
     const hasPad = await p.$('[data-act="lvpt"][data-v="us"]');
     assert.ok(hasPad, "실시간 기록 화면(점수 +1 버튼)"); { await p.click('[data-act="lvpt"][data-v="us"]'); await p.click('[data-act="lvpt"][data-v="us"]'); await p.waitForTimeout(200);
       const rs = (await a.writes("live_rallies")).map(x => x[2]); assert.strictEqual(rs.filter(r => r.point === "us").length, 2, "점수만 +1 두 번"); }
+    // 공격 이어짐을 누르면 상대 팀 화면으로 (다시 이어짐 → 우리 팀), 득점은 그대로
+    const sideOn = () => p.evaluate(() => lv().side);
+    await p.click('[data-act="lvside"][data-v="us"]');
+    await p.click('[data-act="lvcode"][data-v="atk:in"]'); await p.waitForTimeout(150);
+    assert.strictEqual(await sideOn(), "opp", "이어짐 → 상대 팀");
+    await p.click('[data-act="lvcode"][data-v="atk:in"]'); await p.waitForTimeout(150);
+    assert.strictEqual(await sideOn(), "us", "다시 이어짐 → 우리 팀");
+    await p.evaluate(() => lvSave("blk:touch")); await p.waitForTimeout(100);
+    assert.strictEqual(await sideOn(), "us", "다른 기록은 팀 그대로");
     await p.evaluate(() => lvSetForm(2)); await p.waitForTimeout(150);
     assert.ok(await p.$("#lvSetForm"), "다음 세트 시작 창");
     await p.evaluate(() => closeSheet());
