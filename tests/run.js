@@ -346,6 +346,33 @@ const SUITES = {
     assert.deepStrictEqual(on.vals.slice(0, 6).map(String).filter((v, i) => !on.libZ.includes(i + 1)), w.data.lu.slots.map(String).filter((v, i) => !on.libZ.includes(i + 1)));
     clean(a); await a.ctx.close();
   },
+  // 아마추어 규칙(3세트, 21 · 21 · 15) · 서울대라고 넣은 번호 팀은 부원 이름 · 포지션 · 분석 표 포지션 · 다른 기기 기록은 Undo 안 됨
+  async rules(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    const r = await p.evaluate(() => ({ s1: setWinner(21, 19, 1), s1n: setWinner(21, 20, 1), s3: setWinner(15, 13, 3), s3n: setWinner(15, 14, 3), max: SET_MAX,
+      lv: lvEnd({ us: 13, op: 15 }, 3), lv2: lvEnd({ us: 20, op: 22 }, 2) }));
+    assert.deepStrictEqual(r, { s1: "us", s1n: null, s3: "us", s3n: null, max: 3, lv: "opp", lv2: "opp" });
+    await p.evaluate(() => { state.players.p1.number = 11; state.players.p1.pos = "OP"; });
+    await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(300);
+    await p.evaluate(() => { scMatch().opponent = "서울대"; const O = scMatch().lineup.opp; O.pos = ["", "", "", "", "", ""]; state.dirty = false; render(); }); await p.waitForTimeout(200);
+    assert.match(await a.text('.ct-court .ct-p.opp[data-v="11"]'), /최수혁/, "서울대 번호 → 부원 이름");
+    assert.match(await a.text('.ct-court .ct-p.opp[data-v="11"]'), /OP/, "부원 포지션");
+    assert.deepStrictEqual(await p.$$eval('[data-act="scset"]', x => x.map(e => e.textContent.trim())), ["1", "2", "3"], "세트 1~3");
+    // 기록 하나 → 분석 표에 배번 · 이름 · 포지션
+    await p.click('.ct-court .ct-p.opp[data-v="11"]'); await p.click('[data-act="ctcat"][data-v="serve"]'); await p.click('[data-act="ctact"][data-a="foot"]'); await p.waitForTimeout(200);
+    await p.evaluate(() => ctFlush()); await p.waitForTimeout(200);
+    // 다른 기기 기록(이 기기 목록에 없음)은 Undo 로 안 지워짐
+    await p.evaluate(() => { window.confirmDel = async () => true; sc().events.m1.push({ id: "other1", match_id: "m1", set_no: 1, side: "us", action: "foot", skill: "serve", point: "opp" }); });
+    await p.evaluate(() => ctUndo()); await p.waitForTimeout(200);
+    assert.ok(await p.evaluate(() => sc().events.m1.some(e => e.id === "other1")), "다른 기기 기록은 남음");
+    assert.ok(await p.evaluate(() => !sc().events.m1.some(e => e.action === "foot" && e.side === "opp")), "이 기기 기록은 지워짐");
+    await p.evaluate(() => { sc().events.m1 = sc().events.m1.filter(e => e.id !== "other1"); });
+    await p.click('.ct-court .ct-p.opp[data-v="11"]'); await p.click('[data-act="ctcat"][data-v="serve"]'); await p.click('[data-act="ctact"][data-a="foot"]'); await p.waitForTimeout(200);
+    await p.click('[data-act="sctab"][data-k="stats"]'); await p.waitForTimeout(300);
+    const row = await p.evaluate(() => [...document.querySelectorAll(".ct-sheet tbody tr")].map(t => t.innerText.replace(/\s+/g, " ")).find(t => /^11 /.test(t)));
+    assert.match(row || "", /^11 최수혁 OP/, "분석 표: 배번 · 이름 · 포지션 " + row);
+    clean(a); await a.ctx.close();
+  },
   // Undo · 되돌리기: 빨리 여러 번 눌러도, 지우기가 서버에 가기 전에 새로고침해도 다 지워짐 (지우기도 폰 대기열에 남음)
   async undo(b) {
     const a = await openApp(b, "coach"), p = a.page;

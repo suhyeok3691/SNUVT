@@ -275,7 +275,8 @@ function lvState(g, rs, setNo) {
   }
   return s;
 }
-const lvEnd = (s, setNo) => { const t = setNo === 5 ? 15 : 25; return Math.max(s.us, s.op) >= t && Math.abs(s.us - s.op) >= 2 ? (s.us > s.op ? "us" : "opp") : null; };
+const lvEnd = (s, setNo) => setWinner(s.us, s.op, setNo); // 1 · 2세트 21점, 3세트 15점 (court.js)
+const lvMine = mineLoad("snuvt-lvmine"); // 이 기기에서 넣은 기록 (되돌리기는 이것만)
 async function lvLoadGames(x) {
   const L = lv(), key = x.kind + ":" + x.id; L.games[key] = L.games[key] || null;
   try { const r = await sb.from("live_games").select("*").eq("ref_kind", x.kind).eq("ref_id", String(x.id)).order("created_at"); L.games[key] = r.data || []; }
@@ -337,7 +338,7 @@ async function lvFlush() {
       if (r.error && r.error.code === "23505" && row.id) r = { data: { id: row.id, created_at: it.created_at }, error: null }; // 끊겼다 다시 보낸 것: 이미 들어가 있음
       if (r.error) { if (!r.error.code || /fetch|network|JWT/i.test(r.error.message || "")) { setTimeout(lvFlush, 4000); break; } toast(failMsg(r.error)); }
       const l = lv().rallies[it.game_id] || [], loc = l.find(x => x.id === it.id);
-      if (loc) { if (r.error) lv().rallies[it.game_id] = l.filter(x => x !== loc); else { loc.id = r.data.id; loc.created_at = r.data.created_at; delete loc._pending; } }
+      if (loc) { if (r.error) lv().rallies[it.game_id] = l.filter(x => x !== loc); else { if (loc.id !== r.data.id && lvMine.has(String(loc.id))) mineAdd(lvMine, "snuvt-lvmine", r.data.id); loc.id = r.data.id; loc.created_at = r.data.created_at; delete loc._pending; } }
       lvQ.list.shift(); lvQSave();
     }
   } finally { lvQ.busy = false; }
@@ -368,7 +369,7 @@ function lvSave(code, extra) {
     player_id: lvSnu(g, side) && pk ? pk : null, opp_no: !lvSnu(g, side) && pk != null && pk !== "" && lvIdNum(pk) ? Number(pk) : null, tag: !lvSnu(g, side) && pk != null && pk !== "" && !lvIdNum(pk) ? String(pk) : null, point, won: point ? point === "us" : null,
     atype: x.kind === "atk" ? lvAtCur() : null, shot: x.kind === "atk" ? lvShCur() : null, miss: null, two: x.kind === "set" ? lvTwo(g, s, side, pk) : null, stype: null, x: null, y: null, zone: null, ...(extra || {}),
     author: uid(), created_at: new Date().toISOString(), _pending: true };
-  (L.rallies[g.id] = rs).push(row); const q = { ...row }; delete q._sit; lvQ.list.push(q); lvQSave();
+  (L.rallies[g.id] = rs).push(row); mineAdd(lvMine, "snuvt-lvmine", row.id); const q = { ...row }; delete q._sit; lvQ.list.push(q); lvQSave();
   L.pick = null; L.atype = null; L.shot = null; L.stype = null; L.atkOpen = false; L.atMore = false; L.spot = null;
   if (code === "atk:in" || x.kind === "ovr") lvSideTo(lvOther(side)); // 공격 이어짐 · 3단 넘김 → 공이 넘어갔으니 다음은 상대 팀 화면
   closeSheet(); state.dirty = false; render(); lvFlush();
@@ -449,7 +450,8 @@ function lvSrvSheet() {
 }
 async function lvUndo() {
   const L = lv(), g = lvGame(); if (!g) return;
-  const l = (L.rallies[g.id] || []).filter(r => r.set_no === L.set && r.kind), r = l[l.length - 1]; if (!r) return;
+  const all = (L.rallies[g.id] || []).filter(r => r.set_no === L.set && r.kind), l = all.filter(r => r._pending || lvMine.has(String(r.id))), r = l[l.length - 1];
+  if (!r) { if (all.length) toast("다른 기기에서 넣은 기록은 여기서 지울 수 없어요"); return; }
   if (!await confirmDel(`마지막 기록을 지울까요?\n${lvLabel(r).replace(/<[^>]+>/g, "")}`, "네, 지울게요", true)) return;
   if (!(L.rallies[g.id] || []).includes(r)) return; // 그새 지워짐 (두 번 눌림)
   const qi = lvQ.list.findIndex(x => !x.del && x.id === r.id);
@@ -522,7 +524,7 @@ function lvTeam(rs, side, g) {
   const snu = lvSnu(g, side), l = rs.filter(r => r.side === side), key = r => snu ? r.player_id || "" : lvIdOf(r);
   const ks = [...new Set(l.map(key))].sort((a, b) => (snu ? ((playerOf(a) || {}).number ?? 999) - ((playerOf(b) || {}).number ?? 999) : a === "" ? 1 : b === "" ? -1 : lvIdSort(a, b)));
   if (!ks.length) return emptyLine("기록이 없어요.");
-  const nm = k => snu ? (playerOf(k) ? `${pNo(playerOf(k))}${esc(playerOf(k).name)}` : "선수 없음") : k === "" ? "번호 없음" : esc(lvShowId(k)) + (lvPosOf(g, side, k) && !lvTagPos(k) ? ` <small>${esc(lvPosOf(g, side, k))}</small>` : "");
+  const nm = k => snu ? (playerOf(k) ? `${pNo(playerOf(k))}${esc(playerOf(k).name)}${lvPosOf(g, side, k) ? ` <small>${esc(lvPosOf(g, side, k))}</small>` : ""}` : "선수 없음") : k === "" ? "번호 없음" : esc(lvShowId(k)) + (lvPosOf(g, side, k) && !lvTagPos(k) ? ` <small>${esc(lvPosOf(g, side, k))}</small>` : "");
   const d = v => v || "—";
   const row = k => { const m = l.filter(r => key(r) === k), c = (kd, rr) => m.filter(r => r.kind === kd && (!rr || r.res === rr)).length;
     const at = c("atk"), ak = c("atk", "kill"), ae = c("atk", "err") + c("atk", "blk"), rc = m.filter(r => r.kind === "rcv"), st = m.filter(r => r.kind === "set" && r.res !== "err"), dgl = m.filter(r => r.kind === "dig"), ct = m.filter(r => r.kind === "cat"), fl = c("err");
@@ -623,7 +625,7 @@ function lvPage(x) {
   const rs = L.rallies[g.id], sets = [1, 2, 3, 4, 5].map(n => ({ n, s: lvState(g, rs, n) })), cur = sets[L.set - 1].s, end = lvEnd(cur, L.set);
   const won = sets.filter(({ n, s }) => lvEnd(s, n) === "us").length, lost = sets.filter(({ n, s }) => lvEnd(s, n) === "opp").length;
   const lastSet = Math.max(1, ...rs.map(r => r.set_no), ...Object.keys(g.sets || {}).map(Number).filter(n => n >= 1 && n <= 5));
-  const chips = sets.filter(({ n }) => n <= Math.min(5, lastSet + (lvEnd(sets[lastSet - 1].s, lastSet) ? 1 : 0))).map(({ n, s }) => `<button type="button" class="chip sc-chip ${n === L.set ? "on" : ""}" data-act="lvset" data-v="${n}">${n}세트${s.list.length ? ` <span class="num">${s.us}:${s.op}</span>` : ""}</button>`).join("");
+  const chips = sets.filter(({ n }) => n <= Math.min(Math.max(SET_MAX, lastSet), lastSet + (lvEnd(sets[lastSet - 1].s, lastSet) ? 1 : 0))).map(({ n, s }) => `<button type="button" class="chip sc-chip ${n === L.set ? "on" : ""}" data-act="lvset" data-v="${n}">${n}세트${s.list.length ? ` <span class="num">${s.us}:${s.op}</span>` : ""}</button>`).join("");
   // 교류전: 그 세트 출전 명단 · 6인제 대회: 그 세트 라인업(코트 · 리베로 · 교체)이 있으면 그 사람들이 주전으로
   const cupK = (x.kind === "friendly" || x.kind === "event") && !g.team, lu = cupK ? cupState().lineups[x.kind + ":" + x.id] : null;
   if (cupK && !lu) cupLoadLineups(x.kind, x.id);
@@ -654,7 +656,7 @@ function lvPage(x) {
       ${board}
       <div class="row between"><button type="button" class="btn small" data-act="lvundo" ${cur.list.length ? "" : "disabled"}>되돌리기${kb ? " <kbd>⌫</kbd>" : ""}</button><span class="row nowrap">${lvQ.list.length ? `<span class="chip warn">대기 ${lvQ.list.length}</span>` : ""}</span></div>
     </div>` : "";
-  const endBox = end ? `<div class="panel lv-end"><b>${L.set}세트 ${esc(lvTN(g, end))} 승 · ${cur.us}:${cur.op}</b>${me && L.set < 5 && !(won >= 3 || lost >= 3) ? `<button class="btn primary small" type="button" data-act="lvnext">${L.set + 1}세트 시작</button>` : ""}</div>` : "";
+  const endBox = end ? `<div class="panel lv-end"><b>${L.set}세트 ${esc(lvTN(g, end))} 승 · ${cur.us}:${cur.op}</b>${me && L.set < SET_MAX && !(won >= 2 || lost >= 2) ? `<button class="btn primary small" type="button" data-act="lvnext">${L.set + 1}세트 시작</button>` : ""}</div>` : "";
   const scope = L.scope === "all" ? rs.filter(r => r.kind) : cur.list;
   // Lite: 놓친 랠리는 점수판 팀 이름 옆 + 로 점수만 (컴퓨터 = 우리 · - 상대)
   const plus = sd => me && !end ? `<button type="button" class="lv-plus" data-act="lvpt" data-v="${sd}" aria-label="${esc(lvTN(g, sd))} 점수만 +1" title="점수만 +1${kb ? ` (${sd === "us" ? "=" : "-"})` : ""}">+</button>` : "";
@@ -794,7 +796,7 @@ async function lvXlsx(g) {
     const team = side => { const snu = lvSnu(g, side), r0 = ev.filter(e => e.side === side && CT_ACT[e.action]);
       const keys = snu ? [...new Set(r0.map(e => e.player_id).filter(Boolean))].map(id => (p => [id, p && p.number != null ? String(p.number) : "", p ? p.name : ""])(playerOf(id))).sort((a, b) => (Number(a[1]) || 999) - (Number(b[1]) || 999))
         : [...new Set(r0.map(e => e.opp_no).filter(x => x != null))].sort((a, b) => lvIdSort(String(a), String(b))).map(k => [k, String(k), ""]);
-      return ctStatRows(ev, side, keys).map(x => ({ 배번: x.no, 선수명: x.name, 득점: x.득점, 공격: x.공격, "공격 성공률": x.성공률 ?? "-", "공격 효율": x.효율 ?? "-", "공격 점유율": x.s.at && x.점유율 != null ? x.점유율 : "-",
+      return ctStatRows(ev, side, keys).map((x, i) => ({ 배번: x.no, 선수명: x.name, 포지션: lvPosOf(g, side, keys[i][0]) || "", 득점: x.득점, 공격: x.공격, "공격 성공률": x.성공률 ?? "-", "공격 효율": x.효율 ?? "-", "공격 점유율": x.s.at && x.점유율 != null ? x.점유율 : "-",
         서브: x.서브, "서브 점수": x.서브점수 == null ? "-" : Math.round(x.서브점수 * 100) / 100, 블로킹: x.블로킹, 디그: x.디그, 리시브: x.리시브, "리시브 점수": x.리시브점수 == null ? "-" : Math.round(x.리시브점수 * 100) / 100,
         세트: x.세트, "세트 점수": x.세트점수 == null ? "-" : Math.round(x.세트점수 * 100) / 100, 범실: x.범실 })); };
     // 시작 로테: 세트마다 두 팀 R · 자리 1~6 · 리베로 · 첫 서브

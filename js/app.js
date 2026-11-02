@@ -2205,7 +2205,7 @@ function scRotTable(pts) {
 }
 function scoutStats(ev, pts) {
   const S = sc(), m = scMatch(), all = S.fset ? ev.filter(e => e.set_no === S.fset) : ev, pl = S.fset ? pts.filter(p => p.set_no === S.fset) : pts;
-  return `<div class="sc-row"><span class="sc-k">세트</span>${[0, 1, 2, 3, 4, 5].map(n => scChip("scfset", n, S.fset, n || "전체")).join("")}</div>
+  return `<div class="sc-row"><span class="sc-k">세트</span>${[0, ...ctSetNos(ev)].map(n => scChip("scfset", n, S.fset, n || "전체")).join("")}</div>
     <section class="sec"><h3>${esc(ctTA(m))}</h3>${ctSheetTable(all, "us")}</section>
     <section class="sec"><h3>${esc((m && m.opponent) || "상대")}</h3>${ctSheetTable(all, "opp")}</section>
     <section class="sec"><h3>서브 종류</h3>${ctServeTypes(all)}</section>
@@ -2327,9 +2327,9 @@ function scTeamRows(ms, side) {
     for (const e of ev) if (e.side === "us" && e.player_id && CT_ACT[e.action]) keys.set(e.player_id, 1); }
   else { for (const m of ms) { const O = ctLu(m)[side] || {}; for (const n of [...(O.slots || []), ...(O.libero || [])]) if (n !== "" && n != null) keys.set(Number(n), 1); }
     for (const e of ev) if (e.side === side && e.opp_no != null && CT_ACT[e.action]) keys.set(e.opp_no, 1); }
-  const list = [...keys.keys()].map(k => typeof k === "string" ? (p => [k, p && p.number != null ? String(p.number) : "", p ? p.name : ""])(playerOf(k)) : [k, String(k), ""])
+  const m0 = ms[0], list = [...keys.keys()].map(k => typeof k === "string" ? (p => [k, p && p.number != null ? String(p.number) : "", p ? p.name : ""])(playerOf(k)) : [k, String(k), m0 && ctSnuNo(m0, side) ? ((ctByNo(k) || {}).name || "") : ""])
     .sort((a, b) => (Number(a[1]) || 999) - (Number(b[1]) || 999));
-  return ctStatRows(ev, side, list).map(x => ({ 배번: x.no, 선수명: x.name, 득점: x.득점, 공격: x.공격, "공격 성공률": x.성공률 ?? "-", "공격 효율": x.효율 ?? "-", "공격 점유율": x.s.at && x.점유율 != null ? x.점유율 : "-",
+  return ctStatRows(ev, side, list).map((x, i) => ({ 배번: x.no, 선수명: x.name, 포지션: m0 ? ctPosOf(m0, side, list[i][0], ev) : "", 득점: x.득점, 공격: x.공격, "공격 성공률": x.성공률 ?? "-", "공격 효율": x.효율 ?? "-", "공격 점유율": x.s.at && x.점유율 != null ? x.점유율 : "-",
     서브: x.서브, "서브 점수": x.서브점수 == null ? "-" : Math.round(x.서브점수 * 100) / 100, 블로킹: x.블로킹, 디그: x.디그, 리시브: x.리시브, "리시브 점수": x.리시브점수 == null ? "-" : Math.round(x.리시브점수 * 100) / 100,
     세트: x.세트, "세트 점수": x.세트점수 == null ? "-" : Math.round(x.세트점수 * 100) / 100, 범실: x.범실 }));
 }
@@ -2534,8 +2534,7 @@ function cupPage(x) {
     : emptyLine("아직 엔트리가 없어요.");
   // 세트별 출전(교류전) · 서브 타순(9인제 대회) · 라인업(6인제 대회: 로테이션 시작 위치 + 교체 명단): 세트마다 따로
   const six = x.kind === "event" && x.fmt !== "9", needSets = x.kind === "friendly" || x.fmt === "9" || six;
-  // 6인제 대회는 3세트까지 보이고, 3세트를 내면 4 · 5세트도
-  const nSets = x.kind === "friendly" ? 5 : six ? Math.min(5, Math.max(3, ...Object.keys(C.lineups[key] || {}).filter(n => (C.lineups[key][n] || {}).lu).map(n => Number(n) + 1))) : 3;
+  const nSets = SET_MAX; // 아마추어 경기는 3세트까지
   let sets = "";
   if (needSets) {
     const L = C.lineups[key];
