@@ -2532,16 +2532,18 @@ function cupPage(x) {
     : en.size ? `<div class="cup-en"><p><span class="cup-k">주전</span>${[...st].map(id => playerOf(id)).filter(Boolean).map(p => `<span class="chip cup-p ${p.id === state.myPid ? "me" : ""}">${pNo(p)}${esc(p.name)}</span>`).join("") || `<span class="small muted">아직 안 정했어요</span>`}</p>
         <p><span class="cup-k">후보</span>${[...en].filter(id => !st.has(id)).map(id => playerOf(id)).filter(Boolean).map(p => `<span class="chip cup-p ${p.id === state.myPid ? "me" : ""}">${pNo(p)}${esc(p.name)}</span>`).join("") || `<span class="small muted">없음</span>`}</p></div>`
     : emptyLine("아직 엔트리가 없어요.");
-  // 세트별 출전(교류전) · 서브 타순(9인제): 세트마다 따로
-  const needSets = x.kind === "friendly" || x.fmt === "9", nSets = x.kind === "friendly" ? 5 : 3;
+  // 세트별 출전(교류전) · 서브 타순(9인제 대회) · 라인업(6인제 대회: 로테이션 시작 위치 + 교체 명단): 세트마다 따로
+  const six = x.kind === "event" && x.fmt !== "9", needSets = x.kind === "friendly" || x.fmt === "9" || six;
+  // 6인제 대회는 3세트까지 보이고, 3세트를 내면 4 · 5세트도
+  const nSets = x.kind === "friendly" ? 5 : six ? Math.min(5, Math.max(3, ...Object.keys(C.lineups[key] || {}).filter(n => (C.lineups[key][n] || {}).lu).map(n => Number(n) + 1))) : 3;
   let sets = "";
   if (needSets) {
     const L = C.lineups[key];
     if (C.set > nSets) C.set = 1;
     if (!L) { cupLoadLineups(x.kind, x.id); sets = loaderHtml(true); }
     else {
-      const d = L[C.set] || {}, tabs = `<div class="sc-row">${Array.from({ length: nSets }, (_, i) => i + 1).map(n => `<button type="button" class="chip sc-chip ${C.set === n ? "on" : ""}" data-act="cupset" data-v="${n}">${n}세트${(L[n] && (L[n].members || []).length) ? ` <span class="small">${L[n].members.length}</span>` : ""}</button>`).join("")}${x.fmt === "9" ? `<button type="button" class="btn small" data-act="cupprint">인쇄</button>` : ""}</div>`;
-      sets = tabs + (x.kind === "friendly" ? setMembers(x, d, can("schedule")) : "") + (x.fmt === "9" ? `<h4 class="cup-sub">서브 타순</h4>${serveSheet(x, d, can("schedule"))}` : "");
+      const d = L[C.set] || {}, tabs = `<div class="sc-row">${Array.from({ length: nSets }, (_, i) => i + 1).map(n => `<button type="button" class="chip sc-chip ${C.set === n ? "on" : ""}" data-act="cupset" data-v="${n}">${n}세트${(L[n] && (L[n].members || []).length) ? ` <span class="small">${L[n].members.length}</span>` : six && L[n] && L[n].lu ? " ✓" : ""}</button>`).join("")}${six && L[C.set] && L[C.set].lu ? `<button type="button" class="btn small" data-act="lu6print">인쇄</button>` : ""}${x.fmt === "9" ? `<button type="button" class="btn small" data-act="cupprint">인쇄</button>` : ""}</div>`;
+      sets = tabs + (x.kind === "friendly" ? setMembers(x, d, can("schedule")) : "") + (x.fmt === "9" ? `<h4 class="cup-sub">서브 타순</h4>${serveSheet(x, d, can("schedule"))}` : "") + (six ? lineup6(x, d, L[C.set - 1], can("schedule")) : "");
     }
   }
   return `<section class="sec"><div class="row"><button class="btn link small" type="button" data-act="cupback">‹ 목록</button></div>
@@ -2549,7 +2551,59 @@ function cupPage(x) {
     <div class="panel">${voteBox(x.kind, x.id)}</div>
     <section class="panel sec"><div class="sec-head"><h3>엔트리</h3>${can("schedule") && !C.edit ? `<button class="btn small" type="button" data-act="cupedit">선정</button>` : ""}</div>${entry}</section>
     ${lvSection(x)}
-    ${needSets ? `<section class="panel sec"><div class="sec-head"><h3>세트별 ${x.kind === "friendly" ? "출전" : "서브 타순"}</h3></div>${sets}</section>` : ""}</section>`;
+    ${needSets ? `<section class="panel sec"><div class="sec-head"><h3>세트별 ${x.kind === "friendly" ? "출전" : six ? "라인업" : "서브 타순"}</h3></div>${sets}</section>` : ""}</section>`;
+}
+// 6인제 대회 라인업 (세트마다 내는 것): 로테이션 시작 위치 I~VI(I = 1번 자리 서브) · 리베로 2 · 교체 명단(컴포지션).
+// 저장 = lineups.data.lu { slots: 자리 1~6 선수, lib: [리베로], bench: [교체] }. 안 낸 세트는 앞 세트 그대로, 처음이면 주전을 명단 포지션으로 자동 배치
+// 실시간 기록의 SNU 자동 코트도 이걸 먼저 씀(lvDefLu)
+const LU6_ROMAN = ["I", "II", "III", "IV", "V", "VI"];
+function lu6Pool(x) { const en = entryOf(x.kind, x.id); return sortedPlayers().filter(p => !p.military && (!en.size || en.has(p.id))).sort((a, b) => (a.number ?? 999) - (b.number ?? 999)); }
+function lu6Auto(x) {
+  const st = startersOf(x.kind, x.id), pool = lu6Pool(x), ord = [...pool.filter(p => st.has(p.id)), ...pool.filter(p => !st.has(p.id))];
+  const slots = lvAutoArrange(ord.filter(p => lvNormPos(p.pos) !== "L").map(p => ({ v: p.id, pos: lvNormPos(p.pos) }))).map(o => o.v || "");
+  const lib = ord.filter(p => lvNormPos(p.pos) === "L").slice(0, 2).map(p => p.id);
+  return { slots, lib, bench: pool.map(p => p.id).filter(id => !slots.includes(id) && !lib.includes(id)) };
+}
+function lineup6(x, d, prev, canEdit) {
+  const saved = d.lu, src = saved || (prev && prev.lu) || lu6Auto(x), sl = src.slots || [], lib = src.lib || [], bench = new Set(src.bench || []);
+  const nm = id => { const p = playerOf(id); return p ? `${pNo(p)}${p.name}` : ""; }, pos = id => { const p = playerOf(id); return p ? lvNormPos(p.pos) : ""; };
+  if (!canEdit) {
+    if (!saved) return emptyLine("아직 안 냈어요.");
+    const cell = z => `<div class="lu6-c"><span>${LU6_ROMAN[z - 1]}${z === 1 ? " 서브" : ""}</span><b>${esc(nm(sl[z - 1]))}</b><small>${esc(pos(sl[z - 1]))}</small></div>`;
+    return `<div class="lu6"><span class="ct-netl">네트</span><div class="lu6-g">${[4, 3, 2, 5, 6, 1].map(cell).join("")}</div></div>
+      <p><span class="cup-k">리베로</span>${lib.map(id => `<span class="chip cup-p">${esc(nm(id))}</span>`).join("") || `<span class="small muted">없음</span>`}</p>
+      <p><span class="cup-k">교체</span>${[...bench].map(id => `<span class="chip cup-p">${esc(nm(id))}</span>`).join("") || `<span class="small muted">없음</span>`}</p>`;
+  }
+  const pool = lu6Pool(x), opt = (cur, blank) => `<option value="">${blank}</option>${pool.map(p => `<option value="${esc(p.id)}" ${cur === p.id ? "selected" : ""}>${esc(pNo(p) + p.name)} · ${esc(lvNormPos(p.pos))}</option>`).join("")}`;
+  const cell = z => `<div class="ct-lu-c"><span class="ct-lu-n">${LU6_ROMAN[z - 1]}${z === 1 ? " 서브" : ""}</span><select id="lu6-${z}" aria-label="${LU6_ROMAN[z - 1]} 자리">${opt(sl[z - 1], "선택")}</select></div>`;
+  return `<form class="f" id="lu6Form" data-kind="${x.kind}" data-id="${esc(x.id)}">
+      <p class="small muted">${saved ? "" : prev && prev.lu ? "앞 세트 그대로예요. 바꿀 곳만 바꿔 저장하세요." : "주전을 명단 포지션으로 자동 배치했어요. 바꿀 곳만 바꿔 저장하세요."}</p>
+      <div class="ct-lu"><span class="ct-netl">네트</span>${[4, 3, 2, 5, 6, 1].map(cell).join("")}</div>
+      <div class="pair"><label class="fl">리베로 1<select id="lu6-l0">${opt(lib[0], "없음")}</select></label><label class="fl">리베로 2<select id="lu6-l1">${opt(lib[1], "없음")}</select></label></div>
+      <h4 class="cup-sub">교체 명단</h4><div class="jp-chips cup-mem">${pool.map(p => `<label class="chip-check" ${sl.includes(p.id) || lib.includes(p.id) ? "hidden" : ""}><input type="checkbox" class="lu6-b" value="${esc(p.id)}" ${bench.has(p.id) ? "checked" : ""}><span>${pNo(p)}${esc(p.name)}</span></label>`).join("")}</div>
+      <div class="row"><button class="btn primary small" type="submit">${cupState().set}세트 저장</button><button class="btn small" type="button" data-act="lu6auto">주전으로 다시</button></div></form>`;
+}
+// 코트 · 리베로로 고른 사람은 교체 명단에서 숨김(체크도 풂), 빠진 사람은 다시 보이고 교체로 체크
+function lu6Sync() {
+  const f = document.getElementById("lu6Form"); if (!f) return;
+  const on = new Set([...f.querySelectorAll('select[id^="lu6-"]')].map(x => x.value).filter(Boolean));
+  f.querySelectorAll(".lu6-b").forEach(c => { const l = c.closest("label"), was = l.hidden; l.hidden = on.has(c.value); if (l.hidden) c.checked = false; else if (was) c.checked = true; });
+}
+document.addEventListener("change", e => { if (e.target && e.target.closest && e.target.closest("#lu6Form") && e.target.tagName === "SELECT") lu6Sync(); });
+function lu6Print() {
+  const C = cupState(), x = cupItems().find(y => y.kind + ":" + y.id === C.key); if (!x) return;
+  const lu = ((C.lineups[C.key] || {})[C.set] || {}).lu; if (!lu) return;
+  const row = id => { const p = playerOf(id); return `<td class="c">${p && p.number != null ? p.number : ""}</td><td>${p ? esc(p.name) : ""}</td><td class="c">${p ? esc(lvNormPos(p.pos)) : ""}</td>`; };
+  const html = `<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>라인업 · ${esc(x.name)} ${C.set}세트</title><style>
+    body{font-family:"Pretendard","Apple SD Gothic Neo","Malgun Gothic",sans-serif;margin:24px;color:#000}h1{font-size:15px;margin:0 0 8px}h2{font-size:13px;margin:14px 0 4px}
+    table{border-collapse:collapse;width:320px}th,td{border:1px solid #000;padding:5px 6px;font-size:13px;height:20px}th{font-weight:600;text-align:center;white-space:nowrap}td.c{text-align:center}
+    @media print{body{margin:10mm}}</style></head><body><h1>${esc(x.name)} · ${esc(x.when)} · ${C.set}세트 라인업 (서울대학교)</h1>
+    <table><tr><th>자리</th><th>등번호</th><th>선수</th><th>포지션</th></tr>${lu.slots.map((id, i) => `<tr><th>${LU6_ROMAN[i]}${i === 0 ? " (서브)" : ""}</th>${row(id)}</tr>`).join("")}</table>
+    <h2>리베로</h2><table>${(lu.lib || []).length ? lu.lib.map(id => `<tr>${row(id)}</tr>`).join("") : "<tr><td>없음</td></tr>"}</table>
+    <h2>교체</h2><table>${(lu.bench || []).length ? lu.bench.map(id => `<tr>${row(id)}</tr>`).join("") : "<tr><td>없음</td></tr>"}</table>
+    <script>window.onload=()=>window.print()<\/script></body></html>`;
+  const w = window.open("", "_blank"); if (!w) { toast("팝업이 막혔어요"); return; }
+  w.document.write(html); w.document.close();
 }
 // 교류전 세트별 출전: 6인제 6명 · 9인제 9명 (엔트리가 있으면 엔트리 안에서)
 function setMembers(x, d, canEdit) {
@@ -3092,6 +3146,10 @@ document.addEventListener("click", async ev => {
     if (act === "cupopen") { if (state.live) state.live.open = null; C.key = b.dataset.k; C.edit = false; C.set = 1; pushInner(); state.dirty = false; render(); window.scrollTo(0, 0); return; }
     if (act === "cupback") { if (history.state && history.state.inner) return history.back(); C.key = null; C.edit = false; state.dirty = false; render(); window.scrollTo(0, 0); return; }
     if (act === "cupprint") return cupPrint();
+    if (act === "lu6print") return lu6Print();
+    if (act === "lu6auto") { const x = cupItems().find(y => y.kind + ":" + y.id === C.key), a = x && lu6Auto(x); if (!a) return;
+      a.slots.forEach((id, i) => { const el = document.getElementById(`lu6-${i + 1}`); if (el) el.value = id; }); ["lu6-l0", "lu6-l1"].forEach((k, i) => { const el = document.getElementById(k); if (el) el.value = a.lib[i] || ""; });
+      document.querySelectorAll(".lu6-b").forEach(c => { c.checked = a.bench.includes(c.value); }); lu6Sync(); return; }
     if (act === "cupedit") C.edit = !C.edit;
     else if (act === "cupset") C.set = Number(b.dataset.v);
     state.dirty = false; return render();
@@ -3501,6 +3559,17 @@ document.addEventListener("submit", async ev => {
       ok(await sb.from("lineups").upsert({ team_id: TEAM.id, kind, ref_id: id, set_no: C.set, data, updated_at: new Date().toISOString() }));
       ((C.lineups[kind + ":" + id] = C.lineups[kind + ":" + id] || {}))[C.set] = data;
       toast(`${C.set}세트 ${data.members.length}명 저장`); state.dirty = false; render(); return;
+    } else if (f.id === "lu6Form") {
+      const C = cupState(), kind = f.dataset.kind, id = f.dataset.id, v = k => (document.getElementById(k) || {}).value || "";
+      const slots = [1, 2, 3, 4, 5, 6].map(z => v(`lu6-${z}`)), lib = [v("lu6-l0"), v("lu6-l1")].filter(Boolean);
+      if (slots.some(x => !x) || new Set(slots).size !== 6) { toast("I~VI 여섯 자리를 겹치지 않게 골라 주세요"); return; }
+      if (new Set(lib).size !== lib.length) { toast("리베로 1 · 2를 다른 사람으로 골라 주세요"); return; }
+      if (lib.some(x => slots.includes(x))) { toast("코트 6명은 리베로로 고를 수 없어요"); return; }
+      const bench = [...f.querySelectorAll(".lu6-b:checked")].map(x => x.value).filter(x => !slots.includes(x) && !lib.includes(x));
+      const prev = ((C.lineups[kind + ":" + id] || {})[C.set]) || {}, data = { ...prev, lu: { slots, lib, bench } };
+      ok(await sb.from("lineups").upsert({ team_id: TEAM.id, kind, ref_id: id, set_no: C.set, data, updated_at: new Date().toISOString() }));
+      ((C.lineups[kind + ":" + id] = C.lineups[kind + ":" + id] || {}))[C.set] = data;
+      toast(`${C.set}세트 라인업 저장 · 교체 ${bench.length}명`); state.dirty = false; render(); return;
     } else if (f.id === "serveForm") {
       const C = cupState(), kind = f.dataset.kind, id = f.dataset.id;
       const rows = Array.from({ length: 15 }, (_, i) => ({ pid: (f.querySelector(`.ss-p[data-i="${i}"]`) || {}).value || null, chk: !!(f.querySelector(`.ss-chk[data-i="${i}"]`) || {}).checked }));

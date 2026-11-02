@@ -136,7 +136,7 @@ const SUITES = {
     await p.click('[data-act="lvsub"]'); await p.waitForTimeout(150);
     const oz = await p.evaluate(() => { const s = lvState(lvGame(), lv().rallies[lvGame().id] || [], 1), on = lvCourtOn(lvGame(), "opp", s, 1); return { oh: on.vals.indexOf("OH1") + 1, mb: on.vals.indexOf("MB1") + 1 }; });
     await p.click(`[data-act="lvsubout"][data-v="${oz.oh}"]`); await p.waitForTimeout(100);
-    assert.match(await a.text(".lv-subpos .on"), /^OH$/, "나간 선수 포지션이 기본");
+    assert.strictEqual(await p.$eval("#lvSubPos", e => e.value), "OH", "나간 선수 포지션이 기본 (번호 칸 옆)");
     await p.fill("#lvSubNew", "15"); await p.press("#lvSubNew", "Enter"); await p.waitForTimeout(300);
     await p.click('[data-act="lvsub"]'); await p.waitForTimeout(150);
     await p.click(`[data-act="lvsubout"][data-v="${oz.mb}"]`); await p.click('[data-act="lvsubok"]'); await p.waitForTimeout(300);
@@ -144,6 +144,12 @@ const SUITES = {
     assert.deepStrictEqual(sb.r15, { no: 15, pos: "OH" });
     assert.deepStrictEqual(sb.mb3, { no: "MB3", pos: "MB" });
     assert.ok(sb.slots.includes(15) && sb.slots.includes("MB3") && !sb.slots.includes("OH1") && !sb.slots.includes("MB1"), String(sb.slots));
+    // 교체 명단에서 잘못 넣은 번호 지우기 (✕) → 명단에서 빠짐
+    await p.click('[data-act="lvsub"]'); await p.waitForTimeout(150);
+    await p.click('[data-act="lvsubdel"][data-v="OH1"]'); await p.waitForTimeout(200);
+    assert.strictEqual(await p.evaluate(() => lvGame().roster.opp.some(x => x.no === "OH1")), false, "OH1 지움");
+    assert.strictEqual(await p.$('[data-act="lvsubin"][data-v="OH1"]'), null);
+    await p.evaluate(() => closeSheet());
     await p.click('[data-act="lvside"][data-v="us"]');
     // 6자리를 다 안 채우면 저장 안 됨
     await p.click('[data-act="lvros"]'); await p.waitForTimeout(200);
@@ -310,6 +316,34 @@ const SUITES = {
     await p.evaluate(() => lvForm("friendly:f1")); await p.waitForTimeout(200);
     assert.strictEqual(await p.$("#lv-label"), null, "교류전 경기 이름 칸 없음");
     assert.strictEqual(await p.evaluate(() => document.getElementById("lv-opp").value), "연세대");
+    clean(a); await a.ctx.close();
+  },
+  // 6인제 대회 세트 라인업: 로테이션 시작 위치 I~VI · 리베로 · 교체 명단 → 저장, 실시간 기록 SNU 코트가 그대로 따라감
+  async lineup6(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await p.evaluate(() => { [["p3", "김OH", "OH"], ["p4", "박OH", "OH"], ["p5", "이MB", "MB"], ["p6", "정OP", "OP"], ["p7", "한L", "L"], ["p8", "오S", "S"], ["p9", "류OH", "OH"]].forEach(([id, name, pos], i) => { state.players[id] = { name, pos, number: 20 + i }; }); });
+    await a.go("cup"); await p.evaluate(() => { cupState().key = "event:e1"; state.dirty = false; render(); }); await p.waitForTimeout(400);
+    assert.match(await a.text("main"), /세트별 라인업/);
+    const f = await p.evaluate(() => [1, 2, 3, 4, 5, 6].map(z => document.getElementById(`lu6-${z}`).value));
+    assert.ok(f.every(Boolean) && new Set(f).size === 6, "자동 배치 " + f);
+    // 교체 명단엔 코트 · 리베로 사람이 안 보임, 코트에 넣으면 교체 명단에서 숨음
+    const hid = await p.evaluate(() => { const sel = [1, 2, 3, 4, 5, 6].map(z => document.getElementById(`lu6-${z}`).value), vis = [...document.querySelectorAll(".lu6-b")].filter(c => !c.closest("label").hidden).map(c => c.value);
+      return sel.some(v => vis.includes(v)); });
+    assert.strictEqual(hid, false, "코트 선수는 교체 명단에 없음");
+    await p.evaluate(() => { const vis = [...document.querySelectorAll(".lu6-b")].find(c => !c.closest("label").hidden), z = document.getElementById("lu6-6"); window.__old6 = z.value; z.value = vis.value; z.dispatchEvent(new Event("change", { bubbles: true })); window.__new6 = vis.value; });
+    assert.ok(await p.evaluate(() => document.querySelector(`.lu6-b[value="${__new6}"]`).closest("label").hidden && !document.querySelector(`.lu6-b[value="${__old6}"]`).closest("label").hidden), "바꾼 사람은 숨고 빠진 사람은 보임");
+    // 그대로 저장 (교체 명단 = 코트 · 리베로 밖 남는 사람 자동)
+    await p.click("#lu6Form button[type=submit]"); await p.waitForTimeout(300);
+    const w = (await a.writes("lineups")).map(x => x[2]).pop();
+    assert.ok(w && w.data.lu && w.data.lu.slots.length === 6, "라인업 저장");
+    assert.deepStrictEqual(w.data.lu.lib, ["p7"]);
+    assert.ok(w.data.lu.bench.length >= 1 && !w.data.lu.bench.some(x => w.data.lu.slots.includes(x)), "교체 = 코트 밖");
+    // 실시간 기록: 이 대회 경기 → SNU 코트 = 낸 라인업 (1번 자리 = I)
+    await p.evaluate(() => lvForm("event:e1")); await p.waitForTimeout(200);
+    await p.evaluate(() => { document.getElementById("lv-opp").value = "B대"; }); await p.click("#lvForm button[type=submit]"); await p.waitForTimeout(300);
+    await p.evaluate(() => { cupState().key = "event:e1"; state.live.open = __db.live_games[0].id; state.dirty = false; render(); }); await p.waitForTimeout(400);
+    const on = await p.evaluate(() => { const g = lvGame(); return lvCourtOn(g, "us", lvState(g, [], 1), 1); });
+    assert.deepStrictEqual(on.vals.slice(0, 6).map(String).filter((v, i) => !on.libZ.includes(i + 1)), w.data.lu.slots.map(String).filter((v, i) => !on.libZ.includes(i + 1)));
     clean(a); await a.ctx.close();
   },
   // Undo · 되돌리기: 빨리 여러 번 눌러도, 지우기가 서버에 가기 전에 새로고침해도 다 지워짐 (지우기도 폰 대기열에 남음)
