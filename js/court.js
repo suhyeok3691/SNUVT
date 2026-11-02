@@ -32,10 +32,8 @@ const CT_STN = Object.fromEntries(CT_STYPE.map(x => [x[0], x[1]]));
 const ctStKey = c => `${c.side}:${c.v}`;
 const ctStype = c => { const S = sc(); if (S.stypes && S.stypes[ctStKey(c)] !== undefined) return S.stypes[ctStKey(c)];
   const m = scMatch(), l = (S.events[m.id] || []).filter(e => e.skill === "serve" && e.side === c.side && ctSame(e.player_id != null ? e.player_id : e.opp_no, c.v) && e.kind); return l.length ? l[l.length - 1].kind : null; };
-// 예전 프로그램에 더한 것 3: 리시브(전부, 범실 포함)도 서브가 온 자리를 받는 팀 코트 그림에서 누름. x · y 는 공격과 같이 공을 보낸 팀(서브 팀) 쪽에서 봄
-const CT_SPOT = a => (a.skill === "attack" && !a.det && a.res !== "error") || a.skill === "receive";
-// 공이 떨어진 코트 = 공격은 상대 코트, 리시브는 받은 팀 코트
-const ctSpotSide = (a, side) => a.skill === "receive" ? side : ctOther(side);
+// 예전 프로그램에 더한 것 3: 서브(Ace · 1~3-serve)도 공격처럼 상대 코트에서 떨어진 자리를 누름. 범실은 자리 없이
+const CT_SPOT = a => (a.skill === "attack" || a.skill === "serve") && !a.det && a.res !== "error";
 const CT_ZROWS = [[4, 3, 2], [7, 8, 9], [5, 6, 1]];
 const ctZone = (x, y) => CT_ZROWS[Math.min(2, Math.floor(y / 33.34))][Math.min(2, Math.floor(x / 33.34))];
 const ctZoneXY = z => { for (let r = 0; r < 3; r++) { const c = CT_ZROWS[r].indexOf(z); if (c >= 0) return { x: c * 33 + 17, y: r * 33 + 17 }; } return null; };
@@ -208,7 +206,7 @@ function ctSheet() {
   let body, title, back = "";
   if (c.spot) { const a = CT_ACT[c.spot];
     title = `${who} · ${esc(a.name)}`; back = `<button type="button" class="btn link small" data-act="ctback">‹ 뒤로</button>`;
-    body = `<p class="small muted ct-spot-h">${a.skill === "receive" ? "서브가 온 자리" : "공이 떨어진 자리"} · ${esc(ctTN(m, ctSpotSide(a, c.side)))} 코트 <span>(아래가 네트)</span></p>
+    body = `<p class="small muted ct-spot-h">${a.skill === "serve" ? "서브가 떨어진 자리" : "공이 떨어진 자리"} · ${esc(ctTN(m, ctOther(c.side)))} 코트 <span>(아래가 네트)</span></p>
       <div class="lv-cwrap ct-spot">${ctCourtSvg([], true)}</div>
       <div class="row"><button type="button" class="btn" data-act="ctnospot">건너뛰기</button></div>`; }
   else if (c.cat === "sub") { body = ctSubHtml(m, s); title = `${esc(ctTN(m, c.side))} 교체`; if (c.v != null && (libAct || (c.side === "us" ? s.usSlots : s.opSlots).some(x => ctSame(x, c.v)))) back = `<button type="button" class="btn link small" data-act="ctback">‹ 뒤로</button>`; }
@@ -530,26 +528,26 @@ function ctOppRotTable(pts) {
   return `<div class="tw"><table><thead><tr><th>상대 로테</th><th>상대 사이드아웃</th><th>상대 브레이크</th><th>상대 득실</th></tr></thead><tbody>${rows.map(x => `<tr class="${best && x.r === best.r ? "ct-strong" : worst && x.r === worst.r && worst.d < 0 ? "ct-weak" : ""}"><td><b>R${x.r}</b></td><td class="num">${x.so.length ? `${scPct(x.so.filter(p => !p.won).length, x.so.length)} <span class="small muted">${x.so.filter(p => !p.won).length}/${x.so.length}</span>` : "—"}</td><td class="num">${x.br.length ? `${scPct(x.br.filter(p => !p.won).length, x.br.length)} <span class="small muted">${x.br.filter(p => !p.won).length}/${x.br.length}</span>` : "—"}</td><td class="num">${x.n ? (x.d > 0 ? "+" : "") + x.d : "—"}</td></tr>`).join("")}</tbody></table></div>
     ${best && best.d > 0 ? `<p class="small">상대가 가장 강한 로테: <b>R${best.r}</b>${worst && worst.d < 0 ? ` · 가장 약한 로테: <b>R${worst.r}</b>` : ""}</p>` : ""}`;
 }
-// 분석 탭: 공이 떨어진 자리. 공격 = 팀마다 상대 코트(득점 = 칠한 점 · Hit In Play = 빈 점)
-// 리시브 = 받은 팀 코트에 서브가 온 자리(리시브 등급별 색). 선수 칩으로 골라 보기
-const CT_RCOL = { "#": "gM", "+": "gL", "!": "gB", "-": "gE", "=": "gR" };
-const CT_RLEG = [["gM", "3-Receive"], ["gL", "2-Receive"], ["gB", "1-Receive"], ["gE", "Over Pass"], ["gR", "범실"]];
+// 분석 탭: 공이 떨어진 자리 (팀마다 상대 코트). 공격 = 득점 칠한 점 · Hit In Play 빈 점
+// 서브 = 등급별 색 (Ace 파랑 · 3-serve 초록 · 2-serve 주황 · 1-serve 회색). 선수 칩으로 골라 보기
+const CT_SCOL = { ace: "gL", s3: "gM", s2: "gB", s1: "gE" };
+const CT_SLEG = [["gL", "Ace"], ["gM", "3-serve"], ["gB", "2-serve"], ["gE", "1-serve"]];
 function ctSpotStats(l, skill = "attack") {
-  const S = sc(), m = scMatch(), rcv = skill === "receive", pk = rcv ? "r:" : "", f = S.spotPick || {};
+  const S = sc(), m = scMatch(), srv = skill === "serve", pk = srv ? "s:" : "", f = S.spotPick || {};
   const team = side => {
     const a = ctReal(l).filter(e => e.side === side && e.skill === skill && e.x != null);
-    if (!a.length) return `<div class="ct-spot-team"><h4>${esc(ctTN(m, side))}</h4>${emptyLine(rcv ? "서브가 온 자리를 넣은 리시브가 없어요." : "떨어진 자리를 넣은 공격이 없어요.")}</div>`;
+    if (!a.length) return `<div class="ct-spot-team"><h4>${esc(ctTN(m, side))}</h4>${emptyLine(srv ? "떨어진 자리를 넣은 서브가 없어요." : "떨어진 자리를 넣은 공격이 없어요.")}</div>`;
     const key = e => String(e.player_id != null ? e.player_id : e.opp_no), ks = [...new Set(a.map(key))];
     const nm = k => { const n = ctName(side, k); return `${n.no ? "#" + n.no : ""} ${n.nm}`.trim() || "?"; };
     const pick = f[pk + side] && ks.includes(f[pk + side]) ? f[pk + side] : "", sel = pick ? a.filter(e => key(e) === pick) : a;
-    const good = sel.filter(e => rcv ? ["#", "+"].includes(e.grade) : CT_ACT[e.action] && CT_ACT[e.action].res === "earned").length;
-    const dot = e => rcv ? { x: e.x, y: e.y, c: CT_RCOL[e.grade] || "gE" } : { x: e.x, y: e.y, c: CT_ACT[e.action] && CT_ACT[e.action].res === "earned" ? "gL" : "gE tip" };
-    return `<div class="ct-spot-team"><h4>${esc(ctTN(m, side))} ${rcv ? "리시브" : "공격"} <span class="small muted">${rcv ? `${esc(ctTN(m, side))} 코트 · 좋은 리시브(2·3) ${good} / ${sel.length}` : `${esc(ctTN(m, ctOther(side)))} 코트 · 득점 ${good} / ${sel.length}`}</span></h4>
+    const good = sel.filter(e => CT_ACT[e.action] && CT_ACT[e.action].res === "earned").length;
+    const dot = e => srv ? { x: e.x, y: e.y, c: CT_SCOL[e.action] || "gE" } : { x: e.x, y: e.y, c: CT_ACT[e.action] && CT_ACT[e.action].res === "earned" ? "gL" : "gE tip" };
+    return `<div class="ct-spot-team"><h4>${esc(ctTN(m, side))} ${srv ? "서브" : "공격"} <span class="small muted">${esc(ctTN(m, ctOther(side)))} 코트 · ${srv ? "에이스" : "득점"} ${good} / ${sel.length}</span></h4>
       <div class="sc-row">${[["", "전체"], ...ks.map(k => [k, nm(k)])].map(([k, lab]) => `<button type="button" class="chip sc-chip ${k === pick ? "on" : ""}" data-act="ctspotp" data-side="${pk}${side}" data-v="${esc(k)}">${esc(lab)}</button>`).join("")}</div>
       <div class="lv-cwrap sm">${ctCourtSvg(sel.map(dot), false)}</div></div>`;
   };
-  const leg = rcv ? CT_RLEG.map(([c, t]) => `<span><i class="lv-dot-k ${c}"></i>${t}</span>`).join("") : `<span><i class="lv-dot-k gL"></i>득점</span><span><i class="lv-dot-k ct-k-in"></i>Hit In Play</span>`;
-  return `<div class="ct-spots">${team("us")}${team("opp")}</div><p class="small muted lv-leg">${leg}<span>· 아래가 네트${rcv ? " (서브 팀 쪽에서 봄)" : ""}</span></p>`;
+  const leg = srv ? CT_SLEG.map(([c, t]) => `<span><i class="lv-dot-k ${c}"></i>${t}</span>`).join("") : `<span><i class="lv-dot-k gL"></i>득점</span><span><i class="lv-dot-k ct-k-in"></i>Hit In Play</span>`;
+  return `<div class="ct-spots">${team("us")}${team("opp")}</div><p class="small muted lv-leg">${leg}<span>· 아래가 네트</span></p>`;
 }
 // 분석 탭: 서브 종류별 (플로터 · 스파이크 · 안 고름) — 서브 수 · 에이스 · 범실 · 서브 점수(예전 기록지 셈과 같음)
 function ctServeTypes(l) {
