@@ -2119,7 +2119,11 @@ const scCnt = (l, sk, g) => l.filter(e => e.skill === sk && (!g || g.includes(e.
 // (실시간 경기 분석 live.js 는 전력분석 화면에서 뺌. 대회·교류전 페이지의 실시간 기록에만 남음)
 function viewScout() {
   const S = sc();
-  S.track = "video";
+  // 실시간 기록(대회 · 교류전에서 만든 것)도 여기서 열어 봄 — 열면 그 경기 실시간 화면(점수 · 기록 · 분석)
+  if (S.live && lv().open) { const g = lvGame(), all = lv().games["scout:all"];
+    if (!g && !all) { if (all === undefined) lvLoadAll(); return loaderHtml(); } // 새로고침 뒤: 경기 목록부터
+    if (g) return lvPage(cupItems().find(y => y.kind === g.ref_kind && String(y.id) === String(g.ref_id)) || { kind: g.ref_kind, id: g.ref_id, name: "전력분석" }); }
+  S.live = false; S.track = "video";
   if (!S.loaded) { scoutLoad(); return loaderHtml(); }
   const m = scMatch();
   if (!m) return scoutList();
@@ -2134,13 +2138,24 @@ function viewScout() {
 }
 function scoutList() {
   const S = sc(), head = `<div class="sec-head"><h2>전력분석</h2><span class="row nowrap">${S.matches.length ? `<button class="btn link small" type="button" data-act="scxlsx" data-id="">엑셀</button>` : ""}${can("analysis") ? `<button class="btn add" type="button" data-act="scnew">+ 경기</button>` : ""}</span></div>`;
-  if (!S.matches.length) return `<section class="sec">${head}${emptyLine(can("analysis") ? "경기 영상을 추가하면 다 같이 보면서 입력할 수 있어요." : "아직 분석할 경기가 없어요.")}</section>`;
-  const tabs = scSeg("scltab", [["match", "경기"], ["season", "시즌"], ["opp", "팀별"]], S.ltab);
+  const tabs = scSeg("scltab", [["match", "경기"], ["live", "실시간"], ["season", "시즌"], ["opp", "팀별"]], S.ltab);
   let body;
-  if (S.ltab === "match") body = `<div class="sc-list">${S.matches.map(x => `<button type="button" class="panel sc-card" data-act="scopen" data-id="${esc(x.id)}"><b>${esc(x.title)}</b><span class="small muted">${scMeta(x)}</span><span class="go">›</span></button>`).join("")}</div>`;
+  if (S.ltab === "live") body = scoutLiveList();
+  else if (!S.matches.length) body = emptyLine(can("analysis") ? "경기 영상을 추가하면 다 같이 보면서 입력할 수 있어요." : "아직 분석할 경기가 없어요.");
+  else if (S.ltab === "match") body = `<div class="sc-list">${S.matches.map(x => `<button type="button" class="panel sc-card" data-act="scopen" data-id="${esc(x.id)}"><b>${esc(x.title)}</b><span class="small muted">${scMeta(x)}</span><span class="go">›</span></button>`).join("")}</div>`;
   else if (S.all !== true) { scoutAll(); body = loaderHtml(true); }
   else body = S.ltab === "season" ? scoutSeason() : scoutOpp();
   return `<section class="sec">${head}${tabs}${body}</section>`;
+}
+// 실시간 탭: 대회 · 교류전에서 만든 실시간 기록 전부 (최근 것 먼저). 누르면 그 경기 실시간 화면
+function scoutLiveList() {
+  const gs = lv().games["scout:all"];
+  if (gs === undefined) { lvLoadAll(); return loaderHtml(true); }
+  if (gs === null) return loaderHtml(true);
+  if (!gs.length) return emptyLine("실시간 기록한 경기가 없어요. 대회 · 교류전 화면에서 기록해요.");
+  const ref = g => cupItems().find(y => y.kind === g.ref_kind && String(y.id) === String(g.ref_id));
+  return `<div class="sc-list">${gs.map(g => { const x = ref(g), d = g.created_at ? shortDate(new Date(g.created_at)) : "";
+    return `<button type="button" class="panel sc-card" data-act="sclive" data-id="${esc(g.id)}"><b>${g.label ? `${esc(g.label)} · ` : ""}${esc(lvTA(g))} vs ${esc(g.opponent || "")}</b><span class="small muted">${[d, x ? x.name : g.ref_kind === "friendly" ? "교류전" : "대회"].filter(Boolean).map(esc).join(" · ")}</span><span class="go">›</span></button>`; }).join("")}</div>`;
 }
 // 치지직 다시보기는 앱 안에 못 띄워서(퍼가기 없음) 새 창으로 열기만 (영상 시계는 2026-11-01 뺌)
 const parseVod = u => { const x = /^(?:https?:\/\/)?(?:m\.)?chzzk\.naver\.com\/video\/(\d+)/.exec(String(u || "").trim()); return x ? `https://chzzk.naver.com/video/${x[1]}` : null; };
@@ -2357,7 +2372,7 @@ let scPlayer = null;
 async function scoutDock() {
   const dock = document.getElementById("dock"); if (!dock) return;
   // 영상: 전력분석 경기의 유튜브 (실시간 기록은 영상 없음)
-  const m = state.view === "scout" && sc().track === "video" ? scMatch() : null, y = m && m.yt ? parseYt(m.yt) : null;
+  const m = state.view === "scout" && sc().track === "video" && !sc().live ? scMatch() : null, y = m && m.yt ? parseYt(m.yt) : null;
   if (!y) { if (dock.dataset.mid) { dock.innerHTML = ""; dock.dataset.mid = ""; scPlayer = null; } dock.hidden = true; return; }
   dock.hidden = false;
   const hd = document.querySelector("header.top"); dock.style.top = (hd ? hd.offsetHeight : 0) + "px";
@@ -3053,6 +3068,8 @@ document.addEventListener("click", async ev => {
     const S = sc(), x = S.sel, v = b.dataset.v;
     if (act === "scnew") return openScoutForm("");
     if (act === "scedit") return openScoutForm(b.dataset.id);
+    if (act === "sclive") { const L = lv(); pushInner(); S.live = true; L.open = b.dataset.id; L.set = 1; L.pick = null; L.side = "us"; L.scope = "set"; state.dirty = false; render(); window.scrollTo(0, 0);
+      const g = lvGame(); if (g) lvLoadRallies(g.id).then(() => { const l = (L.rallies[g.id] || []).filter(r => r.kind); if (l.length) { L.set = Math.max(...l.map(r => r.set_no)); state.dirty = false; render(); } }); return; }
     if (act === "scopen") { pushInner(); state.scoutId = b.dataset.id; S.tab = "court"; state.dirty = false; render(); window.scrollTo(0, 0); return; }
     if (act === "scback") { if (history.state && history.state.inner) return history.back(); state.scoutId = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
     if (act === "scxlsx") return scoutXlsx(b.dataset.id);
@@ -3940,12 +3957,13 @@ async function pushRefresh() {
 // 새로고침해도 보던 안쪽 화면(대회 하나 · 전력분석 경기 · 실시간 경기 분석 경기 · 세트)에 그대로 (탭마다, sessionStorage)
 const NAV_KEY = "snuvt-nav";
 function navSave() {
-  try { const L = state.live || {}; sessionStorage.setItem(NAV_KEY, JSON.stringify({ v: state.view, tr: (state.scout || {}).track || null, sid: state.scoutId || null, ck: (state.cup || {}).key || null, lo: L.open || null, ls: L.set || 1, sc: L.scope || "set" })); } catch (e) {}
+  try { const L = state.live || {}; sessionStorage.setItem(NAV_KEY, JSON.stringify({ v: state.view, tr: (state.scout || {}).track || null, sl: !!(state.scout || {}).live, sid: state.scoutId || null, ck: (state.cup || {}).key || null, lo: L.open || null, ls: L.set || 1, sc: L.scope || "set" })); } catch (e) {}
 }
 function navRestore() {
   let n = null; try { n = JSON.parse(sessionStorage.getItem(NAV_KEY) || "null"); } catch (e) {}
   if (!n || n.v !== state.view) return;
   if (n.tr) sc().track = n.tr;
+  if (n.sl && state.view === "scout") sc().live = true;
   if (n.sid && state.view === "scout") state.scoutId = n.sid;
   if (n.ck && (state.view === "cup" || state.view === "fr")) cupState().key = n.ck;
   if (n.lo) { const L = lv(); L.open = n.lo; L.set = n.ls || 1; L.scope = n.sc || "set"; L.restored = true; }

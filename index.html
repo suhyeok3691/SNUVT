@@ -1126,7 +1126,11 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 .lvr-list { display: grid; gap: 6px; } .lvr-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; align-items: center; } .lvr-row input, .lvr-row select { min-width: 0; width: 100%; }
 .lv-n { display: inline-flex; align-items: baseline; gap: 4px; padding: 6px 10px; min-height: 40px; font: inherit; border-radius: 9px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
 .lv-n b { font: 800 16px var(--f-data); } .lv-n span { font-size: 12px; } .lv-n.sub { opacity: .75; }
-.lv-n.us.on { background: color-mix(in srgb, var(--blue) 14%, var(--surface)); border: 2px solid var(--blue); color: var(--ink); } .lv-n.opp.on { background: color-mix(in srgb, #c0392b 12%, var(--surface)); border: 2px solid #c0392b; color: var(--ink); }
+/* 선수 고르는 칸: 동작 버튼(흰 · 초록 · 빨강)과 구분되게 팀 색으로 칠하고, 고르면 꽉 채움 (우리 파랑 · 상대 빨강, 리베로는 청록 테두리 그대로) */
+.lv-n.us:not(.lib) { background: color-mix(in srgb, var(--blue) 10%, var(--surface)); border-color: color-mix(in srgb, var(--blue) 45%, var(--line)); }
+.lv-n.opp:not(.lib) { background: color-mix(in srgb, #c0392b 8%, var(--surface)); border-color: color-mix(in srgb, #c0392b 40%, var(--line)); }
+.lv-n.us.on { background: var(--blue); border: 2px solid var(--blue); color: var(--surface); } .lv-n.opp.on { background: #c0392b; border: 2px solid #c0392b; color: #fff; }
+.lv-n.on i { color: inherit; opacity: .8; } .lv-n.on.sub { opacity: 1; }
 .lv-row { display: grid; grid-template-columns: 52px 1fr; gap: 6px; align-items: center; } .lv-rk { font-size: 12.5px; font-weight: 700; color: var(--muted); }
 .lv-row.gap { margin-top: 18px; } .lv-rb.c5 .lv-b { font-size: 12.5px; letter-spacing: -.03em; white-space: nowrap; padding-left: 0; padding-right: 0; }
 .lv-row.want { background: color-mix(in srgb, var(--blue) 8%, transparent); border-radius: 10px; box-shadow: 0 0 0 5px color-mix(in srgb, var(--blue) 8%, transparent); } .lv-row.want .lv-rk { color: var(--blue); }
@@ -1232,8 +1236,8 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 <script src="js/guide.js?v=194"></script>
 <script src="js/library.js?v=196"></script>
 <script src="js/campus.js?v=196"></script>
-<script src="js/court.js?v=216"></script>
-<script src="js/live.js?v=218"></script>
-<script src="js/app.js?v=216"></script>
+<script src="js/court.js?v=219"></script>
+<script src="js/live.js?v=219"></script>
+<script src="js/app.js?v=219"></script>
 </body>
 </html>

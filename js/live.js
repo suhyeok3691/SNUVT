@@ -88,7 +88,7 @@ const lvLabel = r => { const x = LV_RES[r.kind + ":" + r.res], sh = lvShot(r);
 const lv = () => state.live || (state.live = { games: {}, rallies: {}, open: null, set: 1, scope: "set", side: "us", pick: null, atype: null, shot: null, extra: {} });
 const lvCan = () => can("analysis") || can("schedule");
 const lvGame = () => { const L = lv(); for (const l of Object.values(L.games)) { const g = (l || []).find(x => x.id === L.open); if (g) return g; } return null; };
-const lvView = () => state.view === "cup" || state.view === "fr" || (state.view === "scout" && sc().track !== "video");
+const lvView = () => state.view === "cup" || state.view === "fr" || (state.view === "scout" && !!sc().live);
 // 분석 팀(us) · 상대 팀(opp). team이 비어 있으면 분석 팀 = SNU(명단 선수로 고름), 아니면 두 팀 다 번호로
 const lvTA = g => (g && g.team) || "SNU";
 const lvTB = g => (g && g.opponent) || "상대";

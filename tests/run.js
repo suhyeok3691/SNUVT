@@ -27,7 +27,8 @@ async function openApp(browser, role, { width = 390, height = 844, now = NOW } =
   await page.goto("http://local.test/#home", { waitUntil: "domcontentloaded" });
   await page.waitForFunction(() => document.querySelector("main") && !/불러오는 중/.test(document.querySelector("main").innerText), null, { timeout: 15000 }).catch(() => {});
   await page.waitForTimeout(1200);
-  const go = async v => { await page.evaluate(v => { location.hash = "#" + v; }, v); await page.waitForTimeout(400); };
+  // 시계가 멈춰 있어서 앱의 '뒤로 가기 두 번 막기'(450ms 안)가 매번 걸림 → 화면 바꿀 때마다 풀어 줌
+  const go = async v => { await page.evaluate(v => { try { popAt = 0; } catch (e) {} location.hash = "#" + v; }, v); await page.waitForTimeout(400); };
   const text = sel => page.evaluate(s => (document.querySelector(s) || {}).innerText || "", sel).then(t => t.replace(/\s+/g, " "));
   const writes = t => page.evaluate(t => (window.__w || []).filter(x => x[0] === t), t);
   return { ctx, page, errs, missing, go, text, writes };
@@ -275,6 +276,21 @@ const SUITES = {
     assert.ok(await p.$("#lvSetForm"), "다음 세트 시작 창");
     await p.evaluate(() => closeSheet());
 
+    // 선수 칸은 팀 색(우리 파랑), 고르면 꽉 채움
+    const bg = sel => p.$eval(sel, el => getComputedStyle(el).backgroundColor);
+    const off = await bg(".lv-n.us"); await p.click(".lv-n.us"); await p.waitForTimeout(100);
+    assert.notStrictEqual(await bg(".lv-n.us.on"), off, "고른 선수 색 바뀜");
+    assert.notStrictEqual(off, await bg('[data-act="lvundo"]'), "선수 칸은 다른 버튼과 색이 다름");
+    // 전력분석 → 실시간 탭: 만든 경기가 보이고, 누르면 같은 실시간 화면(점수 · 기록)
+    await p.evaluate(() => { state.live.open = null; state.cup.key = null; state.dirty = false; }); await a.go("home"); await a.go("scout"); await p.waitForTimeout(200);
+    await p.click('[data-act="scltab"][data-k="live"]'); await p.waitForTimeout(400);
+    assert.match(await a.text(".sc-list"), /SNU vs B대/);
+    await p.click('[data-act="sclive"]'); await p.waitForTimeout(400);
+    assert.ok(await p.$('[data-act="lvpt"][data-v="us"]'), "전력분석에서 연 실시간 화면");
+    assert.match(await a.text(".lv-score"), /2 : 0/);
+    await p.evaluate(() => innerBack()); await p.evaluate(() => { state.dirty = false; render(); }); await p.waitForTimeout(200);
+    assert.ok(await p.$('[data-act="sclive"]'), "뒤로 → 실시간 목록");
+    await a.go("cup");
     await p.evaluate(() => lvForm("friendly:f1")); await p.waitForTimeout(200);
     assert.strictEqual(await p.$("#lv-label"), null, "교류전 경기 이름 칸 없음");
     assert.strictEqual(await p.evaluate(() => document.getElementById("lv-opp").value), "연세대");
