@@ -2420,3 +2420,70 @@ begin
   return k;
 end $$;
 drop table public.wellness;
+
+-- 2026-11-02 서버 휴지통: 팀 데이터 표에서 지운 줄은 private.trash 에 60일 보관 (Undo · RESET · 삭제 모두), 매일 스냅샷 15일
+create table if not exists private.trash (id bigserial primary key, tbl text not null, row jsonb not null, deleted_at timestamptz not null default now(), by_user uuid default auth.uid());
+create index if not exists trash_tbl_at on private.trash (tbl, deleted_at desc);
+create or replace function private.keep_deleted() returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  insert into private.trash (tbl, row) values (TG_TABLE_NAME, to_jsonb(OLD));
+  return OLD;
+end $$;
+revoke all on function private.keep_deleted() from public, anon, authenticated;
+do $$ declare t text; begin
+  foreach t in array array['teams','profiles','players','player_private','player_contacts','health','tests','pain_checks','lift_sets','logs','day_picks','program_edits',
+    'events','terms','team_off','practice_times','practice_plans','friendlies','event_votes','entries','lineups','absences','open_sessions','open_votes','guest_votes',
+    'notices','videos','training_notes','cups','cup_teams','cup_matches','cup_avail','cup_photos','scout_matches','scout_events','scout_points','live_games','live_rallies'] loop
+    if to_regclass('public.' || t) is null then continue; end if;
+    execute format('drop trigger if exists keep_deleted on public.%I', t);
+    execute format('create trigger keep_deleted before delete on public.%I for each row execute function private.keep_deleted()', t);
+  end loop;
+end $$;
+create or replace function private.take_snapshot() returns integer language plpgsql security definer set search_path = '' as $$
+declare t text; k integer := 0;
+begin
+  foreach t in array array['teams','profiles','players','player_private','player_contacts','health','tests','pain_checks','lift_sets','logs','day_picks','program_edits',
+    'events','terms','team_off','practice_times','practice_plans','friendlies','event_votes','entries','lineups','absences','open_sessions','open_votes','guest_votes',
+    'notices','videos','training_notes','cups','cup_teams','cup_matches','cup_avail','cup_photos','scout_matches','scout_events','scout_points','live_games','live_rallies'] loop
+    if to_regclass('public.' || t) is null then continue; end if;
+    execute format('insert into private.snapshots (tbl, n, data) select %L, count(*), coalesce(jsonb_agg(to_jsonb(x)), ''[]''::jsonb) from public.%I x', t, t);
+    k := k + 1;
+  end loop;
+  delete from private.snapshots where taken_at < now() - interval '15 days';
+  delete from private.trash where deleted_at < now() - interval '60 days';
+  delete from public.client_errors where at < now() - interval '60 days';
+  return k;
+end $$;
+select cron.unschedule('snapshot-weekly');
+select cron.schedule('snapshot-daily', '30 18 * * *', $$select private.take_snapshot()$$);
+-- 전력분석 지운 기록 보기 · 되살리기 (전력분석 담당 이상, 같은 팀 경기만)
+create or replace function public.scout_trash(mid uuid) returns table(id uuid, deleted_at timestamptz, by_name text, set_no int, score text, action text)
+language sql stable security definer set search_path = '' as $$
+  select (t.row->>'id')::uuid, t.deleted_at, coalesce(pl.name, '?'), (t.row->>'set_no')::int, t.row->>'score', t.row->>'action'
+  from private.trash t
+  left join public.profiles pr on pr.id = t.by_user left join public.players pl on pl.id = pr.player_id
+  where t.tbl = 'scout_events' and t.row->>'match_id' = mid::text and private.can('analysis') and private.scout_team(mid) = (select private.my_team())
+    and not exists (select 1 from public.scout_events e where e.id = (t.row->>'id')::uuid)
+  order by t.deleted_at
+$$;
+create or replace function public.scout_restore(mid uuid, ids uuid[]) returns integer language plpgsql security definer set search_path = '' as $$
+declare n integer;
+begin
+  if not private.can('analysis') or private.scout_team(mid) is distinct from (select private.my_team()) then raise exception 'forbidden'; end if;
+  insert into public.scout_events
+    select (jsonb_populate_record(null::public.scout_events, t.row)).* from private.trash t
+    where t.tbl = 'scout_events' and t.row->>'match_id' = mid::text and (t.row->>'id')::uuid = any(ids)
+  on conflict do nothing;
+  get diagnostics n = row_count;
+  insert into public.scout_points
+    select (jsonb_populate_record(null::public.scout_points, t.row)).* from private.trash t
+    where t.tbl = 'scout_points' and t.row->>'match_id' = mid::text and (t.row->>'event_id')::uuid = any(ids)
+      and not exists (select 1 from public.scout_points p where p.id = (t.row->>'id')::uuid)
+  on conflict do nothing;
+  return n;
+end $$;
+revoke all on function public.scout_trash(uuid) from public, anon;
+revoke all on function public.scout_restore(uuid, uuid[]) from public, anon;
+grant execute on function public.scout_trash(uuid) to authenticated;
+grant execute on function public.scout_restore(uuid, uuid[]) to authenticated;
+-- 2026-11-02 KUSF 경희대전 1세트 랠리 1~10 (15:15~15:20 Undo 로 서버에서 지워짐, 휴지통 전): 점수 · 로테만 '점수만(pt)' 기록 10개로 복구 (경희대 7 : 서울대 3, 다음 기록의 R4 · R4 · 서브 경희대에 맞춘 순서), 선수 기록은 없음

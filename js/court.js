@@ -460,8 +460,28 @@ function ctCfgForm() {
       ${s.nine ? "" : rot("ctc-rot", s.rot, "Our Rot") + rot("ctc-orot", s.orot, "Opp Rot")}
       <label class="fl">Serving<select id="ctc-serve"><option value="us" ${s.serve !== "opp" ? "selected" : ""}>${esc(ctTA(m))}</option><option value="opp" ${s.serve === "opp" ? "selected" : ""}>${esc(m.opponent || "상대")}</option></select></label>
       <label class="fl">Rally<input id="ctc-rally" type="number" inputmode="numeric" min="1" max="200" value="${s.rally}"></label>
-    </div><div class="row"><button class="btn primary" type="submit">Confirm</button></div></form>`;
+    </div><div class="row"><button class="btn primary" type="submit">Confirm</button></div></form>
+    ${can("analysis") ? `<div id="ctTrash" class="ct-trash"></div>` : ""}`;
   el.hidden = false; document.body.classList.add("noscroll");
+  if (can("analysis")) ctTrashLoad();
+}
+// 지운 기록 되살리기 (서버 휴지통 private.trash, 60일): 같은 사람이 2분 안에 연달아 지운 것끼리 묶어 보여 주고, 묶음째 되살림
+async function ctTrashLoad() {
+  const box = document.getElementById("ctTrash"), m = scMatch(); if (!box || !m) return;
+  let rows = [];
+  try { const r = await sb.rpc("scout_trash", { mid: m.id }); if (r.error) throw r.error; rows = r.data || []; } catch (e) { box.innerHTML = ""; return; }
+  const g = []; for (const x of rows) { const last = g[g.length - 1], t = new Date(x.deleted_at).getTime();
+    if (last && last.by === x.by_name && t - last.end <= 120000) { last.ids.push(x.id); last.end = t; last.rows.push(x); } else g.push({ by: x.by_name, start: t, end: t, ids: [x.id], rows: [x] }); }
+  ctTrashLoad.groups = g;
+  const hm = t => { const d = new Date(t); return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
+  const sets = l => [...new Set(l.map(x => x.set_no))].map(n => { const sc = l.filter(x => x.set_no === n).map(x => x.score).filter(Boolean); return `${n}세트${sc.length ? ` ${sc[0]}~${sc[sc.length - 1]}` : ""}`; }).join(" · ");
+  box.innerHTML = g.length ? `<h4>지운 기록 되살리기 <span class="small muted">서버에 60일 보관</span></h4><ul class="ct-trl">${g.map((x, i) => `<li><span><b>${hm(x.start)}${x.end - x.start > 60000 ? `~${hm(x.end).slice(-5)}` : ""}</b> · ${esc(x.by)} · ${x.ids.length}개<br><small class="muted">${esc(sets(x.rows))}</small></span><button class="btn small" type="button" data-act="cttrashres" data-i="${i}">되살리기</button></li>`).join("")}</ul>` : "";
+}
+async function ctTrashRestore(i) {
+  const x = (ctTrashLoad.groups || [])[i], m = scMatch(); if (!x || !m) return;
+  if (!await confirmDel(`지운 기록 ${x.ids.length}개를 되살릴까요?`, "네, 되살릴게요")) return;
+  try { const r = await sb.rpc("scout_restore", { mid: m.id, ids: x.ids }); if (r.error) throw r.error; toast(`${r.data ?? x.ids.length}개를 되살렸어요`); } catch (e) { toast(failMsg(e)); return; }
+  closeSheet(); await scoutEvents(m.id);
 }
 function ctCfgSave() {
   const S = sc(), m = scMatch(), v = id => (document.getElementById(id) || {}).value || "";
@@ -506,6 +526,7 @@ function courtClick(b, act) {
   if (act === "ctundo") return ctUndo();
   if (act === "ctlineup") return ctLineupForm();
   if (act === "ctcfg") return ctCfgForm();
+  if (act === "cttrashres") return ctTrashRestore(Number(b.dataset.i));
   if (act === "ctreset") return ctReset();
   if (act === "ctspotp") { S.spotPick = { ...(S.spotPick || {}), [b.dataset.side]: b.dataset.v }; state.dirty = false; return render(); }
   if (act === "ctflip") { try { localStorage.setItem("snuvt-ctflip", ctFlip() ? "0" : "1"); } catch (e) {} state.dirty = false; return render(); }

@@ -371,6 +371,16 @@ const SUITES = {
     await p.click('[data-act="sctab"][data-k="stats"]'); await p.waitForTimeout(300);
     const row = await p.evaluate(() => [...document.querySelectorAll(".ct-sheet tbody tr")].map(t => t.innerText.replace(/\s+/g, " ")).find(t => /^11 /.test(t)));
     assert.match(row || "", /^11 최수혁 OP/, "분석 표: 배번 · 이름 · 포지션 " + row);
+    // 지운 기록 되살리기: Settings 에 사람 · 2분 안 묶음으로 보이고, 묶음째 되살림
+    await p.evaluate(() => { const t0 = Date.parse("2026-11-02T06:15:00Z"), mk = (i, by, dt) => ({ id: "d" + i, deleted_at: new Date(t0 + dt * 1000).toISOString(), by_name: by, set_no: 1, score: `${i}:0`, action: "kill" });
+      window.__rows = [mk(1, "최수혁", 0), mk(2, "최수혁", 30), mk(3, "최수혁", 90), mk(4, "이석훈", 400)];
+      sb.rpc = async (n, a) => n === "scout_trash" ? { data: window.__rows, error: null } : n === "scout_restore" ? (window.__res = a, { data: a.ids.length, error: null }) : { data: null, error: null }; });
+    await p.click('[data-act="sctab"][data-k="court"]'); await p.waitForTimeout(200);
+    await p.click('[data-act="ctcfg"]'); await p.waitForTimeout(300);
+    assert.strictEqual(await p.$$eval(".ct-trl li", x => x.length), 2, "두 묶음");
+    assert.match(await a.text(".ct-trl li"), /최수혁 · 3개/);
+    await p.click('[data-act="cttrashres"][data-i="0"]'); await p.waitForTimeout(300);
+    assert.deepStrictEqual(await p.evaluate(() => window.__res.ids), ["d1", "d2", "d3"]);
     clean(a); await a.ctx.close();
   },
   // Undo · 되돌리기: 빨리 여러 번 눌러도, 지우기가 서버에 가기 전에 새로고침해도 다 지워짐 (지우기도 폰 대기열에 남음)
