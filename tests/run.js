@@ -131,6 +131,20 @@ const SUITES = {
     assert.deepStrictEqual(g.opp.slots, [9, "OH1", "MB1", "OP", "OH2", "MB2"]);
     assert.strictEqual(g.opp.rot, 3);
     assert.deepStrictEqual(g.ros, { no: 9, pos: "S" });
+    // 교체(상대): 나감 OH1 → 포지션 OH 자동 → 번호 15 → 교체, 다음엔 번호 없이 MB1 → MB3 이름표
+    await p.click('[data-act="lvside"][data-v="opp"]'); await p.waitForTimeout(150);
+    await p.click('[data-act="lvsub"]'); await p.waitForTimeout(150);
+    const oz = await p.evaluate(() => { const s = lvState(lvGame(), lv().rallies[lvGame().id] || [], 1), on = lvCourtOn(lvGame(), "opp", s, 1); return { oh: on.vals.indexOf("OH1") + 1, mb: on.vals.indexOf("MB1") + 1 }; });
+    await p.click(`[data-act="lvsubout"][data-v="${oz.oh}"]`); await p.waitForTimeout(100);
+    assert.match(await a.text(".lv-subpos .on"), /^OH$/, "나간 선수 포지션이 기본");
+    await p.fill("#lvSubNew", "15"); await p.press("#lvSubNew", "Enter"); await p.waitForTimeout(300);
+    await p.click('[data-act="lvsub"]'); await p.waitForTimeout(150);
+    await p.click(`[data-act="lvsubout"][data-v="${oz.mb}"]`); await p.click('[data-act="lvsubok"]'); await p.waitForTimeout(300);
+    const sb = await p.evaluate(() => { const g = lvGame(), r = g.roster.opp; return { r15: r.find(x => String(x.no) === "15"), mb3: r.find(x => x.no === "MB3"), slots: g.sets[1].lu.opp.slots }; });
+    assert.deepStrictEqual(sb.r15, { no: 15, pos: "OH" });
+    assert.deepStrictEqual(sb.mb3, { no: "MB3", pos: "MB" });
+    assert.ok(sb.slots.includes(15) && sb.slots.includes("MB3") && !sb.slots.includes("OH1") && !sb.slots.includes("MB1"), String(sb.slots));
+    await p.click('[data-act="lvside"][data-v="us"]');
     // 6자리를 다 안 채우면 저장 안 됨
     await p.click('[data-act="lvros"]'); await p.waitForTimeout(200);
     await p.evaluate(() => { document.getElementById("lvl-opp-2").value = ""; });
