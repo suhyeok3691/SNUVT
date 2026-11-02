@@ -154,8 +154,17 @@ const SUITES = {
     await p.click('.ct-court .ct-p.opp[data-v="12"]'); await p.click('[data-act="ctcat"][data-v="attack"]'); await p.click('[data-act="ctact"][data-a="inplay"]');
     await p.click('[data-act="ctnospot"]'); await p.waitForTimeout(200);
     assert.strictEqual((await a.writes("scout_events"))[1][2].x, null);
+    // 리시브도 서브가 온 자리: 받은 팀 코트 그림 → x/y/구역 저장 (점수 없음, 서브는 상대)
+    await p.click('.ct-court .ct-p.us[data-v="2"]'); await p.click('[data-act="ctcat"][data-v="receive"]'); await p.click('[data-act="ctact"][data-a="r2"]'); await p.waitForTimeout(150);
+    assert.match(await a.text(".ct-spot-h"), /서브가 온 자리/);
+    const rb = await p.locator("#ctCourtTap").boundingBox();
+    await p.mouse.click(rb.x + rb.width * 0.5, rb.y + rb.height * 0.5); await p.waitForTimeout(300); // 가운데 = 8번
+    const rv = (await a.writes("scout_events"))[2][2];
+    assert.deepStrictEqual({ skill: rv.skill, action: rv.action, zone: rv.zone, x: rv.x, y: rv.y, point: rv.point, serve: rv.serve }, { skill: "receive", action: "r2", zone: 8, x: 50, y: 50, point: null, serve: "opp" });
     await p.click('[data-act="sctab"][data-k="stats"]'); await p.waitForTimeout(300);
-    assert.strictEqual(await p.evaluate(() => document.querySelectorAll(".ct-spots circle").length), 1, "분석 탭에 점 하나");
+    assert.strictEqual(await p.evaluate(() => document.querySelectorAll(".ct-spots circle").length), 2, "분석 탭에 공격 점 하나 · 리시브 점 하나");
+    assert.strictEqual(await p.evaluate(() => document.querySelectorAll(".ct-spots circle.gL:not(.tip)").length), 2, "득점 · 2-Receive 둘 다 파랑");
+    assert.match(await a.text("main"), /서브가 온 자리 \(리시브\)/);
     clean(a); await a.ctx.close();
   },
   // 홈 '오늘 할 것': 아침 컨디션 설문 없음 (2026-11-01 뺌), 큰 칸 4개(하단 탭과 같음)도 없음, 알림 안내에도 컨디션 없음

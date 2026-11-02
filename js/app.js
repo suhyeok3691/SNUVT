@@ -2194,6 +2194,7 @@ function scoutStats(ev, pts) {
     <section class="sec"><h3>${esc((m && m.opponent) || "상대")}</h3>${ctSheetTable(all, "opp")}</section>
     <section class="sec"><h3>서브 종류</h3>${ctServeTypes(all)}</section>
     <section class="sec"><h3>공격이 떨어진 자리</h3>${ctSpotStats(all)}</section>
+    <section class="sec"><h3>서브가 온 자리 (리시브)</h3>${ctSpotStats(all, "receive")}</section>
     ${ctNine(m) ? "" : `<section class="sec"><h3>로테이션별 득실 · ${esc(ctTA(m))}</h3>${scRotTable(pl)}</section>
     <section class="sec"><h3>로테이션별 득실 · ${esc((m && m.opponent) || "상대")}</h3>${ctOppRotTable(pl)}</section>`}`;
 }
