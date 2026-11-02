@@ -265,6 +265,10 @@ const SUITES = {
     assert.strictEqual(await sideOn(), "opp", "이어짐 → 상대 팀");
     await p.click('[data-act="lvcode"][data-v="atk:in"]'); await p.waitForTimeout(150);
     assert.strictEqual(await sideOn(), "us", "다시 이어짐 → 우리 팀");
+    // 3단 넘김(점수 고르는 창 → 3/2/1)도 상대 팀으로
+    await p.click('[data-act="lvcode"][data-v="atk:over"]'); await p.waitForTimeout(100); await p.click('[data-act="lvover"][data-v="2"]'); await p.waitForTimeout(150);
+    assert.strictEqual(await sideOn(), "opp", "3단 넘김 → 상대 팀");
+    await p.click('[data-act="lvside"][data-v="us"]');
     await p.evaluate(() => lvSave("blk:touch")); await p.waitForTimeout(100);
     assert.strictEqual(await sideOn(), "us", "다른 기록은 팀 그대로");
     await p.evaluate(() => lvSetForm(2)); await p.waitForTimeout(150);
