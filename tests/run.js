@@ -404,6 +404,42 @@ const SUITES = {
     assert.deepStrictEqual(r, { orot: 3, rot: 2, serve: "opp", z1: 13 }, "상대 3번째 선수가 1번 자리에서 서브");
     clean(a); await a.ctx.close();
   },
+  // 시즌 화면: 팀 한눈에 카드 · 선수별 누적(득점 순) · 경기별 지표 뜻 · 로테 · 공격 종류 · 패스 (번호로 넣은 서울대 경기 포함)
+  async seasonview(b) {
+    const a = await openApp(b, "coach", { width: Number(process.env.W || 390) }), p = a.page;
+    await a.go("scout"); await p.waitForTimeout(300);
+    await p.evaluate(() => {
+      const S = sc(), names = ["김도현", "박준서", "이민재", "정우진", "한서준", "오지훈"], pos = ["OH", "MB", "OP", "OH", "MB", "Li"];
+      names.forEach((n, i) => { state.players["px" + i] = { name: n, pos: pos[i], number: 2 + i * 3, sort: 10 + i }; });
+      S.matches.push({ id: "m2", title: "KUSF", date: "2026-10-20", team: "경희대", opponent: "서울대", division: "6", lineup: {} }, { id: "m3", title: "교류전", date: "2026-10-25", team: null, opponent: "고려대", division: "6", lineup: {} });
+      let t = Date.parse("2026-10-20T10:00:00Z"), k = 0;
+      const R = () => (k = (k * 9301 + 49297) % 233280) / 233280;
+      for (const [mid, sd] of [["m2", "opp"], ["m3", "us"]]) {
+        const ev = [], pts = [], ot = sd === "us" ? "opp" : "us";
+        for (const set of [1, 2]) for (let r = 0; r < 40; r++) {
+          const i = Math.floor(R() * 5), who = mid === "m2" ? { opp_no: 2 + i * 3, player_id: null } : { player_id: "px" + i, opp_no: null };
+          const pick = R(), kinds = ["lo", "lq", "a", "b", "bc", "pipe", "ro", null];
+          const mk = (action, skill, grade, point, extra = {}) => ev.push({ id: mid + "-" + ev.length, match_id: mid, set_no: set, side: sd, action, skill, grade, point, created_at: new Date(t += 1000).toISOString(), ...who, ...extra });
+          if (pick < .45) { const g = R(); mk(g < .45 ? "kill" : g < .7 ? "inplay" : "aerr", "attack", g < .45 ? "#" : g < .7 ? "!" : "=", g < .45 ? sd : g < .7 ? null : ot, { kind: kinds[Math.floor(R() * kinds.length)] }); }
+          else if (pick < .65) { const g = R(); mk(g < .12 ? "ace" : g < .8 ? "s2" : "serr", "serve", g < .12 ? "#" : g < .8 ? "!" : "=", g < .12 ? sd : g < .8 ? null : ot); }
+          else if (pick < .82) { const g = R(); mk(g < .4 ? "r3" : g < .7 ? "r2" : g < .9 ? "r1" : "rerr", "receive", g < .4 ? "#" : g < .7 ? "+" : g < .9 ? "!" : "=", g < .9 ? null : ot); }
+          else if (pick < .93) { const g = R(); mk(g < .6 ? "dig" : "derr", "dig", g < .6 ? "+" : "=", g < .6 ? null : ot); }
+          else mk("blk", "block", "#", sd);
+          const won = R() < .52; pts.push({ id: mid + "p" + pts.length, match_id: mid, set_no: set, rot: 1 + Math.floor(R() * 6), opp_rot: 1 + Math.floor(R() * 6), serve: R() < .5 ? "us" : "opp", won });
+        }
+        S.events[mid] = ev; S.points[mid] = pts;
+      }
+      S.all = true; S.ltab = "season"; state.dirty = false; render();
+    });
+    await p.waitForTimeout(300);
+    const txt = await a.text("main");
+    for (const w of ["팀 한눈에", "공격 성공률", "선수별 누적", "경기별로 보기", "로테이션별 득실", "공격 종류별", "패스에 따른 공격", "(득점 − 범실) ÷ 시도", "김도현"]) assert.ok(txt.includes(w), w);
+    assert.ok(txt.includes("2경기"), "번호 서울대 경기 + 명단 경기");
+    await p.click('[data-act="scmetric"][data-v="rcv"]'); await p.waitForTimeout(150);
+    assert.match(await a.text(".ss-def"), /2·3점 리시브 ÷ 받은 서브/);
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT, fullPage: true });
+    clean(a); await a.ctx.close();
+  },
   // 고치기에서 서브 · 공격 떨어진 자리 넣기 · 고치기 · 지우기 / 번호로 넣은 서울대(SNUVT) 쪽 기록도 시즌 누적에
   async spotedit(b) {
     const a = await openApp(b, "coach"), p = a.page;
