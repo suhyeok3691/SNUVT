@@ -404,7 +404,22 @@ const SUITES = {
     assert.deepStrictEqual(r, { orot: 3, rot: 2, serve: "opp", z1: 13 }, "상대 3번째 선수가 1번 자리에서 서브");
     clean(a); await a.ctx.close();
   },
-  // 시즌 화면: 팀 한눈에 카드 · 선수별 누적(득점 순) · 경기별 지표 뜻 · 로테 · 공격 종류 · 패스 (번호로 넣은 서울대 경기 포함)
+  // 교내 대회는 위 탭이 아니라 '대회' 안 칸 → 누르면 교내 대회 화면(위 탭은 대회 그대로), ‹ 대회로 돌아옴
+  async campustab(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await a.go("cup"); await p.waitForTimeout(200);
+    assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["대회", "교류전", "전력분석"]);
+    assert.match(await a.text("main"), /교내 대회/);
+    await p.evaluate(() => { state.cups = [{ id: "c1", name: "2026 종합체육대회", kind: "gen", start: "2026-10-26", end: "2026-10-29", teams: [{ id: "t1", name: "종보상점" }, { id: "t2", name: "서울대 배구부" }], matches: [{ id: "f", stage: "f", label: "결승", a: "t2", b: "t1", winner: "t1", date: "2026-10-29", refs: {} }], photos: [], avail: {}, picks: {} }]; state.dirty = false; render(); });
+    assert.match(await a.text("main"), /우승 종보상점/);
+    await p.click('[data-act="cmpgo"][data-id="c1"]'); await p.waitForTimeout(200);
+    assert.strictEqual(await p.evaluate(() => state.view), "campus");
+    assert.strictEqual(await a.text("#tabs .seg-tab.on"), "대회", "위 탭은 대회");
+    await p.click('main [data-act="view"][data-v="cup"]'); await p.waitForTimeout(200);
+    assert.strictEqual(await p.evaluate(() => state.view), "cup");
+    clean(a); await a.ctx.close();
+  },
+  // 시즌 화면: 팀 카드(효율 .300 · 리시브 0~3 · 서브 0~4 · 세트당) · 예전 선수 × 경기 표 · 로테 · 공격 종류 · 패스 (번호로 넣은 서울대 경기 포함)
   async seasonview(b) {
     const a = await openApp(b, "coach", { width: Number(process.env.W || 390) }), p = a.page;
     await a.go("scout"); await p.waitForTimeout(300);
@@ -433,10 +448,13 @@ const SUITES = {
     });
     await p.waitForTimeout(300);
     const txt = await a.text("main");
-    for (const w of ["팀 한눈에", "공격 성공률", "선수별 누적", "경기별로 보기", "로테이션별 득실", "공격 종류별", "패스에 따른 공격", "(득점 − 범실) ÷ 시도", "김도현"]) assert.ok(txt.includes(w), w);
+    for (const w of ["공격 효율", "공격 성공률", "리시브 점수", "서브 점수", "로테이션별 득실", "공격 종류별", "패스에 따른 공격", "김도현"]) assert.ok(txt.includes(w), w);
+    assert.match(await a.text(".ss-kpis"), /공격 효율\s*-?\.\d{3}/, "공격 효율은 .300 꼴");
+    assert.doesNotMatch(await a.text(".ss-kpis"), /공격 효율\s*-?\d+%/);
     assert.ok(txt.includes("2경기"), "번호 서울대 경기 + 명단 경기");
     await p.click('[data-act="scmetric"][data-v="rcv"]'); await p.waitForTimeout(150);
-    assert.match(await a.text(".ss-def"), /2·3점 리시브 ÷ 받은 서브/);
+    assert.match(await a.text("main"), /0~3점 평균 · 2\.0 이상 좋음/);
+    assert.match(await a.text(".sc-season .sc-team"), /\d\.\d\d/, "리시브 점수 2.15 꼴");
     if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT, fullPage: true });
     clean(a); await a.ctx.close();
   },

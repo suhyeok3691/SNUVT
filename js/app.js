@@ -110,10 +110,13 @@ const VIEWS = ["home", "practice", "notes", "video", "jp", "scout", "train", "pl
 const SECTIONS = {
   physical: { label: "피지컬", views: [["train", "오늘"], ["plan", "프로그램"], ["rec", "기록"]] },
   schedule: { label: "일정", views: [["season", "다가오는"], ["comps", "전체 일정"], ["sched", "훈련 관리", "attend"]] },
-  cup: { label: "대회", views: [["cup", "대회"], ["fr", "교류전"], ["scout", "전력분석"], ["campus", "교내 대회"]] },
+  cup: { label: "대회", views: [["cup", "대회"], ["fr", "교류전"], ["scout", "전력분석"]] },
   admin: { label: "관리", views: [["roster", "명단", "roster"], ["intake", "부원", "full"], ["report", "리포트", "training"]] },
   practice: { label: "훈련", views: [["practice", "훈련 계획"], ["notes", "훈련 노트"], ["video", "영상"], ["jp", "일본 고교"]] },
 };
+// 위 탭 없이 다른 탭 안에 들어간 화면 (교내 대회는 1년에 두 번이라 '대회' 안 항목)
+const TAB_OF = { campus: "cup" };
+const tabOf = v => TAB_OF[v] || v;
 const SECTION_OF = { scout: "cup", practice: "practice", notes: "practice", video: "practice", jp: "practice", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", cup: "cup", fr: "cup", campus: "cup", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
 // 직책: 관리자·주장 = 전체 / 부주장·훈련 담당·총무·피지컬 담당 = 맡은 일만 (서버 규칙 private.can 과 같게)
 const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", treasurer: "총무", ops: "훈련 담당", trainer: "피지컬 담당", analyst: "전력분석 담당", media: "영상 담당" };
@@ -385,10 +388,10 @@ function header() {
   const key = secKey + "|" + vs.map(v => v[0] + v[1]).join(",");
   if (nav._key === key) {
     // 같은 섹션: 버튼은 그대로 두고 고른 탭만 바꿈 → 흰 칸이 부드럽게 미끄러짐
-    for (const b of nav.querySelectorAll(".seg-tab")) { const on = b.dataset.v === state.view; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); }
+    for (const b of nav.querySelectorAll(".seg-tab")) { const on = b.dataset.v === tabOf(state.view); b.classList.toggle("on", on); b.setAttribute("aria-selected", on); }
     placeThumb(nav, true);
   } else {
-    nav.innerHTML = `<span class="tab-title">${sec.label}</span><div class="seg" role="tablist"><span class="seg-thumb"></span>${vs.map(([k, l]) => `<button type="button" class="seg-tab ${state.view === k ? "on" : ""}" role="tab" aria-selected="${state.view === k}" data-act="view" data-v="${k}">${l}</button>`).join("")}</div>`;
+    nav.innerHTML = `<span class="tab-title">${sec.label}</span><div class="seg" role="tablist"><span class="seg-thumb"></span>${vs.map(([k, l]) => `<button type="button" class="seg-tab ${tabOf(state.view) === k ? "on" : ""}" role="tab" aria-selected="${tabOf(state.view) === k}" data-act="view" data-v="${k}">${l}</button>`).join("")}</div>`;
     nav._key = key; nav._h = null;
     placeThumb(nav, false);
   }
@@ -2189,17 +2192,17 @@ function scSetterRows(ev) {
 }
 // 공격 묶음 → 시도 · 성공률 · 효율 칸
 const scAtkCells = l => { const n = l.length, k = l.filter(r => r.grade === "#").length, er = l.filter(r => "=/".includes(r.grade)).length, ef = n ? Math.round(100 * (k - er) / n) : null;
-  return `<td class="num">${n}</td><td class="num">${scPct(k, n)}</td><td class="num ${ef == null ? "" : ef > 0 ? "ss-up" : ef < 0 ? "ss-dn" : ""}">${ef == null ? "—" : ef + "%"}</td>`; };
+  return `<td class="num">${n}</td><td class="num">${scPct(k, n)}</td><td class="num ${ef == null ? "" : ef >= 30 ? "good" : ef < 10 ? "crit" : ""}">${scEff(k - er, n)}</td>`; };
 function scAtkTypeTable(ev) {
   const rows = scSetterRows(ev); if (!rows.length) return emptyLine("공격 기록이 없어요.");
   const kinds = [...CT_ATYPE.map(x => x[0]).filter(k => rows.some(r => r.kind === k)), ...(rows.some(r => !CT_ATN[r.kind]) ? [""] : [])];
-  const tr = k => { const l = rows.filter(r => k ? r.kind === k : !CT_ATN[r.kind]); return `<tr><td class="ss-name">${k ? esc(CT_ATN[k]) : `<span class="muted">안 고름</span>`}</td><td class="num">${scPct(l.length, rows.length)}</td>${scAtkCells(l)}</tr>`; };
-  return `<div class="tw"><table class="ss-tbl"><thead><tr><th>공격 종류</th><th>비중</th><th>시도</th><th>성공률</th><th>효율</th></tr></thead><tbody>${kinds.map(tr).join("")}</tbody></table></div>`;
+  const tr = k => { const l = rows.filter(r => k ? r.kind === k : !CT_ATN[r.kind]); return `<tr><td>${k ? esc(CT_ATN[k]) : `<span class="muted">안 고름</span>`}</td><td class="num">${scPct(l.length, rows.length)}</td>${scAtkCells(l)}</tr>`; };
+  return `<div class="tw"><table><thead><tr><th>공격 종류</th><th>비중</th><th>시도</th><th>성공률</th><th>효율</th></tr></thead><tbody>${kinds.map(tr).join("")}</tbody></table></div>`;
 }
 function scPassTable(ev) {
   const rows = scSetterRows(ev); if (!rows.length) return emptyLine("공격 기록이 없어요.");
-  const qs = [["good", "좋은 패스", "2·3점 리시브 · 디그 뒤"], ["ok", "보통 패스", "1점 리시브 뒤"], ["bad", "나쁜 패스", "오버 패스 등 뒤"], ["?", "패스 기록 없음", "바로 앞 우리 패스를 안 넣음"]];
-  return `<div class="tw"><table class="ss-tbl"><thead><tr><th>공격 직전 패스</th><th>시도</th><th>성공률</th><th>효율</th></tr></thead><tbody>${qs.map(([q, l, h]) => { const x = rows.filter(r => r.q === q); return x.length ? `<tr><td class="ss-name">${l}<span class="ss-th">${h}</span></td>${scAtkCells(x)}</tr>` : ""; }).join("")}</tbody></table></div>`;
+  const qs = [["good", "좋은 패스 (2·3점)"], ["ok", "보통 패스 (1점)"], ["bad", "나쁜 패스"], ["?", "패스 기록 없음"]];
+  return `<div class="tw"><table><thead><tr><th>공격 직전 패스</th><th>시도</th><th>성공률</th><th>효율</th></tr></thead><tbody>${qs.map(([q, l]) => { const x = rows.filter(r => r.q === q); return x.length ? `<tr><td>${l}</td>${scAtkCells(x)}</tr>` : ""; }).join("")}</tbody></table></div>`;
 }
 // 로테이션별 득실: 사이드아웃(상대 서브 때) · 브레이크(우리 서브 때) · 득실. 3랠리 이상인 로테 중 가장 좋은 · 나쁜 로테 표시
 function scRotTable(pts) {
@@ -2207,9 +2210,9 @@ function scRotTable(pts) {
   const rs = [1, 2, 3, 4, 5, 6].map(r => { const l = pts.filter(p => p.rot === r), so = l.filter(p => p.serve === "opp"), bp = l.filter(p => p.serve === "us"), w = l.filter(p => p.won).length; return { r, n: l.length, so, bp, d: w * 2 - l.length }; });
   const ok = rs.filter(x => x.n >= 3), best = ok.slice().sort((a, b) => b.d - a.d)[0], worst = ok.slice().sort((a, b) => a.d - b.d)[0];
   const pc = l => { const w = l.filter(p => p.won).length; return l.length ? `${scPct(w, l.length)} <span class="small muted">${w}/${l.length}</span>` : "—"; };
-  return `<div class="tw"><table class="ss-tbl"><thead><tr><th>로테</th><th>사이드아웃<span class="ss-th">상대 서브 때 딴 비율</span></th><th>브레이크<span class="ss-th">우리 서브 때 딴 비율</span></th><th>득실<span class="ss-th">딴 점수 − 잃은 점수</span></th></tr></thead><tbody>${rs.map(x =>
-    `<tr class="${best && x.r === best.r && best.d > 0 ? "ss-best" : worst && x.r === worst.r && worst.d < 0 ? "ss-worst" : ""}"><td><b>R${x.r}</b></td><td class="num">${pc(x.so)}</td><td class="num">${pc(x.bp)}</td><td class="num ${x.d > 0 ? "ss-up" : x.d < 0 ? "ss-dn" : ""}">${x.n ? (x.d > 0 ? "+" : "") + x.d : "—"}</td></tr>`).join("")}</tbody></table></div>
-    ${best && best.d > 0 || worst && worst.d < 0 ? `<p class="small">${best && best.d > 0 ? `가장 강한 로테 <b>R${best.r}</b>` : ""}${best && best.d > 0 && worst && worst.d < 0 ? " · " : ""}${worst && worst.d < 0 ? `가장 약한 로테 <b>R${worst.r}</b>` : ""}</p>` : ""}`;
+  return `<div class="tw"><table><thead><tr><th>로테</th><th>사이드아웃</th><th>브레이크</th><th>득실</th></tr></thead><tbody>${rs.map(x =>
+    `<tr class="${best && x.r === best.r && best.d > 0 ? "ss-best" : worst && x.r === worst.r && worst.d < 0 ? "ss-worst" : ""}"><td><b>R${x.r}</b></td><td class="num">${pc(x.so)}</td><td class="num">${pc(x.bp)}</td><td class="num ${x.d > 0 ? "good" : x.d < 0 ? "crit" : ""}">${x.n ? (x.d > 0 ? "+" : "") + x.d : "—"}</td></tr>`).join("")}</tbody></table></div>
+    <p class="small muted">사이드아웃 = 상대 서브 때 딴 비율 · 브레이크 = 우리 서브 때 딴 비율</p>`;
 }
 function scoutStats(ev, pts) {
   const S = sc(), m = scMatch(), all = S.fset ? ev.filter(e => e.set_no === S.fset) : ev, pl = S.fset ? pts.filter(p => p.set_no === S.fset) : pts;
@@ -2233,16 +2236,26 @@ function scAsSnu(m) {
   return { ev, pts };
 }
 /* ---- 시즌 누적 · 경기별 ---- */
-// 선수 · 팀 묶음 합계 (경기 분석 기록지와 같은 셈 ctSum) + 좋은 리시브(2·3점)
-const scSum = l => { l = ctReal(l); return { ...ctSum(l), rg: l.filter(e => e.action === "r3" || e.action === "r2").length, se: l.filter(e => CT_CNT.srv_err.includes(e.action)).length }; };
-// 경기별로 볼 지표: [키, 이름, (합계) → [분자, 분모], 식, 뜻]
+// 배구 기록 표기 (NCAA · 코칭 통계와 같게)
+// 공격 효율 = (득점 − 범실) ÷ 시도 를 소수 셋째 자리(.300)로. .300 이상 좋음 · .100 밑이면 문제 · 마이너스 = 범실이 더 많음
+// 리시브 점수 = 3점 리시브 3 · 2점 2 · 1점 1 · 오버 · 범실 0 의 평균(0~3). 2.0 이상 좋음
+// 서브 점수 = 에이스 4 · 3-serve 3 · 2-serve 2 · 1-serve 1 · 범실 0 의 평균(0~4)
+// 디그 · 블로킹 = 세트당 개수
+const scEff = (a, b) => { if (!b) return "—"; const v = a / b; return (v < 0 ? "-" : "") + Math.abs(v).toFixed(3).replace(/^0/, ""); };
+const scAvg = v => v == null ? "—" : v.toFixed(2);
+const scPer = (a, n) => n ? (a / n).toFixed(1) : "—";
+const scSum = l => { l = ctReal(l); return { ...ctSum(l), se: l.filter(e => CT_CNT.srv_err.includes(e.action)).length }; };
+// 지표: [키, 이름, (합계, 세트 수) → [보일 값, 아래 작은 숫자, 색]]
 const SC_METRICS = [
-  ["atk", "공격 효율", s => [s.ak - s.ae, s.at], "(득점 − 범실) ÷ 시도", "범실 · 블로킹 당한 것까지 뺀 공격 기여. 0%보다 크면 이득"],
-  ["kill", "공격 성공률", s => [s.ak, s.at], "득점 ÷ 시도", "때린 공 중 바로 점수가 난 비율"],
-  ["rcv", "리시브 좋음", s => [s.rg, s.rc], "2·3점 리시브 ÷ 받은 서브", "세터가 편하게 올릴 수 있게 받은 비율"],
-  ["srv", "서브 효율", s => [s.sa - s.se, s.sv], "(에이스 − 범실) ÷ 서브", "마이너스면 서브로 점수를 더 많이 준 것"],
-  ["dig", "디그 성공", s => [s.dok, s.dg], "살린 디그 ÷ 디그 시도", "상대 공격을 받아 살린 비율"],
+  ["atk", "공격 효율", s => s.at ? [scEff(s.ak - s.ae, s.at), s.at, (s.ak - s.ae) / s.at >= .3 ? "good" : (s.ak - s.ae) / s.at < .1 ? "crit" : ""] : null],
+  ["kill", "공격 성공률", s => s.at ? [scPct(s.ak, s.at), s.at] : null],
+  ["rcv", "리시브 점수", s => s.rc ? [scAvg(s.rs), s.rc, s.rs >= 2 ? "good" : s.rs < 1.5 ? "crit" : ""] : null],
+  ["srv", "서브 점수", s => s.sv ? [scAvg(s.ss), s.sv] : null],
+  ["dig", "디그", (s, n) => s.dok ? [scPer(s.dok, n), s.dok] : null],
+  ["blk", "블로킹", (s, n) => s.bk ? [scPer(s.bk, n), s.bk] : null],
+  ["pts", "득점", s => s.pts ? [String(s.pts), null] : null],
 ];
+const SC_MNOTE = { atk: "(득점 − 범실) ÷ 시도 · .300 이상 좋음", kill: "득점 ÷ 시도", rcv: "0~3점 평균 · 2.0 이상 좋음", srv: "0~4점 평균 (에이스 4 · 범실 0)", dig: "세트당 · 아래는 개수", blk: "세트당 · 아래는 개수", pts: "공격 · 블로킹 · 에이스" };
 function scoutSeason() {
   const S = sc(), sys = [...new Set(S.matches.filter(m => m.date).map(m => syOf(m.date)))].sort((a, b) => b - a);
   if (S.sy && !sys.includes(S.sy)) S.sy = 0;
@@ -2250,58 +2263,37 @@ function scoutSeason() {
   const as = ms.map(scAsSnu), evs = as.map(x => x.ev.filter(e => e.side === "us")), allUs = evs.flat();
   const syRow = sys.length > 1 ? `<select id="scSy" class="sm-select" aria-label="시즌"><option value="0">전체</option>${sys.map(y => `<option value="${y}" ${S.sy === y ? "selected" : ""}>${y} 시즌</option>`).join("")}</select>` : "";
   if (!ms.length || !ctReal(allUs).length) return `<div class="sc-row">${syRow}</div>${emptyLine("아직 우리 팀 입력이 없어요.")}`;
-  
-  const sum = scSum, T = sum(allUs), sets = new Set(ctReal(allUs).map(e => e.match_id + ":" + e.set_no)).size;
-  // 경기 결과 (우리 쪽 기준 세트 승패)
-  const res = ms.map(m => { const { w } = ctSetWins(m, S.events[m.id] || []), fl = scSnuSide(m) === "opp", a = fl ? w.opp : w.us, b = fl ? w.us : w.opp; return a + b ? { a, b } : null; });
-  const vs = m => scSnuSide(m) === "opp" ? m.team : m.opponent || m.title;
-  const per = (a, b) => b ? (Math.round(a / b * 10) / 10).toFixed(1) : "—";
-  const tone = v => v > 0 ? "ss-up" : v < 0 ? "ss-dn" : "";
-  // 1. 팀 한눈에
-  const card = (label, val, sub, hint, cls = "") => `<div class="ss-k"><span class="ss-kl">${label}</span><b class="ss-kv ${cls}">${val}</b><span class="ss-ks">${sub}</span><span class="ss-kh">${hint}</span></div>`;
-  const eff = T.at ? Math.round(100 * (T.ak - T.ae) / T.at) : null;
+  const nSets = l => new Set(ctReal(l).map(e => e.match_id + ":" + e.set_no)).size;
+  const T = scSum(allUs), sets = nSets(allUs);
+  // 팀 한눈에: 값 + 실제 개수 한 줄
+  const card = (label, val, sub, cls = "") => `<div class="ss-k"><span class="ss-kl">${label}</span><b class="ss-kv ${cls}">${val}</b><span class="ss-ks">${sub}</span></div>`;
+  const ef = T.at ? (T.ak - T.ae) / T.at : null;
   const cards = [
-    card("공격 성공률", scPct(T.ak, T.at), `득점 ${T.ak} / 시도 ${T.at}`, "때린 공 중 바로 점수가 난 비율"),
-    card("공격 효율", eff == null ? "—" : eff + "%", `범실 · 블로킹 당함 ${T.ae}`, "성공에서 범실을 뺀 값. 0%보다 크면 이득", tone(eff)),
-    card("서브", `${T.sa} <small>에이스</small> · ${T.se} <small>범실</small>`, `서브 ${T.sv}번`, T.se > T.sa ? "범실이 에이스보다 많아요" : "에이스가 범실 이상이에요"),
-    card("리시브 좋음", scPct(T.rg, T.rc), `2·3점 ${T.rg} / 받은 서브 ${T.rc}`, "세터가 편하게 올릴 수 있게 받은 비율"),
-    card("디그 성공", scPct(T.dok, T.dg), `살림 ${T.dok} / 시도 ${T.dg}`, "상대 공격을 받아 살린 비율"),
-    card("득점", String(T.pts), `세트당 ${per(T.pts, sets)}`, "공격 · 블로킹 · 에이스로 낸 점수 (상대 범실 제외)"),
-    card("블로킹 득점", String(T.bk), `세트당 ${per(T.bk, sets)}`, "블로킹으로 바로 낸 점수"),
-    card("범실", String(T.err), `세트당 ${per(T.err, sets)}`, "공격 · 서브 · 리시브 · 네트 등으로 준 점수", T.err ? "ss-dn" : ""),
+    card("공격 효율", scEff(T.ak - T.ae, T.at), `득점 ${T.ak} · 범실 ${T.ae} · 시도 ${T.at}`, ef == null ? "" : ef >= .3 ? "good" : ef < .1 ? "crit" : ""),
+    card("공격 성공률", scPct(T.ak, T.at), `득점 ${T.ak} / 시도 ${T.at}`),
+    card("리시브 점수", scAvg(T.rs), `받은 서브 ${T.rc}`, T.rs == null ? "" : T.rs >= 2 ? "good" : T.rs < 1.5 ? "crit" : ""),
+    card("서브 점수", scAvg(T.ss), `에이스 ${T.sa} · 범실 ${T.se} · 서브 ${T.sv}`),
+    card("디그", `${scPer(T.dok, sets)}<small>/세트</small>`, `${T.dok}개`),
+    card("블로킹", `${scPer(T.bk, sets)}<small>/세트</small>`, `${T.bk}개`),
   ].join("");
-  // 2. 선수별 누적 (득점 순). 시도 5번 미만 비율은 흐리게
-  const ps = sortedPlayers().filter(p => allUs.some(e => e.player_id === p.id)).map(p => ({ p, s: sum(allUs.filter(e => e.player_id === p.id)) }))
-    .sort((a, b) => b.s.pts - a.s.pts || b.s.at - a.s.at);
-  const pc = (a, b) => b ? `<span class="${b < 5 ? "muted" : ""}">${scPct(a, b)}</span>` : "—", z = v => v || "—";
-  const prow = ({ p, s }) => { const ef = s.at ? Math.round(100 * (s.ak - s.ae) / s.at) : null;
-    return `<tr><td class="ss-name"><b>${pNo(p)}${esc(p.name)}</b></td><td class="num"><b>${z(s.pts)}</b></td>
-      <td class="num ss-g">${z(s.at)}</td><td class="num">${pc(s.ak, s.at)}</td><td class="num ${s.at >= 5 ? tone(ef) : ""}">${ef == null ? "—" : `<span class="${s.at < 5 ? "muted" : ""}">${ef}%</span>`}</td>
-      <td class="num ss-g">${z(s.sv)}</td><td class="num">${z(s.sa)}</td><td class="num">${z(s.se)}</td>
-      <td class="num ss-g">${z(s.rc)}</td><td class="num">${pc(s.rg, s.rc)}</td>
-      <td class="num ss-g">${z(s.dg)}</td><td class="num">${pc(s.dok, s.dg)}</td>
-      <td class="num ss-g">${z(s.bk)}</td><td class="num ss-g">${z(s.err)}</td></tr>`; };
-  const ptable = `<div class="tw"><table class="ss-tbl ss-pl"><thead>
-    <tr><th rowspan="2">선수</th><th rowspan="2">득점</th><th colspan="3" class="ss-g">공격</th><th colspan="3" class="ss-g">서브</th><th colspan="2" class="ss-g">리시브</th><th colspan="2" class="ss-g">디그</th><th rowspan="2" class="ss-g">블록<br>득점</th><th rowspan="2" class="ss-g">범실</th></tr>
-    <tr><th class="ss-g">시도</th><th>성공</th><th>효율</th><th class="ss-g">시도</th><th>에이스</th><th>범실</th><th class="ss-g">시도</th><th>좋음</th><th class="ss-g">시도</th><th>성공</th></tr></thead><tbody>${ps.map(prow).join("")}</tbody></table></div>`;
-  // 3. 경기별로 보기: 고른 지표 한 가지를 경기마다 (칸 = 비율, 아래 = 분자/분모)
+  // 경기별 (예전 표 그대로: 선수 × 경기 + 누적, 지표 칩)
   const met = SC_METRICS.find(x => x[0] === S.metric) || SC_METRICS[0];
-  const cell = l => { const [a, b] = met[2](sum(l)); return b ? `<b class="${met[0] === "atk" || met[0] === "srv" ? tone(a) : ""}">${scPct(a, b)}</b><span class="sc-n">${a}/${b}</span>` : "—"; };
-  const mhead = ms.map((m, i) => `<th><button type="button" class="btn link small" data-act="scopen" data-id="${esc(m.id)}">${m.date ? md(parseD(m.date)) : ""}<br>${esc(vs(m))}</button>${res[i] ? `<span class="ss-res ${res[i].a > res[i].b ? "ss-up" : res[i].a < res[i].b ? "ss-dn" : ""}">${res[i].a}:${res[i].b}</span>` : ""}</th>`).join("");
-  const byMatch = `<div class="sc-row">${SC_METRICS.map(([k, l]) => scChip("scmetric", k, met[0], l)).join("")}</div>
-    <p class="ss-def"><b>${met[1]}</b> = ${met[3]} <span class="muted">· ${met[4]}</span></p>
-    <div class="tw"><table class="ss-tbl sc-season"><thead><tr><th>선수</th>${mhead}<th>누적</th></tr></thead><tbody>
-      <tr class="sc-team"><td><b>팀</b></td>${evs.map(l => `<td class="num">${cell(l)}</td>`).join("")}<td class="num">${cell(allUs)}</td></tr>
-      ${ps.map(({ p }) => `<tr><td class="ss-name"><b>${pNo(p)}${esc(p.name)}</b></td>${evs.map(l => `<td class="num">${cell(l.filter(e => e.player_id === p.id))}</td>`).join("")}<td class="num">${cell(allUs.filter(e => e.player_id === p.id))}</td></tr>`).join("")}</tbody></table></div>
-    <p class="small muted">칸 아래 숫자 = ${met[3].replace(" ÷ ", " / ")}</p>`;
+  const cell = (l, n) => { const r = met[2](scSum(l), n); return r ? `<span class="${r[2] || ""}">${r[0]}</span>${r[1] != null ? `<span class="sc-n">${r[1]}</span>` : ""}` : "—"; };
+  const setsOf = evs.map(nSets);
+  const ps = sortedPlayers().filter(p => allUs.some(e => e.player_id === p.id));
+  const vs = m => scSnuSide(m) === "opp" ? m.team : m.opponent || m.title;
+  const team = `<tr class="sc-team"><td><b>팀</b></td>${evs.map((l, i) => `<td class="num">${cell(l, setsOf[i])}</td>`).join("")}<td class="num"><b>${cell(allUs, sets)}</b></td></tr>`;
+  const rows = ps.map(p => `<tr><td><b>${pNo(p)}${esc(p.name)}</b></td>${evs.map((l, i) => `<td class="num">${cell(l.filter(e => e.player_id === p.id), setsOf[i])}</td>`).join("")}<td class="num"><b>${cell(allUs.filter(e => e.player_id === p.id), sets)}</b></td></tr>`).join("");
   const evAll = as.flatMap(x => x.ev);
   return `<div class="sc-row">${syRow}<span class="small muted">${ms.length}경기 · ${sets}세트</span></div>
-    <section class="sec"><h3>팀 한눈에</h3><div class="ss-kpis">${cards}</div></section>
-    <section class="sec"><h3>선수별 누적</h3><p class="small muted">득점 많은 순 · 시도 5번 미만인 비율은 흐리게 · 효율 = (득점 − 범실) ÷ 시도</p>${ptable}</section>
-    <section class="sec"><h3>경기별로 보기</h3>${byMatch}</section>
-    <section class="sec"><h3>로테이션별 득실</h3>${scRotTable(as.flatMap(x => x.pts))}</section>
-    <div class="cols"><div class="col"><section class="sec"><h3>공격 종류별</h3><p class="small muted">공격 넣을 때 고른 종류 기준</p>${scAtkTypeTable(evAll)}</section></div>
-      <div class="col"><section class="sec"><h3>패스에 따른 공격</h3><p class="small muted">공격 바로 앞 우리 리시브 · 디그 등급으로 나눔</p>${scPassTable(evAll)}</section></div></div>`;
+    <div class="ss-kpis">${cards}</div>
+    <p class="small muted">공격 효율 = (득점 − 범실) ÷ 시도, .300 이상 좋음 · 리시브 0~3점 평균, 2.0 이상 좋음 · 서브 0~4점 평균</p>
+    <section class="sec"><div class="sc-row">${SC_METRICS.map(([k, l]) => scChip("scmetric", k, met[0], l)).join("")}</div>
+      <div class="tw"><table class="sc-season"><thead><tr><th>선수</th>${ms.map(m => `<th><button type="button" class="btn link small" data-act="scopen" data-id="${esc(m.id)}">${m.date ? md(parseD(m.date)) : ""}<br>${esc(vs(m))}</button></th>`).join("")}<th>누적</th></tr></thead><tbody>${team}${rows}</tbody></table></div>
+      <p class="small muted">${SC_MNOTE[met[0]]}${met[0] === "dig" || met[0] === "blk" || met[0] === "pts" ? "" : " · 숫자 아래는 시도 수"}</p></section>
+    <section class="sec"><h3>로테이션별 득실 (누적)</h3>${scRotTable(as.flatMap(x => x.pts))}</section>
+    <div class="cols"><div class="col"><section class="sec"><h3>공격 종류별</h3>${scAtkTypeTable(evAll)}</section></div>
+      <div class="col"><section class="sec"><h3>패스에 따른 공격</h3>${scPassTable(evAll)}</section></div></div>`;
 }
 /* ---- 상대 스카우팅 ---- */
 function scoutOpp() {
@@ -2576,7 +2568,7 @@ function viewCup(kind = "event") {
   const card = x => { const en = entryOf(x.kind, x.id), st = startersOf(x.kind, x.id), vs = evVotesOf(x.kind, x.id), go = Object.values(vs).filter(v => v.going).length;
     return `<button type="button" class="panel sc-card cup-card ${x.end < t ? "past" : ""}" data-act="cupopen" data-k="${esc(x.kind + ":" + x.id)}"><b>${esc(x.name)} <span class="chip">${x.fmt === "9" ? "9인제" : "6인제"}</span></b><span class="small muted">${esc(x.when)}${seeVotes() ? ` · 참 ${go}` : ""} · 엔트리 ${en.size}${st.size ? ` · 주전 ${st.size}` : ""}</span><span class="go">›</span></button>`; };
   const l = items.filter(x => x.kind === kind), fr = kind === "friendly";
-  return `<section class="sec"><div class="sec-head"><h3>${fr ? "교류전" : "대회"}</h3>${can("schedule") ? addBtn(fr ? "friendly" : "event", fr ? "교류전" : "일정") : ""}</div>${l.length ? `<div class="boxes">${l.map(card).join("")}</div>` : emptyLine(fr ? "다가오는 교류전이 없어요." : "다가오는 대회가 없어요.")}</section>`;
+  return `<section class="sec"><div class="sec-head"><h3>${fr ? "교류전" : "대회"}</h3>${can("schedule") ? addBtn(fr ? "friendly" : "event", fr ? "교류전" : "일정") : ""}</div>${l.length ? `<div class="boxes">${l.map(card).join("")}</div>` : emptyLine(fr ? "다가오는 교류전이 없어요." : "다가오는 대회가 없어요.")}</section>${fr ? "" : campusList()}`;
 }
 async function cupLoadLineups(kind, id) {
   const C = cupState(), key = kind + ":" + id;
@@ -2908,7 +2900,7 @@ function setView(k) {
   state.viewAs = k; state.admin = k !== "player"; state.pid = null; state.editPid = null; state.dirty = false; state.boxEdit = false; state.prEdit = false;
   try { localStorage.setItem("snuvt-mode", k); } catch (e) {}
   // 지금 화면을 그 직책이 못 보면 홈으로
-  const sec = SECTIONS[SECTION_OF[state.view]], ok = !sec || secViews(sec).some(v => v[0] === state.view);
+  const sec = SECTIONS[SECTION_OF[state.view]], ok = !sec || secViews(sec).some(v => v[0] === tabOf(state.view));
   if (!ok) state.view = "home";
   closeDrawer(); closeSheet(); render(); window.scrollTo(0, 0);
   toast(`${VIEW_LABEL(k)} 화면`);

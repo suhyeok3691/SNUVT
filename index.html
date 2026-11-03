@@ -774,19 +774,8 @@ button:focus:not(:focus-visible), a:focus:not(:focus-visible) { outline: none; }
 .ss-kv { font-family: var(--f-display); font-size: 26px; font-weight: 400; line-height: 1.15; color: var(--ink); font-variant-numeric: tabular-nums; }
 .ss-kv small { font-family: var(--f-body); font-size: 12px; color: var(--muted); }
 .ss-ks { font-size: 12px; color: var(--ink); font-variant-numeric: tabular-nums; }
-.ss-kh { font-size: 11.5px; color: var(--muted); line-height: 1.35; margin-top: 2px; }
-.ss-up { color: var(--good); } .ss-dn { color: var(--crit); }
-.ss-kv.ss-up { color: var(--good); } .ss-kv.ss-dn { color: var(--crit); }
-.ss-tbl th { font-size: 12px; white-space: nowrap; vertical-align: bottom; }
-.ss-tbl td.num, .ss-tbl th { text-align: center; }
-.ss-tbl .ss-g { border-left: 1px solid var(--line); }
-.ss-tbl .ss-name { text-align: left; white-space: nowrap; position: sticky; left: 0; background: var(--surface); z-index: 1; }
-.ss-tbl tr.sc-team .ss-name, .ss-tbl tr.sc-team td:first-child { background: var(--surface-2); }
-.ss-th { display: block; font-size: 10.5px; font-weight: 500; color: var(--muted); white-space: normal; }
-.ss-tbl tr.ss-best td { background: color-mix(in srgb, var(--good) 12%, var(--surface)); }
-.ss-tbl tr.ss-worst td { background: color-mix(in srgb, var(--crit) 10%, var(--surface)); }
-.ss-def { margin: 0; font-size: 13px; }
-.ss-res { display: block; font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.ss-kv.good { color: var(--good); } .ss-kv.crit { color: var(--crit); } .sc-season td .good { color: var(--good); font-weight: 700; } .sc-season td .crit { color: var(--crit); font-weight: 700; }
+tr.ss-best td { background: color-mix(in srgb, var(--good) 12%, var(--surface)); } tr.ss-worst td { background: color-mix(in srgb, var(--crit) 10%, var(--surface)); }
 td.num.good { color: var(--good); font-weight: 700; } td.num.crit { color: var(--crit); font-weight: 700; }
 @media (max-width: 759px) {
   .tiles-grid .tile-btn.wide { grid-column: 1 / -1; grid-template-columns: auto 1fr; align-items: center; column-gap: 12px; padding: 10px 14px; }
@@ -1282,9 +1271,9 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 <script src="js/program.js?v=213"></script>
 <script src="js/guide.js?v=194"></script>
 <script src="js/library.js?v=196"></script>
-<script src="js/campus.js?v=196"></script>
+<script src="js/campus.js?v=197"></script>
 <script src="js/court.js?v=239"></script>
 <script src="js/live.js?v=237"></script>
-<script src="js/app.js?v=241"></script>
+<script src="js/app.js?v=243"></script>
 </body>
 </html>

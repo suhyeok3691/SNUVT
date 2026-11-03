@@ -106,13 +106,20 @@ function availBtns(c, d, compact) {
 
 /* ---------- 화면 ---------- */
 const CMP_TABS = [["games", "경기"], ["avail", "가능일"], ["groups", "조편성"], ["bracket", "대진표"]];
+// '대회' 탭 아래 교내 대회 칸 (1학기 총장배 · 2학기 종합체육대회): 하는 중 · 다가오는 것 먼저, 지난 건 최근 순
+function campusList() {
+  const t = iso(today()), cs = (state.cups || []).slice().sort((a, b) => (a.end < t) - (b.end < t) || (a.end < t ? b.start.localeCompare(a.start) : a.start.localeCompare(b.start)));
+  const card = c => { const n = (c.matches || []).length, on = c.start <= t && t <= c.end, f = (c.matches || []).find(m => m.stage === "f"), wt = f ? cmpTeam(c, winnerOf(c, f)) : null;
+    return `<button type="button" class="panel sc-card cup-card ${c.end < t ? "past" : ""}" data-act="cmpgo" data-id="${c.id}"><b>${esc(c.name)} <span class="chip">${esc(CUP_KIND[c.kind] || "")}</span>${on ? ` <span class="chip warn">진행 중</span>` : ""}</b><span class="small muted">${cupRange(c)}${c.place ? ` · ${esc(c.place)}` : ""}${n ? ` · ${n}경기` : ""}${wt ? ` · 우승 <b>${esc(wt.name)}</b>` : ""}</span><span class="go">›</span></button>`; };
+  return `<section class="sec"><div class="sec-head"><h3>교내 대회</h3>${can("schedule") ? `<button class="btn add" type="button" data-act="cmpform" data-f="cup">+ 교내 대회</button>` : ""}</div>${cs.length ? `<div class="boxes">${cs.map(card).join("")}</div>` : emptyLine("등록된 교내 대회가 없어요.")}</section>`;
+}
 function viewCampus() {
   if (!state.loaded) return loaderHtml();
   const c = curCup(), adm = can("schedule"), t = iso(today()), tab = state.cmpTab || "games";
   const pick = (state.cups || []).length > 1 ? `<div class="sc-row">${state.cups.map(x => `<button type="button" class="chip sc-chip ${c && x.id === c.id ? "on" : ""}" data-act="cmppick" data-id="${x.id}">${esc(x.name)}</button>`).join("")}</div>` : "";
   const addCup = adm ? `<button class="btn add" type="button" data-act="cmpform" data-f="cup">+ 교내 대회</button>` : "";
-  if (!c) return `<section class="sec"><div class="sec-head"><h3>교내 대회</h3>${addCup}</div>${emptyLine("등록된 교내 대회가 없어요.")}<a class="btn small" href="${CAFE_URL}" target="_blank" rel="noopener">스포츠진흥원 cafe</a></section>`;
-  const head = `<section class="sec"><div class="sec-head"><h3>교내 대회</h3>${addCup}</div>${pick}
+  if (!c) return `<section class="sec"><div class="sec-head"><h3><button type="button" class="btn link small" data-act="view" data-v="cup">‹ 대회</button> 교내 대회</h3>${addCup}</div>${emptyLine("등록된 교내 대회가 없어요.")}<a class="btn small" href="${CAFE_URL}" target="_blank" rel="noopener">스포츠진흥원 cafe</a></section>`;
+  const head = `<section class="sec"><div class="sec-head"><h3><button type="button" class="btn link small" data-act="view" data-v="cup">‹ 대회</button> 교내 대회</h3>${addCup}</div>${pick}
     <div class="panel cmp-head"><div class="cmp-ttl"><h2 class="dyn">${esc(c.name)}</h2><span class="small muted">${cupRange(c)}${c.place ? ` · ${esc(c.place)}` : ""}</span></div>
       ${c.note ? `<p class="small muted">${esc(c.note)}</p>` : ""}
       <div class="row"><a class="btn small" href="${esc(c.cafe || CAFE_URL)}" target="_blank" rel="noopener">스포츠진흥원 cafe</a>${adm ? `<button class="btn small" type="button" data-act="cmppost">카페 글</button>` : ""}${adm ? `<button class="btn small" type="button" data-act="cmpform" data-f="cup" data-id="${c.id}">수정</button>` : ""}</div></div>
