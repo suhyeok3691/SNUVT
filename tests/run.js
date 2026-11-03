@@ -391,6 +391,19 @@ const SUITES = {
     assert.strictEqual(await p.evaluate(() => { const e = { id: "x9", action: "kill", author: "someone" }, was = state.role; const r1 = ctCanEdit(e); state.admin = false; state.role = "player"; const t = state.titles; state.titles = []; const r2 = typeof can === "function" ? ctCanEdit(e) : null; state.admin = true; state.role = was; state.titles = t; return [r1, r2].join(); }), "true,false");
     clean(a); await a.ctx.close();
   },
+  // 로테: 랠리 중에 Receive 를 눌러도(공격을 받은 걸 리시브로 기록) 서브권이 안 넘어감 → 상대가 그 랠리를 따면 상대 로테가 돎 (2026-11-04 경희대전)
+  async rotrally(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(300);
+    const r = await p.evaluate(() => {
+      const m = scMatch(), e = (side, action, skill, point, no) => ({ set_no: 1, side, action, skill, point: point || null, opp_no: no ?? null });
+      const ev = [e("us", "serr", "serve", "opp", 1), e("opp", "s2", "serve", null, 12), e("us", "r3", "receive"), e("us", "kill", "attack", "us", 2),
+        e("us", "s2", "serve", null, 2), e("opp", "r3", "receive"), e("opp", "inplay", "attack"), e("us", "r1", "receive"), e("opp", "dump", "attack", "opp", 14)];
+      const s = ctState(m, ev, 1); return { orot: s.orot, rot: s.rot, serve: s.serve, z1: ctSideAt(s, "opp", 1).v };
+    });
+    assert.deepStrictEqual(r, { orot: 3, rot: 2, serve: "opp", z1: 13 }, "상대 3번째 선수가 1번 자리에서 서브");
+    clean(a); await a.ctx.close();
+  },
   // 끼워 넣기 · 지우기: 기록 ⋯ → "이 앞에 넣기" → 코트 · 점수가 그 자리 기준 → 기록하면 그 사이 시각으로 들어감 → 끝내기 → 뒤 기록 점수 다시 맞춤. 지우면 다시 맞춤
   async insert(b) {
     const a = await openApp(b, "coach"), p = a.page;

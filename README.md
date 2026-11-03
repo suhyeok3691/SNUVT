@@ -234,7 +234,8 @@ docs/archive/           예전에 만든 설계 · 자료 문서 사본 (앱에 
 - **기록 화면**: 점수 · Set(점수 목표) · Rot · Rally, 버튼 Undo · Settings · Change Court · Edit Lineup · Export Excel · RESET. 세트가 끝나면 "N세트 X 승 · 다음 세트로"
   - 선수 → Serve · Receive · Attack · Set · Block · Dig · Pass · Fault & Error → 결과 → (범실 이유). 이름 · 순서는 예전 프로그램 그대로, 숫자는 3이 가장 좋음
   - 예전 프로그램에 더한 것: **서브 종류**(플로터 · 스파이크, 컴퓨터 F · J, 선수마다 마지막 것 기억 → `kind`) · **서브 · 공격이 떨어진 자리**(Ace · 1~3-serve · 공격 득점 · Hit In Play를 고르면 상대 코트 그림, 아래가 네트, 건너뛰기 가능 → `x · y` 0~100 · `zone`) · **공격 종류**(Attack 창 위 칩, 포지션에 맞는 것 먼저 · "더보기" → `kind`) · **Block Out Kill**(블록 맞고 나간 공격 = 공격수 득점, Attack 목록 맨 끝)
-  - 득점 · 실점이면 점수 · 서브권 · 두 팀 로테(6인제) · Rally가 저절로, 한 랠리에 점수는 한 번만
+  - 득점 · 실점이면 점수 · 서브권 · 두 팀 로테(6인제) · Rally가 저절로, 한 랠리에 점수는 한 번만. Receive는 그 랠리에 서브가 아직 없을 때만 서브 리시브(상대 서브로 새 랠리) — 랠리 중 공격을 Receive로 기록해도 서브권은 그대로라 로테가 맞게 돎
+  - 경기를 열면(전력분석 담당 이상, 다른 기기에서 쓰는 중이 아닐 때) 세트마다 다시 따라가 저장된 점수 · 서브 · 로테 · 랠리 칸과 랠리 점수를 한 번 맞춤(`ctAutoFix`)
   - Settings(예전 Game Settings): Set · Our Rot · Opp Rot · Serving · Rally를 언제든 맞춤(기록으로 남음). 아래에 **지운 기록 되살리기**(전력분석 담당 이상): 이 경기에서 지워진 기록을 같은 사람이 2분 안에 연달아 지운 묶음(시각 · 누가 · 몇 개 · 세트 점수 범위)으로 보여 주고 묶음째 되살림(`scout_trash` · `scout_restore`, 원래 id · 시각 그대로)
   - **Undo**: 이 기기에서 넣은 기록만(`snuvt-ctmine`, 다른 기기 기록은 지울 수 없음). 화면에서 먼저 빼고 지우기는 폰 대기열(`snuvt-ctq`)로
   - **전체 기록 · 고치기 · 지우기 · 끼워 넣기**: 기록 목록 위 "전체 기록 · 고치기" → 그 세트 기록 전부. 기록 옆 ⋯(내 기록, 전력분석 담당 이상은 모든 기록) → 고치기(팀 · 선수 · 동작 · 이유 · 공격 종류) · 지우기 · 이 앞에 넣기 · 이 뒤에 넣기
@@ -364,7 +365,7 @@ docs/archive/           예전에 만든 설계 · 자료 문서 사본 (앱에 
 4. 서버 함수를 바꾸면 `supabase/functions/<이름>/index.ts`도 같이 올려요.
 5. 올리기 전에 테스트: `cd tests && npm install && npm test` (처음 한 번 `npx playwright install chromium`). 하나만은 `node run.js guest`
    - 진짜 서버에 안 붙고 `tests/mock.js`의 가짜 데이터(2026년 10~11월, 코치 p1 · 부원 p2)로 돌아요. 브라우저 시계는 2026-11-01로 고정(`openApp(b, role, { now })`로 바꿈), 가짜 서버 표는 `window.__db`
-   - 19개: `insert` 끼워 넣기 · 지우기 / `clock` 기기 시계 어긋남 안내 / `smoke` 모든 화면 × 코치·부원 + 새로고침 / `picker` 날짜·시간 / `guest` 다른 팀 훈련 합류 / `friendly` 교류전 투표 대상 / `rotation` 실시간 라인업 창 · 교체 / `scout` 전력분석 공격 떨어진 자리 / `todo` 홈 오늘 할 것 / `errors` 앱 오류 기록 / `landscape` 가로 코트 / `serve` 서브 종류 · 서브 자리 / `libero` 리베로 자동 교대 / `lite` 실시간 기록 · 팀 자동 전환 · 전력분석 실시간 탭 / `lineup6` 6인제 대회 라인업 → 실시간 / `edit` 기록 고치기 · Block Out · 공격 종류 / `rules` 21·21·15 규칙 · 서울대 번호 팀 · Undo 내 기록만 · 되살리기 / `undo` Undo 대기열(새로고침 · 끊김) / `practice` 훈련 계획 기본 틀
+   - 20개: `rotrally` 랠리 중 리시브 · 로테 / `insert` 끼워 넣기 · 지우기 / `clock` 기기 시계 어긋남 안내 / `smoke` 모든 화면 × 코치·부원 + 새로고침 / `picker` 날짜·시간 / `guest` 다른 팀 훈련 합류 / `friendly` 교류전 투표 대상 / `rotation` 실시간 라인업 창 · 교체 / `scout` 전력분석 공격 떨어진 자리 / `todo` 홈 오늘 할 것 / `errors` 앱 오류 기록 / `landscape` 가로 코트 / `serve` 서브 종류 · 서브 자리 / `libero` 리베로 자동 교대 / `lite` 실시간 기록 · 팀 자동 전환 · 전력분석 실시간 탭 / `lineup6` 6인제 대회 라인업 → 실시간 / `edit` 기록 고치기 · Block Out · 공격 종류 / `rules` 21·21·15 규칙 · 서울대 번호 팀 · Undo 내 기록만 · 되살리기 / `undo` Undo 대기열(새로고침 · 끊김) / `practice` 훈련 계획 기본 틀
    - 새 기능을 만들면 `run.js`의 `SUITES`에 하나 더하고, 필요한 가짜 데이터는 `mock.js`에
 
 ## 8. 지켜야 할 것

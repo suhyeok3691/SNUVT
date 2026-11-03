@@ -84,7 +84,7 @@ function ctSideAt(s, side, z) {
 // 세트 하나를 처음부터 다시 따라가며 지금 상태 계산 (되돌리기도 이걸로 맞음)
 function ctState(m, ev, setNo) {
   const L = ctLu(m), st = (L.sets || {})[setNo] || {}, U = L.us || {}, O = L.opp || {}, nine = ctNine(m);
-  const s = { nine, rot: nine ? null : st.rot || 1, orot: nine ? null : st.opp_rot || 1, serve: st.serve || "us", us: 0, op: 0, rally: 1, done: false, last: null, list: [],
+  const s = { nine, rot: nine ? null : st.rot || 1, orot: nine ? null : st.opp_rot || 1, serve: st.serve || "us", us: 0, op: 0, rally: 1, done: false, served: false, last: null, list: [],
     usSlots: [...(U.slots || [])], opSlots: [...(O.slots || [])],
     usPos: (U.slots || []).map((id, i) => nine ? CT_POS9[i] : (U.pos || [])[i] || (m.team ? ctNoPos(m, "us", id) : ctRosterPos(id))), opPos: (O.slots || []).map((n, i) => nine ? CT_POS9[i] : (O.pos || [])[i] || ctNoPos(m, "opp", n)),
     lib: nine ? null : ctLibs(L, "us")[0] ?? null, olib: nine ? null : ctLibs(L, "opp")[0] ?? null };
@@ -92,7 +92,7 @@ function ctState(m, ev, setNo) {
     if (e.set_no !== setNo || !e.action) continue;
     s.list.push(e);
     const us = e.side === "us", v = us ? e.player_id : e.opp_no, slots = us ? s.usSlots : s.opSlots;
-    if (e.action === CT_CFG) { if (!nine) { if (e.rot) s.rot = e.rot; if (e.opp_rot) s.orot = e.opp_rot; } if (e.serve) s.serve = e.serve; if (e.rally) s.rally = e.rally; s.done = false; s.last = null; continue; }
+    if (e.action === CT_CFG) { if (!nine) { if (e.rot) s.rot = e.rot; if (e.opp_rot) s.orot = e.opp_rot; } if (e.serve) s.serve = e.serve; if (e.rally) s.rally = e.rally; s.done = false; s.served = false; s.last = null; continue; }
     if (e.action === CT_LIB) { if (ctIsLib(L, v, e.side) && !slots.some(x => ctSame(x, v))) { if (us) s.lib = v; else s.olib = v; } continue; }
     if (e.action === CT_SUB) { const i = (e.zone || 0) - 1;
       if (i >= 0 && i < slots.length) { slots[i] = v; if (!nine) (us ? s.usPos : s.opPos)[i] = e.kind || (ctRos(m, e.side) ? ctRosterPos(v) : ctNoPos(m, e.side, v) || (us ? s.usPos : s.opPos)[i]); }
@@ -100,12 +100,13 @@ function ctState(m, ev, setNo) {
       const cur = us ? s.lib : s.olib;
       if (ctSame(cur, v)) { const nx = ctLibs(L, e.side).find(x => !ctSame(x, v) && !slots.some(y => ctSame(y, x))) ?? null; if (us) s.lib = nx; else s.olib = nx; }
       continue; }
-    if (e.skill === "serve") { s.serve = e.side; s.done = false; s.last = null; }
-    else if (e.skill === "receive") { s.serve = ctOther(e.side); s.done = false; s.last = null; } // 리시브 = 새 랠리 (서브 기록을 빼먹어도)
+    if (e.skill === "serve") { s.serve = e.side; s.done = false; s.served = true; s.last = null; }
+    // 리시브: 이 랠리에 아직 서브가 없으면 서브 리시브(서브 기록을 빼먹음) → 상대 서브로 새 랠리. 서브가 이미 있으면 랠리 중 받은 공이라 서브권은 그대로
+    else if (e.skill === "receive" && !s.served) { s.serve = ctOther(e.side); s.done = false; s.served = true; s.last = null; }
     if (e.point) {
       if (e.point === "us") { s.us++; if (s.serve === "opp" && !nine) s.rot = s.rot % 6 + 1; s.serve = "us"; }
       else { s.op++; if (s.serve === "us" && !nine) s.orot = s.orot % 6 + 1; s.serve = "opp"; }
-      s.rally++; s.done = true; s.last = null;
+      s.rally++; s.done = true; s.served = false; s.last = null;
     } else if (e.action !== CT_PT && !s.done) s.last = e;
   }
   return s;
@@ -147,6 +148,7 @@ setInterval(async () => {
 function ctPad(m, ev) {
   const S = sc(), L = ctLu(m), setNo = S.sel.set || 1;
   if (!ctReady(m)) return `<div class="panel ct-empty"><b>라인업이 아직 없어요</b>${can("analysis") ? `<button class="btn primary" type="button" data-act="ctlineup">라인업 넣기</button>` : `<span class="small muted">전력분석 담당이 넣을 수 있어요.</span>`}</div>`;
+  if (!S.ins) ctAutoFix(m);
   ev = ctEv(m); const s = ctState(m, ev, setNo), flip = ctFlip();
   // 아래 칸: 앞줄(네트) 4·3·2, 뒷줄 5·6·1 / 위 칸: 뒷줄 1·6·5, 앞줄 2·3·4 (영상 방향에 맞게 뒤집기)
   const half = (side, top) => { const srv = s.serve === side && !s.last;
@@ -339,7 +341,7 @@ function ctSave(code, detail, spot) {
   const a = code === CT_PT ? { skill: "fault", grade: "#", res: "earned" } : CT_ACT[code];
   const ev = ctEv(m), setNo = S.sel.set || 1, s = ctState(m, ev, setNo);
   // 서브를 누르면 그 팀 서브, 리시브면 상대 서브 (점수는 랠리에서 처음 난 것만)
-  const serveBefore = a.skill === "serve" ? c.side : a.skill === "receive" ? ctOther(c.side) : s.serve;
+  const serveBefore = a.skill === "serve" ? c.side : a.skill === "receive" && !s.served ? ctOther(c.side) : s.serve;
   const fresh = code === CT_PT || a.skill === "serve" || a.skill === "receive" || !s.done;
   const point = fresh && a.res ? (a.res === "earned" ? c.side : ctOther(c.side)) : null;
   const rot = s.rot, orot = s.orot, rally = Math.max(1, s.done && !["serve", "receive"].includes(a.skill) ? s.rally - 1 : s.rally); let us = s.us, op = s.op;
@@ -421,7 +423,7 @@ function ctReplay(m, ev, setNo) {
     const e = l[i]; if (e.action === CT_SUB || e.action === CT_LIB || e.action === CT_CFG) continue;
     const a = e.action === CT_PT ? { skill: "fault", res: "earned" } : CT_ACT[e.action]; if (!a) continue;
     const s = ctState(m, l.slice(0, i), setNo), other = e.side === "us" ? "opp" : "us";
-    const serve = a.skill === "serve" ? e.side : a.skill === "receive" ? other : s.serve, fresh = e.action === CT_PT || a.skill === "serve" || a.skill === "receive" || !s.done;
+    const serve = a.skill === "serve" ? e.side : a.skill === "receive" && !s.served ? other : s.serve, fresh = e.action === CT_PT || a.skill === "serve" || a.skill === "receive" || !s.done;
     const point = fresh && a.res ? (a.res === "earned" ? e.side : other) : null, rally = Math.max(1, s.done && !["serve", "receive"].includes(a.skill) ? s.rally - 1 : s.rally);
     const score = `${s.us + (point === "us" ? 1 : 0)}:${s.op + (point === "opp" ? 1 : 0)}`, want = { point, score, rot: s.rot, opp_rot: s.orot, rally, serve };
     const patch = {}; for (const k in want) if ((e[k] ?? null) !== (want[k] ?? null)) patch[k] = want[k];
@@ -456,6 +458,14 @@ async function ctEditSave(f) {
   try { const n = await ctFixSet(m, e.set_no, { [e.id]: patch }); toast(n ? `고쳤어요 · 뒤 기록 ${n}개 점수 · 로테도 맞춤` : "고쳤어요"); }
   catch (err) { S.events[m.id] = before; toast(failMsg(err)); await scoutEvents(m.id); return; }
   closeSheet(); state.dirty = false; render();
+}
+// 경기를 열면(전력분석 담당 이상, 다른 기기에서 쓰는 중이 아닐 때, 한 번) 세트마다 다시 따라가 저장된 점수 · 서브 · 로테 · 랠리 칸과 랠리 점수를 맞춤
+// (계산 규칙이 바뀌었거나 — 예: 랠리 중 리시브로 서브권이 넘어가던 것 — 다른 기기에서 고친 뒤 어긋난 것)
+async function ctAutoFix(m) {
+  const S = sc(); S.fixed = S.fixed || {}; if (S.fixed[m.id] || !can("analysis") || ctQ.busy || ctQ.list.length || ctLiveBy(m)) return;
+  const ev = S.events[m.id]; if (!ev || !ev.length) return; S.fixed[m.id] = true;
+  let n = 0; try { for (const set of [...new Set(ev.map(e => e.set_no))]) n += await ctFixSet(m, set); } catch (e) { S.fixed[m.id] = false; return; }
+  if (n) { toast(`저장된 점수 · 로테 칸 ${n}개를 맞췄어요`); if (state.view === "scout" && document.getElementById("sheet").hidden) { state.dirty = false; render(); } }
 }
 // 기록 하나 누르면: 고치기 · 지우기 · 이 앞에 넣기 · 이 뒤에 넣기
 function ctRecSheet(id) {
