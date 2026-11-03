@@ -2223,21 +2223,30 @@ const SC_METRICS = [
   ["srv", "서브 효율", l => { const s = scPlayerSum(l); return [s.sa - s.se, s.sv]; }],
   ["dig", "디그 성공", l => { const s = scPlayerSum(l); return [s.dok, s.dg]; }],
 ];
+// 시즌에 넣는 우리 경기 = 명단으로 넣은 경기 + 번호로 넣은 서울대 · SNU · SNUVT 팀이 있는 경기 (분석 팀이든 상대든)
+const scSnuSide = m => !m.team ? "us" : ctSnuNo(m, "us") ? "us" : ctSnuNo(m, "opp") ? "opp" : null;
+// 그 경기 기록 · 랠리 점수를 우리 쪽이 us 가 되게 바꿔 줌 (상대 쪽이었으면 팀 · 득실 · 로테 · 서브를 뒤집고, 번호는 부원으로)
+function scAsSnu(m) {
+  const S = sc(), fl = scSnuSide(m) === "opp", sw = x => !fl ? x : x === "us" ? "opp" : x === "opp" ? "us" : x;
+  const ev = (S.events[m.id] || []).map(e => { const side = sw(e.side); return { ...e, side, point: sw(e.point), serve: sw(e.serve), player_id: side === "us" && m.team ? ((ctByNo(e.opp_no) || {}).id || null) : e.player_id }; });
+  const pts = (S.points[m.id] || []).map(p => fl ? { ...p, won: !p.won, rot: p.opp_rot, opp_rot: p.rot, serve: sw(p.serve) } : p);
+  return { ev, pts };
+}
 function scoutSeason() {
   const S = sc(), sys = [...new Set(S.matches.filter(m => m.date).map(m => syOf(m.date)))].sort((a, b) => b - a);
   if (S.sy && !sys.includes(S.sy)) S.sy = 0;
-  const ms = S.matches.filter(m => !m.team && (!S.sy || (m.date && syOf(m.date) === S.sy))).slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  const ms = S.matches.filter(m => scSnuSide(m) && (!S.sy || (m.date && syOf(m.date) === S.sy))).slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
   const met = SC_METRICS.find(x => x[0] === S.metric) || SC_METRICS[0], f = met[2];
-  const evs = ms.map(m => (S.events[m.id] || []).filter(e => e.side === "us")), allUs = evs.flat();
+  const as = ms.map(scAsSnu), evs = as.map(x => x.ev.filter(e => e.side === "us")), allUs = evs.flat();
   const ps = sortedPlayers().filter(p => allUs.some(e => e.player_id === p.id));
   const cell = l => { const [a, b] = f(l); return b ? `${scPct(a, b)}<span class="sc-n">${b}</span>` : "—"; };
   const team = `<tr class="sc-team"><td><b>팀</b></td>${evs.map(l => `<td class="num">${cell(l)}</td>`).join("")}<td class="num"><b>${cell(allUs)}</b></td></tr>`;
   const rows = ps.map(p => `<tr><td><b>${pNo(p)}${esc(p.name)}</b></td>${evs.map(l => `<td class="num">${cell(l.filter(e => e.player_id === p.id))}</td>`).join("")}<td class="num"><b>${cell(allUs.filter(e => e.player_id === p.id))}</b></td></tr>`).join("");
-  const pts = ms.flatMap(m => S.points[m.id] || []);
+  const pts = as.flatMap(x => x.pts);
   return `<div class="sc-row">${sys.length > 1 ? `<select id="scSy" class="sm-select" aria-label="시즌"><option value="0">전체</option>${sys.map(y => `<option value="${y}" ${S.sy === y ? "selected" : ""}>${y} 시즌</option>`).join("")}</select>` : ""}${SC_METRICS.map(([k, l]) => scChip("scmetric", k, met[0], l)).join("")}</div>
-    ${ms.length && allUs.length ? `<div class="tw"><table class="sc-season"><thead><tr><th>선수</th>${ms.map(m => `<th><button type="button" class="btn link small" data-act="scopen" data-id="${esc(m.id)}">${m.date ? md(parseD(m.date)) : ""}<br>${esc(m.opponent || m.title)}</button></th>`).join("")}<th>누적</th></tr></thead><tbody>${team}${rows}</tbody></table></div><p class="small muted">숫자 아래는 시도 수</p>` : emptyLine("아직 우리 팀 입력이 없어요.")}
+    ${ms.length && allUs.length ? `<div class="tw"><table class="sc-season"><thead><tr><th>선수</th>${ms.map(m => `<th><button type="button" class="btn link small" data-act="scopen" data-id="${esc(m.id)}">${m.date ? md(parseD(m.date)) : ""}<br>${esc(scSnuSide(m) === "opp" ? m.team : m.opponent || m.title)}</button></th>`).join("")}<th>누적</th></tr></thead><tbody>${team}${rows}</tbody></table></div><p class="small muted">숫자 아래는 시도 수</p>` : emptyLine("아직 우리 팀 입력이 없어요.")}
     <section class="sec"><h3>로테이션별 득실 (누적)</h3>${scRotTable(pts)}</section>
-    <section class="sec"><h3>세터 토스 분배 (누적)</h3>${scSetterTable(ms.flatMap(m => S.events[m.id] || []))}</section>`;
+    <section class="sec"><h3>세터 토스 분배 (누적)</h3>${scSetterTable(as.flatMap(x => x.ev))}</section>`;
 }
 /* ---- 상대 스카우팅 ---- */
 function scoutOpp() {

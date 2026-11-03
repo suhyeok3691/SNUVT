@@ -68,8 +68,8 @@ const ctTB = m => (m && m.opponent) || "상대";
 const ctTN = (m, side) => side === "us" ? ctTA(m) : ctTB(m);
 const ctRos = (m, side) => side === "us" && !(m && m.team);
 const ctLu = m => m.lineup || {};
-// 번호로 넣는 팀 이름이 서울대 · SNU 면 우리 부원 정보(이름 · 포지션)를 등번호로 붙임
-const SNU_RE = /^\s*(서울대(학교)?|snu)\s*$/i;
+// 번호로 넣는 팀 이름이 서울대 · SNU · SNUVT 면 우리 부원 정보(이름 · 포지션)를 등번호로 붙이고 시즌 누적에도 넣음
+const SNU_RE = /^\s*(서울대(학교)?|snu\s*vt|snu)(\s*배구부)?\s*$/i;
 const ctSnuNo = (m, side) => !!m && !ctRos(m, side) && SNU_RE.test(ctTN(m, side));
 const ctByNo = n => n == null || n === "" ? null : sortedPlayers().find(p => p.number != null && String(p.number) === String(n)) || null;
 const ctNoPos = (m, side, n) => { if (!ctSnuNo(m, side)) return ""; const p = ctByNo(n), q = p ? String(p.pos || "").toUpperCase() : ""; return CT_POS.includes(q) ? q : ""; };
@@ -419,13 +419,26 @@ function ctEditForm(id) {
       <label class="fl">선수<select id="cte-who" data-us="${esc(who("us"))}" data-opp="${esc(who("opp"))}">${who(e.side)}</select></label>
       <label class="fl wide">동작<select id="cte-act">${acts}</select></label>
       <label class="fl" id="cte-detw">이유<select id="cte-det"></select></label>
+      <div class="fl wide" id="cte-spotw"><p class="small muted ct-spot-h"><span id="cte-spoth"></span> · <span id="cte-spott"></span> 코트 <span>(아래가 네트)</span></p><div class="lv-cwrap ct-spot" id="cte-court"></div>
+        <div class="row"><span class="small muted" id="cte-spotn"></span><button type="button" class="btn link small" id="cte-spotclr">자리 지우기</button></div></div>
       <label class="fl" id="cte-atw">공격 종류<select id="cte-at"><option value="">안 고름</option>${CT_ATYPE.map(([k, l]) => `<option value="${k}" ${e.skill === "attack" && e.kind === k ? "selected" : ""}>${esc(l)}</option>`).join("")}</select></label>
     </div><div class="row"><button class="btn primary" type="submit">저장</button></div></form>`;
   el.hidden = false; document.body.classList.add("noscroll");
   const sideSel = document.getElementById("cte-side"), whoSel = document.getElementById("cte-who"), actSel = document.getElementById("cte-act"), det = document.getElementById("cte-det"), detw = document.getElementById("cte-detw");
-  const fillDet = keep => { const a = CT_ACT[actSel.value], l = (a && a.det) || []; detw.hidden = !l.length; document.getElementById("cte-atw").hidden = !a || a.skill !== "attack"; det.innerHTML = l.map(d => `<option ${keep && d === e.detail ? "selected" : ""}>${esc(d)}</option>`).join(""); };
-  fillDet(true); actSel.addEventListener("change", () => fillDet(false));
-  sideSel.addEventListener("change", () => { whoSel.innerHTML = whoSel.dataset[sideSel.value]; });
+  // 서브 · 공격(점수 · 이어짐): 떨어진 자리를 코트에서 찍거나 고침 (예전에 안 찍은 기록도 여기서 넣음)
+  const form = document.getElementById("ctEditForm"), court = document.getElementById("cte-court");
+  if (e.x != null && e.y != null) { form.dataset.x = e.x; form.dataset.y = e.y; }
+  const drawSpot = () => { const has = form.dataset.x != null && form.dataset.x !== "";
+    court.innerHTML = ctCourtSvg(has ? [{ x: Number(form.dataset.x), y: Number(form.dataset.y), c: "g" }] : [], true);
+    document.getElementById("cte-spotn").textContent = has ? `${ctZone(Number(form.dataset.x), Number(form.dataset.y))}번 자리` : "코트를 눌러 넣어요";
+    document.getElementById("cte-spotclr").hidden = !has;
+    const svg = court.querySelector("svg"); svg.addEventListener("click", ev => { const r = svg.getBoundingClientRect(), fx = Math.max(0, Math.min(100, Math.round((ev.clientX - r.left) / r.width * 100))), fy = Math.max(0, Math.min(100, Math.round((ev.clientY - r.top) / r.height * 100)));
+      form.dataset.x = 100 - fx; form.dataset.y = 100 - fy; drawSpot(); }); };
+  document.getElementById("cte-spotclr").addEventListener("click", () => { delete form.dataset.x; delete form.dataset.y; drawSpot(); });
+  const spotHead = () => { const a = CT_ACT[actSel.value]; document.getElementById("cte-spotw").hidden = !a || !CT_SPOT(a); document.getElementById("cte-spoth").textContent = a && a.skill === "serve" ? "서브가 떨어진 자리" : "공이 떨어진 자리"; document.getElementById("cte-spott").textContent = ctTN(m, ctOther(sideSel.value)); };
+  const fillDet = keep => { const a = CT_ACT[actSel.value], l = (a && a.det) || []; detw.hidden = !l.length; document.getElementById("cte-atw").hidden = !a || a.skill !== "attack"; det.innerHTML = l.map(d => `<option ${keep && d === e.detail ? "selected" : ""}>${esc(d)}</option>`).join(""); spotHead(); };
+  fillDet(true); drawSpot(); actSel.addEventListener("change", () => fillDet(false));
+  sideSel.addEventListener("change", () => { whoSel.innerHTML = whoSel.dataset[sideSel.value]; spotHead(); });
 }
 // 세트를 처음부터 다시 따라가 점수 · 서브 · 로테 · 랠리(넣을 때 규칙 그대로: 랠리에서 처음 난 점수만)를 다시 셈 → 바뀐 기록 [{e, patch}]
 function ctReplay(m, ev, setNo) {
@@ -461,9 +474,9 @@ async function ctEditSave(f) {
   { const L = ctBlocked(m, e); if (L) return toast(ctLiveMsg(L)); }
   if (!await ctWaitQ()) return toast("저장 중인 기록이 아직 안 올라갔어요. 인터넷을 확인하고 다시 눌러 주세요");
   const v = id => (document.getElementById(id) || {}).value || "", side = v("cte-side"), who = v("cte-who"), code = v("cte-act"), a = CT_ACT[code]; if (!a) return;
-  const ros = ctRos(m, side), detail = a.det ? v("cte-det") || null : null;
+  const ros = ctRos(m, side), detail = a.det ? v("cte-det") || null : null, sp = CT_SPOT(a) && f.dataset.x != null && f.dataset.x !== "" ? { x: Number(f.dataset.x), y: Number(f.dataset.y) } : null;
   const patch = { side, player_id: ros ? who || null : null, opp_no: ros ? null : who === "" ? null : Number(who), action: code, skill: a.skill, grade: a.skill === "attack" && detail === "Blocked" ? "/" : a.grade, detail,
-    kind: a.skill === "serve" ? (e.skill === "serve" ? e.kind || null : null) : a.skill === "attack" ? v("cte-at") || null : null, x: CT_SPOT(a) ? e.x : null, y: CT_SPOT(a) ? e.y : null, zone: CT_SPOT(a) ? e.zone : null };
+    kind: a.skill === "serve" ? (e.skill === "serve" ? e.kind || null : null) : a.skill === "attack" ? v("cte-at") || null : null, x: sp ? sp.x : null, y: sp ? sp.y : null, zone: sp ? ctZone(sp.x, sp.y) : CT_SPOT(a) && e.x == null ? e.zone : null };
   const before = (S.events[m.id] || []).map(x => ({ ...x }));
   Object.assign(e, patch);
   try { const n = await ctFixSet(m, e.set_no, { [e.id]: patch }); toast(n ? `고쳤어요 · 뒤 기록 ${n}개 점수 · 로테도 맞춤` : "고쳤어요"); }

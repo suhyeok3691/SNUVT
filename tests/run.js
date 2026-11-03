@@ -404,6 +404,39 @@ const SUITES = {
     assert.deepStrictEqual(r, { orot: 3, rot: 2, serve: "opp", z1: 13 }, "상대 3번째 선수가 1번 자리에서 서브");
     clean(a); await a.ctx.close();
   },
+  // 고치기에서 서브 · 공격 떨어진 자리 넣기 · 고치기 · 지우기 / 번호로 넣은 서울대(SNUVT) 쪽 기록도 시즌 누적에
+  async spotedit(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(300);
+    await p.click('.ct-court .ct-p.us[data-v="2"]'); await p.click('[data-act="ctcat"][data-v="attack"]'); await p.click('[data-act="ctact"][data-a="kill"]'); await p.click('[data-act="ctnospot"]'); await p.waitForTimeout(100);
+    await p.evaluate(() => ctFlush()); await p.waitForTimeout(300);
+    const id = await p.evaluate(() => sc().events.m1[0].id);
+    await p.click('[data-act="ctrecall"]'); await p.waitForTimeout(100);
+    await p.click(`[data-act="ctrec"][data-id="${id}"]`); await p.waitForTimeout(100); await p.click(`[data-act="ctedit"][data-id="${id}"]`); await p.waitForTimeout(150);
+    assert.ok(!(await p.$eval("#cte-spotw", x => x.hidden)), "공격 득점이면 자리 칸");
+    const box = await (await p.$("#cte-court svg")).boundingBox();
+    await p.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.1); await p.waitForTimeout(100);
+    assert.match(await a.text("#cte-spotn"), /번 자리/);
+    await p.click("#ctEditForm button[type=submit]"); await p.waitForTimeout(300);
+    const e1 = await p.evaluate(() => sc().events.m1[0]);
+    assert.ok(e1.x === 50 && e1.y === 90 && e1.zone, "자리 저장 " + JSON.stringify([e1.x, e1.y, e1.zone]));
+    assert.ok((await a.writes("scout_events")).some(x => x[1] === "update" && x[2].x === 50), "서버에도");
+    // 동작을 범실로 바꾸면 자리 칸 숨고 자리 지움
+    await p.click('[data-act="ctrecall"]'); await p.waitForTimeout(100);
+    await p.click(`[data-act="ctrec"][data-id="${id}"]`); await p.waitForTimeout(100); await p.click(`[data-act="ctedit"][data-id="${id}"]`); await p.waitForTimeout(150);
+    await p.selectOption("#cte-act", "aerr"); assert.ok(await p.$eval("#cte-spotw", x => x.hidden));
+    await p.click("#ctEditForm button[type=submit]"); await p.waitForTimeout(300);
+    assert.strictEqual(await p.evaluate(() => sc().events.m1[0].x), null);
+    // 시즌: 상대가 SNUVT(번호) → 그 쪽 기록이 등번호로 부원에 붙어 시즌 표에
+    await p.evaluate(() => { const id = sortedPlayers().find(x => x.name === "최수혁").id; state.players[id].number = 12; sc().matches.find(m => m.id === "m1").opponent = "SNUVT"; });
+    await p.click('.ct-court .ct-p.opp[data-v="12"]'); await p.click('[data-act="ctcat"][data-v="attack"]'); await p.click('[data-act="ctact"][data-a="kill"]'); await p.click('[data-act="ctnospot"]'); await p.waitForTimeout(100);
+    await p.evaluate(() => ctFlush()); await p.waitForTimeout(300);
+    assert.ok(await p.evaluate(() => scSnuSide(sc().matches.find(m => m.id === "m1")) === "opp"));
+    const html = await p.evaluate(() => { sc().all = true; return scoutSeason(); });
+    assert.match(html, /최수혁/, "SNUVT 쪽 #12 = 부원 최수혁 시즌 표에");
+    assert.match(html, /A대/, "열 이름은 상대(분석 팀)");
+    clean(a); await a.ctx.close();
+  },
   // 라인업에서 번호를 고치면 이미 넣은 기록 번호도 바꿀지 묻고 바꿈 · 숫자 칸 휠은 값 안 바꿈
   async lurename(b) {
     const a = await openApp(b, "coach"), p = a.page;
