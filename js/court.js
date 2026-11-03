@@ -130,7 +130,11 @@ const ctLand = () => matchMedia("(orientation: landscape)").matches;
 matchMedia("(orientation: landscape)").addEventListener("change", () => { if (state.view === "scout" && sc().tab === "court" && scMatch() && document.getElementById("sheet").hidden) { state.dirty = false; render(); } });
 const ctFlip = () => { try { return localStorage.getItem("snuvt-ctflip") === "1"; } catch (e) { return false; } };
 // 세트 칩: 1~3세트 (예전 기록에 4 · 5세트가 있으면 그것도)
-const ctSetNos = ev => [...new Set([1, 2, 3, ...ev.filter(e => e.set_no > SET_MAX).map(e => e.set_no)])].sort((a, b) => a - b);
+// 3판 2선승: 1 · 2세트를 한 팀이 다 이기면 3세트는 안 보임(3세트 기록이 있으면 보임). 예전 기록에 4 · 5세트가 있으면 그것도
+const ctSetWins = (m, ev) => { const w = { us: 0, opp: 0 }, by = {}; for (const n of [1, 2, 3]) { const s = ctState(m, ev, n), x = setWinner(s.us, s.op, n); by[n] = x; if (x) w[x]++; } return { w, by }; };
+const ctMatchOver = (m, ev) => { const { w } = ctSetWins(m, ev); return w.us >= 2 ? "us" : w.opp >= 2 ? "opp" : null; };
+const ctSetNos = (ev, m = scMatch()) => { const { by } = m ? ctSetWins(m, ev) : { by: {} }, skip3 = by[1] && by[1] === by[2] && !ev.some(e => e.set_no === 3);
+  return [...new Set([1, 2, ...(skip3 ? [] : [3]), ...ev.filter(e => e.set_no > SET_MAX).map(e => e.set_no)])].sort((a, b) => a - b); };
 // 같이 보는 기기 맞추기: 경기를 열어 두면 15초마다 서버 기록을 다시 받아 다른 기기의 입력 · 지우기를 반영 (보낼 게 남아 있으면 건너뜀)
 setInterval(async () => {
   if (state.view !== "scout" || !state.scoutId || sc().live || sc().ins || document.hidden || ctQ.busy || ctQ.list.length) return;
@@ -182,7 +186,8 @@ function ctPad(m, ev) {
       <div class="sc-row"><span class="sc-k">세트</span>${ctSetNos(ev).map(n => scChip("scset", n, setNo, n)).join("")}<span class="ct-tools">${q ? `<span class="chip warn" title="인터넷이 되면 저장돼요">대기 ${q}</span>` : ""}</span></div>
       <div class="ct-score">${score || `<span class="ct-t us ${s.serve === "us" ? "srv" : ""}">${esc(ctTA(m))}${s.nine ? "" : ` <small>R${s.rot}</small>`}</span><b class="num">${s.us} : ${s.op}</b><span class="ct-t opp ${s.serve === "opp" ? "srv" : ""}">${s.nine ? "" : `<small>R${s.orot}</small> `}${esc(m.opponent || "상대")}</span>`}</div>
       <div class="ct-info small muted">Set ${setNo} (${setTarget(setNo)}점) · ${s.nine ? "9인제" : `Rot ${s.rot}:${s.orot}`} · Rally ${s.rally}</div>
-      ${(w => w ? `<div class="ct-end"><b>${setNo}세트 ${esc(ctTN(m, w))} 승 · ${s.us}:${s.op}</b>${setNo < SET_MAX ? `<button class="btn primary small" type="button" data-act="scset" data-v="${setNo + 1}">${setNo + 1}세트로</button>` : ""}</div>` : "")(setWinner(s.us, s.op, setNo))}
+      ${(w => { if (!w) return ""; const all = sc().events[m.id] || [], over = ctMatchOver(m, all), sw = ctSetWins(m, all).w;
+        return `<div class="ct-end"><b>${setNo}세트 ${esc(ctTN(m, w))} 승 · ${s.us}:${s.op}${over ? ` — 경기 끝 ${esc(ctTN(m, over))} ${Math.max(sw.us, sw.opp)}:${Math.min(sw.us, sw.opp)}` : ""}</b>${!over && setNo < SET_MAX ? `<button class="btn primary small" type="button" data-act="scset" data-v="${setNo + 1}">${setNo + 1}세트로</button>` : ""}</div>`; })(setWinner(s.us, s.op, setNo))}
       <div class="ct-btns">
         <button class="btn small" type="button" data-act="ctundo" ${s.list.length ? "" : "disabled"}>Undo</button>
         <button class="btn small" type="button" data-act="ctcfg">Settings</button>

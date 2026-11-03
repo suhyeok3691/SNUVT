@@ -625,7 +625,9 @@ function lvPage(x) {
   const rs = L.rallies[g.id], sets = [1, 2, 3, 4, 5].map(n => ({ n, s: lvState(g, rs, n) })), cur = sets[L.set - 1].s, end = lvEnd(cur, L.set);
   const won = sets.filter(({ n, s }) => lvEnd(s, n) === "us").length, lost = sets.filter(({ n, s }) => lvEnd(s, n) === "opp").length;
   const lastSet = Math.max(1, ...rs.map(r => r.set_no), ...Object.keys(g.sets || {}).map(Number).filter(n => n >= 1 && n <= 5));
-  const chips = sets.filter(({ n }) => n <= Math.min(Math.max(SET_MAX, lastSet), lastSet + (lvEnd(sets[lastSet - 1].s, lastSet) ? 1 : 0))).map(({ n, s }) => `<button type="button" class="chip sc-chip ${n === L.set ? "on" : ""}" data-act="lvset" data-v="${n}">${n}세트${s.list.length ? ` <span class="num">${s.us}:${s.op}</span>` : ""}</button>`).join("");
+  // 3판 2선승: 한 팀이 2세트를 먼저 이기면 다음 세트 칩은 안 나옴
+  const decided = sets.filter(({ n, s }) => lvEnd(s, n) === "us").length >= 2 || sets.filter(({ n, s }) => lvEnd(s, n) === "opp").length >= 2;
+  const chips = sets.filter(({ n }) => n <= Math.min(Math.max(SET_MAX, lastSet), lastSet + (lvEnd(sets[lastSet - 1].s, lastSet) && !decided ? 1 : 0))).map(({ n, s }) => `<button type="button" class="chip sc-chip ${n === L.set ? "on" : ""}" data-act="lvset" data-v="${n}">${n}세트${s.list.length ? ` <span class="num">${s.us}:${s.op}</span>` : ""}</button>`).join("");
   // 교류전: 그 세트 출전 명단 · 6인제 대회: 그 세트 라인업(코트 · 리베로 · 교체)이 있으면 그 사람들이 주전으로
   const cupK = (x.kind === "friendly" || x.kind === "event") && !g.team, lu = cupK ? cupState().lineups[x.kind + ":" + x.id] : null;
   if (cupK && !lu) cupLoadLineups(x.kind, x.id);
@@ -656,7 +658,7 @@ function lvPage(x) {
       ${board}
       <div class="row between"><button type="button" class="btn small" data-act="lvundo" ${cur.list.length ? "" : "disabled"}>되돌리기${kb ? " <kbd>⌫</kbd>" : ""}</button><span class="row nowrap">${lvQ.list.length ? `<span class="chip warn">대기 ${lvQ.list.length}</span>` : ""}</span></div>
     </div>` : "";
-  const endBox = end ? `<div class="panel lv-end"><b>${L.set}세트 ${esc(lvTN(g, end))} 승 · ${cur.us}:${cur.op}</b>${me && L.set < SET_MAX && !(won >= 2 || lost >= 2) ? `<button class="btn primary small" type="button" data-act="lvnext">${L.set + 1}세트 시작</button>` : ""}</div>` : "";
+  const endBox = end ? `<div class="panel lv-end"><b>${L.set}세트 ${esc(lvTN(g, end))} 승 · ${cur.us}:${cur.op}${won >= 2 || lost >= 2 ? ` — 경기 끝 ${won}:${lost}` : ""}</b>${me && L.set < SET_MAX && !(won >= 2 || lost >= 2) ? `<button class="btn primary small" type="button" data-act="lvnext">${L.set + 1}세트 시작</button>` : ""}</div>` : "";
   const scope = L.scope === "all" ? rs.filter(r => r.kind) : cur.list;
   // Lite: 놓친 랠리는 점수판 팀 이름 옆 + 로 점수만 (컴퓨터 = 우리 · - 상대)
   const plus = sd => me && !end ? `<button type="button" class="lv-plus" data-act="lvpt" data-v="${sd}" aria-label="${esc(lvTN(g, sd))} 점수만 +1" title="점수만 +1${kb ? ` (${sd === "us" ? "=" : "-"})` : ""}">+</button>` : "";

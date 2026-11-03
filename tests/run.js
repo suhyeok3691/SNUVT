@@ -452,6 +452,10 @@ const SUITES = {
     const r = await p.evaluate(() => ({ s1: setWinner(21, 19, 1), s1n: setWinner(21, 20, 1), s3: setWinner(15, 13, 3), s3n: setWinner(15, 14, 3), max: SET_MAX,
       lv: lvEnd({ us: 13, op: 15 }, 3), lv2: lvEnd({ us: 20, op: 22 }, 2) }));
     assert.deepStrictEqual(r, { s1: "us", s1n: null, s3: "us", s3n: null, max: 3, lv: "opp", lv2: "opp" });
+    // 3판 2선승: 1 · 2세트를 한 팀이 다 이기면 3세트 칩 없음, 1 · 1이면 있음
+    const sets = await p.evaluate(() => { const m = { id: "x", lineup: {} }, pts = (n, side, k) => Array.from({ length: k }, () => ({ set_no: n, action: "pt", side, point: side, skill: "fault" }));
+      return [ctSetNos([...pts(1, "us", 21), ...pts(2, "us", 21)], m).join(), ctSetNos([...pts(1, "us", 21), ...pts(2, "opp", 21)], m).join(), ctSetNos(pts(1, "us", 21), m).join()]; });
+    assert.deepStrictEqual(sets, ["1,2", "1,2,3", "1,2,3"]);
     await p.evaluate(() => { state.players.p1.number = 11; state.players.p1.pos = "OP"; });
     await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(300);
     await p.evaluate(() => { scMatch().opponent = "서울대"; const O = scMatch().lineup.opp; O.pos = ["", "", "", "", "", ""]; state.dirty = false; render(); }); await p.waitForTimeout(200);
