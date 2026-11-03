@@ -2209,6 +2209,7 @@ function scoutStats(ev, pts) {
     <section class="sec"><h3>${esc(ctTA(m))}</h3>${ctSheetTable(all, "us")}</section>
     <section class="sec"><h3>${esc((m && m.opponent) || "상대")}</h3>${ctSheetTable(all, "opp")}</section>
     <section class="sec"><h3>서브 종류</h3>${ctServeTypes(all)}</section>
+    <section class="sec"><h3>공격 종류</h3>${ctAtkTypes(all)}</section>
     <section class="sec"><h3>공격이 떨어진 자리</h3>${ctSpotStats(all)}</section>
     <section class="sec"><h3>서브가 떨어진 자리</h3>${ctSpotStats(all, "serve")}</section>
     ${ctNine(m) ? "" : `<section class="sec"><h3>로테이션별 득실 · ${esc(ctTA(m))}</h3>${scRotTable(pl)}</section>
@@ -2314,7 +2315,7 @@ function scLogRows(m) {
       const p = us && !m.team ? playerOf(e.player_id) : null;
       rows.push({ Division: nine ? "9-people" : "6-people", Date: m.date || String(e.created_at || "").slice(0, 10), Timestamp: hms(e.created_at), Tournament: m.title || "", Stage: m.stage || "", "Set Number": set,
         Rotation: nine ? "10:10" : `${post.rot}:${post.orot}`, "Rally Count": e.rally || "", "Serving Team": tm(post.serve), "Player No": p ? (p.number != null ? String(p.number) : "") : String(e.opp_no ?? ""), "Player Name": p ? p.name : "", Position: pos,
-        Category: (CT_MENU.find(x => x[0] === a.skill) || ["", ""])[1], Action: a.name, "Action Type": a.res === "earned" ? "earned" : a.res === "error" ? "error" : "in_rally", Detail: e.detail || "N/A", Score: e.score || "",
+        Category: (CT_MENU.find(x => x[0] === a.skill) || ["", ""])[1], Action: a.name, "Action Type": a.res === "earned" ? "earned" : a.res === "error" ? "error" : "in_rally", Detail: e.detail || "N/A", "Attack Type": e.skill === "attack" && CT_ATN[e.kind] ? CT_ATN[e.kind] : "", Score: e.score || "",
         "Point To": e.point ? tm(e.point) : "None", "Did Rotate": !nine && e.point && e.serve && e.serve !== e.point ? 1 : 0, Recorder: m.recorder || "" });
     });
   }

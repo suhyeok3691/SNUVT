@@ -366,6 +366,17 @@ const SUITES = {
     const up = (await a.writes("scout_events")).filter(x => x[1] === "update").map(x => x[2]);
     assert.ok(up.some(u => u.action === "bout" && u.point === "us") && up.some(u => u.point === null), "서버에도 두 기록 고침");
     assert.match(await a.text(".ct-score"), /1 : 0/);
+    // 공격 종류: 공격 창 위 칩(포지션에 맞는 것 먼저 · 더보기) → kind 에 저장, 고치기에서도 바꿈, 분석 탭 "공격 종류" 표
+    await p.click('[data-act="ctrecall"]'); await p.waitForTimeout(100);
+    await p.click('.ct-court .ct-p.us[data-v="2"]'); await p.click('[data-act="ctcat"][data-v="attack"]'); await p.waitForTimeout(100);
+    const chips = await p.$$eval('[data-act="ctatype"]', x => x.map(e => e.textContent.trim()));
+    assert.deepStrictEqual(chips, ["레프트 오픈", "레프트 퀵", "앞차", "백차", "파이프"], "OH 공격 종류 " + chips);
+    await p.click('[data-act="ctatype"][data-v="pipe"]'); await p.click('[data-act="ctact"][data-a="kill"]'); await p.click('[data-act="ctnospot"]'); await p.waitForTimeout(150);
+    const k = (await a.writes("scout_events")).filter(x => x[1] === "insert").pop()[2];
+    assert.deepStrictEqual([k.action, k.kind], ["kill", "pipe"]);
+    await p.click('[data-act="sctab"][data-k="stats"]'); await p.waitForTimeout(200);
+    assert.match(await a.text("main"), /공격 종류.*파이프 1 1/);
+    await p.click('[data-act="sctab"][data-k="court"]'); await p.waitForTimeout(150);
     // 다른 사람 기록은 고치기 버튼 없음
     await p.evaluate(() => { sc().events.m1.push({ id: "x9", match_id: "m1", set_no: 1, side: "us", action: "kill", skill: "attack", point: null, author: "someone", created_at: "2099-01-01" }); state.dirty = false; render(); }); await p.waitForTimeout(150);
     assert.strictEqual(await p.$('[data-act="ctedit"][data-id="x9"]'), null);
