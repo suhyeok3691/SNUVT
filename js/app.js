@@ -3126,12 +3126,13 @@ document.addEventListener("click", async ev => {
     if (act === "sclive") { const L = lv(); pushInner(); S.live = true; L.open = b.dataset.id; L.set = 1; L.pick = null; L.side = "us"; L.scope = "set"; state.dirty = false; render(); window.scrollTo(0, 0);
       const g = lvGame(); if (g) lvLoadRallies(g.id).then(() => { const l = (L.rallies[g.id] || []).filter(r => r.kind); if (l.length) { L.set = Math.max(...l.map(r => r.set_no)); state.dirty = false; render(); } }); return; }
     if (act === "scopen") { pushInner(); state.scoutId = b.dataset.id; S.tab = "court"; state.dirty = false; render(); window.scrollTo(0, 0); return; }
+    if (act === "scback" && S.ins) await ctInsEnd();
     if (act === "scback") { if (history.state && history.state.inner) return history.back(); state.scoutId = null; state.dirty = false; render(); window.scrollTo(0, 0); return; }
     if (act === "scxlsx") return scoutXlsx(b.dataset.id);
     if (act === "sctab") S.tab = b.dataset.k;
     else if (act === "scltab") S.ltab = b.dataset.k;
     else if (act === "scmetric") S.metric = v;
-    else if (act === "scset") x.set = Number(v);
+    else if (act === "scset") { if (S.ins) { toast("끼워 넣기를 끝내고 세트를 바꿔 주세요"); return; } x.set = Number(v); }
     else if (act === "scfset") S.fset = Number(v);
     else if (act === "scdel") {
       if (!await confirmDel("이 경기와 입력한 플레이를 모두 지울까요?")) return;

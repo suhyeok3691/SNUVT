@@ -369,7 +369,7 @@ const SUITES = {
     await p.click('[data-act="ctrecall"]'); await p.waitForTimeout(150);
     assert.match(await a.text(".ct-recs h3"), /1세트 전체 기록/);
     const idA = await p.evaluate(() => sc().events.m1.find(e => e.action === "inplay").id);
-    await p.click(`[data-act="ctedit"][data-id="${idA}"]`); await p.waitForTimeout(150);
+    await p.click(`[data-act="ctrec"][data-id="${idA}"]`); await p.waitForTimeout(100); await p.click(`[data-act="ctedit"][data-id="${idA}"]`); await p.waitForTimeout(150);
     await p.selectOption("#cte-act", "bout"); await p.click("#ctEditForm button[type=submit]"); await p.waitForTimeout(300);
     const ev = await p.evaluate(() => sc().events.m1.map(e => [e.action, e.point, e.score]));
     assert.deepStrictEqual(ev, [["bout", "us", "1:0"], ["derr", null, "1:0"]]);
@@ -387,9 +387,35 @@ const SUITES = {
     await p.click('[data-act="sctab"][data-k="stats"]'); await p.waitForTimeout(200);
     assert.match(await a.text("main"), /공격 종류.*파이프 1 1/);
     await p.click('[data-act="sctab"][data-k="court"]'); await p.waitForTimeout(150);
-    // 다른 사람 기록은 고치기 버튼 없음
-    await p.evaluate(() => { sc().events.m1.push({ id: "x9", match_id: "m1", set_no: 1, side: "us", action: "kill", skill: "attack", point: null, author: "someone", created_at: "2099-01-01" }); state.dirty = false; render(); }); await p.waitForTimeout(150);
-    assert.strictEqual(await p.$('[data-act="ctedit"][data-id="x9"]'), null);
+    // 부원은 다른 사람 기록을 못 고침 (전력분석 담당 이상은 모두)
+    assert.strictEqual(await p.evaluate(() => { const e = { id: "x9", action: "kill", author: "someone" }, was = state.role; const r1 = ctCanEdit(e); state.admin = false; state.role = "player"; const t = state.titles; state.titles = []; const r2 = typeof can === "function" ? ctCanEdit(e) : null; state.admin = true; state.role = was; state.titles = t; return [r1, r2].join(); }), "true,false");
+    clean(a); await a.ctx.close();
+  },
+  // 끼워 넣기 · 지우기: 기록 ⋯ → "이 앞에 넣기" → 코트 · 점수가 그 자리 기준 → 기록하면 그 사이 시각으로 들어감 → 끝내기 → 뒤 기록 점수 다시 맞춤. 지우면 다시 맞춤
+  async insert(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await p.evaluate(() => { window.confirmDel = async () => true; });
+    await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(300);
+    const kill = async (side, v) => { await p.click(`.ct-court .ct-p.${side}[data-v="${v}"]`); await p.click('[data-act="ctcat"][data-v="serve"]'); await p.click('[data-act="ctact"][data-a="ace"]'); await p.click('[data-act="ctnospot"]'); await p.waitForTimeout(120); }; // 서브 에이스 = 랠리 하나
+    await kill("us", 2); await kill("opp", 12); await p.evaluate(() => ctFlush()); await p.waitForTimeout(300);
+    await p.evaluate(() => sc().events.m1.forEach((e, i) => { e.created_at = new Date(Date.parse("2026-11-01T01:00:00Z") + i * 10000).toISOString(); })); // 시계가 멈춰 있어 시각을 벌려 둠
+    const id2 = await p.evaluate(() => sc().events.m1.find(e => e.side === "opp").id);
+    await p.click('[data-act="ctrecall"]'); await p.click(`[data-act="ctrec"][data-id="${id2}"]`); await p.click(`[data-act="ctins"][data-v="before"]`); await p.waitForTimeout(200);
+    assert.ok(await p.$(".ct-ins"), "끼워 넣는 중 표시"); assert.match(await a.text(".ct-score"), /1 : 0/, "그 자리 점수");
+    await kill("us", 3); await p.evaluate(() => ctFlush()); await p.waitForTimeout(300);
+    assert.match(await a.text(".ct-score"), /2 : 0/);
+    await p.click('[data-act="ctinsend"]'); await p.waitForTimeout(400);
+    const ev = await p.evaluate(() => sc().events.m1.map(e => [e.side, e.opp_no, e.score]));
+    assert.deepStrictEqual(ev, [["us", 2, "1:0"], ["us", 3, "2:0"], ["opp", 12, "2:1"]], "순서 · 뒤 기록 점수");
+    const ins = (await a.writes("scout_events")).filter(x => x[1] === "insert").pop()[2];
+    assert.ok(ins.created_at && Date.parse(ins.created_at) < Date.parse(await p.evaluate(id => sc().events.m1.find(e => e.id === id).created_at, id2)), "넣은 기록 시각이 뒤 기록보다 앞");
+    assert.ok((await a.writes("scout_events")).some(x => x[1] === "update" && x[2].score === "2:1"), "서버도 점수 고침");
+    // 넣은 기록 지우기 → 뒤 기록 점수 다시 1:1
+    const id3 = await p.evaluate(() => sc().events.m1.find(e => e.opp_no === 3).id);
+    await p.click('[data-act="ctrecall"]').catch(() => {}); await p.waitForTimeout(100);
+    if (!(await p.$(`[data-act="ctrec"][data-id="${id3}"]`))) await p.click('[data-act="ctrecall"]');
+    await p.click(`[data-act="ctrec"][data-id="${id3}"]`); await p.click(`[data-act="ctdelrec"]`); await p.waitForTimeout(400);
+    assert.deepStrictEqual(await p.evaluate(() => sc().events.m1.map(e => [e.opp_no, e.score])), [[2, "1:0"], [12, "1:1"]]);
     clean(a); await a.ctx.close();
   },
   // 아마추어 규칙(3세트, 21 · 21 · 15) · 서울대라고 넣은 번호 팀은 부원 이름 · 포지션 · 분석 표 포지션 · 다른 기기 기록은 Undo 안 됨
