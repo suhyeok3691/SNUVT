@@ -284,7 +284,12 @@ function ctQApply(mid, ev, pt) {
   return [ctSort(ev), pt];
 }
 // 기록 순서는 늘 시각(created_at) 순. 끼워 넣기 중이면 그 자리까지만 보고 상태(점수 · 로테 · 코트)를 셈
-const ctT = e => Date.parse(String(e.created_at || "").replace(" ", "T").replace(/\+00$/, "Z")) || 0;
+// 시각은 마이크로초(µs) 정수로 다룸 — DB 가 µs 까지 저장해서, 끼워 넣을 때 틈을 아주 잘게 나눠도 순서가 지켜짐
+const ctUs = v => { const m = /^(\d{4}-\d\d-\d\d)[T ](\d\d:\d\d:\d\d)(?:\.(\d+))?(Z|[+-]\d\d(?::?\d\d)?)?$/.exec(String(v || "").trim()); if (!m) return 0;
+  let tz = m[4] || "Z"; if (/^[+-]\d\d$/.test(tz)) tz += ":00"; else if (/^[+-]\d{4}$/.test(tz)) tz = tz.slice(0, 3) + ":" + tz.slice(3);
+  const base = Date.parse(`${m[1]}T${m[2]}${tz}`); return isNaN(base) ? 0 : base * 1000 + Number(((m[3] || "") + "000000").slice(0, 6)); };
+const ctIso = us => { const ms = Math.floor(us / 1000); return new Date(ms).toISOString().replace("Z", String(Math.round(us - ms * 1000)).padStart(3, "0") + "Z"); };
+const ctT = e => ctUs(e.created_at);
 const ctSort = l => l.sort((a, b) => ctT(a) - ctT(b));
 const ctEv = m => { const S = sc(), l = S.events[m.id] || [], I = S.ins; return I && I.mid === m.id ? l.filter(e => ctT(e) <= I.cur) : l; };
 const ctRetry = err => !err || !err.code || /fetch|network|timeout|JWT|PGRST301/i.test(`${err.message || ""} ${err.code || ""}`);
@@ -326,9 +331,10 @@ window.addEventListener("beforeunload", e => { if (ctQ.list.length) { ctQSave();
 setTimeout(ctFlush, 3000);
 function ctPush(row, pr) {
   const S = sc(), tmp = "tmp" + Date.now() + Math.random().toString(36).slice(2, 6), I = S.ins && S.ins.mid === row.match_id ? S.ins : null;
-  let at = Date.now();
-  if (I) { at = Math.min(I.cur + 1000, I.cur + Math.floor((I.next - I.cur) / 2)); if (!(at > I.cur)) { toast("이 자리엔 더 넣을 틈이 없어요"); return false; } I.cur = at; row._keepAt = true; }
-  row.created_at = new Date(at).toISOString(); if (pr) pr.created_at = row.created_at;
+  let at = Date.now() * 1000;
+  // 끼워 넣기: 남은 틈의 2%(최대 1초)씩 → 4초 틈에도 수백 개를 차례로 넣을 수 있음
+  if (I) { at = I.cur + Math.max(1, Math.min(1e6, Math.floor((I.next - I.cur) / 50))); if (!(at < I.next)) { toast("이 자리엔 더 넣을 틈이 없어요"); return false; } I.cur = at; row._keepAt = true; }
+  row.created_at = ctIso(at); if (pr) pr.created_at = row.created_at;
   const ev = { ...row, id: tmp, _pending: true }; delete ev._keepAt; mineAdd(ctMine, "snuvt-ctmine", tmp);
   S.events[row.match_id] = ctSort([...(S.events[row.match_id] || []), ev]);
   let pt = null;
@@ -390,7 +396,7 @@ const ctOwn = e => !!e && (ctMine.has(String(e.id)) || (!!e.author && e.author =
 // 지금 다른 기기에서 기록 중인가: 이 경기에 다른 사람(다른 기기) 기록이 10분 안에 들어왔으면 그 사람이 쓰는 중으로 봄 → 남의 기록 고치기 · 지우기 · 끼워 넣기 · RESET 막음
 const CT_LIVE_MIN = 10;
 function ctLiveBy(m) { const l = (sc().events[m.id] || []).filter(e => !e._pending && !ctOwn(e)); if (!l.length) return null;
-  const last = l.reduce((a, b) => ctT(a) >= ctT(b) ? a : b), ago = (Date.now() - ctT(last)) / 60000; return ago < CT_LIVE_MIN ? { ago: Math.max(0, Math.round(ago)), last } : null; }
+  const last = l.reduce((a, b) => ctT(a) >= ctT(b) ? a : b), ago = (Date.now() * 1000 - ctT(last)) / 6e7; return ago < CT_LIVE_MIN ? { ago: Math.max(0, Math.round(ago)), last } : null; }
 const ctLiveMsg = L => `지금 다른 기기에서 기록하는 중이라(마지막 기록 ${L.ago ? `${L.ago}분 전` : "방금"}) 다른 사람 기록은 못 고치고 못 지워요. 기록이 ${CT_LIVE_MIN}분 멈추면 돼요`;
 const ctCanEdit = e => !!e && !e._pending && (ctOwn(e) || can("analysis")); // 내 기록 · 전력분석 담당 이상은 모든 기록 (다른 기기에서 쓰는 중이면 남의 기록은 ctBlocked)
 const ctBlocked = (m, e) => !ctOwn(e) && ctLiveBy(m);
@@ -482,7 +488,7 @@ function ctInsStart(id, where) {
   const S = sc(), m = scMatch(), all = ctSort((S.events[m.id] || []).slice()), i = all.findIndex(x => String(x.id) === String(id)); if (i < 0) return;
   const e = all[i], prev = all[i - 1], nx = all[i + 1];
   { const L = ctLiveBy(m); if (L) return toast(ctLiveMsg(L).replace("다른 사람 기록은 못 고치고 못 지워요", "중간에 끼워 넣을 수 없어요")); } // 넣으면 쓰는 사람 기록 점수가 바뀜
-  S.ins = where === "before" ? { mid: m.id, set: e.set_no, cur: prev ? ctT(prev) : ctT(e) - 3600e3, next: ctT(e), label: `${e.score || ""} ${ctLabel(e).replace(/<[^>]+>/g, "")} 앞` }
+  S.ins = where === "before" ? { mid: m.id, set: e.set_no, cur: prev ? ctT(prev) : ctT(e) - 3600e6, next: ctT(e), label: `${e.score || ""} ${ctLabel(e).replace(/<[^>]+>/g, "")} 앞` }
     : { mid: m.id, set: e.set_no, cur: ctT(e), next: nx ? ctT(nx) : Infinity, label: `${e.score || ""} ${ctLabel(e).replace(/<[^>]+>/g, "")} 뒤` };
   S.sel.set = e.set_no; S.recAll = false; closeSheet(); state.dirty = false; render(); window.scrollTo(0, 0);
 }

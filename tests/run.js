@@ -423,6 +423,11 @@ const SUITES = {
     const ins = (await a.writes("scout_events")).filter(x => x[1] === "insert").pop()[2];
     assert.ok(ins.created_at && Date.parse(ins.created_at) < Date.parse(await p.evaluate(id => sc().events.m1.find(e => e.id === id).created_at, id2)), "넣은 기록 시각이 뒤 기록보다 앞");
     assert.ok((await a.writes("scout_events")).some(x => x[1] === "update" && x[2].score === "2:1"), "서버도 점수 고침");
+    // 좁은 틈(4ms)에도 30개를 차례로 넣을 수 있음 (µs 단위)
+    const tight = await p.evaluate(() => { const S = sc(), save = S.ins, base = ctUs("2026-11-01T02:00:00.000Z"); S.ins = { mid: "m1", set: 1, cur: base, next: base + 4000, label: "t" }; const out = [];
+      for (let i = 0; i < 30; i++) { const r = { match_id: "m1", set_no: 1, side: "us", skill: "fault", grade: "!", action: "unk" }; if (!ctPush(r, null)) break; out.push(ctUs(r.created_at)); }
+      S.ins = save; const ok2 = out.every((t, i) => t > (i ? out[i - 1] : base) && t < base + 4000); S.events.m1 = S.events.m1.filter(e => e.action !== "unk"); ctQ.list = ctQ.list.filter(x => !x.ev || x.ev.action !== "unk"); return [out.length, ok2]; });
+    assert.deepStrictEqual(tight, [30, true]);
     // 넣은 기록 지우기 → 뒤 기록 점수 다시 1:1
     const id3 = await p.evaluate(() => sc().events.m1.find(e => e.opp_no === 3).id);
     await p.click('[data-act="ctrecall"]').catch(() => {}); await p.waitForTimeout(100);
