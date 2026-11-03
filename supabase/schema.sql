@@ -2487,3 +2487,7 @@ revoke all on function public.scout_restore(uuid, uuid[]) from public, anon;
 grant execute on function public.scout_trash(uuid) to authenticated;
 grant execute on function public.scout_restore(uuid, uuid[]) to authenticated;
 -- 2026-11-02 KUSF 경희대전 1세트 랠리 1~10 (15:15~15:20 Undo 로 서버에서 지워짐, 휴지통 전): 점수 · 로테만 '점수만(pt)' 기록 10개로 복구 (경희대 7 : 서울대 3, 다음 기록의 R4 · R4 · 서브 경희대에 맞춘 순서), 선수 기록은 없음
+
+-- 2026-11-04 기기 시계 확인용 서버 시각 (로그인 전에도 부름)
+create or replace function public.server_now() returns timestamptz language sql stable set search_path = '' as $$ select now() $$;
+grant execute on function public.server_now() to anon, authenticated;

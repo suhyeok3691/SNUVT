@@ -3669,13 +3669,19 @@ document.addEventListener("submit", async ev => {
 });
 
 // 기기 시계 · 시간대가 틀리면(서버 시각과 5분 넘게 차이) 로그인 토큰이 바로 만료된 걸로 보여 계속 새로 받다가 막히고 로그인이 풀림 → 맨 위에 안내
-function clockCheck(tok) {
+// 서버 시각(server_now RPC)과 비교 (오가는 시간의 가운데로). 탭마다 한 번. 예전 토큰의 발급 시각으로 재면 저장된 토큰 나이만큼 틀리게 나와서 안 씀
+let clockDone = false;
+async function clockCheck() {
+  if (clockDone || !sb) return; clockDone = true;
   try {
-    const iat = JSON.parse(atob(tok.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).iat, skew = Date.now() / 1000 - iat;
-    if (!iat || Math.abs(skew) < 300 || document.getElementById("clockWarn")) return;
+    const t0 = Date.now(), r = await sb.rpc("server_now"), t1 = Date.now(); if (r.error || !r.data) return;
+    const srv = Date.parse(r.data), rtt = t1 - t0; if (!srv || rtt > 10000) { clockDone = false; return; } // 너무 느리면 다음에 다시
+    const skew = ((t0 + t1) / 2 - srv) / 1000, old = document.getElementById("clockWarn");
+    if (Math.abs(skew) < 300) { if (old) old.remove(); return; }
+    if (old) return;
     const h = Math.abs(skew) / 3600, amt = h >= 1 ? `${Math.round(h)}시간` : `${Math.round(Math.abs(skew) / 60)}분`;
     document.body.insertAdjacentHTML("afterbegin", `<div id="clockWarn" class="clock-warn" role="alert"><b>이 기기 시계가 ${amt} ${skew > 0 ? "빨라요" : "느려요"}</b> — 이대로면 로그인이 계속 풀려요. 컴퓨터 날짜·시간 설정에서 "시간 자동 설정"을 켜고 시간대를 "서울"로 맞춘 뒤 새로고침해 주세요.</div>`);
-  } catch (e) { /* 토큰을 못 읽으면 넘어감 */ }
+  } catch (e) { clockDone = false; }
 }
 /* ---------- 데이터 ---------- */
 async function loadProfile() {
@@ -4064,7 +4070,7 @@ function boot() {
   window.addEventListener("online", () => { if (state.canWrite) { flushQueue(); loadAll(true); } });
   // 콜백 안에서 바로 Supabase 를 부르면 멈출 수 있어 다음 틱으로 넘긴다
   sb.auth.onAuthStateChange((event, session) => {
-    if (session && session.access_token) clockCheck(session.access_token);
+    if (event === "INITIAL_SESSION" || event === "SIGNED_IN") setTimeout(clockCheck, 0);
     if (event === "PASSWORD_RECOVERY") { state.recovery = true; state.dirty = false; }
     if (["INITIAL_SESSION", "SIGNED_IN", "SIGNED_OUT", "USER_UPDATED"].includes(event)) setTimeout(loadProfile, 0);
   });

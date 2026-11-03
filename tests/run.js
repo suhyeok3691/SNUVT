@@ -204,11 +204,11 @@ const SUITES = {
   // 기기 시계가 서버와 5분 넘게 어긋나면 로그인이 풀린다는 안내 (맞으면 안 뜸)
   async clock(b) {
     const a = await openApp(b, "coach"), p = a.page;
-    const tok = sec => "x." + Buffer.from(JSON.stringify({ iat: sec })).toString("base64").replace(/=+$/, "") + ".y";
-    const now = Math.floor(Date.parse("2026-11-01T10:00:00+09:00") / 1000);
-    await p.evaluate(t => clockCheck(t), tok(now - 60)); assert.strictEqual(await p.$("#clockWarn"), null, "1분은 괜찮음");
-    await p.evaluate(t => clockCheck(t), tok(now - 8 * 3600));
-    assert.match(await a.text("#clockWarn"), /8시간 빨라요/);
+    const run = async serverIso => p.evaluate(async iso => { sb.rpc = async n => n === "server_now" ? { data: iso, error: null } : { data: null, error: null }; clockDone = false; await clockCheck(); }, serverIso);
+    // 브라우저 시계 = 2026-11-01 10:00 KST (01:00Z). 서버가 1분 차이면 괜찮음, 8시간 차이면 안내, 다시 맞으면 사라짐
+    await run("2026-11-01T01:01:00Z"); assert.strictEqual(await p.$("#clockWarn"), null, "1분은 괜찮음");
+    await run("2026-10-31T17:00:00Z"); assert.match(await a.text("#clockWarn"), /8시간 빨라요/);
+    await run("2026-11-01T01:00:00Z"); assert.strictEqual(await p.$("#clockWarn"), null, "맞으면 안내가 사라짐");
     clean(a); await a.ctx.close();
   },
   // 앱 오류 기록: 우리 파일에서 난 오류는 client_errors 에 한 번만 (같은 오류 두 번이어도 하나)
