@@ -993,6 +993,7 @@ sub { font-size: 10px; color: var(--muted); }
 .td-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-2); font: inherit; font-size: 14px; color: var(--ink); text-align: left; width: 100%; }
 button.td-row { cursor: pointer; } button.td-row:hover { border-color: var(--blue); } .td-row .go { color: var(--muted); }
 #pushNudge:empty { display: none; }
+.clock-warn { position: sticky; top: 0; z-index: 60; padding: 10px 14px; background: #c0392b; color: #fff; font-size: 13.5px; line-height: 1.45; }
 .nudge { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-color: var(--blue); background: var(--blue-soft); }
 .nudge > div:first-child { display: grid; gap: 2px; }
 /* 달력 날짜를 누르면 위에 날짜가 있으니 줄마다 날짜는 숨김 */
@@ -1245,6 +1246,6 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 <script src="js/campus.js?v=196"></script>
 <script src="js/court.js?v=230"></script>
 <script src="js/live.js?v=225"></script>
-<script src="js/app.js?v=229"></script>
+<script src="js/app.js?v=231"></script>
 </body>
 </html>

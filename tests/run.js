@@ -201,6 +201,16 @@ const SUITES = {
     assert.match(await c.text("main"), /연세대와 교류전/);
     clean(c); await c.ctx.close();
   },
+  // 기기 시계가 서버와 5분 넘게 어긋나면 로그인이 풀린다는 안내 (맞으면 안 뜸)
+  async clock(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    const tok = sec => "x." + Buffer.from(JSON.stringify({ iat: sec })).toString("base64").replace(/=+$/, "") + ".y";
+    const now = Math.floor(Date.parse("2026-11-01T10:00:00+09:00") / 1000);
+    await p.evaluate(t => clockCheck(t), tok(now - 60)); assert.strictEqual(await p.$("#clockWarn"), null, "1분은 괜찮음");
+    await p.evaluate(t => clockCheck(t), tok(now - 8 * 3600));
+    assert.match(await a.text("#clockWarn"), /8시간 빨라요/);
+    clean(a); await a.ctx.close();
+  },
   // 앱 오류 기록: 우리 파일에서 난 오류는 client_errors 에 한 번만 (같은 오류 두 번이어도 하나)
   async errors(b) {
     const a = await openApp(b, "coach"), p = a.page;
