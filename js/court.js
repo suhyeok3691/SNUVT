@@ -384,9 +384,16 @@ async function ctUndo() {
   ctQ.list.push({ del: e.id, match_id: m.id }); ctQSave(); state.dirty = false; render(); ctFlush();
 }
 // 기록 고치기: 내가 넣은 기록(이 기기 · 내 계정)만. 팀 · 선수 · 동작 · 이유를 바꾸면 그 세트 점수 · 서브 · 로테 · 랠리를 처음부터 다시 따라가 바뀐 줄만 서버에 고침
-const ctCanEdit = e => !!e && !e._pending && (ctMine.has(String(e.id)) || (e.author && e.author === uid()) || can("analysis")); // 내 기록 · 전력분석 담당 이상은 모든 기록
+const ctOwn = e => !!e && (ctMine.has(String(e.id)) || (!!e.author && e.author === uid()));
+// 지금 다른 기기에서 기록 중인가: 이 경기에 다른 사람(다른 기기) 기록이 10분 안에 들어왔으면 그 사람이 쓰는 중으로 봄 → 남의 기록 고치기 · 지우기 · 끼워 넣기 · RESET 막음
+const CT_LIVE_MIN = 10;
+function ctLiveBy(m) { const l = (sc().events[m.id] || []).filter(e => !e._pending && !ctOwn(e)); if (!l.length) return null;
+  const last = l.reduce((a, b) => ctT(a) >= ctT(b) ? a : b), ago = (Date.now() - ctT(last)) / 60000; return ago < CT_LIVE_MIN ? { ago: Math.max(0, Math.round(ago)), last } : null; }
+const ctLiveMsg = L => `지금 다른 기기에서 기록하는 중이라(마지막 기록 ${L.ago ? `${L.ago}분 전` : "방금"}) 다른 사람 기록은 못 고치고 못 지워요. 기록이 ${CT_LIVE_MIN}분 멈추면 돼요`;
+const ctCanEdit = e => !!e && !e._pending && (ctOwn(e) || can("analysis")); // 내 기록 · 전력분석 담당 이상은 모든 기록 (다른 기기에서 쓰는 중이면 남의 기록은 ctBlocked)
+const ctBlocked = (m, e) => !ctOwn(e) && ctLiveBy(m);
 function ctEditForm(id) {
-  const S = sc(), m = scMatch(), e = (S.events[m.id] || []).find(x => String(x.id) === String(id)); if (!ctCanEdit(e) || !CT_ACT[e.action]) return toast("고칠 수 없는 기록이에요");
+  const S = sc(), m = scMatch(), e = (S.events[m.id] || []).find(x => String(x.id) === String(id)); if (!ctCanEdit(e) || !CT_ACT[e.action]) return toast("고칠 수 없는 기록이에요"); { const L = ctBlocked(m, e); if (L) return toast(ctLiveMsg(L)); }
   const el = document.getElementById("sheet"), s = ctState(m, S.events[m.id] || [], e.set_no);
   const who = side => { const slots = side === "us" ? s.usSlots : s.opSlots, libs = ctLibs(ctLu(m), side), cur = side === e.side ? (e.player_id ?? e.opp_no) : null;
     const vals = [...new Set([...slots, ...libs, ...(S.events[m.id] || []).filter(x => x.side === side && CT_ACT[x.action]).map(x => x.player_id ?? x.opp_no), ...(cur != null ? [cur] : [])].filter(x => x != null && x !== "").map(String))];
@@ -438,6 +445,7 @@ async function ctFixSet(m, setNo, extra) {
 }
 async function ctEditSave(f) {
   const S = sc(), m = scMatch(), e = (S.events[m.id] || []).find(x => String(x.id) === String(f.dataset.id)); if (!ctCanEdit(e)) return;
+  { const L = ctBlocked(m, e); if (L) return toast(ctLiveMsg(L)); }
   if (!await ctWaitQ()) return toast("저장 중인 기록이 아직 안 올라갔어요. 인터넷을 확인하고 다시 눌러 주세요");
   const v = id => (document.getElementById(id) || {}).value || "", side = v("cte-side"), who = v("cte-who"), code = v("cte-act"), a = CT_ACT[code]; if (!a) return;
   const ros = ctRos(m, side), detail = a.det ? v("cte-det") || null : null;
@@ -452,7 +460,8 @@ async function ctEditSave(f) {
 // 기록 하나 누르면: 고치기 · 지우기 · 이 앞에 넣기 · 이 뒤에 넣기
 function ctRecSheet(id) {
   const S = sc(), m = scMatch(), e = (S.events[m.id] || []).find(x => String(x.id) === String(id)); if (!ctCanEdit(e)) return;
-  const el = document.getElementById("sheet");
+  const el = document.getElementById("sheet"), L = ctBlocked(m, e);
+  if (L) { el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>기록</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div><p class="small muted">${e.set_no}세트 · ${esc(e.score || "")} · ${ctLabel(e)}</p><p class="small ct-live-note">${esc(ctLiveMsg(L))}</p>`; el.hidden = false; document.body.classList.add("noscroll"); return; }
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>기록</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <p class="small muted">${e.set_no}세트 · ${esc(e.score || "")} · ${ctLabel(e)}</p>
     <div class="ct-recacts">${CT_ACT[e.action] ? `<button class="btn" type="button" data-act="ctedit" data-id="${esc(e.id)}">고치기</button>` : ""}<button class="btn" type="button" data-act="ctins" data-id="${esc(e.id)}" data-v="before">이 앞에 넣기</button><button class="btn" type="button" data-act="ctins" data-id="${esc(e.id)}" data-v="after">이 뒤에 넣기</button><button class="btn danger" type="button" data-act="ctdelrec" data-id="${esc(e.id)}">지우기</button></div>`;
@@ -462,6 +471,7 @@ function ctRecSheet(id) {
 function ctInsStart(id, where) {
   const S = sc(), m = scMatch(), all = ctSort((S.events[m.id] || []).slice()), i = all.findIndex(x => String(x.id) === String(id)); if (i < 0) return;
   const e = all[i], prev = all[i - 1], nx = all[i + 1];
+  { const L = ctLiveBy(m); if (L) return toast(ctLiveMsg(L).replace("다른 사람 기록은 못 고치고 못 지워요", "중간에 끼워 넣을 수 없어요")); } // 넣으면 쓰는 사람 기록 점수가 바뀜
   S.ins = where === "before" ? { mid: m.id, set: e.set_no, cur: prev ? ctT(prev) : ctT(e) - 3600e3, next: ctT(e), label: `${e.score || ""} ${ctLabel(e).replace(/<[^>]+>/g, "")} 앞` }
     : { mid: m.id, set: e.set_no, cur: ctT(e), next: nx ? ctT(nx) : Infinity, label: `${e.score || ""} ${ctLabel(e).replace(/<[^>]+>/g, "")} 뒤` };
   S.sel.set = e.set_no; S.recAll = false; closeSheet(); state.dirty = false; render(); window.scrollTo(0, 0);
@@ -476,6 +486,7 @@ async function ctInsEnd() {
 // 기록 지우기 (고칠 수 있는 기록): 화면에서 빼고 지우기는 대기열로, 다 올라가면 그 세트 점수 · 로테를 다시 맞춤
 async function ctDelRec(id) {
   const S = sc(), m = scMatch(), e = (S.events[m.id] || []).find(x => String(x.id) === String(id)); if (!ctCanEdit(e)) return;
+  { const L = ctBlocked(m, e); if (L) return toast(ctLiveMsg(L)); }
   if (!await confirmDel(`이 기록을 지울까요?\n${ctLabel(e).replace(/<[^>]+>/g, "")}`, "네, 지울게요")) return;
   const qi = ctQ.list.findIndex(x => x.ev && x.ev.id === e.id);
   if (qi >= 0) { const it = ctQ.list.splice(qi, 1)[0]; ctDrop(it); ctQSave(); if (!it.ev._done) { closeSheet(); state.dirty = false; return render(); } }
@@ -612,6 +623,7 @@ function ctCfgSave() {
 // RESET: 이 세트 기록 모두 지우기 (선수는 그대로)
 async function ctReset() {
   const S = sc(), m = scMatch(), setNo = S.sel.set || 1;
+  { const L = ctLiveBy(m); if (L) return toast(ctLiveMsg(L).replace("다른 사람 기록은 못 고치고 못 지워요", "RESET 할 수 없어요")); }
   if (!await confirmDel(`${setNo}세트 기록을 모두 지울까요?`)) return;
   if (ctQ.busy) { toast("저장 중이에요. 잠깐 뒤에 다시 눌러 주세요"); return; }
   ctQ.list = ctQ.list.filter(x => x.del || !(x.ev.match_id === m.id && x.ev.set_no === setNo)); ctQSave();

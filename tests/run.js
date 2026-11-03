@@ -416,6 +416,16 @@ const SUITES = {
     if (!(await p.$(`[data-act="ctrec"][data-id="${id3}"]`))) await p.click('[data-act="ctrecall"]');
     await p.click(`[data-act="ctrec"][data-id="${id3}"]`); await p.click(`[data-act="ctdelrec"]`); await p.waitForTimeout(400);
     assert.deepStrictEqual(await p.evaluate(() => sc().events.m1.map(e => [e.opp_no, e.score])), [[2, "1:0"], [12, "1:1"]]);
+    // 다른 기기에서 지금 기록 중(다른 사람 기록이 10분 안)이면: 그 사람 기록 ⋯ → 안내만, 지우기 · 끼워 넣기 · RESET 막힘
+    await p.evaluate(() => { sc().events.m1.push({ id: "live1", match_id: "m1", set_no: 1, side: "us", player_id: null, opp_no: 4, action: "s2", skill: "serve", point: null, score: "1:1", author: "someone", created_at: new Date(Date.now() - 60000).toISOString() }); state.dirty = false; render(); });
+    await p.click('[data-act="ctrec"][data-id="live1"]').catch(async () => { await p.click('[data-act="ctrecall"]'); await p.click('[data-act="ctrec"][data-id="live1"]'); }); await p.waitForTimeout(150);
+    assert.match(await a.text("#sheet .ct-live-note"), /다른 기기에서 기록하는 중/);
+    assert.strictEqual(await p.$('#sheet [data-act="ctdelrec"]'), null, "지우기 버튼 없음");
+    await p.evaluate(() => closeSheet());
+    await p.evaluate(() => ctDelRec("live1")); await p.waitForTimeout(150);
+    assert.ok(await p.evaluate(() => sc().events.m1.some(e => e.id === "live1")), "남의 기록 안 지워짐");
+    await p.evaluate(() => ctReset()); await p.waitForTimeout(150);
+    assert.ok(await p.evaluate(() => sc().events.m1.length === 3), "RESET 막힘");
     clean(a); await a.ctx.close();
   },
   // 아마추어 규칙(3세트, 21 · 21 · 15) · 서울대라고 넣은 번호 팀은 부원 이름 · 포지션 · 분석 표 포지션 · 다른 기기 기록은 Undo 안 됨
