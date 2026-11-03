@@ -4066,6 +4066,8 @@ function boot() {
     state.offline = true; state.booting = false; render(); return;
   }
   sb = window.supabase.createClient(cfg.url, cfg.anonKey);
+  // 숫자 칸을 고른 채로 마우스 휠을 굴리면 값이 바뀌어 버림 → 휠이면 칸에서 빠져나와 화면만 스크롤
+  document.addEventListener("wheel", e => { const t = e.target; if (t && t.tagName === "INPUT" && t.type === "number" && document.activeElement === t) t.blur(); }, { passive: true });
   // 앱 설치·오프라인 (서비스 워커) · 연결되면 모아 둔 기록 올리기
   if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
   window.addEventListener("online", () => { if (state.canWrite) { flushQueue(); loadAll(true); } });

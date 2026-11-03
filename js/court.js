@@ -579,8 +579,9 @@ async function ctLineupSave(f) {
     if (op.some(x => x === "") || new Set(op).size !== 9) { toast("상대 등번호 9개를 겹치지 않게 넣어 주세요"); return false; }
     const L = { ...ctLu(m), us: { slots: ros ? us : us.map(Number), pos: CT_POS9, libero: [] }, opp: { slots: op.map(Number), pos: CT_POS9, libero: [] } };
     L.sets = { ...(L.sets || {}), [setNo]: { serve: v("cts-serve") || "us" } };
+    const old9 = ctLu(m);
     ok(await sb.from("scout_matches").update({ lineup: L }).eq("id", m.id));
-    m.lineup = L; closeSheet(); toast("라인업을 저장했어요"); state.dirty = false; render(); return false;
+    m.lineup = L; closeSheet(); toast("라인업을 저장했어요"); state.dirty = false; render(); await ctLineupRename(m, old9, L); return false;
   }
   const ros = !m.team, us = [0, 1, 2, 3, 4, 5].map(i => v(`${ros ? "ctu" : "ctn"}-${i}`)), op = [0, 1, 2, 3, 4, 5].map(i => v(`cto-${i}`));
   if (us.some(x => x === "") || new Set(us).size !== 6) { toast(ros ? "SNU 선수 6명을 겹치지 않게 골라 주세요" : `${ctTA(m)} 등번호 6개를 겹치지 않게 넣어 주세요`); return false; }
@@ -595,9 +596,34 @@ async function ctLineupSave(f) {
   L.us = ros ? { slots: us, pos: us.map((id, i) => v(`ctp-${i}`) || ctRosterPos(id)), libero: libs } : { slots: us.map(Number), pos: us.map((x, i) => v(`cnp-${i}`)), libero: libs.map(Number) };
   L.opp = { slots: op.map(Number), pos: op.map((x, i) => v(`cop-${i}`)), libero: olibs.map(Number) };
   L.sets = { ...(L.sets || {}), [setNo]: { rot: Number(v("cts-rot")) || 1, opp_rot: Number(v("cts-orot")) || 1, serve: v("cts-serve") || "us" } };
+  const old = ctLu(m);
   ok(await sb.from("scout_matches").update({ lineup: L }).eq("id", m.id));
   m.lineup = L; closeSheet(); toast("라인업을 저장했어요"); state.dirty = false; render();
+  await ctLineupRename(m, old, L);
   return false;
+}
+// 라인업에서 번호(선수)를 고쳤으면(같은 칸의 예전 번호가 새 라인업 어디에도 없고, 새 번호도 예전 라인업에 없음 = 잘못 적은 것) 이미 넣은 기록도 바꿀지 물어봄
+// 바꾸면 그 팀 기록의 opp_no(번호 팀) · player_id(명단 팀)를 한꺼번에 고침 → 분석 · 엑셀에 바로 반영
+async function ctLineupRename(m, oldL, newL) {
+  const S = sc(), ev = S.events[m.id] || [], maps = [];
+  for (const side of ["us", "opp"]) {
+    const o = oldL[side] || {}, n = newL[side] || {}, ol = [...(o.slots || []), ...(o.libero || [])], nl = [...(n.slots || []), ...(n.libero || [])], mp = {};
+    const pair = (a, b) => { if (a == null || a === "" || b == null || b === "" || ctSame(a, b)) return; if (nl.some(x => ctSame(x, a)) || ol.some(x => ctSame(x, b))) return; mp[String(a)] = b; };
+    (o.slots || []).forEach((a, i) => pair(a, (n.slots || [])[i])); (o.libero || []).forEach((a, i) => pair(a, (n.libero || [])[i]));
+    const key = ctRos(m, side) ? "player_id" : "opp_no", hit = ev.filter(e => e.side === side && e[key] != null && mp[String(e[key])] != null);
+    if (hit.length) maps.push({ side, key, mp, hit });
+  }
+  if (!maps.length) return;
+  const nm = (side, v) => { const x = ctName(side, v); return `${x.no ? "#" + x.no : ""} ${x.nm}`.trim() || String(v); };
+  const desc = maps.map(x => `${ctTN(m, x.side)}: ${Object.entries(x.mp).map(([a, b]) => `${nm(x.side, a)} → ${nm(x.side, b)}`).join(", ")} (기록 ${x.hit.length}개)`).join("\n");
+  if (!await confirmDel(`라인업에서 바꾼 번호로 이미 넣은 기록도 바꿀까요?\n${desc}\n\n잘못 적은 번호를 고친 거면 "네". 선수가 실제로 바뀐 거면 "아니요"`, "네, 기록도 바꿀게요")) return;
+  if (!await ctWaitQ()) return toast("보낼 기록이 남아 있어요. 잠깐 뒤에 라인업을 다시 저장해 주세요");
+  try {
+    for (const x of maps) { const by = {}; for (const e of x.hit) { const to = x.mp[String(e[x.key])]; (by[String(to)] = by[String(to)] || { to, ids: [] }).ids.push(e.id); }
+      for (const g of Object.values(by)) { const val = x.key === "opp_no" ? Number(g.to) : g.to; ok(await sb.from("scout_events").update({ [x.key]: val }).in("id", g.ids)); for (const e of x.hit) if (g.ids.includes(e.id)) e[x.key] = val; } }
+    toast(`기록 ${maps.reduce((a, x) => a + x.hit.length, 0)}개의 번호를 바꿨어요`);
+  } catch (err) { toast(failMsg(err)); await scoutEvents(m.id); }
+  state.dirty = false; render();
 }
 // Settings (예전 프로그램 Game Settings): 세트 · 우리 로테 · 상대 로테 · 서브 팀 · 랠리
 function ctCfgForm() {

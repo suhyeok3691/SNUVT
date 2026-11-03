@@ -404,6 +404,22 @@ const SUITES = {
     assert.deepStrictEqual(r, { orot: 3, rot: 2, serve: "opp", z1: 13 }, "상대 3번째 선수가 1번 자리에서 서브");
     clean(a); await a.ctx.close();
   },
+  // 라인업에서 번호를 고치면 이미 넣은 기록 번호도 바꿀지 묻고 바꿈 · 숫자 칸 휠은 값 안 바꿈
+  async lurename(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await p.evaluate(() => { window.confirmDel = async () => true; });
+    await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(300);
+    await p.click('.ct-court .ct-p.us[data-v="1"]'); await p.click('[data-act="ctcat"][data-v="serve"]'); await p.click('[data-act="ctact"][data-a="foot"]'); await p.waitForTimeout(150);
+    await p.evaluate(() => ctFlush()); await p.waitForTimeout(200);
+    await p.click('[data-act="ctlineup"]'); await p.waitForTimeout(200);
+    // 휠: 숫자 칸을 고르고 굴리면 칸에서 빠져나옴
+    await p.focus("#ctn-0"); await p.mouse.move(0, 0); await p.$eval("#ctn-0", el => el.dispatchEvent(new WheelEvent("wheel", { deltaY: 100, bubbles: true })));
+    assert.notStrictEqual(await p.evaluate(() => document.activeElement && document.activeElement.id), "ctn-0", "휠이면 칸에서 빠짐");
+    await p.fill("#ctn-0", "9"); await p.click("#ctLineupForm button[type=submit]"); await p.waitForTimeout(400);
+    assert.deepStrictEqual(await p.evaluate(() => sc().events.m1.filter(e => e.action === "foot").map(e => e.opp_no)), [9], "기록 번호 1 → 9");
+    assert.ok((await a.writes("scout_events")).some(x => x[1] === "update" && x[2].opp_no === 9), "서버도 바꿈");
+    clean(a); await a.ctx.close();
+  },
   // 끼워 넣기 · 지우기: 기록 ⋯ → "이 앞에 넣기" → 코트 · 점수가 그 자리 기준 → 기록하면 그 사이 시각으로 들어감 → 끝내기 → 뒤 기록 점수 다시 맞춤. 지우면 다시 맞춤
   async insert(b) {
     const a = await openApp(b, "coach"), p = a.page;
