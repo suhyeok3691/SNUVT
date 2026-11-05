@@ -1192,6 +1192,17 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 .lv-coach { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; margin: 8px 0; } .lv-coach .panel { padding: 10px 12px; } .lv-coach h4 { margin: 0 0 6px; font-size: 13.5px; } .lv-coach h4 small, .lv-coach .sc-k small { font-weight: 500; color: var(--muted); }
 .lv-coach .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; } .lv-coach .col { min-width: 0; } .lv-coach .sc-k { margin: 0 0 2px; font-size: 12px; }
 .lv-cl { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 8px; font-size: 13px; padding: 3px 0; border-top: 1px solid var(--line); } .lv-cl:first-of-type { border-top: 0; } .lv-cl span { text-align: right; } .lv-cl small { color: var(--muted); }
+/* 실시간 감독 요약: 두 팀 비교표 · 벤치 메모 */
+.lv-cmp { width: 100%; border-collapse: collapse; margin: 8px 0 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; font-variant-numeric: tabular-nums; }
+.lv-cmp th, .lv-cmp td { padding: 7px 10px; border-top: 1px solid var(--line); font-size: 14px; text-align: center; }
+.lv-cmp thead th { border-top: 0; font-size: 13px; } .lv-cmp thead th.us { color: var(--blue); } .lv-cmp thead th.opp { color: var(--fill-opp); }
+.lv-cmp tbody th { text-align: left; font-weight: 600; color: var(--muted); font-size: 13px; white-space: nowrap; width: 30%; }
+.lv-cmp td b { font-family: var(--f-data); font-weight: 600; font-size: 15px; } .lv-cmp td small, .lv-cmp th small { display: block; color: var(--muted); font-size: 11px; font-weight: 500; }
+.lv-cmp td.win b { font-weight: 800; }
+.lv-cmp td.win { background: color-mix(in srgb, var(--good) 10%, var(--surface)); }
+.lv-memo { padding: 10px 12px; margin: 8px 0; } .lv-memo h4 { margin: 0 0 4px; font-size: 13.5px; }
+.lv-memo ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; } .lv-memo li { font-size: 13.5px; line-height: 1.4; padding-left: 10px; border-left: 3px solid var(--line); }
+.lv-memo li.bad { border-left-color: var(--crit); } .lv-memo li small { color: var(--muted); }
 .lv-kpi { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin: 8px 0; }
 .lv-kpi > div { display: grid; justify-items: center; gap: 1px; padding: 8px 4px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); text-align: center; }
 .lv-kpi span { font-size: 11px; color: var(--muted); } .lv-kpi b { font: 800 19px var(--f-data); } .lv-kpi small { font-size: 11px; color: var(--muted); }
@@ -1275,7 +1286,7 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 <script src="js/library.js?v=196"></script>
 <script src="js/campus.js?v=197"></script>
 <script src="js/court.js?v=240"></script>
-<script src="js/live.js?v=238"></script>
+<script src="js/live.js?v=239"></script>
 <script src="js/app.js?v=245"></script>
 </body>
 </html>

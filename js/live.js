@@ -521,7 +521,7 @@ function lvTeam(rs, side, g) {
     const at = c("atk"), ak = c("atk", "kill"), ae = c("atk", "err") + c("atk", "blk"), rc = m.filter(r => r.kind === "rcv"), st = m.filter(r => r.kind === "set" && r.res !== "err"), dgl = m.filter(r => r.kind === "dig"), ct = m.filter(r => r.kind === "cat"), fl = c("err");
     return `<tr><td><b>${nm(k)}</b></td><td class="num">${c("srv") ? `${c("srv", "ace")}/${c("srv", "err")}` : "—"}</td><td class="num">${rc.length ? `${lvAvg(rc)} <small>${rc.length}</small>` : "—"}</td>
       <td class="num">${c("set") ? `${st.length ? lvAvg(st) : "—"} <small>${c("set")}${c("set", "err") ? ` · 범실 ${c("set", "err")}` : ""}</small>` : "—"}</td>
-      <td class="num">${at ? `${ak}/${at}` : "—"}</td><td class="num">${d(c("atk", "err"))}</td><td class="num">${d(c("atk", "blk"))}</td><td class="num"><b>${at ? lvPct(ak - ae, at) : "—"}</b></td>
+      <td class="num">${at ? `${ak}/${at}` : "—"}</td><td class="num">${d(c("atk", "err"))}</td><td class="num">${d(c("atk", "blk"))}</td><td class="num"><b>${at ? lvEff(ak, ae, at) : "—"}</b></td>
       <td class="num">${c("blk") ? `${c("blk", "pt")}/${c("blk", "touch")}` : "—"}</td><td class="num">${dgl.length ? `${dgl.filter(r => lvGrade(r) > 0).length}/${dgl.length}` : "—"}</td><td class="num">${ct.length ? `${lvAvg(ct)} <small>${ct.length}</small>` : "—"}</td>${hasCov ? `<td class="num">${d(c("cov"))}</td>` : ""}<td class="num">${d(fl)}</td><td class="num"><b>${d(ak + c("blk", "pt") + c("srv", "ace"))}</b></td></tr>`; };
   return `<div class="tw"><table class="lv-t"><thead><tr><th>선수</th><th>서브 <small>에이스/범실</small></th><th>리시브 <small>평균</small></th><th>세트 <small>평균</small></th><th>공격 <small>득점/시도</small></th><th>범실</th><th>막힘</th><th>효율</th><th>블로킹 <small>득점/원터치</small></th><th>디그 <small>성공/시도</small></th><th>캐치 <small>평균</small></th>${hasCov ? "<th>커버</th>" : ""}<th>파울</th><th>득점</th></tr></thead><tbody>${ks.map(row).join("")}</tbody></table></div>`;
 }
@@ -529,7 +529,7 @@ function lvTeam(rs, side, g) {
 function lvAtk(rs, g) {
   const team = side => { const a = rs.filter(r => r.side === side && r.kind === "atk"); if (!a.length) return "";
     const tot = a.length, rows = [...LV_ATYPE.map(x => x[0]), "w4", "o2", "q3"].map(k => [k, LV_AT[k]]).map(([k, l]) => { const l2 = a.filter(r => r.atype === k); if (!l2.length) return ""; const kk = l2.filter(r => r.res === "kill").length, e = l2.filter(r => r.res === "err" || r.res === "blk").length;
-      return `<tr><td><b>${l}</b></td><td class="num">${l2.length} <small>${lvPct(l2.length, tot)}</small></td><td class="num">${kk}</td><td class="num">${e}</td><td class="num"><b>${lvPct(kk - e, l2.length)}</b></td></tr>`; }).join("");
+      return `<tr><td><b>${l}</b></td><td class="num">${l2.length} <small>${lvPct(l2.length, tot)}</small></td><td class="num">${kk}</td><td class="num">${e}</td><td class="num"><b>${lvEff(kk, e, l2.length)}</b></td></tr>`; }).join("");
     const kills = a.filter(r => r.res === "kill" && r.x != null), zc = {}; for (const r of kills) { const z = lvOut(r) ? "코트 밖" : r.zone ? r.zone + "구역" : null; if (z) zc[z] = (zc[z] || 0) + 1; }
     const ft = a.filter(r => r.shot === "tip"), ftk = ft.filter(r => r.res === "kill").length;
     return `<div class="col"><h4>${esc(lvTN(g, side))} 공격</h4>${rows ? `<div class="tw"><table class="lv-t"><thead><tr><th>종류</th><th>시도 <small>분배</small></th><th>득점</th><th>범실·막힘</th><th>효율</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}
@@ -548,7 +548,7 @@ function lvSets(rs, g) {
       ...rs.filter(r => r.side === side && r.kind === "atk" && (r.setter || r.set_q)).map(r => ({ who: r.setter || "", two: r.setter ? lvPosOf(g, side, r.setter) !== "S" : false, q: r.set_q || null, err: false, atk: r }))]; // 예전 기록
     if (!items.length) return "";
     const row = (lab, l) => { if (!l.length) return ""; const a = l.map(x => x.atk).filter(Boolean), kk = a.filter(r => r.res === "kill").length, e = a.filter(r => r.res === "err" || r.res === "blk").length, q = l.filter(x => x.q);
-      return `<tr><td><b>${lab}</b></td><td class="num">${l.length}</td><td class="num">${q.length ? (q.reduce((x, y) => x + y.q, 0) / q.length).toFixed(2) : "—"}</td><td class="num">${l.filter(x => x.err).length || "—"}</td><td class="num">${a.length ? `${lvPct(kk, a.length)} <small>${kk}/${a.length}</small>` : "—"}</td><td class="num"><b>${a.length ? lvPct(kk - e, a.length) : "—"}</b></td></tr>`; };
+      return `<tr><td><b>${lab}</b></td><td class="num">${l.length}</td><td class="num">${q.length ? (q.reduce((x, y) => x + y.q, 0) / q.length).toFixed(2) : "—"}</td><td class="num">${l.filter(x => x.err).length || "—"}</td><td class="num">${a.length ? `${lvPct(kk, a.length)} <small>${kk}/${a.length}</small>` : "—"}</td><td class="num"><b>${a.length ? lvEff(kk, e, a.length) : "—"}</b></td></tr>`; };
     const whos = [...new Set(items.map(x => x.who).filter(Boolean))];
     const rows = [row("메이킹", items.filter(x => !x.two)), row("이단", items.filter(x => x.two)), ...whos.map(w => row(esc(lvShortName(g, side, w)) + (lvPosOf(g, side, w) && !lvTagPos(w) ? ` <small>${esc(lvPosOf(g, side, w))}</small>` : ""), items.filter(x => x.who === w)))].join("");
     return `<div class="col"><h4>${esc(lvTN(g, side))} 세트</h4><div class="tw"><table class="lv-t"><thead><tr><th>세트</th><th>수</th><th>점수</th><th>범실</th><th>공격 득점%</th><th>효율</th></tr></thead><tbody>${rows}</tbody></table></div></div>`; };
@@ -559,34 +559,68 @@ function lvSets(rs, g) {
 function lvSit(rs, g) {
   const rows = [["lead", "리드"], ["tie", "동점"], ["trail", "추격"]].map(([k, l]) => { const l2 = rs.filter(r => r._sit === k), pts = l2.filter(r => r.point), so = pts.filter(r => r.serve === "opp"), br = pts.filter(r => r.serve === "us");
     const a = l2.filter(r => r.side === "us" && r.kind === "atk"), kk = a.filter(r => r.res === "kill").length, e = a.filter(r => r.res === "err" || r.res === "blk").length;
-    return pts.length ? `<tr><td><b>${l}</b></td><td class="num">${lvPct(so.filter(r => r.point === "us").length, so.length)} <small>${so.filter(r => r.point === "us").length}/${so.length}</small></td><td class="num">${lvPct(br.filter(r => r.point === "us").length, br.length)} <small>${br.filter(r => r.point === "us").length}/${br.length}</small></td><td class="num">${lvPct(kk - e, a.length)}</td></tr>` : ""; }).join("");
+    return pts.length ? `<tr><td><b>${l}</b></td><td class="num">${lvPct(so.filter(r => r.point === "us").length, so.length)} <small>${so.filter(r => r.point === "us").length}/${so.length}</small></td><td class="num">${lvPct(br.filter(r => r.point === "us").length, br.length)} <small>${br.filter(r => r.point === "us").length}/${br.length}</small></td><td class="num">${lvEff(kk, e, a.length)}</td></tr>` : ""; }).join("");
   return rows ? `<h4>점수 상황별 (${esc(lvTA(g))})</h4><div class="tw"><table class="lv-t"><thead><tr><th>상황</th><th>사이드아웃</th><th>브레이크</th><th>공격 효율</th></tr></thead><tbody>${rows}</tbody></table></div>` : "";
 }
 // 결과: 이번 세트 / 경기 전체
-// 감독용 요약 (맨 위): 사이드아웃 · 브레이크 · 공격 효율 · 범실 / 지금 로테 / 공격수 / 리시브(낮은 순, 상대는 서브 노릴 사람) / 상대 공격 분배
+// 감독용 요약 (맨 위). 경기 중 감독이 먼저 보는 순서(점수 → 사이드아웃 · 브레이크 → 공격 → 범실 → 로테 · 사람)대로
+// 1) 두 팀 비교표: 사이드아웃 · 브레이크 · 공격 효율(.300 꼴) · 서브 · 리시브 · 블로킹 · 범실 — 나은 쪽 굵게
+// 2) 벤치 메모: 지금 로테 사이드아웃, 서브 노릴 사람(상대 리시브 최저), 상대 주 공격수 · 주 공격, 우리 범실 많은 것
+// 3) 사람: 공격수 · 리시브(낮은 순) · 지금 로테 · 상대 공격 분배
+const lvEff = (k, e, n) => { if (!n) return "—"; const v = (k - e) / n; return (v < 0 ? "-" : "") + Math.abs(v).toFixed(3).replace(/^0/, ""); };
 function lvCoach(rs, g, cur) {
-  const pts = rs.filter(r => r.point), won = (l, sd) => l.filter(r => r.point === sd).length, T = sd => esc(lvTN(g, sd));
-  const so = sd => pts.filter(r => r.serve !== sd), br = sd => pts.filter(r => r.serve === sd);
-  const eff = l => { const k = l.filter(r => r.res === "kill").length, e = l.filter(r => r.res === "err" || r.res === "blk").length; return l.length ? Math.round(100 * (k - e) / l.length) + "%" : "—"; };
-  const atk = sd => rs.filter(r => r.side === sd && r.kind === "atk");
-  const errs = sd => rs.filter(r => r.side === sd && ((["srv", "atk", "set", "blk", "ovr"].includes(r.kind) && r.res === "err") || r.kind === "err")).length;
+  const pts = rs.filter(r => r.point), T = sd => esc(lvTN(g, sd));
+  const won = (l, sd) => l.filter(r => r.point === sd).length;
+  const team = sd => { const m = rs.filter(r => r.side === sd), c = (kd, rr) => m.filter(r => r.kind === kd && (!rr || r.res === rr)).length;
+    const so = pts.filter(r => r.serve !== sd), br = pts.filter(r => r.serve === sd), at = c("atk"), ak = c("atk", "kill"), ae = c("atk", "err") + c("atk", "blk"), rc = m.filter(r => r.kind === "rcv");
+    const err = { 서브: c("srv", "err"), 공격: c("atk", "err"), 막힘: c("atk", "blk"), 세트: c("set", "err"), 블로킹: c("blk", "err") + c("blk", "out"), "3단 처리": c("ovr", "err"), 파울: c("err") };
+    return { so: [won(so, sd), so.length], br: [won(br, sd), br.length], at, ak, ae, ef: at ? (ak - ae) / at : null, ace: c("srv", "ace"), se: c("srv", "err"), sv: c("srv"),
+      rcN: rc.length, rcAvg: rc.length ? rc.reduce((a, r) => a + lvGrade(r), 0) / rc.length : null, rc0: rc.filter(r => r.res === "0").length, bk: c("blk", "pt"), err, errT: Object.values(err).reduce((a, b) => a + b, 0) - err.막힘 };
+  };
+  const U = team("us"), O = team("opp"), pc = ([a, b]) => b ? Math.round(100 * a / b) : null;
+  // [이름, 작은 설명, 우리 [값, 아래 줄], 상대 [값, 아래 줄], 비교값(우리, 상대), 클수록 좋음 1 · 작을수록 -1]
+  const fr = ([a, b]) => b ? `${pc([a, b])}% <small>${a}/${b}</small>` : "—";
+  const pv = x => x[1] ? [pc(x) + "%", `${x[0]}/${x[1]}`] : ["—", ""];
+  const rows = [
+    ["사이드아웃", "상대 서브 때", pv(U.so), pv(O.so), [pc(U.so), pc(O.so)], 1],
+    ["브레이크", "우리 서브 때", pv(U.br), pv(O.br), [pc(U.br), pc(O.br)], 1],
+    ["공격 효율", "(득점−범실)÷시도", U.at ? [lvEff(U.ak, U.ae, U.at), `${U.ak}/${U.at}`] : ["—", ""], O.at ? [lvEff(O.ak, O.ae, O.at), `${O.ak}/${O.at}`] : ["—", ""], [U.ef, O.ef], 1],
+    ["서브", "에이스 · 범실", U.sv ? [`${U.ace} · ${U.se}`, `${U.sv}개`] : ["—", ""], O.sv ? [`${O.ace} · ${O.se}`, `${O.sv}개`] : ["—", ""], [U.sv ? U.ace - U.se : null, O.sv ? O.ace - O.se : null], 1],
+    ["리시브", "0~3 평균", U.rcN ? [U.rcAvg.toFixed(2), `${U.rcN}개${U.rc0 ? ` · 실패 ${U.rc0}` : ""}`] : ["—", ""], O.rcN ? [O.rcAvg.toFixed(2), `${O.rcN}개${O.rc0 ? ` · 실패 ${O.rc0}` : ""}`] : ["—", ""], [U.rcAvg, O.rcAvg], 1],
+    ["블로킹 득점", "", [String(U.bk), ""], [String(O.bk), ""], [U.bk, O.bk], 1],
+    ["범실", "준 점수", [String(U.errT), ""], [String(O.errT), ""], [U.errT, O.errT], -1],
+  ];
+  const win = ([u, o], dir) => u == null || o == null || u === o ? "" : (u - o) * dir > 0 ? "us" : "opp";
+  const cell = ([v, d], on) => `<td class="${on ? "win" : ""}"><b>${v}</b>${d ? `<small>${d}</small>` : ""}</td>`;
+  const cmp = `<div class="tw"><table class="lv-cmp"><thead><tr><th></th><th class="us">${T("us")}</th><th class="opp">${T("opp")}</th></tr></thead><tbody>${rows.map(([l, sub, u, o, v, dir]) => { const w = win(v, dir);
+    return `<tr><th>${l}${sub ? `<small>${sub}</small>` : ""}</th>${cell(u, w === "us")}${cell(o, w === "opp")}</tr>`; }).join("")}</tbody></table></div>`;
+  // 사람별 묶음
   const by = (sd, kind) => { const snu = lvSnu(g, sd), m = new Map(); for (const r of rs) if (r.side === sd && r.kind === kind) { const k = snu ? r.player_id || "" : lvIdOf(r); if (!k) continue; if (!m.has(k)) m.set(k, []); m.get(k).push(r); } return [...m.entries()]; };
   const nm = (sd, k) => lvSnu(g, sd) ? (p => p ? `${pNo(p)}${esc(p.name)}` : "?")(playerOf(k)) : esc(lvShowId(k));
-  const rot = (sd, R) => { const l = pts.filter(r => (sd === "us" ? r.rot : r._orot) === R), a = l.filter(r => r.serve !== sd), b = l.filter(r => r.serve === sd);
-    return `<div class="lv-cl"><b>${T(sd)} R${R}</b><span>사이드아웃 ${lvPct(won(a, sd), a.length)} <small>${won(a, sd)}/${a.length}</small> · 브레이크 ${lvPct(won(b, sd), b.length)} <small>${won(b, sd)}/${b.length}</small></span></div>`; };
-  const atkers = sd => by(sd, "atk").sort((a, b) => b[1].length - a[1].length).slice(0, 3).map(([k, l]) => `<div class="lv-cl"><b>${nm(sd, k)}</b><span>${l.filter(r => r.res === "kill").length}/${l.length} · 효율 ${eff(l)}</span></div>`).join("") || `<span class="small muted">—</span>`;
+  const effL = l => lvEff(l.filter(r => r.res === "kill").length, l.filter(r => r.res === "err" || r.res === "blk").length, l.length);
+  const rotOf = (sd, R) => { const l = pts.filter(r => (sd === "us" ? r.rot : r._orot) === R), a = l.filter(r => r.serve !== sd), b = l.filter(r => r.serve === sd); return { a: [won(a, sd), a.length], b: [won(b, sd), b.length] }; };
+  // 벤치 메모
+  const memo = [], ro = rotOf("us", cur.rot);
+  if (ro.a[1] >= 2) memo.push([pc(ro.a) < 50 ? "bad" : "", `우리 지금 로테 <b>R${cur.rot}</b> 사이드아웃 <b>${pc(ro.a)}%</b> <small>${ro.a[0]}/${ro.a[1]}</small>`]);
+  const orc = by("opp", "rcv").filter(([, l]) => l.length >= 2).map(([k, l]) => [k, l, l.reduce((a, r) => a + lvGrade(r), 0) / l.length]).sort((a, b) => a[2] - b[2])[0];
+  if (orc) memo.push(["", `서브 노릴 사람 <b>${T("opp")} ${nm("opp", orc[0])}</b> 리시브 ${orc[2].toFixed(2)} <small>${orc[1].length}개</small>`]);
+  const oat = by("opp", "atk").sort((a, b) => b[1].length - a[1].length)[0], oa = rs.filter(r => r.side === "opp" && r.kind === "atk");
+  if (oat && oat[1].length >= 2) { const tp = (() => { const c = {}; for (const r of oa) if (r.atype) c[r.atype] = (c[r.atype] || 0) + 1; const t = Object.entries(c).sort((a, b) => b[1] - a[1])[0]; return t ? ` · 주 공격 ${LV_AT[t[0]] || t[0]} ${Math.round(100 * t[1] / oa.length)}%` : ""; })();
+    memo.push(["", `상대 주 공격수 <b>${nm("opp", oat[0])}</b> ${oat[1].length}번(${Math.round(100 * oat[1].length / oa.length)}%) · 효율 ${effL(oat[1])}${tp}`]); }
+  const ue = Object.entries(U.err).sort((a, b) => b[1] - a[1])[0];
+  if (ue && ue[1] >= 3) memo.push(["bad", `우리 범실 가장 많은 것 <b>${ue[0]} ${ue[1]}</b>`]);
+  // 사람 칸
+  const atkers = sd => by(sd, "atk").sort((a, b) => b[1].length - a[1].length).slice(0, 3).map(([k, l]) => `<div class="lv-cl"><b>${nm(sd, k)}</b><span>${l.filter(r => r.res === "kill").length}/${l.length} · ${effL(l)}</span></div>`).join("") || `<span class="small muted">—</span>`;
   const rcvs = sd => by(sd, "rcv").map(([k, l]) => [k, l, l.reduce((a, r) => a + lvGrade(r), 0) / l.length]).sort((a, b) => a[2] - b[2]).slice(0, 3).map(([k, l, v]) => `<div class="lv-cl"><b>${nm(sd, k)}</b><span>${v.toFixed(2)} <small>${l.length}개${l.filter(r => r.res === "0").length ? ` · 실패 ${l.filter(r => r.res === "0").length}` : ""}</small></span></div>`).join("") || `<span class="small muted">—</span>`;
-  const oa = atk("opp"), dist = (() => { const c = {}; for (const r of oa) if (r.atype) c[r.atype] = (c[r.atype] || 0) + 1; return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${LV_AT[k] || k} ${lvPct(v, oa.length)}`).join(" · "); })();
-  const zones = (() => { const c = {}; for (const r of oa) if (r.res === "kill" && r.zone) c[r.zone] = (c[r.zone] || 0) + 1; return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([z, v]) => `${z}구역 ${v}`).join(" · "); })();
-  const ua = atk("us"), oA = atk("opp");
-  return `<div class="lv-kpi"><div><span>사이드아웃</span><b>${lvPct(won(so("us"), "us"), so("us").length)}</b><small>${won(so("us"), "us")}/${so("us").length} · ${T("opp")} ${lvPct(won(so("opp"), "opp"), so("opp").length)}</small></div>
-      <div><span>브레이크</span><b>${lvPct(won(br("us"), "us"), br("us").length)}</b><small>${won(br("us"), "us")}/${br("us").length} · ${T("opp")} ${lvPct(won(br("opp"), "opp"), br("opp").length)}</small></div>
-      <div><span>공격 효율</span><b>${eff(ua)}</b><small>${ua.filter(r => r.res === "kill").length}/${ua.length} · ${T("opp")} ${eff(oA)}</small></div>
-      <div><span>범실</span><b>${errs("us")}</b><small>${T("opp")} ${errs("opp")}</small></div></div>
+  const rot = (sd, R) => { const x = rotOf(sd, R); return `<div class="lv-cl"><b>${T(sd)} R${R}</b><span>사이드아웃 ${fr(x.a)} · 브레이크 ${fr(x.b)}</span></div>`; };
+  const dist = (() => { const c = {}; for (const r of oa) if (r.atype) c[r.atype] = (c[r.atype] || 0) + 1; return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${LV_AT[k] || k} ${lvPct(v, oa.length)}`).join(" · "); })();
+  const zones = (() => { const c = {}; for (const r of oa) if (r.res === "kill" && (r.zone || lvOut(r))) { const z = r.zone ? r.zone + "구역" : "코트 밖"; c[z] = (c[z] || 0) + 1; } return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([z, v]) => `${z} ${v}`).join(" · "); })();
+  return `${cmp}
+    ${memo.length ? `<div class="panel lv-memo"><h4>벤치 메모</h4><ul>${memo.map(([c, t]) => `<li class="${c}">${t}</li>`).join("")}</ul></div>` : ""}
     <div class="lv-coach">
+      <div class="panel"><h4>공격 <small>득점/시도 · 효율</small></h4><div class="cols lv-two"><div class="col"><p class="sc-k">${T("us")}</p>${atkers("us")}</div><div class="col"><p class="sc-k">${T("opp")}</p>${atkers("opp")}</div></div></div>
+      <div class="panel"><h4>리시브 <small>낮은 순 · 0~3</small></h4><div class="cols lv-two"><div class="col"><p class="sc-k">${T("us")}</p>${rcvs("us")}</div><div class="col"><p class="sc-k">${T("opp")}</p>${rcvs("opp")}</div></div></div>
       <div class="panel"><h4>지금 로테</h4>${rot("us", cur.rot)}${rot("opp", cur.orot)}</div>
-      <div class="panel"><h4>공격 <small>득점/시도</small></h4><div class="cols lv-two"><div class="col"><p class="sc-k">${T("us")}</p>${atkers("us")}</div><div class="col"><p class="sc-k">${T("opp")}</p>${atkers("opp")}</div></div></div>
-      <div class="panel"><h4>리시브 <small>낮은 순</small></h4><div class="cols lv-two"><div class="col"><p class="sc-k">${T("us")}</p>${rcvs("us")}</div><div class="col"><p class="sc-k">${T("opp")} <small>서브 노릴 사람</small></p>${rcvs("opp")}</div></div></div>
       ${dist || zones ? `<div class="panel"><h4>${T("opp")} 공격</h4>${dist ? `<p class="small">${dist}</p>` : ""}${zones ? `<p class="small">득점 자리 ${zones}</p>` : ""}</div>` : ""}
     </div>`;
 }

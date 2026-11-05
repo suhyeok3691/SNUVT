@@ -431,6 +431,35 @@ const SUITES = {
     assert.deepStrictEqual(r, { orot: 3, rot: 2, serve: "opp", z1: 13 }, "상대 3번째 선수가 1번 자리에서 서브");
     clean(a); await a.ctx.close();
   },
+  // 실시간 감독 요약: 두 팀 비교표(사이드아웃 · 브레이크 · 공격 효율 · 서브 · 리시브 · 범실) → 벤치 메모 → 선수 칸 → 자세한 기록
+  async lvcoach(b) {
+    const a = await openApp(b, "coach", { width: Number(process.env.W || 390) }), p = a.page;
+    await p.evaluate(() => lvForm("event:e1")).catch(() => {}); await p.waitForTimeout(300);
+    await p.evaluate(() => { document.getElementById("lv-opp").value = "B대"; }); await p.click("#lvForm button[type=submit]"); await p.waitForTimeout(300);
+    await a.go("cup"); await p.waitForTimeout(200);
+    await p.evaluate(() => { state.cup = state.cup || {}; state.cup.key = "event:e1"; state.live.open = (lv().games["event:e1"] || [])[0]?.id; render(); }); await p.waitForTimeout(400);
+    await p.evaluate(() => {
+      const L = lv(), g = lvGame(); let k = 7; const R = () => (k = (k * 9301 + 49297) % 233280) / 233280;
+      const ids = sortedPlayers().map(x => x.id), opp = [1, 3, 7, 9, 12, 15];
+      for (let i = 0; i < 34; i++) {
+        const s = lvState(g, L.rallies[g.id] || [], 1); if (lvEnd(s, 1)) break;
+        const sv = s.serve, rc = sv === "us" ? "opp" : "us", who = sd => { L.side = sd; L.pick = sd === "us" ? ids[Math.floor(R() * ids.length)] : String(opp[Math.floor(R() * 6)]); };
+        who(sv); const x = R(); if (x < .1) { lvSave("srv:err"); continue; } if (x < .17) { lvSave("srv:ace"); continue; } lvSave("srv:s2");
+        who(rc); lvSave("rcv:" + ["3", "2", "2", "1", "1", "0"][Math.floor(R() * 6)]); { const l = L.rallies[g.id]; if (l[l.length - 1].point) continue; }
+        let atkSide = rc;
+        for (let t = 0; t < 4; t++) { who(atkSide); L.atype = ["lo", "a", "ro", "pipe", "b"][Math.floor(R() * 5)]; const y = R();
+          if (y < .4) { lvSave("atk:kill", { x: Math.round(R() * 100), y: Math.round(R() * 100), zone: 1 + Math.floor(R() * 6) }); break; }
+          if (y < .55) { lvSave("atk:err", { miss: "atk" }); break; } if (y < .62) { lvSave("atk:blk"); break; }
+          lvSave("atk:in"); atkSide = atkSide === "us" ? "opp" : "us"; who(atkSide); lvSave("dig:2"); }
+      }
+      state.dirty = false; render();
+    });
+    await p.waitForTimeout(300);
+    if (process.env.SHOT) await (await p.$(".lv-cmp")).evaluate(el => el.closest("section")).then(async () => { const h = await p.$(".lv-cmp"); const sec = await h.evaluateHandle(el => el.closest("section")); await sec.asElement().screenshot({ path: process.env.SHOT }); });
+    const txt = await a.text(".lv-page");
+    for (const w of ["사이드아웃", "브레이크", "공격 효율", "리시브", "범실"]) assert.ok(txt.includes(w), w);
+    clean(a); await a.ctx.close();
+  },
   // 교내 대회는 위 탭이 아니라 '대회' 안 칸 → 누르면 교내 대회 화면(위 탭은 대회 그대로), ‹ 대회로 돌아옴
   async campustab(b) {
     const a = await openApp(b, "coach"), p = a.page;
