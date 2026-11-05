@@ -649,12 +649,14 @@ async function jpFetch() {
 // 전국 본선이 아직 안 열린 해(하루코 = 그해 1월 초, 인터하이 = 7월 말)의 영상은 라운드가 '결승'이어도 현 예선으로 (서버 태그가 틀려도 화면은 맞게)
 const JP_NAT_START = { haruko: "-01-03", ih: "-07-20" };
 const jpPreNat = v => { const st = JP_NAT_START[v.tourn], r = v.rnd || ""; if (!st || !v.year || iso(today()) >= v.year + st || r.split(":").includes("yosen")) return v.rnd; return ["yosen", ...r.split(":").filter(Boolean)].join(":"); };
+// 경기 영상이 아닌 것: 리액션 · 같이 보기(同時視聴 · 生観戦 · BeeQuick LIVE配信) · 취주악부 (서버 트리거가 새로 안 넣고, 남은 건 화면에서 뺌)
+const jpNotGame = v => /同時視聴|生観戦|リアクション|ウォッチパーティ|吹奏楽/.test(v.title || "") || (/beequick|ビークイック/i.test(v.ch || "") && /live|ライブ/i.test(v.title || ""));
 const JP_VCOLS = ["id", "source", "title", "published", "year", "tourn", "gender", "rnd", "schools", "ch", "len", "noembed"];
 function jpApply(J, d) {
   J.results = d.results; J.prefTop = d.prefTop; J.stars = d.stars; J.top = d.top; J.blockTop = d.blockTop; J.rosters = J.rosters || {};
   J.rank = {}; for (const r of d.rank) J.rank[r.school_id + "|" + r.gender] = r;
   J.schools = d.schools; J.sources = d.sources;
-  J.videos = d.vids.map(a => { const v = {}; JP_VCOLS.forEach((k, i) => { v[k] = a[i]; }); v.schools = v.schools || []; v.rnd = jpPreNat(v); return v; });
+  J.videos = d.vids.map(a => { const v = {}; JP_VCOLS.forEach((k, i) => { v[k] = a[i]; }); v.schools = v.schools || []; v.rnd = jpPreNat(v); return v; }).filter(v => !jpNotGame(v));
   jpLinkPref(J);
   // 한국어 제목용 바꾸기 목록 (긴 것부터)
   const rep = [];

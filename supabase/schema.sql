@@ -2518,3 +2518,25 @@ create trigger jp_videos_prenat before insert or update on public.jp_videos for 
 alter table public.live_rallies drop constraint live_rallies_x_check, add constraint live_rallies_x_check check (x is null or (x >= -20 and x <= 120));
 alter table public.live_rallies drop constraint live_rallies_y_check, add constraint live_rallies_y_check check (y is null or (y >= 0 and y <= 120));
 alter table public.live_rallies drop constraint live_rallies_atype_check, add constraint live_rallies_atype_check check (atype is null or atype = any (array['lo','lq','ro','rq','a','b','mv','fc','bc','pipe','back','dir','etc','w4','o2','q3']));
+
+-- ===== 2026-11-06 (2) jp_videos 트리거 확장: 리액션 · 같이 보기(同時視聴 · 生観戦 · BeeQuick LIVE配信) · 취주악부는 안 넣음, 「代表決定」은 현 예선(제목의 라운드) =====
+create or replace function private.jp_video_prenat() returns trigger language plpgsql set search_path = '' as $$
+declare n text;
+begin
+  if tg_op = 'INSERT' and (new.title ~ '同時視聴|生観戦|リアクション|ウォッチパーティ|吹奏楽' or (coalesce(new.ch, '') ~* 'beequick|ビークイック' and new.title ~* 'live|ライブ')) then
+    return null;
+  end if;
+  if new.rnd ~ '(^|:)F($|:)' and new.title ~ '決勝トーナメント' and new.title !~ '決勝(?!トーナメント)' then
+    n := substring(translate(new.title, '１２３４５一二三四五', '1234512345') from '決勝トーナメント[\s_]*([1-5])回戦');
+    new.rnd := nullif(array_to_string(array_remove(array_replace(string_to_array(new.rnd, ':'), 'F', case when n is null then '' else 'R' || n end), ''), ':'), '');
+  end if;
+  if new.tourn in ('haruko', 'ih') and not ('yosen' = any (string_to_array(coalesce(new.rnd, ''), ':')))
+     and (new.title ~ '代表決定'
+          or (new.year is not null and now() < make_date(new.year, case when new.tourn = 'haruko' then 1 else 7 end, case when new.tourn = 'haruko' then 3 else 20 end))) then
+    if new.title ~ '代表決定' then
+      new.rnd := case when new.title ~ '準々決勝' then 'QF' when new.title ~ '準決勝' then 'SF' when new.title ~ '[1-5一二三四五]回戦' then null else 'F' end;
+    end if;
+    new.rnd := array_to_string(array_remove(array['yosen'] || string_to_array(coalesce(new.rnd, ''), ':'), ''), ':');
+  end if;
+  return new;
+end $$;

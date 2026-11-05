@@ -175,7 +175,8 @@ function tag(title: string, pub: string | null = null, at: string | null = null)
     const isVs = /vs|VS|Vs|対|×|\s[-ー－]\s/.test(title) || ids.length >= 2;
     const found = ms.filter((m) => hit(m.a) && hit(m.b) && (!gender || m.gender === gender));
     const strip = (r: string | null) => (r || "").split(":").filter((x) => x && x !== "yosen").join(":");
-    if (found.length) {
+    // 「代表決定戦 準決勝 下北沢成徳vs共栄学園」처럼 현 예선이라 적힌 영상은 그해 전국 대진에서 같은 두 팀(결승)을 찾아도 전국으로 안 넣음
+    if (found.length && !(rnd || "").split(":").includes("yosen") && !prefLocal) {
       const m = found.find((f) => (rnd || "").split(":").includes(f.rnd)) || found[0];
       rnd = m.rnd; gender = gender || m.gender;
     } else if (prefLocal) {
@@ -235,7 +236,7 @@ async function loadSchools() {
 // 경기 직캠·중계 풀영상만: 인터뷰·하이라이트·공식연습·선수 소개·뉴스·짧은 클립(8분 미만)은 안 담음
 // (탐방 재생목록과 「연습·탐방」으로 태그된 영상은 그대로)
 const VISIT = /潜入|密着|練習風景|練習メニュー|1日練習|部活紹介|部活動紹介|裏側|強さの秘訣|に迫る|vlog|BeeQuick/i;
-const HARD = /インタビュー|会見|取材|試合後|表彰|閉会式|開会式|入場行進|ハイライト|ダイジェスト|shorts|切り抜き|名場面|好プレー|スーパープレー|プレー集|(スパイク|レシーブ|ブロック|サーブ|アタック|トス|ディグ)集|まとめ|highlight|優勝の瞬間|ラストポイント|勝ち上がり|予告|特集|ニュース|応援団|応援合戦|応援歌|応援メドレー|応援風景|振り返[りる]|校歌|斉唱|カモンロッソ|パブリックビューイング/i;
+const HARD = /インタビュー|会見|取材|試合後|表彰|閉会式|開会式|入場行進|ハイライト|ダイジェスト|shorts|切り抜き|名場面|好プレー|スーパープレー|プレー集|(スパイク|レシーブ|ブロック|サーブ|アタック|トス|ディグ)集|まとめ|highlight|優勝の瞬間|ラストポイント|勝ち上がり|予告|特集|ニュース|応援団|応援合戦|応援歌|応援メドレー|応援風景|振り返[りる]|校歌|斉唱|カモンロッソ|パブリックビューイング|同時視聴|生観戦|リアクション|ウォッチパーティ|吹奏楽/i;
 const SOFT = /公式練習|スパイク練習|サーブ練習|フリースパイク|メンバー紹介|選手紹介|サービスエース|マッチポイント|ウォーミングアップ|応援|のアップ|アップ風景|試合前アップ/;
 const secs = (len: string | null) => { if (!len) return null; const p = len.split(":").map(Number); return p.some(isNaN) ? null : p.reduce((a, x) => a * 60 + x, 0); };
 function notMatch(title: string, len: string | null) {
@@ -245,7 +246,9 @@ function notMatch(title: string, len: string | null) {
 }
 // 「연습·탐방」은 학교 탐방(잠입·밀착)만 둠. 스파이크 연습 같은 짧은 연습 영상은 뺌
 // 자동으로 더한 채널(id 'a-…', 아래 roleOf 로 'auto')은 배구 말고 다른 영상도 올리므로 고교 대회로 읽히고 학교가 나오는 영상만
-const keepRow = (role: string | undefined, r: { title: string; len: string | null; tourn: string | null; schools?: string[] }) => role === "visit" || (role === "auto" ? !!r.tourn && !["other", "univ", "practice"].includes(r.tourn) && !!(r.schools || []).length && !notMatch(r.title, r.len) : r.tourn === "practice" ? VISIT.test(norm(r.title)) : !notMatch(r.title, r.len));
+// BeeQuick 의 「LIVE配信」은 중계를 같이 보는 리액션 방송 (경기 영상 아님)
+const reactLive = (r: { title: string; ch?: string }) => /beequick|ビークイック/i.test(r.ch || "") && /live|ライブ/i.test(r.title);
+const keepRow = (role: string | undefined, r: { title: string; len: string | null; tourn: string | null; schools?: string[]; ch?: string }) => !reactLive(r) && (role === "visit" || (role === "auto" ? !!r.tourn && !["other", "univ", "practice"].includes(r.tourn) && !!(r.schools || []).length && !notMatch(r.title, r.len) : r.tourn === "practice" ? VISIT.test(norm(r.title)) : !notMatch(r.title, r.len)));
 
 const roleOf = (src: { id: string; role?: string }) => src.id.startsWith("a-") ? "auto" : src.role;
 async function upsert(src: any, vs: V[]) {
