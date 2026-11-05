@@ -2491,3 +2491,30 @@ grant execute on function public.scout_restore(uuid, uuid[]) to authenticated;
 -- 2026-11-04 기기 시계 확인용 서버 시각 (로그인 전에도 부름)
 create or replace function public.server_now() returns timestamptz language sql stable set search_path = '' as $$ select now() $$;
 grant execute on function public.server_now() to anon, authenticated;
+
+-- ===== 2026-11-06 일본 고교 영상 라운드 바로잡기 (jp_videos 트리거) =====
+-- 1) 「決勝トーナメントN回戦」은 결승(F)이 아니라 N회전
+-- 2) 전국 본선이 아직 안 열린 해(하루코 = 그해 1월 3일, 인터하이 = 7월 20일 전)의 영상은 '결승'이어도 현 예선 (예: 2026년 가을 「春の高校バレー2027 徳島 決勝」)
+-- jp-sync 의 tag() 도 같은 규칙 + 현 이름만 붙은 라운드(「徳島 決勝」, 다른 현 둘 이상이면 전국)를 씀. 트리거는 어떤 함수가 넣어도 지켜지게
+create or replace function private.jp_video_prenat() returns trigger language plpgsql set search_path = '' as $$
+declare n text;
+begin
+  if new.rnd ~ '(^|:)F($|:)' and new.title ~ '決勝トーナメント' and new.title !~ '決勝(?!トーナメント)' then
+    n := substring(translate(new.title, '１２３４５一二三四五', '1234512345') from '決勝トーナメント[\s_]*([1-5])回戦');
+    new.rnd := nullif(array_to_string(array_remove(array_replace(string_to_array(new.rnd, ':'), 'F', case when n is null then '' else 'R' || n end), ''), ':'), '');
+  end if;
+  if new.tourn in ('haruko', 'ih') and new.year is not null
+     and now() < make_date(new.year, case when new.tourn = 'haruko' then 1 else 7 end, case when new.tourn = 'haruko' then 3 else 20 end)
+     and not ('yosen' = any (string_to_array(coalesce(new.rnd, ''), ':'))) then
+    new.rnd := array_to_string(array_remove(array['yosen'] || string_to_array(coalesce(new.rnd, ''), ':'), ''), ':');
+  end if;
+  return new;
+end $$;
+drop trigger if exists jp_videos_prenat on public.jp_videos;
+create trigger jp_videos_prenat before insert or update on public.jp_videos for each row execute function private.jp_video_prenat();
+
+-- ===== 2026-11-06 실시간: 공격 득점 자리 코트 밖(터치아웃, 옆 · 뒤 20%) · 공격 종류 다이렉트 =====
+-- (3단 처리 미스는 kind 'ovr' res 'err' 로 — 기존 check 그대로)
+alter table public.live_rallies drop constraint live_rallies_x_check, add constraint live_rallies_x_check check (x is null or (x >= -20 and x <= 120));
+alter table public.live_rallies drop constraint live_rallies_y_check, add constraint live_rallies_y_check check (y is null or (y >= 0 and y <= 120));
+alter table public.live_rallies drop constraint live_rallies_atype_check, add constraint live_rallies_atype_check check (atype is null or atype = any (array['lo','lq','ro','rq','a','b','mv','fc','bc','pipe','back','dir','etc','w4','o2','q3']));

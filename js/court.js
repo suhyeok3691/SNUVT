@@ -37,8 +37,8 @@ const CT_CFG = "cfg"; // Settings: 경기 중 로테·서브·랠리 맞추기 (
 const CT_STYPE = [["float", "플로터", "f"], ["jump", "스파이크", "j"]];
 const CT_STN = Object.fromEntries(CT_STYPE.map(x => [x[0], x[1]]));
 // 예전 프로그램에 더한 것 4: 공격 종류(고르면, 안 골라도 됨) — 공격 동작을 고르는 창 위 칩. kind 칸에 저장 (실시간 기록과 같은 이름). 포지션에 맞는 것만 먼저, "더보기"로 전부
-const CT_ATYPE = [["lo", "레프트 오픈"], ["lq", "레프트 퀵"], ["ro", "라이트 오픈"], ["rq", "라이트 퀵"], ["a", "A퀵"], ["b", "B퀵"], ["mv", "이동"], ["fc", "앞차"], ["bc", "백차"], ["pipe", "파이프"], ["back", "백어택"], ["etc", "그 외"]];
-const CT_ATN = Object.fromEntries(CT_ATYPE), CT_ATPOS = { OH: ["lo", "lq", "fc", "bc", "pipe"], OP: ["ro", "rq", "bc", "back"], MB: ["a", "b", "mv"] };
+const CT_ATYPE = [["lo", "레프트 오픈"], ["lq", "레프트 퀵"], ["ro", "라이트 오픈"], ["rq", "라이트 퀵"], ["a", "A퀵"], ["b", "B퀵"], ["mv", "이동"], ["fc", "앞차"], ["bc", "백차"], ["pipe", "파이프"], ["back", "백어택"], ["dir", "다이렉트"], ["etc", "그 외"]];
+const CT_ATN = Object.fromEntries(CT_ATYPE), CT_ATPOS = { OH: ["lo", "lq", "fc", "bc", "pipe", "dir"], OP: ["ro", "rq", "bc", "back", "dir"], MB: ["a", "b", "mv", "dir"] };
 const ctStKey = c => `${c.side}:${c.v}`;
 const ctStype = c => { const S = sc(); if (S.stypes && S.stypes[ctStKey(c)] !== undefined) return S.stypes[ctStKey(c)];
   const m = scMatch(), l = (S.events[m.id] || []).filter(e => e.skill === "serve" && e.side === c.side && ctSame(e.player_id != null ? e.player_id : e.opp_no, c.v) && e.kind); return l.length ? l[l.length - 1].kind : null; };

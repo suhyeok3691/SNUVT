@@ -1176,6 +1176,8 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 .lv-at .chip kbd { font: 600 10px var(--f-data); margin-left: 4px; padding: 0 3px; border: 1px solid currentColor; border-radius: 4px; opacity: .7; }
 .lv-cwrap { max-width: 340px; margin: 6px auto; } .lv-cwrap.sm { max-width: 220px; margin: 4px 0; }
 .lv-c { display: block; width: 100%; height: auto; background: var(--court); border-radius: 6px; } .lv-c.big { cursor: crosshair; }
+/* 코트 밖까지 그린 코트(터치아웃 자리): 밖은 옅게, 코트 안은 코트 색 */
+.lv-c.wide { background: var(--surface-2); } .lv-c-out { fill: var(--surface-2); } .lv-c-in { fill: var(--court); }
 .lv-c-bd { fill: none; stroke: var(--ink); stroke-width: 2; } .lv-c-net { stroke: #c0392b; stroke-width: 6; } .lv-c-al { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 6 4; }
 .lv-c-g { stroke: var(--muted); stroke-width: .8; opacity: .45; }
 .lv-dot { fill: #6b7280; stroke: #fff; stroke-width: 1.5; opacity: .9; }
@@ -1272,8 +1274,8 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 <script src="js/guide.js?v=194"></script>
 <script src="js/library.js?v=196"></script>
 <script src="js/campus.js?v=197"></script>
-<script src="js/court.js?v=239"></script>
-<script src="js/live.js?v=237"></script>
-<script src="js/app.js?v=243"></script>
+<script src="js/court.js?v=240"></script>
+<script src="js/live.js?v=238"></script>
+<script src="js/app.js?v=244"></script>
 </body>
 </html>

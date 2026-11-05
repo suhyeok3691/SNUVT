@@ -91,7 +91,7 @@ function tag(title: string, pub: string | null = null, at: string | null = null)
   // 학교 탐방(잠입·밀착·연습 풍경)은 대회 영상이 아님: 「연습·탐방」으로
   const visit = VISIT.test(t);
   // 큰 대회 이름은 해시태그 말고 제목 본문에서 먼저 찾고, 여럿이면 먼저 나온 것 (#インターハイ2026 … #春高バレー → 인터하이)
-  const BIG: [string, RegExp][] = [["haruko", /春高|春の高校バレー|高等学校選手権|全日本高校選手権/], ["ih", /インターハイ|インハイ|高校総体|総合体育大会/], ["kokutai", /国体|国民体育大会|国スポ|国民スポーツ大会/], ["sakura", /さくらバレー|全国私立高等学校|全国私学/]];
+  const BIG: [string, RegExp][] = [["haruko", /春高|春の高校バレー|高等学校選手権|全日本高校選手権/], ["ih", /インターハイ|インハイ|高校総体|総合体育大会|(?<![A-Za-z])(\d{4}IH|IH\s?\d{4})(?![A-Za-z])/], ["kokutai", /国体|国民体育大会|国スポ|国民スポーツ大会/], ["sakura", /さくらバレー|全国私立高等学校|全国私学/]];
   const first = (x: string) => { let best: [string, number] | null = null; for (const [k, re] of BIG) { const m = x.match(re); if (m && (!best || m.index! < best[1])) best = [k, m.index!]; } return best ? best[0] : null; };
   if (visit) tourn = "practice";
   else if (/インカレ|大学|大学院/.test(t) && !/高校|高等学校/.test(t)) tourn = "univ";
@@ -110,8 +110,7 @@ function tag(title: string, pub: string | null = null, at: string | null = null)
   if (/準々決勝/.test(t)) add("QF");
   else if (/準決勝/.test(t)) add("SF");
   else if (/3位|3・4位|3.4位/.test(t)) add("3rd");
-  else if (/決勝/.test(t) && !/代表決定|予選/.test(t.replace(/決勝トーナメント/g, ""))) add("F");
-  else if (/決勝/.test(t)) add("F");
+  else if (/決勝/.test(t.replace(/決勝トーナメント/g, ""))) add("F"); // 「決勝トーナメント3回戦」은 결승 아님 → 아래 N회전
   else { const r = t.match(/([1-5一二三四五])回戦/); if (r) add("R" + ("1一".includes(r[1]) ? 1 : "2二".includes(r[1]) ? 2 : "3三".includes(r[1]) ? 3 : "4四".includes(r[1]) ? 4 : 5)); }
   // 현 대표 결정전 = 현 결승
   if (repF && !/:/.test(rnd || "")) add("F");
@@ -149,7 +148,10 @@ function tag(title: string, pub: string | null = null, at: string | null = null)
   // ---- 위계: 전국 본선 vs 현 예선 ----
   // 학교 이름을 뺀 제목에 「鹿児島県男子」「県大会」「県高校総体」 같은 말이 있으면 현 대회
   let rest = bodyS; for (const h of [...keep].sort((x, y) => y.a - x.a)) rest = rest.slice(0, h.a) + " " + rest.slice(h.b);
-  const prefLocal = /[県都府](男子|女子|高等学校|高校総体|総体|大会|予選|代表|決勝|準決勝|準々決勝|バレー|新人)/.test(rest.replace(/・/g, ""));
+  // 「徳島 決勝」「女子栃木 決勝」「男子 沖縄 決勝」처럼 현 이름만(県 없이) 붙은 라운드도 현 대회.
+  // 단 전국 본선 제목은 학교마다 현을 붙임(「東山 京都 vs 清風 大阪 男子決勝」) → 다른 현이 둘 이상 나오면 현 대회 아님
+  const restJ = rest.replace(/・/g, "").replace(/決勝トーナメント/g, "トーナメント"), prefs = new Set(restJ.match(prefAll()) || []);
+  const prefLocal = /[県都府](男子|女子|高等学校|高校総体|総体|大会|予選|代表|決勝|準決勝|準々決勝|バレー|新人)/.test(restJ) || (prefs.size === 1 && prefRound().test(restJ));
   if ((tourn === "haruko" || tourn === "ih") && !year && prefLocal) rnd = ["yosen", (rnd || "").split(":").filter((x) => x && x !== "yosen").join(":")].filter(Boolean).join(":");
   // 국스포 블록 예선(「国スポ2025九州ブロック」·ミニ国体)은 본선 대진에 넣지 않음
   if (tourn === "kokutai" && /ブロック|予選|ミニ国体/.test(body)) rnd = ["yosen", (rnd || "").split(":").filter((x) => x && x !== "yosen").join(":")].filter(Boolean).join(":");
@@ -192,7 +194,24 @@ function tag(title: string, pub: string | null = null, at: string | null = null)
       if (sameP || badF || badSF) rnd = ["yosen", strip(rnd)].filter(Boolean).join(":");
     }
   }
+  // 전국 본선이 아직 안 열린 해(하루코 = 그해 1월 초, 인터하이 = 7월 말)는 결승이라 적혀 있어도 다 현 예선
+  // 올린 때(「N日前」 등)가 본선 전이어도 마찬가지 (예: 2026년 11월에 올린 「春の高校バレー2027 … 決勝」 = 현 결승)
+  if ((tourn === "haruko" || tourn === "ih") && year && !(rnd || "").split(":").includes("yosen")) {
+    const st = new Date(Date.UTC(year, tourn === "haruko" ? 0 : 6, tourn === "haruko" ? 3 : 20)), now = at ? new Date(at) : new Date(), pd = pubDate(pub, at);
+    if (now < st || (pd && pd < st)) rnd = ["yosen", ...(rnd || "").split(":").filter(Boolean)].join(":");
+  }
   return { tourn, rnd, year, gender, schools: ids };
+}
+// 현 이름 + 라운드 (「徳島決勝」「栃木県男子決勝」「沖縄準決勝」)
+let PREF_RND: RegExp | null = null, PREF_ALL: RegExp | null = null;
+const prefAll = () => PREF_ALL || (PREF_ALL = new RegExp(Object.keys(PREF_KANA).join("|"), "g"));
+const prefRound = () => PREF_RND || (PREF_RND = new RegExp(`(${Object.keys(PREF_KANA).join("|")})[県都府]?(男子|女子)?(決勝|準決勝|準々決勝|代表決定|予選|[1-5一二三四五]回戦)`));
+// 「N日前 · N週間前 · N時間前」로 올린 날 (하루 단위로 믿을 만한 것만. か月 · 年 은 null)
+function pubDate(pub: string | null | undefined, at: string | null = null) {
+  const m = (pub || "").replace(/\s/g, "").match(/(\d+)(週間|日|時間|分)前/); if (!m) return null;
+  const d = at ? new Date(at) : new Date(), n = Number(m[1]);
+  if (m[2] === "週間") d.setDate(d.getDate() - 7 * n); else if (m[2] === "日") d.setDate(d.getDate() - n);
+  return d;
 }
 async function loadSchools() {
   const r = await sb.from("jp_schools").select("id,name_ja,aliases,pref");

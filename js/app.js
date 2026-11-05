@@ -646,12 +646,15 @@ async function jpFetch() {
   for (const r of [s, vp]) if (r.error) throw r.error;
   return { at: Date.now(), schools: s.data || [], sources: src.data || [], results: res.data || [], prefTop: pt.data || [], rank: rk.data || [], stars: st.data || [], top: mt.data || [], blockTop: bt.data || [], vids: vp.data || [] };
 }
+// 전국 본선이 아직 안 열린 해(하루코 = 그해 1월 초, 인터하이 = 7월 말)의 영상은 라운드가 '결승'이어도 현 예선으로 (서버 태그가 틀려도 화면은 맞게)
+const JP_NAT_START = { haruko: "-01-03", ih: "-07-20" };
+const jpPreNat = v => { const st = JP_NAT_START[v.tourn], r = v.rnd || ""; if (!st || !v.year || iso(today()) >= v.year + st || r.split(":").includes("yosen")) return v.rnd; return ["yosen", ...r.split(":").filter(Boolean)].join(":"); };
 const JP_VCOLS = ["id", "source", "title", "published", "year", "tourn", "gender", "rnd", "schools", "ch", "len", "noembed"];
 function jpApply(J, d) {
   J.results = d.results; J.prefTop = d.prefTop; J.stars = d.stars; J.top = d.top; J.blockTop = d.blockTop; J.rosters = J.rosters || {};
   J.rank = {}; for (const r of d.rank) J.rank[r.school_id + "|" + r.gender] = r;
   J.schools = d.schools; J.sources = d.sources;
-  J.videos = d.vids.map(a => { const v = {}; JP_VCOLS.forEach((k, i) => { v[k] = a[i]; }); v.schools = v.schools || []; return v; });
+  J.videos = d.vids.map(a => { const v = {}; JP_VCOLS.forEach((k, i) => { v[k] = a[i]; }); v.schools = v.schools || []; v.rnd = jpPreNat(v); return v; });
   jpLinkPref(J);
   // 한국어 제목용 바꾸기 목록 (긴 것부터)
   const rep = [];

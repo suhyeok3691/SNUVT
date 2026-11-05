@@ -304,6 +304,33 @@ const SUITES = {
     await p.click('[data-act="lvside"][data-v="us"]');
     await p.evaluate(() => lvSave("blk:touch")); await p.waitForTimeout(100);
     assert.strictEqual(await sideOn(), "us", "다른 기록은 팀 그대로");
+    // 공격 득점 자리: 코트 밖(터치아웃)도 찍힘 → 구역 없이 x < 0, 기록에 "코트 밖"
+    const last = () => p.evaluate(() => { const l = lv().rallies[lvGame().id]; return l[l.length - 1]; });
+    await p.click('[data-act="lvcode"][data-v="atk:kill"]'); await p.waitForTimeout(150);
+    assert.match(await a.text("#sheet"), /터치아웃은 코트 밖/);
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT });
+    const box = await (await p.$("#lvCourtTap")).boundingBox();
+    await p.mouse.click(box.x + box.width * 0.03, box.y + box.height * 0.5); await p.waitForTimeout(150);
+    { const r = await last(); assert.ok(r.kind === "atk" && r.res === "kill" && r.x > 100 && r.zone === null, "코트 밖 " + JSON.stringify([r.x, r.y, r.zone])); }
+    assert.match(await p.evaluate(() => { const l = lv().rallies[lvGame().id]; return lvLabel(l[l.length - 1]); }), /코트 밖/);
+    // 코트 안은 구역 그대로
+    await p.click('[data-act="lvcode"][data-v="atk:kill"]'); await p.waitForTimeout(150);
+    { const bx = await (await p.$("#lvCourtTap")).boundingBox(); await p.mouse.click(bx.x + bx.width * 0.5, bx.y + bx.height * 0.5); await p.waitForTimeout(150); }
+    { const r = await last(); assert.ok(r.x >= 0 && r.x <= 100 && r.y >= 0 && r.y <= 100 && r.zone >= 1, "코트 안 " + JSON.stringify([r.x, r.y, r.zone])); }
+    // 다이렉트 공격 종류
+    assert.strictEqual(await p.evaluate(() => LV_AT.dir), "다이렉트");
+    // 범실 → 3단 처리 미스 = 3단 넘김 미스(공격 아님), 상대 점수, 팀 그대로
+    await p.click('[data-act="lvside"][data-v="us"]');
+    await p.click('[data-act="lvcode"][data-v="atk:err"]'); await p.waitForTimeout(100);
+    assert.match(await a.text("#sheet"), /3단 처리 미스/);
+    await p.click('[data-act="lvmiss"][data-v="ovr"]'); await p.waitForTimeout(150);
+    { const r = await last(); assert.ok(r.kind === "ovr" && r.res === "err" && r.point === "opp", "3단 처리 미스 " + JSON.stringify([r.kind, r.res, r.point])); }
+    assert.strictEqual(await sideOn(), "us");
+    // 막힘 → 커버 · 이어감: 커버한 사람 고르는 창 없이 바로
+    await p.click('[data-act="lvcode"][data-v="atk:blk"]'); await p.waitForTimeout(100);
+    await p.click('[data-act="lvblkd"][data-v="bcov"]'); await p.waitForTimeout(150);
+    assert.ok(await p.evaluate(() => document.getElementById("sheet").hidden), "커버 사람 창 없음");
+    { const r = await last(); assert.ok(r.kind === "atk" && r.res === "bcov"); }
     await p.evaluate(() => lvSetForm(2)); await p.waitForTimeout(150);
     assert.ok(await p.$("#lvSetForm"), "다음 세트 시작 창");
     await p.evaluate(() => closeSheet());
@@ -319,7 +346,7 @@ const SUITES = {
     assert.match(await a.text(".sc-list"), /SNU vs B대/);
     await p.click('[data-act="sclive"]'); await p.waitForTimeout(400);
     assert.ok(await p.$('[data-act="lvpt"][data-v="us"]'), "전력분석에서 연 실시간 화면");
-    assert.match(await a.text(".lv-score"), /2 : 0/);
+    assert.match(await a.text(".lv-score"), /4 : 1/); // 점수 +1 둘 · 득점 둘 · 3단 처리 미스(상대 +1)
     await p.evaluate(() => innerBack()); await p.evaluate(() => { state.dirty = false; render(); }); await p.waitForTimeout(200);
     assert.ok(await p.$('[data-act="sclive"]'), "뒤로 → 실시간 목록");
     await a.go("cup");
@@ -380,7 +407,7 @@ const SUITES = {
     await p.click('[data-act="ctrecall"]'); await p.waitForTimeout(100);
     await p.click('.ct-court .ct-p.us[data-v="2"]'); await p.click('[data-act="ctcat"][data-v="attack"]'); await p.waitForTimeout(100);
     const chips = await p.$$eval('[data-act="ctatype"]', x => x.map(e => e.textContent.trim()));
-    assert.deepStrictEqual(chips, ["레프트 오픈", "레프트 퀵", "앞차", "백차", "파이프"], "OH 공격 종류 " + chips);
+    assert.deepStrictEqual(chips, ["레프트 오픈", "레프트 퀵", "앞차", "백차", "파이프", "다이렉트"], "OH 공격 종류 " + chips);
     await p.click('[data-act="ctatype"][data-v="pipe"]'); await p.click('[data-act="ctact"][data-a="kill"]'); await p.click('[data-act="ctnospot"]'); await p.waitForTimeout(150);
     const k = (await a.writes("scout_events")).filter(x => x[1] === "insert").pop()[2];
     assert.deepStrictEqual([k.action, k.kind], ["kill", "pipe"]);
