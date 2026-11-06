@@ -123,13 +123,15 @@ const SUITES = {
     assert.strictEqual(f.lib, "p7", "리베로 자동");
     assert.deepStrictEqual(f.opp, ["S", "OH1", "MB1", "OP", "OH2", "MB2"]);
     assert.strictEqual(f.opos, "S");
-    // 상대 1번 자리를 등번호 9(S)로, 1세트 상대 로테 3 · 첫 서브 상대
-    await p.evaluate(() => { document.getElementById("lvl-opp-1").value = "9"; document.getElementById("lvl-orot").value = "3"; document.getElementById("lvl-serve").value = "opp"; });
+    // 상대 1번 자리를 등번호 9(S)로. 로테 번호 · 첫 서브 칸은 없음 (넣은 자리 = 시작 자리)
+    assert.strictEqual(await p.$("#lvl-rot, #lvl-orot, #lvl-serve"), null, "로테 번호 · 첫 서브 칸 없음");
+    await p.evaluate(() => { document.getElementById("lvl-opp-1").value = "9"; });
     await p.click("#lvLineupForm button[type=submit]"); await p.waitForTimeout(300);
     const g = await p.evaluate(() => { const g = lvGame(); return { st: { rot: g.sets[1].rot, orot: g.sets[1].orot, serve: g.sets[1].serve }, opp: g.sets[1].lu.opp, ros: g.roster.opp.find(x => String(x.no) === "9") }; });
-    assert.deepStrictEqual(g.st, { rot: 1, orot: 3, serve: "opp" });
+    assert.deepStrictEqual(g.st, { rot: 1, orot: 1, serve: undefined });
+    await p.click('[data-act="lvfirst"][data-v="opp"]'); await p.waitForTimeout(150); // 첫 서브는 기록 화면에서
     assert.deepStrictEqual(g.opp.slots, [9, "OH1", "MB1", "OP", "OH2", "MB2"]);
-    assert.strictEqual(g.opp.rot, 3);
+    assert.strictEqual(g.opp.rot, 1);
     assert.deepStrictEqual(g.ros, { no: 9, pos: "S" });
     // 교체(상대): 나감 OH1 → 포지션 OH 자동 → 번호 15 → 교체, 다음엔 번호 없이 MB1 → MB3 이름표
     await p.click('[data-act="lvside"][data-v="opp"]'); await p.waitForTimeout(150);
@@ -331,9 +333,15 @@ const SUITES = {
     await p.click('[data-act="lvblkd"][data-v="bcov"]'); await p.waitForTimeout(150);
     assert.ok(await p.evaluate(() => document.getElementById("sheet").hidden), "커버 사람 창 없음");
     { const r = await last(); assert.ok(r.kind === "atk" && r.res === "bcov"); }
-    await p.evaluate(() => lvSetForm(2)); await p.waitForTimeout(150);
-    assert.ok(await p.$("#lvSetForm"), "다음 세트 시작 창");
-    await p.evaluate(() => closeSheet());
+    // 다음 세트: 시작 창(첫 서브 · 로테 번호) 없이 바로, 첫 기록 전에 첫 서브를 고름 → 그 팀 화면 · 세트에 저장
+    await p.evaluate(() => { lv().set = 2; state.dirty = false; render(); }); await p.waitForTimeout(150);
+    assert.strictEqual(await p.$("#lvSetForm"), null, "세트 시작 창 없음");
+    await p.click('[data-act="lvfirst"][data-v="opp"]'); await p.waitForTimeout(150);
+    assert.strictEqual(await p.evaluate(() => lvGame().sets[2].serve), "opp");
+    assert.strictEqual(await sideOn(), "opp", "첫 서브 팀 화면");
+    assert.ok((await a.writes("live_games")).some(x => x[1] === "update" && x[2].sets && x[2].sets[2] && x[2].sets[2].serve === "opp"), "서버에도");
+    assert.strictEqual(await p.$("#lv-rot, #lv-serve"), null);
+    await p.evaluate(() => { lv().set = 1; lvSideTo("us"); state.dirty = false; render(); });
 
     // 선수 칸은 팀 색(우리 파랑), 고르면 꽉 채움
     const bg = sel => p.$eval(sel, el => getComputedStyle(el).backgroundColor);
