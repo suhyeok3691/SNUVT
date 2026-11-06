@@ -431,6 +431,30 @@ const SUITES = {
     assert.deepStrictEqual(r, { orot: 3, rot: 2, serve: "opp", z1: 13 }, "상대 3번째 선수가 1번 자리에서 서브");
     clean(a); await a.ctx.close();
   },
+  // 남녀부 바꾸기는 관리자 · 주장(role coach)만 / 대회 엔트리 · Edit Lineup 에서 명단에 선수 바로 추가 (쓰던 칸은 그대로)
+  async qpadd(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await p.evaluate(() => openSettings()); await p.waitForTimeout(200);
+    assert.ok(await p.$('input[name="teamsw"]'), "관리자는 남녀부 바꾸기");
+    await p.evaluate(() => closeSettings());
+    await a.go("cup"); await p.click('[data-act="cupopen"][data-k="event:e1"]'); await p.waitForTimeout(200);
+    await p.click('[data-act="cupedit"]'); await p.waitForTimeout(150);
+    const first = await p.$eval('#cupEntryForm input[name="en"]', e => e.value);
+    await p.check(`#cupEntryForm input[name="en"][value="${first}"]`);
+    await p.click('#cupEntryForm [data-act="qpadd"]'); await p.waitForTimeout(150);
+    await p.fill("#qp-name", "김여부"); await p.fill("#qp-num", "17"); await p.selectOption("#qp-pos", "S");
+    await p.click("#qpForm button[type=submit]"); await p.waitForTimeout(300);
+    const ins = (await a.writes("players")).find(x => x[1] === "insert");
+    assert.ok(ins && ins[2].name === "김여부" && ins[2].number === 17 && ins[2].pos === "S", "players 에 넣음 " + JSON.stringify(ins));
+    assert.match(await a.text("#cupEntryForm"), /김여부/);
+    assert.ok(await p.$eval(`#cupEntryForm input[name="en"][value="${first}"]`, e => e.checked), "쓰던 체크 그대로");
+    assert.ok(await p.evaluate(() => { const id = sortedPlayers().find(x => x.name === "김여부").id; return document.querySelector(`#cupEntryForm input[name="en"][value="${id}"]`).checked; }), "새 선수는 엔트리에 체크");
+    clean(a); await a.ctx.close();
+    const c = await openApp(b, "player"), q = c.page;
+    await q.evaluate(() => openSettings()); await q.waitForTimeout(200);
+    assert.strictEqual(await q.$('input[name="teamsw"]'), null, "부원은 남녀부 못 바꿈");
+    clean(c); await c.ctx.close();
+  },
   // 실시간 감독 요약: 두 팀 비교표(사이드아웃 · 브레이크 · 공격 효율 · 서브 · 리시브 · 범실) → 벤치 메모 → 선수 칸 → 자세한 기록
   async lvcoach(b) {
     const a = await openApp(b, "coach", { width: Number(process.env.W || 390) }), p = a.page;

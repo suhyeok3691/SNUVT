@@ -1063,7 +1063,7 @@ function viewSettings() {
     </section>
     <section class="panel set-sec"><h3>계정</h3>
       ${email ? `<div class="kv"><span>이메일</span><b>${esc(email)}</b></div>` : ""}
-      ${state.superAdmin ? `<div class="kv"><span>팀</span><div class="seg-pick team-switch" role="radiogroup" aria-label="팀 바꾸기">${[["men", "남자부"], ["women", "여자부"]].map(([v, l]) => `<label><input type="radio" name="teamsw" value="${v}" ${TEAM.id === v ? "checked" : ""}><span>${l}</span></label>`).join("")}</div></div>` : ""}
+      ${canSwitchTeam() ? `<div class="kv"><span>팀</span><div class="seg-pick team-switch" role="radiogroup" aria-label="팀 바꾸기">${[["men", "남자부"], ["women", "여자부"]].map(([v, l]) => `<label><input type="radio" name="teamsw" value="${v}" ${TEAM.id === v ? "checked" : ""}><span>${l}</span></label>`).join("")}</div></div>` : ""}
       ${state.staff ? `<button type="button" class="menu-item" data-act="rolepick"><span>화면 보기</span><span class="small muted">${VIEW_LABEL(state.viewAs)}</span><span class="go">›</span></button>` : ""}
       <button type="button" class="menu-item" data-act="pwchange"><span>비밀번호 바꾸기</span><span></span><span class="go">›</span></button>
       <button type="button" class="menu-item danger" data-act="logout"><span>로그아웃</span><span></span><span class="go">›</span></button>
@@ -2590,7 +2590,7 @@ function cupPage(x) {
   const sorted = ps.slice().sort((a, b) => order(a) - order(b) || (a.number ?? 999) - (b.number ?? 999));
   const entry = edit
     ? `<form class="f" id="cupEntryForm" data-kind="${x.kind}" data-id="${esc(x.id)}"><table class="cup-tbl"><thead><tr><th>엔트리</th><th>주전</th><th>선수</th><th></th></tr></thead><tbody>${sorted.map(p => `<tr><td><input type="checkbox" name="en" value="${esc(p.id)}" ${en.has(p.id) ? "checked" : ""}></td><td><input type="checkbox" name="st" value="${esc(p.id)}" ${st.has(p.id) ? "checked" : ""}></td><td><b>${pNo(p)}${esc(p.name)}</b> <span class="chip pos">${esc(p.pos)}</span></td><td>${mark(p)}</td></tr>`).join("")}</tbody></table>
-      <div class="row"><button class="btn primary" type="submit">저장</button><button class="btn danger" type="button" data-act="cupedit">취소</button></div></form>`
+      <div class="row"><button class="btn primary" type="submit">저장</button>${qpBtn()}<button class="btn danger" type="button" data-act="cupedit">취소</button></div></form>`
     : en.size ? `<div class="cup-en"><p><span class="cup-k">주전</span>${[...st].map(id => playerOf(id)).filter(Boolean).map(p => `<span class="chip cup-p ${p.id === state.myPid ? "me" : ""}">${pNo(p)}${esc(p.name)}</span>`).join("") || `<span class="small muted">아직 안 정했어요</span>`}</p>
         <p><span class="cup-k">후보</span>${[...en].filter(id => !st.has(id)).map(id => playerOf(id)).filter(Boolean).map(p => `<span class="chip cup-p ${p.id === state.myPid ? "me" : ""}">${pNo(p)}${esc(p.name)}</span>`).join("") || `<span class="small muted">없음</span>`}</p></div>`
     : emptyLine("아직 엔트리가 없어요.");
@@ -3201,6 +3201,8 @@ document.addEventListener("click", async ev => {
     }
     state.dirty = false; return render();
   }
+  if (act === "qpadd") return qpForm(b);
+  if (act === "qpcancel") return qpReturn(null);
   if (act.startsWith("cmp")) return campusClick(b, act);
   if (act === "entry") return openEntry(b.dataset.kind, b.dataset.id);
   if (act.startsWith("cup")) {
@@ -3383,6 +3385,7 @@ document.addEventListener("submit", async ev => {
   ev.preventDefault();
   const f = ev.target;
   if (!sb) return toast("서버에 연결되어 있지 않아요.");
+  if (f.id === "qpForm") { await qpSave(); return; }
   if (f.id === "guestForm") {
     const st = txt("gs-s"), en = txt("gs-e") || null, d = f.dataset.d, btn = f.querySelector('button[type="submit"]');
     if (en && en <= st) { toast("끝 시간이 시작보다 앞이에요."); return; }
@@ -3848,8 +3851,52 @@ function withQueued(raw) {
   });
   return out;
 }
-// 총관리자: 남자부·여자부 오가기 (서버에서 내 팀을 바꾸고 처음부터 다시 불러옴)
+/* 빠른 선수 추가 (가입 안 한 부원 · 여자부처럼 아직 아무도 없을 때): 이름 · 번호 · 포지션만, 관리자 · 주장(서버: 관리자만 players 씀)
+   대회 엔트리 · 전력분석 Edit Lineup · 실시간 라인업 창에서. 쓰던 칸 값은 그대로 두었다가 창을 다시 열며 되살림 */
+const canQuickAdd = () => can("full") || (!!state.coach && state.viewAs !== "player");
+const QP_REOPEN = { cupEntryForm: () => { state.dirty = false; render(); }, ctLineupForm: () => ctLineupForm(), lvLineupForm: () => lvLineupForm() };
+let qpBack = null;
+const qpBtn = () => canQuickAdd() ? `<button type="button" class="btn small" data-act="qpadd">+ 명단에 선수 추가</button>` : "";
+function qpCapture(f) { return f ? [...f.elements].filter(e => e.id || e.name).map(e => ({ id: e.id, name: e.name, type: e.type, value: e.value, checked: e.checked })) : []; }
+function qpRestore(fid, snap) {
+  const f = document.getElementById(fid); if (!f) return;
+  for (const x of snap) { const el = x.id ? document.getElementById(x.id) : x.type === "checkbox" || x.type === "radio" ? [...f.querySelectorAll(`[name="${x.name}"]`)].find(e => e.value === x.value) : f.querySelector(`[name="${x.name}"]`);
+    if (!el) continue; if (x.type === "checkbox" || x.type === "radio") el.checked = x.checked; else el.value = x.value; }
+}
+function qpForm(b) {
+  const f = b && b.closest("form"), fid = f ? f.id : null;
+  qpBack = fid && QP_REOPEN[fid] ? { fid, snap: qpCapture(f) } : null;
+  const el = document.getElementById("sheet");
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>명단에 선수 추가 <span class="small muted">${esc(TEAM.label)}</span></h3><button class="btn link" type="button" data-act="qpcancel">닫기</button></div>
+    <p class="small muted">가입 안 한 부원도 이름 · 번호 · 포지션만으로 넣어요. 나중에 가입하면 부원에서 이어 붙여요.</p>
+    <form class="f" id="qpForm"><div class="fields">
+      <label class="fl">이름<input id="qp-name" required maxlength="20" autocomplete="off"></label>
+      <label class="fl">번호<input id="qp-num" type="number" inputmode="numeric" min="0" max="99"></label>
+      <label class="fl">포지션<select id="qp-pos">${[["OH", "OH 아웃사이드"], ["MB", "MB 미들"], ["OP", "OP 아포짓"], ["S", "S 세터"], ["Li", "L 리베로"]].map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select></label>
+    </div><div class="row"><button class="btn primary" type="submit">추가</button></div></form>`;
+  el.hidden = false; document.body.classList.add("noscroll");
+  setTimeout(() => { const n = document.getElementById("qp-name"); if (n) n.focus(); }, 50);
+}
+function qpReturn(newId) {
+  const back = qpBack; qpBack = null; closeSheet();
+  if (!back) { state.dirty = false; render(); return; }
+  QP_REOPEN[back.fid](); qpRestore(back.fid, back.snap);
+  // 대회 엔트리에서 넣었으면 엔트리에 바로 체크
+  if (newId && back.fid === "cupEntryForm") { const c = document.querySelector(`#cupEntryForm input[name="en"][value="${newId}"]`); if (c) c.checked = true; }
+}
+async function qpSave() {
+  const name = (document.getElementById("qp-name").value || "").trim(); if (!name) return toast("이름을 넣어 주세요");
+  const nv = document.getElementById("qp-num").value, number = nv === "" ? null : Number(nv), pos = document.getElementById("qp-pos").value;
+  if (number != null && sortedPlayers().some(p => p.number === number)) { if (!await confirmDel(`${number}번은 이미 있어요. 그래도 넣을까요?`, "네, 넣을게요")) return; }
+  const r = await sb.from("players").insert({ name, pos, number, sort: Object.keys(state.players).length + 1 }).select("*").single();
+  if (r.error) return toast(failMsg(r.error));
+  const x = r.data; state.players[x.id] = { name, pos, year: null, height: null, weight: null, exp: null, weightExp: wexpNorm(x.weight_exp), adjust: {}, order: x.sort ?? Object.keys(state.players).length + 1, titles: [], number, military: false };
+  toast(`${name} 선수를 넣었어요`); qpReturn(x.id);
+}
+// 남자부·여자부 오가기: 총관리자 · 관리자 · 주장만 (서버 switch_team 도 같은 규칙). 서버에서 내 팀을 바꾸고 처음부터 다시 불러옴
+const canSwitchTeam = () => !!state.superAdmin || state.role === "coach";
 async function switchTeam(t) {
+  if (!canSwitchTeam()) return;
   if (t === TEAM.id) return;
   const r = await sb.rpc("switch_team", { t });
   if (r.error) { toast(r.error.code === "42501" ? r.error.message : failMsg(r.error)); return; }

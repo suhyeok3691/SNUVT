@@ -2540,3 +2540,11 @@ begin
   end if;
   return new;
 end $$;
+
+-- ===== 2026-11-07 남자부 · 여자부 오가기: 총관리자 + 관리자 · 주장(role coach)만 =====
+create or replace function public.switch_team(t text) returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if not coalesce((select super or role = 'coach' from public.profiles where id = auth.uid()), false) then raise exception '관리자 · 주장만 남녀부를 바꿀 수 있어요' using errcode = '42501'; end if;
+  if not exists (select 1 from public.teams where id = t) then raise exception '팀을 확인해 주세요' using errcode = '23514'; end if;
+  update public.profiles set team_id = t where id = auth.uid();
+end $$;

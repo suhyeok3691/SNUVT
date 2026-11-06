@@ -163,7 +163,7 @@ function lvLineupForm() {
     const libF = snu
       ? `<select id="lvl-${side}-l"><option value="">없음</option>${ps.slice().sort((a, b) => (lvNormPos(b.pos) === "L") - (lvNormPos(a.pos) === "L")).map(p => `<option value="${esc(p.id)}" ${String(lib ?? "") === String(p.id) ? "selected" : ""}>${esc(pNo(p) + p.name)}${lvNormPos(p.pos) === "L" ? " · L" : ""}</option>`).join("")}</select>`
       : `<input id="lvl-${side}-l" maxlength="4" autocapitalize="characters" autocomplete="off" placeholder="번호" value="${esc(lib ?? "")}">`;
-    return `<h4>${esc(lvTN(g, side))}${snu ? ` <span class="small muted">명단 포지션으로 자동 배치</span>` : ""}</h4><div class="ct-lu"><span class="ct-netl">네트</span>${[4, 3, 2, 5, 6, 1].map(cell).join("")}</div>
+    return `<h4>${esc(lvTN(g, side))}${snu ? ` <span class="small muted">명단 포지션으로 자동 배치</span> ${qpBtn()}` : ""}</h4><div class="ct-lu"><span class="ct-netl">네트</span>${[4, 3, 2, 5, 6, 1].map(cell).join("")}</div>
       <div class="fields"><label class="fl">리베로${libF}</label></div>`;
   };
   const rot = (id, cur, l) => `<label class="fl">${l}<select id="${id}">${[1, 2, 3, 4, 5, 6].map(n => `<option ${n === cur ? "selected" : ""}>${n}</option>`).join("")}</select></label>`;

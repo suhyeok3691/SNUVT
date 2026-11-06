@@ -86,6 +86,9 @@ docs/archive/           예전에 만든 설계 · 자료 문서 사본 (앱에 
 - 체지방 순위나 감량 처방은 만들지 않아요.
 - 졸업·탈퇴하면 개인정보를 지우고(`private.wipe_personal`), 이름과 운동 기록만 남겨요.
 
+- **남녀부 바꾸기**: 설정 → 계정 → 팀. 총관리자와 관리자 · 주장(role coach)만 보이고, 서버 `switch_team`도 같은 규칙(다른 부원은 42501)
+- **명단에 선수 추가**: 대회 엔트리 선정 · 전력분석 Edit Lineup(SNU 쪽) · 실시간 라인업 창(SNU 쪽)에 "+ 명단에 선수 추가"(관리자 · 주장). 이름 · 번호 · 포지션만으로 `players`에 넣음(가입 안 한 부원, 아직 아무도 없는 여자부). 쓰던 칸 값은 그대로 되살리고, 엔트리에서 넣었으면 엔트리에 바로 체크. 같은 번호가 있으면 한 번 묻고 넣음
+
 ## 4. 데이터 (Supabase 표)
 
 | 묶음 | 표 | 내용 |
@@ -374,7 +377,7 @@ docs/archive/           예전에 만든 설계 · 자료 문서 사본 (앱에 
 4. 서버 함수를 바꾸면 `supabase/functions/<이름>/index.ts`도 같이 올려요.
 5. 올리기 전에 테스트: `cd tests && npm install && npm test` (처음 한 번 `npx playwright install chromium`). 하나만은 `node run.js guest`
    - 진짜 서버에 안 붙고 `tests/mock.js`의 가짜 데이터(2026년 10~11월, 코치 p1 · 부원 p2)로 돌아요. 브라우저 시계는 2026-11-01로 고정(`openApp(b, role, { now })`로 바꿈), 가짜 서버 표는 `window.__db`
-   - 24개: `rotrally` 랠리 중 리시브 · 로테 / `insert` 끼워 넣기 · 지우기 / `clock` 기기 시계 어긋남 안내 / `smoke` 모든 화면 × 코치·부원 + 새로고침 / `picker` 날짜·시간 / `guest` 다른 팀 훈련 합류 / `friendly` 교류전 투표 대상 / `rotation` 실시간 라인업 창 · 교체 / `scout` 전력분석 공격 떨어진 자리 / `todo` 홈 오늘 할 것 / `errors` 앱 오류 기록 / `landscape` 가로 코트 / `serve` 서브 종류 · 서브 자리 / `libero` 리베로 자동 교대 / `lvcoach` 실시간 감독 요약 / `lite` 실시간 기록 · 팀 자동 전환 · 코트 밖 득점 자리 · 3단 처리 미스 · 커버 바로 · 전력분석 실시간 탭 / `lineup6` 6인제 대회 라인업 → 실시간 / `edit` 기록 고치기 · Block Out · 공격 종류 / `campustab` 교내 대회는 대회 안 칸 / `seasonview` 시즌 화면 / `spotedit` 고치기에서 떨어진 자리 · SNUVT 쪽 시즌 누적 / `lurename` 라인업 번호 고치기 · 숫자 칸 휠 / `rules` 21·21·15 규칙 · 서울대 번호 팀 · Undo 내 기록만 · 되살리기 / `undo` Undo 대기열(새로고침 · 끊김) / `practice` 훈련 계획 기본 틀
+   - 24개: `rotrally` 랠리 중 리시브 · 로테 / `insert` 끼워 넣기 · 지우기 / `clock` 기기 시계 어긋남 안내 / `smoke` 모든 화면 × 코치·부원 + 새로고침 / `picker` 날짜·시간 / `guest` 다른 팀 훈련 합류 / `friendly` 교류전 투표 대상 / `rotation` 실시간 라인업 창 · 교체 / `scout` 전력분석 공격 떨어진 자리 / `todo` 홈 오늘 할 것 / `errors` 앱 오류 기록 / `landscape` 가로 코트 / `serve` 서브 종류 · 서브 자리 / `libero` 리베로 자동 교대 / `qpadd` 남녀부 바꾸기 권한 · 빠른 선수 추가 / `lvcoach` 실시간 감독 요약 / `lite` 실시간 기록 · 팀 자동 전환 · 코트 밖 득점 자리 · 3단 처리 미스 · 커버 바로 · 전력분석 실시간 탭 / `lineup6` 6인제 대회 라인업 → 실시간 / `edit` 기록 고치기 · Block Out · 공격 종류 / `campustab` 교내 대회는 대회 안 칸 / `seasonview` 시즌 화면 / `spotedit` 고치기에서 떨어진 자리 · SNUVT 쪽 시즌 누적 / `lurename` 라인업 번호 고치기 · 숫자 칸 휠 / `rules` 21·21·15 규칙 · 서울대 번호 팀 · Undo 내 기록만 · 되살리기 / `undo` Undo 대기열(새로고침 · 끊김) / `practice` 훈련 계획 기본 틀
    - 새 기능을 만들면 `run.js`의 `SUITES`에 하나 더하고, 필요한 가짜 데이터는 `mock.js`에
 
 ## 8. 지켜야 할 것

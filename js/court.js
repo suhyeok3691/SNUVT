@@ -561,7 +561,7 @@ function ctLineupForm() {
     const num9p = (pre, sl) => i => `<div class="ct-lu-c"><span class="ct-lu-n">${CT_POS9[i]}</span><input id="${pre}-${i}" type="number" inputmode="numeric" min="0" max="99" placeholder="번호" value="${esc(sl[i] ?? "")}" aria-label="${CT_POS9[i]}"></div>`, num9 = num9p("cto", op);
     const grid9 = f => `<span class="ct-netl">네트</span>${CT_ROWS9.map(r => `<div class="ct-lu9" style="grid-template-columns:repeat(${r.length},minmax(0,1fr))">${r.map(f).join("")}</div>`).join("")}`;
     el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>Edit Lineup · 9인제</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
-      <form class="f" id="ctLineupForm"><h4>${esc(ctTA(m))}</h4><div class="ct-lu nine">${grid9(ros ? sel9 : num9p("ctn", us))}</div>
+      <form class="f" id="ctLineupForm"><h4>${esc(ctTA(m))}${ros ? ` ${qpBtn()}` : ""}</h4><div class="ct-lu nine">${grid9(ros ? sel9 : num9p("ctn", us))}</div>
         <h4>${esc(m.opponent || "상대")}</h4><div class="ct-lu nine">${grid9(num9)}</div>
         <h4>${setNo}세트 시작</h4><div class="fields"><label class="fl">첫 서브<select id="cts-serve"><option value="us" ${st.serve !== "opp" ? "selected" : ""}>${esc(ctTA(m))}</option><option value="opp" ${st.serve === "opp" ? "selected" : ""}>${esc(m.opponent || "상대")}</option></select></label></div>
         <div class="row"><button class="btn primary" type="submit">저장</button></div></form>`;
@@ -569,7 +569,7 @@ function ctLineupForm() {
   }
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>Edit Lineup</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="ctLineupForm">
-      <h4>${esc(ctTA(m))}</h4><div class="ct-lu"><span class="ct-netl">네트</span>${CT_SHEET.map(ros ? sel : unum).join("")}</div>
+      <h4>${esc(ctTA(m))}${ros ? ` ${qpBtn()}` : ""}</h4><div class="ct-lu"><span class="ct-netl">네트</span>${CT_SHEET.map(ros ? sel : unum).join("")}</div>
       <div class="pair">${ros ? lsel(0) + lsel(1) : num("ctn-l1", (U.libero || [])[0], "리베로 1") + num("ctn-l2", (U.libero || [])[1], "리베로 2")}</div>
       <h4>${esc(m.opponent || "상대")}</h4><div class="ct-lu"><span class="ct-netl">네트</span>${CT_SHEET.map(onum).join("")}</div>
       <div class="pair">${num("cto-l1", (O.libero || [])[0], "리베로 1")}${num("cto-l2", (O.libero || [])[1], "리베로 2")}</div>
