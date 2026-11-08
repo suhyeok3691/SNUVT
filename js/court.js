@@ -47,12 +47,20 @@ const CT_SPOT = a => (a.skill === "attack" || a.skill === "serve") && !a.det && 
 const CT_ZROWS = [[4, 3, 2], [7, 8, 9], [5, 6, 1]];
 const ctZone = (x, y) => CT_ZROWS[Math.min(2, Math.floor(y / 33.34))][Math.min(2, Math.floor(x / 33.34))];
 const ctZoneXY = z => { for (let r = 0; r < 3; r++) { const c = CT_ZROWS[r].indexOf(z); if (c >= 0) return { x: c * 33 + 17, y: r * 33 + 17 }; } return null; };
+// 공격 범실 중 아웃(Out)도 어디로 나갔는지 찍음 (코트 밖)
+const ctOutAtk = (code, det) => { const a = CT_ACT[code]; return !!a && a.skill === "attack" && a.res === "error" && det === "Out"; };
+// 코트 밖: 옆 · 뒤로 20%씩 (x -20~120, y 0~120). 누르는 코트(tap)나 밖 점이 있으면 바깥까지 그림
+const CT_OUT = 20, ctOut = d => d.x < 0 || d.x > 100 || d.y > 100;
+const ctTapXY = (svg, ev) => { const r = svg.getBoundingClientRect(), O = CT_OUT, fx = (ev.clientX - r.left) / r.width * (100 + 2 * O) - O, fy = (ev.clientY - r.top) / r.height * (100 + O) - O;
+  return { x: Math.max(-O, Math.min(100 + O, Math.round(100 - fx))), y: Math.max(0, Math.min(100 + O, Math.round(100 - fy))) }; };
+const ctSpotZone = p => ctOut(p) ? null : ctZone(p.x, p.y);
 // 코트 그림 (300 × 300, 네트가 아래 = 공격한 팀 쪽에서 봄). dots: [{x, y, c}]
 function ctCourtSvg(dots, tap) {
-  const W = 300, g = `<rect x="1" y="1" width="${W - 2}" height="${W - 2}" class="lv-c-bd"/><line x1="0" y1="${W - 1}" x2="${W}" y2="${W - 1}" class="lv-c-net"/><line x1="0" y1="200" x2="${W}" y2="200" class="lv-c-al"/>
+  const W = 300, M = CT_OUT * 3, wide = tap || (dots || []).some(ctOut);
+  const g = `${wide ? `<rect x="${-M}" y="${-M}" width="${W + 2 * M}" height="${W + M}" class="lv-c-out"/><rect x="0" y="0" width="${W}" height="${W}" class="lv-c-in"/>` : ""}<rect x="1" y="1" width="${W - 2}" height="${W - 2}" class="lv-c-bd"/><line x1="0" y1="${W - 1}" x2="${W}" y2="${W - 1}" class="lv-c-net"/><line x1="0" y1="200" x2="${W}" y2="200" class="lv-c-al"/>
     <line x1="100" y1="0" x2="100" y2="${W}" class="lv-c-g"/><line x1="200" y1="0" x2="200" y2="${W}" class="lv-c-g"/><line x1="0" y1="100" x2="${W}" y2="100" class="lv-c-g"/>`;
   const pts = (dots || []).map(d => `<circle cx="${(100 - d.x) * 3}" cy="${(100 - d.y) * 3}" r="${tap ? 8 : 6}" class="lv-dot ${d.c || ""}"/>`).join("");
-  return `<svg class="lv-c ${tap ? "big" : ""}" viewBox="0 0 ${W} ${W}" ${tap ? 'id="ctCourtTap"' : ""} role="img" aria-label="상대 코트">${g}${pts}</svg>`;
+  return `<svg class="lv-c ${tap ? "big" : ""} ${wide ? "wide" : ""}" viewBox="${wide ? `${-M} ${-M} ${W + 2 * M} ${W + M}` : `0 0 ${W} ${W}`}" ${tap ? 'id="ctCourtTap"' : ""} role="img" aria-label="상대 코트">${g}${pts}</svg>`;
 }
 // 9인제 (예전 프로그램 그대로): 자리 고정, 로테이션 없음. 네트 쪽부터 C·S / L·FS·BS·R / LB·CB·RB
 const CT_POS9 = ["C", "S", "L", "FS", "BS", "R", "LB", "CB", "RB"];
@@ -209,7 +217,7 @@ function ctLabel(e) {
   if (e.action === CT_LIB) return `리베로 바꿈 · ${who}`;
   if (e.action === CT_CFG) return `Settings · ${e.rot ? `Rot ${e.rot}:${e.opp_rot} · ` : ""}서브 ${esc(ctTN(m, e.serve === "opp" ? "opp" : "us"))} · Rally ${e.rally || 1}`;
   if (e.action === CT_SUB) return `교체 · ${who}${e.kind ? ` (${esc(e.kind)})` : ""} 들어감${e.detail ? ` ↔ ${esc(e.detail)}` : ""}`;
-  return `${who} · ${a ? esc(a.name) : esc(e.action)}${e.skill === "serve" && CT_STN[e.kind] ? ` · ${CT_STN[e.kind]}` : ""}${e.skill === "attack" && CT_ATN[e.kind] ? ` · ${CT_ATN[e.kind]}` : ""}${e.detail ? ` (${esc(e.detail)})` : ""}${e.zone ? ` → ${e.zone}` : ""}`;
+  return `${who} · ${a ? esc(a.name) : esc(e.action)}${e.skill === "serve" && CT_STN[e.kind] ? ` · ${CT_STN[e.kind]}` : ""}${e.skill === "attack" && CT_ATN[e.kind] ? ` · ${CT_ATN[e.kind]}` : ""}${e.detail ? ` (${esc(e.detail)})` : ""}${e.zone ? ` → ${e.zone}` : e.x != null && ctOut(e) ? " → 코트 밖" : ""}`;
 }
 // 지금 리베로로 뛰는 중인가 (코트 6명 칸이 아닌 리베로)
 const ctLibActing = (m, s, side, v) => !s.nine && ctIsLib(ctLu(m), v, side) && !(side === "us" ? s.usSlots : s.opSlots).some(x => ctSame(x, v));
@@ -252,9 +260,9 @@ function ctSheet() {
   const cats = CT_MENU.filter(([k]) => !(libAct && CT_NOLIB.includes(k)));
   const n = c.v != null ? ctName(c.side, c.v) : null, who = n ? `${esc(ctTN(m, c.side))} ${esc(n.no ? "#" + n.no : "")} ${esc(n.nm)}${libAct ? ` <span class="chip">L</span>` : ""}` : "";
   let body, title, back = "";
-  if (c.spot) { const a = CT_ACT[c.spot];
-    title = `${who} · ${esc(a.name)}`; back = `<button type="button" class="btn link small" data-act="ctback">‹ 뒤로</button>`;
-    body = `<p class="small muted ct-spot-h">${a.skill === "serve" ? "서브가 떨어진 자리" : "공이 떨어진 자리"} · ${esc(ctTN(m, ctOther(c.side)))} 코트 <span>(아래가 네트)</span></p>
+  if (c.spot) { const a = CT_ACT[c.spot], out = ctOutAtk(c.spot, c.spotDet);
+    title = `${who} · ${esc(a.name)}${out ? " (Out)" : ""}`; back = `<button type="button" class="btn link small" data-act="ctback">‹ 뒤로</button>`;
+    body = `<p class="small muted ct-spot-h">${out ? "아웃된 자리 — 코트 밖을 눌러요" : a.skill === "serve" ? "서브가 떨어진 자리" : "공이 떨어진 자리"} · ${esc(ctTN(m, ctOther(c.side)))} 코트 <span>(아래가 네트)</span></p>
       <div class="lv-cwrap ct-spot">${ctCourtSvg([], true)}</div>
       <div class="row"><button type="button" class="btn" data-act="ctnospot">건너뛰기</button></div>`; }
   else if (c.cat === "sub") { body = ctSubHtml(m, s); title = `${esc(ctTN(m, c.side))} 교체`; if (c.v != null && (libAct || (c.side === "us" ? s.usSlots : s.opSlots).some(x => ctSame(x, c.v)))) back = `<button type="button" class="btn link small" data-act="ctback">‹ 뒤로</button>`; }
@@ -272,8 +280,7 @@ function ctSheet() {
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${title}</h3><span class="row nowrap">${back}<button class="btn link" type="button" data-act="sheetclose">닫기</button></span></div>${body}`;
   el.hidden = false; document.body.classList.add("noscroll");
   const svg = document.getElementById("ctCourtTap");
-  if (svg) svg.addEventListener("click", e => { const r = svg.getBoundingClientRect(), fx = Math.max(0, Math.min(100, Math.round((e.clientX - r.left) / r.width * 100))), fy = Math.max(0, Math.min(100, Math.round((e.clientY - r.top) / r.height * 100))), x = 100 - fx, y = 100 - fy;
-    ctSave(c.spot, null, { x, y, zone: ctZone(x, y) }); });
+  if (svg) svg.addEventListener("click", e => { const p = ctTapXY(svg, e); ctSave(c.spot, c.spotDet || null, { ...p, zone: ctSpotZone(p) }); });
 }
 /* 저장: 화면에 먼저 넣고(바로 다음 입력) 서버에는 차례대로 보냄. 인터넷이 끊겨도 대기열에 남았다가 다시 보냄 */
 const ctQ = { list: [], busy: false, timer: null };
@@ -430,14 +437,13 @@ function ctEditForm(id) {
   if (e.x != null && e.y != null) { form.dataset.x = e.x; form.dataset.y = e.y; }
   const drawSpot = () => { const has = form.dataset.x != null && form.dataset.x !== "";
     court.innerHTML = ctCourtSvg(has ? [{ x: Number(form.dataset.x), y: Number(form.dataset.y), c: "g" }] : [], true);
-    document.getElementById("cte-spotn").textContent = has ? `${ctZone(Number(form.dataset.x), Number(form.dataset.y))}번 자리` : "코트를 눌러 넣어요";
+    document.getElementById("cte-spotn").textContent = has ? (ctOut({ x: Number(form.dataset.x), y: Number(form.dataset.y) }) ? "코트 밖" : `${ctZone(Number(form.dataset.x), Number(form.dataset.y))}번 자리`) : "코트를 눌러 넣어요";
     document.getElementById("cte-spotclr").hidden = !has;
-    const svg = court.querySelector("svg"); svg.addEventListener("click", ev => { const r = svg.getBoundingClientRect(), fx = Math.max(0, Math.min(100, Math.round((ev.clientX - r.left) / r.width * 100))), fy = Math.max(0, Math.min(100, Math.round((ev.clientY - r.top) / r.height * 100)));
-      form.dataset.x = 100 - fx; form.dataset.y = 100 - fy; drawSpot(); }); };
+    const svg = court.querySelector("svg"); svg.addEventListener("click", ev => { const p = ctTapXY(svg, ev); form.dataset.x = p.x; form.dataset.y = p.y; drawSpot(); }); };
   document.getElementById("cte-spotclr").addEventListener("click", () => { delete form.dataset.x; delete form.dataset.y; drawSpot(); });
-  const spotHead = () => { const a = CT_ACT[actSel.value]; document.getElementById("cte-spotw").hidden = !a || !CT_SPOT(a); document.getElementById("cte-spoth").textContent = a && a.skill === "serve" ? "서브가 떨어진 자리" : "공이 떨어진 자리"; document.getElementById("cte-spott").textContent = ctTN(m, ctOther(sideSel.value)); };
+  const spotHead = () => { const a = CT_ACT[actSel.value], out = ctOutAtk(actSel.value, det.value); document.getElementById("cte-spotw").hidden = !a || !(CT_SPOT(a) || out); document.getElementById("cte-spoth").textContent = out ? "아웃된 자리" : a && a.skill === "serve" ? "서브가 떨어진 자리" : "공이 떨어진 자리"; document.getElementById("cte-spott").textContent = ctTN(m, ctOther(sideSel.value)); };
   const fillDet = keep => { const a = CT_ACT[actSel.value], l = (a && a.det) || []; detw.hidden = !l.length; document.getElementById("cte-atw").hidden = !a || a.skill !== "attack"; det.innerHTML = l.map(d => `<option ${keep && d === e.detail ? "selected" : ""}>${esc(d)}</option>`).join(""); spotHead(); };
-  fillDet(true); drawSpot(); actSel.addEventListener("change", () => fillDet(false));
+  fillDet(true); drawSpot(); actSel.addEventListener("change", () => fillDet(false)); det.addEventListener("change", spotHead);
   sideSel.addEventListener("change", () => { whoSel.innerHTML = whoSel.dataset[sideSel.value]; spotHead(); });
 }
 // 세트를 처음부터 다시 따라가 점수 · 서브 · 로테 · 랠리(넣을 때 규칙 그대로: 랠리에서 처음 난 점수만)를 다시 셈 → 바뀐 기록 [{e, patch}]
@@ -474,9 +480,9 @@ async function ctEditSave(f) {
   { const L = ctBlocked(m, e); if (L) return toast(ctLiveMsg(L)); }
   if (!await ctWaitQ()) return toast("저장 중인 기록이 아직 안 올라갔어요. 인터넷을 확인하고 다시 눌러 주세요");
   const v = id => (document.getElementById(id) || {}).value || "", side = v("cte-side"), who = v("cte-who"), code = v("cte-act"), a = CT_ACT[code]; if (!a) return;
-  const ros = ctRos(m, side), detail = a.det ? v("cte-det") || null : null, sp = CT_SPOT(a) && f.dataset.x != null && f.dataset.x !== "" ? { x: Number(f.dataset.x), y: Number(f.dataset.y) } : null;
+  const ros = ctRos(m, side), detail = a.det ? v("cte-det") || null : null, sp = (CT_SPOT(a) || ctOutAtk(code, detail)) && f.dataset.x != null && f.dataset.x !== "" ? { x: Number(f.dataset.x), y: Number(f.dataset.y) } : null;
   const patch = { side, player_id: ros ? who || null : null, opp_no: ros ? null : who === "" ? null : Number(who), action: code, skill: a.skill, grade: a.skill === "attack" && detail === "Blocked" ? "/" : a.grade, detail,
-    kind: a.skill === "serve" ? (e.skill === "serve" ? e.kind || null : null) : a.skill === "attack" ? v("cte-at") || null : null, x: sp ? sp.x : null, y: sp ? sp.y : null, zone: sp ? ctZone(sp.x, sp.y) : CT_SPOT(a) && e.x == null ? e.zone : null };
+    kind: a.skill === "serve" ? (e.skill === "serve" ? e.kind || null : null) : a.skill === "attack" ? v("cte-at") || null : null, x: sp ? sp.x : null, y: sp ? sp.y : null, zone: sp ? ctSpotZone(sp) : CT_SPOT(a) && e.x == null ? e.zone : null };
   const before = (S.events[m.id] || []).map(x => ({ ...x }));
   Object.assign(e, patch);
   try { const n = await ctFixSet(m, e.set_no, { [e.id]: patch }); toast(n ? `고쳤어요 · 뒤 기록 ${n}개 점수 · 로테도 맞춤` : "고쳤어요"); }
@@ -702,17 +708,17 @@ function courtClick(b, act) {
   if (act === "ctcat") { if (b.dataset.v === "sub") { const m = scMatch(), s = ctState(m, ctEv(m), S.sel.set || 1), slots = S.ct.side === "us" ? s.usSlots : s.opSlots, i = slots.findIndex(x => ctSame(x, S.ct.v));
       return ctSubOpen(S.ct.side, i >= 0 ? { out: i, v: S.ct.v } : { inn: S.ct.v, v: S.ct.v }); }
     S.ct.cat = b.dataset.v; S.ct.act = null; return ctSheet(); }
-  if (act === "ctback") { if (S.ct.spot) S.ct.spot = null; else if (S.ct.act) S.ct.act = null; else if (S.ct.cat === "sub") S.ct = { side: S.ct.side, v: S.ct.v, z: null, cat: null, act: null }; else S.ct.cat = null; return ctSheet(); }
+  if (act === "ctback") { if (S.ct.spot) { S.ct.spot = null; S.ct.spotDet = null; } else if (S.ct.act) S.ct.act = null; else if (S.ct.cat === "sub") S.ct = { side: S.ct.side, v: S.ct.v, z: null, cat: null, act: null }; else S.ct.cat = null; return ctSheet(); }
   if (act === "ctsubout") { const m = scMatch(), s = ctState(m, ctEv(m), S.sel.set || 1), i = Number(b.dataset.i); S.ct.out = i; S.ct.pos = (S.ct.side === "us" ? s.usPos : s.opPos)[i] || S.ct.pos; return ctSheet(); }
   if (act === "ctsubin") { S.ct.inn = b.dataset.v; const n = document.getElementById("ctSubNo"); if (n) n.value = ""; return ctSheet(); }
   if (act === "ctsubpos") { S.ct.pos = b.dataset.v; return ctSheet(); }
   if (act === "ctsubok") return ctSubSave();
   if (act === "ctact") { const a = CT_ACT[b.dataset.a]; if (a.det) { S.ct.act = a.code; return ctSheet(); } if (CT_SPOT(a)) { S.ct.spot = a.code; return ctSheet(); } return ctSave(a.code, null); }
-  if (act === "ctnospot") return ctSave(S.ct.spot, null);
+  if (act === "ctnospot") return ctSave(S.ct.spot, S.ct.spotDet || null);
   if (act === "ctatype") { S.ct.atype = S.ct.atype === b.dataset.v ? null : b.dataset.v; return ctSheet(); }
   if (act === "ctatmore") { S.ct.atMore = true; return ctSheet(); }
   if (act === "ctstype") { const k = ctStKey(S.ct), cur = ctStype(S.ct); S.stypes = { ...(S.stypes || {}), [k]: cur === b.dataset.v ? null : b.dataset.v }; return ctSheet(); }
-  if (act === "ctdet") return ctSave(S.ct.act, b.dataset.v || null);
+  if (act === "ctdet") { const d = b.dataset.v || null; if (ctOutAtk(S.ct.act, d)) { S.ct.spot = S.ct.act; S.ct.spotDet = d; return ctSheet(); } return ctSave(S.ct.act, d); }
   if (act === "ctlib") return ctLibSave(b.dataset.side || "us", b.dataset.v);
   if (act === "ctundo") return ctUndo();
   if (act === "ctrecall") { sc().recAll = !sc().recAll; state.dirty = false; return render(); }
@@ -734,8 +740,8 @@ document.addEventListener("keydown", ev => {
   const t = ev.target; if (t && (t.tagName === "INPUT" || t.tagName === "SELECT" || t.tagName === "TEXTAREA")) return;
   const sh = document.getElementById("sheet");
   const np = /^Numpad([1-9])$/.exec(ev.code || ""), dk = np ? np[1] : ev.key; // 숫자패드도
-  if (sh && !sh.hidden && sc().ct && sc().ct.spot && /^[1-9]$/.test(dk)) { ev.preventDefault(); const p = ctZoneXY(Number(dk)); ctSave(sc().ct.spot, null, { ...p, zone: Number(dk) }); }
-  else if (sh && !sh.hidden && sc().ct && sc().ct.spot && ev.key === "Backspace") { ev.preventDefault(); sc().ct.spot = null; ctSheet(); }
+  if (sh && !sh.hidden && sc().ct && sc().ct.spot && /^[1-9]$/.test(dk)) { ev.preventDefault(); const p = ctZoneXY(Number(dk)); ctSave(sc().ct.spot, sc().ct.spotDet || null, { ...p, zone: Number(dk) }); }
+  else if (sh && !sh.hidden && sc().ct && sc().ct.spot && ev.key === "Backspace") { ev.preventDefault(); sc().ct.spot = null; sc().ct.spotDet = null; ctSheet(); }
   else if (sh && !sh.hidden && sc().ct && sc().ct.cat === "serve" && /^[fj]$/i.test(ev.key)) { ev.preventDefault(); const x = sh.querySelector(`.ct-stype [data-v="${ev.key.toLowerCase() === "f" ? "float" : "jump"}"]`); if (x) x.click(); }
   else if (sh && !sh.hidden && sc().ct && /^[1-9]$/.test(dk)) { const bs = sh.querySelectorAll(".ct-acts .btn"), x = bs[Number(dk) - 1]; if (x) { ev.preventDefault(); x.click(); } }
   else if (sh && !sh.hidden && sc().ct && ev.key === "Backspace") { ev.preventDefault(); const c = sc().ct; if (c.act) c.act = null; else if (c.cat && c.cat !== "sub" || c.cat === "sub" && c.v != null) c.cat = null; else return closeSheet(); ctSheet(); } // 한 단계 뒤로
@@ -815,12 +821,13 @@ function ctSpotStats(l, skill = "attack") {
     const nm = k => { const n = ctName(side, k); return `${n.no ? "#" + n.no : ""} ${n.nm}`.trim() || "?"; };
     const pick = f[pk + side] && ks.includes(f[pk + side]) ? f[pk + side] : "", sel = pick ? a.filter(e => key(e) === pick) : a;
     const good = sel.filter(e => CT_ACT[e.action] && CT_ACT[e.action].res === "earned").length;
-    const dot = e => srv ? { x: e.x, y: e.y, c: CT_SCOL[e.action] || "gE" } : { x: e.x, y: e.y, c: CT_ACT[e.action] && CT_ACT[e.action].res === "earned" ? "gL" : "gE tip" };
-    return `<div class="ct-spot-team"><h4>${esc(ctTN(m, side))} ${srv ? "서브" : "공격"} <span class="small muted">${esc(ctTN(m, ctOther(side)))} 코트 · ${srv ? "에이스" : "득점"} ${good} / ${sel.length}</span></h4>
+    const res = e => CT_ACT[e.action] ? CT_ACT[e.action].res : null, outN = srv ? 0 : sel.filter(e => res(e) === "error").length;
+    const dot = e => srv ? { x: e.x, y: e.y, c: CT_SCOL[e.action] || "gE" } : { x: e.x, y: e.y, c: res(e) === "earned" ? "gL" : res(e) === "error" ? "gR" : "gE tip" };
+    return `<div class="ct-spot-team"><h4>${esc(ctTN(m, side))} ${srv ? "서브" : "공격"} <span class="small muted">${esc(ctTN(m, ctOther(side)))} 코트 · ${srv ? "에이스" : "득점"} ${good} / ${sel.length}${outN ? ` · 아웃 ${outN}` : ""}</span></h4>
       <div class="sc-row">${[["", "전체"], ...ks.map(k => [k, nm(k)])].map(([k, lab]) => `<button type="button" class="chip sc-chip ${k === pick ? "on" : ""}" data-act="ctspotp" data-side="${pk}${side}" data-v="${esc(k)}">${esc(lab)}</button>`).join("")}</div>
       <div class="lv-cwrap sm">${ctCourtSvg(sel.map(dot), false)}</div></div>`;
   };
-  const leg = srv ? CT_SLEG.map(([c, t]) => `<span><i class="lv-dot-k ${c}"></i>${t}</span>`).join("") : `<span><i class="lv-dot-k gL"></i>득점</span><span><i class="lv-dot-k ct-k-in"></i>Hit In Play</span>`;
+  const leg = srv ? CT_SLEG.map(([c, t]) => `<span><i class="lv-dot-k ${c}"></i>${t}</span>`).join("") : `<span><i class="lv-dot-k gL"></i>득점</span><span><i class="lv-dot-k ct-k-in"></i>Hit In Play</span><span><i class="lv-dot-k gR"></i>아웃 범실</span>`;
   return `<div class="ct-spots">${team("us")}${team("opp")}</div><p class="small muted lv-leg">${leg}<span>· 아래가 네트</span></p>`;
 }
 // 분석 탭: 공격 종류별 (고른 것만) — 시도 · 득점 · 범실(막힘 포함) · 효율, 팀마다

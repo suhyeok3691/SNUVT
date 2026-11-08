@@ -170,7 +170,7 @@ const SUITES = {
     await p.click('[data-act="ctcat"][data-v="attack"]'); await p.click('[data-act="ctact"][data-a="kill"]'); await p.waitForTimeout(150);
     assert.ok(await p.isVisible("#ctCourtTap"), "떨어진 자리 그림");
     const box = await p.locator("#ctCourtTap").boundingBox();
-    await p.mouse.click(box.x + box.width * 0.8, box.y + box.height * 0.15); await p.waitForTimeout(300); // 오른쪽 위 = 상대 뒤 왼쪽(5번)
+    await p.mouse.click(box.x + box.width * (100 / 140), box.y + box.height * (35 / 120)); await p.waitForTimeout(300); // (그림은 옆 · 뒤로 20% 넓음) 오른쪽 위 = 상대 뒤 왼쪽(5번)
     const ev = (await a.writes("scout_events")).map(x => x[2]);
     assert.strictEqual(ev.length, 1);
     assert.deepStrictEqual({ action: ev[0].action, opp_no: ev[0].opp_no, point: ev[0].point, zone: ev[0].zone, x: ev[0].x, y: ev[0].y }, { action: "kill", opp_no: 2, point: "us", zone: 5, x: 20, y: 85 });
@@ -248,7 +248,7 @@ const SUITES = {
     await srv("jump", "s3");
     assert.match(await a.text(".ct-spot-h"), /서브가 떨어진 자리/);
     const bb = await p.locator("#ctCourtTap").boundingBox();
-    await p.mouse.click(bb.x + bb.width * 0.5, bb.y + bb.height * 0.15); await p.waitForTimeout(250); // 맨 뒤 가운데 = 6번
+    await p.mouse.click(bb.x + bb.width * 0.5, bb.y + bb.height * (35 / 120)); await p.waitForTimeout(250); // 맨 뒤 가운데 = 6번
     await srv(null, "s2"); await p.click('[data-act="ctnospot"]'); await p.waitForTimeout(150);
     await p.click('.ct-court .ct-p.us[data-v="1"]'); await p.click('[data-act="ctcat"][data-v="serve"]'); await p.click('[data-act="ctact"][data-a="foot"]'); await p.waitForTimeout(150);
     assert.strictEqual(await p.$("#ctCourtTap"), null, "범실은 자리 단계 없음");
@@ -439,6 +439,28 @@ const SUITES = {
     assert.deepStrictEqual(r, { orot: 3, rot: 2, serve: "opp", z1: 13 }, "상대 3번째 선수가 1번 자리에서 서브");
     clean(a); await a.ctx.close();
   },
+  // 영상 분석: 공격 범실 Out → 아웃된 자리(코트 밖) 찍기 → 분석 지도에 빨간 점 · 고치기에서도
+  async atkout(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(300);
+    await p.click('.ct-court .ct-p.us[data-v="2"]'); await p.click('[data-act="ctcat"][data-v="attack"]'); await p.click('[data-act="ctact"][data-a="aerr"]'); await p.waitForTimeout(100);
+    await p.click('[data-act="ctdet"][data-v="Out"]'); await p.waitForTimeout(150);
+    assert.match(await a.text("#sheet"), /아웃된 자리/);
+    const box = await (await p.$("#ctCourtTap")).boundingBox();
+    await p.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.04); await p.waitForTimeout(200); // 뒤쪽 바깥
+    const e = await p.evaluate(() => sc().events.m1.find(x => x.action === "aerr"));
+    assert.ok(e.detail === "Out" && e.y > 100 && e.zone == null, "코트 밖 " + JSON.stringify([e.detail, e.x, e.y, e.zone]));
+    assert.match(await p.evaluate(() => ctLabel(sc().events.m1.find(x => x.action === "aerr"))), /코트 밖/);
+    // Into Net 은 자리 없이 바로
+    await p.click('.ct-court .ct-p.us[data-v="2"]'); await p.click('[data-act="ctcat"][data-v="attack"]'); await p.click('[data-act="ctact"][data-a="aerr"]'); await p.waitForTimeout(100);
+    await p.click('[data-act="ctdet"][data-v="Into Net"]'); await p.waitForTimeout(150);
+    assert.ok(await p.evaluate(() => document.getElementById("sheet").hidden), "Into Net 은 바로 저장");
+    // 분석 지도: 빨간 점 · 아웃 1
+    await p.evaluate(() => ctFlush()); await p.waitForTimeout(200);
+    await p.click('[data-act="sctab"][data-k="stats"]'); await p.waitForTimeout(200);
+    assert.ok(await p.$(".ct-spot-team .lv-dot.gR"), "아웃 빨간 점"); assert.match(await a.text(".ct-spots"), /아웃 1/);
+    clean(a); await a.ctx.close();
+  },
   // 전력분석 경기 영상: 코트 탭에선 위에 고정, 분석 탭은 같이 올라감 · 고정 풀기 · 접기(소리 그대로)
   async dock(b) {
     const a = await openApp(b, "coach"), p = a.page;
@@ -579,12 +601,12 @@ const SUITES = {
     await p.click(`[data-act="ctrec"][data-id="${id}"]`); await p.waitForTimeout(100); await p.click(`[data-act="ctedit"][data-id="${id}"]`); await p.waitForTimeout(150);
     assert.ok(!(await p.$eval("#cte-spotw", x => x.hidden)), "공격 득점이면 자리 칸");
     const box = await (await p.$("#cte-court svg")).boundingBox();
-    await p.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.1); await p.waitForTimeout(100);
+    await p.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.25); await p.waitForTimeout(100);
     assert.match(await a.text("#cte-spotn"), /번 자리/);
     await p.click("#ctEditForm button[type=submit]"); await p.waitForTimeout(300);
     const e1 = await p.evaluate(() => sc().events.m1[0]);
-    assert.ok(e1.x === 50 && e1.y === 90 && e1.zone, "자리 저장 " + JSON.stringify([e1.x, e1.y, e1.zone]));
-    assert.ok((await a.writes("scout_events")).some(x => x[1] === "update" && x[2].x === 50), "서버에도");
+    assert.ok(Math.abs(e1.x - 50) <= 1 && Math.abs(e1.y - 90) <= 1 && e1.zone, "자리 저장 " + JSON.stringify([e1.x, e1.y, e1.zone]));
+    assert.ok((await a.writes("scout_events")).some(x => x[1] === "update" && Math.abs(x[2].x - 50) <= 1), "서버에도");
     // 동작을 범실로 바꾸면 자리 칸 숨고 자리 지움
     await p.click('[data-act="ctrecall"]'); await p.waitForTimeout(100);
     await p.click(`[data-act="ctrec"][data-id="${id}"]`); await p.waitForTimeout(100); await p.click(`[data-act="ctedit"][data-id="${id}"]`); await p.waitForTimeout(150);
