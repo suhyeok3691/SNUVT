@@ -452,8 +452,13 @@ const SUITES = {
     await p.click('[data-act="dockmini"]'); await p.waitForTimeout(100);
     assert.match(await cls(), /mini/); assert.strictEqual(await p.$eval("#dock .vid-frame", e => e.getBoundingClientRect().height), 0, "접으면 영상 칸 0");
     assert.ok(await p.$("#dock .vid-frame iframe, #dock #scYt"), "플레이어는 그대로");
+    // 접은 채로 분석 탭 · 코트 탭이 눌려야 함
+    await p.click('[data-act="sctab"][data-k="stats"]', { timeout: 3000 }); await p.waitForTimeout(150);
+    assert.strictEqual(await p.evaluate(() => sc().tab), "stats", "접은 채로 분석 탭");
+    await p.click('[data-act="sctab"][data-k="court"]', { timeout: 3000 }); await p.waitForTimeout(150);
     await p.click('[data-act="dockmini"]'); await p.evaluate(() => { sc().dockPin = null; sc().tab = "stats"; state.dirty = false; render(); }); await p.waitForTimeout(100);
     assert.doesNotMatch(await cls(), /pin/, "분석 탭은 기본 고정 안 함");
+    await p.click('[data-act="sctab"][data-k="court"]', { timeout: 3000 }); await p.waitForTimeout(100); // 펼친 채 고정 아닐 때도 탭이 안 가려짐
     clean(a); await a.ctx.close();
   },
   // 남녀부 바꾸기는 관리자 · 주장(role coach)만 / 대회 엔트리 · Edit Lineup 에서 명단에 선수 바로 추가 (쓰던 칸은 그대로)

@@ -2438,10 +2438,11 @@ async function scoutDock() {
   const m = state.view === "scout" && sc().track === "video" && !sc().live ? scMatch() : null, y = m && m.yt ? parseYt(m.yt) : null;
   if (!y) { if (dock.dataset.mid) { dock.innerHTML = ""; dock.dataset.mid = ""; scPlayer = null; } dock.hidden = true; return; }
   dock.hidden = false;
-  const hd = document.querySelector("header.top"); dock.style.top = (hd ? hd.offsetHeight : 0) + "px";
   // 고정(스크롤해도 위에 남음)은 코트에서 기록할 때만 기본, 분석 탭은 같이 올라감. 버튼으로 고정 · 접기 (접어도 소리는 이어짐)
   const S = sc(), pin = S.dockPin != null ? S.dockPin : S.tab === "court", mini = !!S.dockMini;
   dock.classList.toggle("pin", pin && !mini); dock.classList.toggle("mini", mini);
+  // top 은 고정(sticky)일 때만: 고정이 아닐 때 top 이 남으면 relative 로 그만큼 내려가 아래 탭 · 버튼을 덮음
+  const hd = document.querySelector("header.top"); dock.style.top = pin && !mini ? (hd ? hd.offsetHeight : 0) + "px" : "";
   const bar = `<div class="dock-bar"><span class="small muted">경기 영상</span><button type="button" class="btn link small" data-act="dockpin">${pin ? "고정 풀기" : "위에 고정"}</button><button type="button" class="btn link small" data-act="dockmini">${mini ? "펼치기" : "접기"}</button></div>`;
   if (dock.dataset.mid === m.id) { const b = dock.querySelector(".dock-bar"); if (b) b.outerHTML = bar; return; }
   dock.dataset.mid = m.id; scPlayer = null;
