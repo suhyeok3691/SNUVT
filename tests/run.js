@@ -439,6 +439,23 @@ const SUITES = {
     assert.deepStrictEqual(r, { orot: 3, rot: 2, serve: "opp", z1: 13 }, "상대 3번째 선수가 1번 자리에서 서브");
     clean(a); await a.ctx.close();
   },
+  // 전력분석 경기 영상: 코트 탭에선 위에 고정, 분석 탭은 같이 올라감 · 고정 풀기 · 접기(소리 그대로)
+  async dock(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await a.go("scout"); await p.evaluate(() => { sc().matches.find(m => m.id === "m1").yt = "https://youtu.be/dQw4w9WgXcQ"; });
+    await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(400);
+    const cls = () => p.$eval("#dock", e => (e.hidden ? "hidden " : "") + e.className);
+    assert.match(await cls(), /pin/, "코트 탭 고정");
+    assert.strictEqual(await p.$eval("#dock", e => getComputedStyle(e).position), "sticky");
+    await p.click('[data-act="dockpin"]'); await p.waitForTimeout(100);
+    assert.doesNotMatch(await cls(), /pin/); assert.strictEqual(await p.$eval("#dock", e => getComputedStyle(e).position), "relative", "고정 풀면 같이 올라감");
+    await p.click('[data-act="dockmini"]'); await p.waitForTimeout(100);
+    assert.match(await cls(), /mini/); assert.strictEqual(await p.$eval("#dock .vid-frame", e => e.getBoundingClientRect().height), 0, "접으면 영상 칸 0");
+    assert.ok(await p.$("#dock .vid-frame iframe, #dock #scYt"), "플레이어는 그대로");
+    await p.click('[data-act="dockmini"]'); await p.evaluate(() => { sc().dockPin = null; sc().tab = "stats"; state.dirty = false; render(); }); await p.waitForTimeout(100);
+    assert.doesNotMatch(await cls(), /pin/, "분석 탭은 기본 고정 안 함");
+    clean(a); await a.ctx.close();
+  },
   // 남녀부 바꾸기는 관리자 · 주장(role coach)만 / 대회 엔트리 · Edit Lineup 에서 명단에 선수 바로 추가 (쓰던 칸은 그대로)
   async qpadd(b) {
     const a = await openApp(b, "coach"), p = a.page;

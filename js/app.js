@@ -2439,11 +2439,15 @@ async function scoutDock() {
   if (!y) { if (dock.dataset.mid) { dock.innerHTML = ""; dock.dataset.mid = ""; scPlayer = null; } dock.hidden = true; return; }
   dock.hidden = false;
   const hd = document.querySelector("header.top"); dock.style.top = (hd ? hd.offsetHeight : 0) + "px";
-  if (dock.dataset.mid === m.id) return;
+  // 고정(스크롤해도 위에 남음)은 코트에서 기록할 때만 기본, 분석 탭은 같이 올라감. 버튼으로 고정 · 접기 (접어도 소리는 이어짐)
+  const S = sc(), pin = S.dockPin != null ? S.dockPin : S.tab === "court", mini = !!S.dockMini;
+  dock.classList.toggle("pin", pin && !mini); dock.classList.toggle("mini", mini);
+  const bar = `<div class="dock-bar"><span class="small muted">경기 영상</span><button type="button" class="btn link small" data-act="dockpin">${pin ? "고정 풀기" : "위에 고정"}</button><button type="button" class="btn link small" data-act="dockmini">${mini ? "펼치기" : "접기"}</button></div>`;
+  if (dock.dataset.mid === m.id) { const b = dock.querySelector(".dock-bar"); if (b) b.outerHTML = bar; return; }
   dock.dataset.mid = m.id; scPlayer = null;
-  dock.innerHTML = `<div class="vid-frame"><div id="scYt"></div></div>`;
+  dock.innerHTML = `${bar}<div class="vid-frame"><div id="scYt"></div></div>`;
   const YT = await loadYtApi();
-  if (!YT || dock.dataset.mid !== m.id) { if (!YT) dock.innerHTML = `<div class="vid-frame"><iframe src="${ytEmbed(y)}" title="경기 영상" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`; return; }
+  if (!YT || dock.dataset.mid !== m.id) { if (!YT) dock.innerHTML = `${bar}<div class="vid-frame"><iframe src="${ytEmbed(y)}" title="경기 영상" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe></div>`; return; }
   new YT.Player("scYt", { host: "https://www.youtube-nocookie.com", width: "100%", height: "100%", ...(y.kind === "playlist" ? { playerVars: { listType: "playlist", list: y.yt, playsinline: 1, rel: 0 } } : { videoId: y.yt, playerVars: { playsinline: 1, rel: 0 } }),
     events: { onReady: e => { if (dock.dataset.mid === m.id) scPlayer = e.target; } } });
 }
@@ -3201,6 +3205,7 @@ document.addEventListener("click", async ev => {
     }
     state.dirty = false; return render();
   }
+  if (act === "dockpin" || act === "dockmini") { const S = sc(); if (act === "dockpin") S.dockPin = !document.getElementById("dock").classList.contains("pin"); else S.dockMini = !S.dockMini; return scoutDock(); }
   if (act === "qpadd") return qpForm(b);
   if (act === "qpcancel") return qpReturn(null);
   if (act.startsWith("cmp")) return campusClick(b, act);

@@ -261,6 +261,7 @@ docs/archive/           예전에 만든 설계 · 자료 문서 사본 (앱에 
   - 저장: 화면에 먼저 넣고 서버로 차례대로("대기 N"). 경기를 열어 두면 15초마다 서버 기록을 다시 받아 다른 기기의 입력 · 지우기를 반영
 - **분석 탭**(세트 고르기): 팀별 기록지(배번 · 선수명 · 포지션 · 득점 · 공격 · 성공률 · 효율 · 점유율 · 서브 · 블로킹 · 디그 · 리시브 · 세트 · 범실) · 서브 종류 · 공격 종류 · 공격이 떨어진 자리 · 서브가 떨어진 자리(선수 칩으로 골라 보기) · 로테이션별 득실(두 팀)
 - **Export Excel**(예전 프로그램과 같은 파일, `날짜_대회명_스테이지_SNU vs 상대.xlsx`): Logs(… Detail · Attack Type · Score …) · 팀별 기록지(포지션 포함, 성공률 25% 이상 노랑 · 효율 + 초록 / − 빨강) · Start Rotation · Rotation. 목록 화면 엑셀은 전체 경기
+- 영상 칸(`#dock`, 화면을 다시 그려도 안 끊김): 코트 탭에선 위에 고정, 분석 탭은 같이 올라감. 영상 위 "고정 풀기 / 위에 고정" · "접기 / 펼치기"(접어도 재생 · 소리 그대로)
 - 영상: 유튜브(앱 안에서 재생 · 기록마다 영상 시간) 또는 치지직("다시보기 열기 ↗", `naver.me` 주소는 `resolve-link`가 풀어 줌)
 - DB: `scout_events`(side · player_id/opp_no · skill · action · grade · detail · kind(서브 종류 · 공격 종류 · 교체 포지션) · x · y · zone · rot · opp_rot · rally · serve · point · score · t · author), 점수가 난 랠리는 `scout_points`(6인제, 로테이션별 득실용). `action = 'pt'`는 선수 없이 점수만
 
@@ -378,7 +379,7 @@ docs/archive/           예전에 만든 설계 · 자료 문서 사본 (앱에 
 4. 서버 함수를 바꾸면 `supabase/functions/<이름>/index.ts`도 같이 올려요.
 5. 올리기 전에 테스트: `cd tests && npm install && npm test` (처음 한 번 `npx playwright install chromium`). 하나만은 `node run.js guest`
    - 진짜 서버에 안 붙고 `tests/mock.js`의 가짜 데이터(2026년 10~11월, 코치 p1 · 부원 p2)로 돌아요. 브라우저 시계는 2026-11-01로 고정(`openApp(b, role, { now })`로 바꿈), 가짜 서버 표는 `window.__db`
-   - 24개: `rotrally` 랠리 중 리시브 · 로테 / `insert` 끼워 넣기 · 지우기 / `clock` 기기 시계 어긋남 안내 / `smoke` 모든 화면 × 코치·부원 + 새로고침 / `picker` 날짜·시간 / `guest` 다른 팀 훈련 합류 / `friendly` 교류전 투표 대상 / `rotation` 실시간 라인업 창 · 교체 / `scout` 전력분석 공격 떨어진 자리 / `todo` 홈 오늘 할 것 / `errors` 앱 오류 기록 / `landscape` 가로 코트 / `serve` 서브 종류 · 서브 자리 / `libero` 리베로 자동 교대 / `qpadd` 남녀부 바꾸기 권한 · 빠른 선수 추가 / `lvcoach` 실시간 감독 요약 / `lite` 실시간 기록 · 팀 자동 전환 · 코트 밖 득점 자리 · 3단 처리 미스 · 커버 바로 · 전력분석 실시간 탭 / `lineup6` 6인제 대회 라인업 → 실시간 / `edit` 기록 고치기 · Block Out · 공격 종류 / `campustab` 교내 대회는 대회 안 칸 / `seasonview` 시즌 화면 / `spotedit` 고치기에서 떨어진 자리 · SNUVT 쪽 시즌 누적 / `lurename` 라인업 번호 고치기 · 숫자 칸 휠 / `rules` 21·21·15 규칙 · 서울대 번호 팀 · Undo 내 기록만 · 되살리기 / `undo` Undo 대기열(새로고침 · 끊김) / `practice` 훈련 계획 기본 틀
+   - 25개: `rotrally` 랠리 중 리시브 · 로테 / `insert` 끼워 넣기 · 지우기 / `clock` 기기 시계 어긋남 안내 / `smoke` 모든 화면 × 코치·부원 + 새로고침 / `picker` 날짜·시간 / `guest` 다른 팀 훈련 합류 / `friendly` 교류전 투표 대상 / `rotation` 실시간 라인업 창 · 교체 / `scout` 전력분석 공격 떨어진 자리 / `todo` 홈 오늘 할 것 / `errors` 앱 오류 기록 / `landscape` 가로 코트 / `serve` 서브 종류 · 서브 자리 / `libero` 리베로 자동 교대 / `dock` 전력분석 영상 고정 · 접기 / `qpadd` 남녀부 바꾸기 권한 · 빠른 선수 추가 / `lvcoach` 실시간 감독 요약 / `lite` 실시간 기록 · 팀 자동 전환 · 코트 밖 득점 자리 · 3단 처리 미스 · 커버 바로 · 전력분석 실시간 탭 / `lineup6` 6인제 대회 라인업 → 실시간 / `edit` 기록 고치기 · Block Out · 공격 종류 / `campustab` 교내 대회는 대회 안 칸 / `seasonview` 시즌 화면 / `spotedit` 고치기에서 떨어진 자리 · SNUVT 쪽 시즌 누적 / `lurename` 라인업 번호 고치기 · 숫자 칸 휠 / `rules` 21·21·15 규칙 · 서울대 번호 팀 · Undo 내 기록만 · 되살리기 / `undo` Undo 대기열(새로고침 · 끊김) / `practice` 훈련 계획 기본 틀
    - 새 기능을 만들면 `run.js`의 `SUITES`에 하나 더하고, 필요한 가짜 데이터는 `mock.js`에
 
 ## 8. 지켜야 할 것
