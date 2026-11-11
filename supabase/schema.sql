@@ -2548,3 +2548,7 @@ begin
   if not exists (select 1 from public.teams where id = t) then raise exception '팀을 확인해 주세요' using errcode = '23514'; end if;
   update public.profiles set team_id = t where id = auth.uid();
 end $$;
+
+-- ===== 2026-11-11 전력분석 경기 종류: 대회(match) · 교류전(friendly) — 시즌 · 팀별 · 개인 스탯을 나눠 봄 =====
+alter table public.scout_matches add column if not exists kind text not null default 'match' check (kind in ('match', 'friendly'));
+update public.scout_matches set kind = 'friendly' where stage ~ '교류전|친선|연습' or title ~ '교류전|친선';

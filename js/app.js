@@ -2083,6 +2083,11 @@ function noticesHtml() {
 const ZONES = [4, 3, 2, 5, 6, 1]; // 코트 위에서 본 배치 (네트 쪽 4·3·2, 뒤 5·6·1)
 const sc = () => state.scout || (state.scout = { loaded: false, matches: [], events: {}, points: {}, all: false, sel: { set: 1, side: "us", pid: null, opp: "", skill: "serve", kind: null, len: null, zone: null, src: null, rot: 1, serve: "us" }, tab: "court", ltab: "match", fset: 0, flt: { side: "", pid: "", skill: "", grade: "" }, metric: "atk", sy: 0, oppSel: "" });
 const scMatch = () => sc().matches.find(m => m.id === state.scoutId) || null;
+// 경기 종류: 대회(match) · 교류전(friendly). 경기 목록 · 시즌 · 팀별 · 엑셀(전체)은 고른 종류만 — 교류전 스탯이 시즌 · 팀별에 섞이지 않게
+const SC_KIND = [["match", "대회"], ["friendly", "교류전"]];
+const scKindOf = m => m && m.kind === "friendly" ? "friendly" : "match";
+const scMk = () => sc().mk === "friendly" ? "friendly" : "match";
+const scMs = () => sc().matches.filter(m => scKindOf(m) === scMk());
 async function scoutLoad() {
   const S = sc();
   try { const r = await sb.from("scout_matches").select("*").order("date", { ascending: false }); if (!r.error) S.matches = r.data || []; } catch (e) { /* 연결 없음 */ }
@@ -2118,7 +2123,7 @@ async function scoutAll() {
   if (state.view === "scout") render();
 }
 const pNo = p => p.number != null ? `${p.number} ` : "";
-const scMeta = x => [x.date ? shortDate(parseD(x.date)) : "", x.stage || "", x.opponent ? (x.team ? x.team + " " : "") + "vs " + x.opponent : x.team || "", x.division === "9" ? "9인제" : ""].filter(Boolean).map(esc).join(" · ");
+const scMeta = x => [x.date ? shortDate(parseD(x.date)) : "", scKindOf(x) === "friendly" && !/교류전/.test(x.stage || "") ? "교류전" : "", x.stage || "", x.opponent ? (x.team ? x.team + " " : "") + "vs " + x.opponent : x.team || "", x.division === "9" ? "9인제" : ""].filter(Boolean).map(esc).join(" · ");
 const scSeg = (act, list, cur) => `<div class="seg fill sc-tabs" role="tablist">${list.map(([k, l]) => `<button type="button" class="seg-tab ${cur === k ? "on solid" : ""}" role="tab" aria-selected="${cur === k}" data-act="${act}" data-k="${k}">${l}</button>`).join("")}</div>`;
 const scChip = (act, v, cur, l) => `<button type="button" class="chip sc-chip ${String(v) === String(cur) ? "on" : ""}" data-act="${act}" data-v="${esc(v)}">${l}</button>`;
 const scPct = (a, b) => b ? Math.round(100 * a / b) + "%" : "—";
@@ -2146,11 +2151,12 @@ function viewScout() {
 }
 function scoutList() {
   const S = sc(), head = `<div class="sec-head"><h2>전력분석</h2><span class="row nowrap">${S.matches.length ? `<button class="btn link small" type="button" data-act="scxlsx" data-id="">엑셀</button>` : ""}${can("analysis") ? `<button class="btn add" type="button" data-act="scnew">+ 경기</button>` : ""}</span></div>`;
-  const tabs = scSeg("scltab", [["match", "경기"], ["live", "실시간"], ["season", "시즌"], ["opp", "팀별"]], S.ltab);
+  const tabs = scSeg("scltab", [["match", "경기"], ["live", "실시간"], ["season", "시즌"], ["opp", "팀별"]], S.ltab)
+    + (S.ltab === "live" || !S.matches.length ? "" : `<div class="sc-row sc-kind">${SC_KIND.map(([k, l]) => scChip("scmk", k, scMk(), `${l} <span class="sc-n-in">${S.matches.filter(m => scKindOf(m) === k).length}</span>`)).join("")}</div>`);
   let body;
   if (S.ltab === "live") body = scoutLiveList();
   else if (!S.matches.length) body = emptyLine(can("analysis") ? "경기 영상을 추가하면 다 같이 보면서 입력할 수 있어요." : "아직 분석할 경기가 없어요.");
-  else if (S.ltab === "match") body = `<div class="sc-list">${S.matches.map(x => `<button type="button" class="panel sc-card" data-act="scopen" data-id="${esc(x.id)}"><b>${esc(x.title)}</b><span class="small muted">${scMeta(x)}</span><span class="go">›</span></button>`).join("")}</div>`;
+  else if (S.ltab === "match") body = !scMs().length ? emptyLine(scMk() === "friendly" ? "영상으로 분석한 교류전이 없어요." : "영상으로 분석한 대회 경기가 없어요.") : `<div class="sc-list">${scMs().map(x => `<button type="button" class="panel sc-card" data-act="scopen" data-id="${esc(x.id)}"><b>${esc(x.title)}</b><span class="small muted">${scMeta(x)}</span><span class="go">›</span></button>`).join("")}</div>`;
   else if (S.all !== true) { scoutAll(); body = loaderHtml(true); }
   else body = S.ltab === "season" ? scoutSeason() : scoutOpp();
   return `<section class="sec">${head}${tabs}${body}</section>`;
@@ -2262,9 +2268,9 @@ const SC_METRICS = [
 ];
 const SC_MNOTE = { atk: "(득점 − 범실) ÷ 시도 · .300 이상 좋음", kill: "득점 ÷ 시도", rcv: "0~3점 평균 · 2.0 이상 좋음", srv: "0~4점 평균 (에이스 4 · 범실 0)", dig: "세트당 · 아래는 개수", blk: "세트당 · 아래는 개수", pts: "공격 · 블로킹 · 에이스" };
 function scoutSeason() {
-  const S = sc(), sys = [...new Set(S.matches.filter(m => m.date).map(m => syOf(m.date)))].sort((a, b) => b - a);
+  const S = sc(), sys = [...new Set(scMs().filter(m => m.date).map(m => syOf(m.date)))].sort((a, b) => b - a);
   if (S.sy && !sys.includes(S.sy)) S.sy = 0;
-  const ms = S.matches.filter(m => scSnuSide(m) && (!S.sy || (m.date && syOf(m.date) === S.sy))).slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+  const ms = scMs().filter(m => scSnuSide(m) && (!S.sy || (m.date && syOf(m.date) === S.sy))).slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
   const as = ms.map(scAsSnu), evs = as.map(x => x.ev.filter(e => e.side === "us")), allUs = evs.flat();
   const syRow = sys.length > 1 ? `<select id="scSy" class="sm-select" aria-label="시즌"><option value="0">전체</option>${sys.map(y => `<option value="${y}" ${S.sy === y ? "selected" : ""}>${y} 시즌</option>`).join("")}</select>` : "";
   if (!ms.length || !ctReal(allUs).length) return `<div class="sc-row">${syRow}</div>${emptyLine("아직 우리 팀 입력이 없어요.")}`;
@@ -2302,12 +2308,12 @@ function scoutSeason() {
 }
 /* ---- 상대 스카우팅 ---- */
 function scoutOpp() {
-  const S = sc(), opps = [...new Set(S.matches.flatMap(m => [(m.opponent || "").trim(), (m.team || "").trim()]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko"));
+  const S = sc(), opps = [...new Set(scMs().flatMap(m => [(m.opponent || "").trim(), (m.team || "").trim()]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ko"));
   if (!opps.length) return emptyLine("경기에 상대 팀 이름을 넣으면 팀별로 모아 볼 수 있어요.");
   if (!opps.includes(S.oppSel)) S.oppSel = opps[0];
   // 그 팀이 분석 팀(us)이었던 경기 · 상대(opp)였던 경기를 같이 모음 (둘 다 등번호)
   const sideIn = m => (m.team || "").trim() === S.oppSel ? "us" : (m.opponent || "").trim() === S.oppSel ? "opp" : null;
-  const ms = S.matches.filter(m => sideIn(m)), opp = ms.flatMap(m => (S.events[m.id] || []).filter(e => e.side === sideIn(m)));
+  const ms = scMs().filter(m => sideIn(m)), opp = ms.flatMap(m => (S.events[m.id] || []).filter(e => e.side === sideIn(m)));
   const nos = [...new Set(opp.map(e => e.opp_no))].sort((a, b) => (a ?? 999) - (b ?? 999));
   const prow = n => { const l = opp.filter(e => e.opp_no === n), s = scPlayerSum(l); if (!s.at && !s.sv && !s.bk) return "";
     const top = (() => { const c = {}; for (const e of l.filter(e => e.skill === "attack" && e.zone)) c[e.zone] = (c[e.zone] || 0) + 1; const k = Object.entries(c).sort((a, b) => b[1] - a[1])[0]; return k ? k[0] : "—"; })();
@@ -2401,7 +2407,7 @@ async function scoutXlsx(mid) {
   try {
     if (!window.ExcelJS) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js");
     if (mid) { if (!S.events[mid] || !S.points[mid]) await scoutEvents(mid); } else if (S.all !== true) { await scoutAll(); if (S.all !== true) return; }
-    const ms = mid ? S.matches.filter(m => m.id === mid) : S.matches.slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
+    const ms = mid ? S.matches.filter(m => m.id === mid) : scMs().slice().sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")));
     const logs = ms.flatMap(scLogRows);
     if (!logs.length) { toast("내보낼 기록이 없어요"); return; }
     const wb = new ExcelJS.Workbook();
@@ -2423,7 +2429,7 @@ async function scoutXlsx(mid) {
         row.eachCell(c => { if (typeof c.value === "number") c.numFmt = Number.isInteger(c.value) ? '0;-0;"-"' : '0.00;-0.00;"-"'; }); });
     }
     const m0 = ms[0], ymd = (mid ? (m0.date || iso(today())) : iso(today())).replace(/-/g, "");
-    const raw = mid ? `${ymd}_${m0.title || "Tournament"}_${m0.stage || "Stage"}_${t1} vs ${t2}` : `${ymd}_SNUVT 전력분석 전체`;
+    const raw = mid ? `${ymd}_${m0.title || "Tournament"}_${m0.stage || "Stage"}_${t1} vs ${t2}` : `${ymd}_SNUVT 전력분석 ${scMk() === "friendly" ? "교류전" : "대회"} 전체`;
     const fname = raw.replace(/[\\/:*?"<>|]/g, "").slice(0, 120) + ".xlsx";
     const buf = await wb.xlsx.writeBuffer(), url = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
     const a = document.createElement("a"); a.href = url; a.download = fname; document.body.appendChild(a); a.click(); setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 4000);
@@ -2457,7 +2463,8 @@ function openScoutForm(id) {
   const div = m.division || "6";
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${id ? "경기 수정" : "Match Setup"}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="scForm" data-id="${esc(id || "")}"><div class="fields">
-      <label class="fl wide">대회명<input id="scf-title" required maxlength="80" value="${esc(m.title || "")}" placeholder="대회명 / 친선전"></label>
+      <label class="fl">종류<select id="scf-kind">${SC_KIND.map(([k, l]) => `<option value="${k}" ${(id ? scKindOf(m) : scMk()) === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      <label class="fl wide">대회명<input id="scf-title" required maxlength="80" value="${esc(m.title || "")}" placeholder="대회명 / 교류전 상대"></label>
       <label class="fl">스테이지<input id="scf-stage" maxlength="30" value="${esc(m.stage || "")}" placeholder="예선 · 16강 · 8강 · 4강 · 결승"></label>
       <label class="fl">분석 팀<input id="scf-team" maxlength="60" value="${esc(m.team || "")}" placeholder="SNU"></label>
       <label class="fl">상대 팀<input id="scf-opp" maxlength="60" value="${esc(m.opponent || "")}"></label>
@@ -3197,6 +3204,7 @@ document.addEventListener("click", async ev => {
     if (act === "scxlsx") return scoutXlsx(b.dataset.id);
     if (act === "sctab") S.tab = b.dataset.k;
     else if (act === "scltab") S.ltab = b.dataset.k;
+    else if (act === "scmk") { S.mk = b.dataset.v; S.sy = 0; S.oppSel = ""; }
     else if (act === "scmetric") S.metric = v;
     else if (act === "scset") { if (S.ins) { toast("끼워 넣기를 끝내고 세트를 바꿔 주세요"); return; } x.set = Number(v); }
     else if (act === "scfset") S.fset = Number(v);
@@ -3712,7 +3720,8 @@ document.addEventListener("submit", async ev => {
       if (vodIn && !vod) { toast("치지직 다시보기 주소를 확인해 주세요"); return; }
       const tmIn = txt("scf-team"), team = !tmIn || /^(snu|서울대)/i.test(tmIn) ? null : tmIn, old = f.dataset.id ? sc().matches.find(x => x.id === f.dataset.id) : null;
       if (old && !!old.team !== !!team && (ctReady(old) || (sc().events[old.id] || []).length)) { toast("라인업·기록이 있어서 SNU ↔ 다른 팀은 바꿀 수 없어요"); return; }
-      const row = { title: txt("scf-title"), stage: txt("scf-stage") || null, date: txt("scf-date") || null, team, opponent: txt("scf-opp") || null, recorder: txt("scf-rec") || null, division: txt("scf-div") === "9" ? "9" : "6", yt: yt || null, vod };
+      const row = { title: txt("scf-title"), stage: txt("scf-stage") || null, date: txt("scf-date") || null, team, opponent: txt("scf-opp") || null, recorder: txt("scf-rec") || null, division: txt("scf-div") === "9" ? "9" : "6", yt: yt || null, vod, kind: txt("scf-kind") === "friendly" ? "friendly" : "match" };
+      sc().mk = row.kind; // 저장한 종류 목록으로
       const r = f.dataset.id ? await sb.from("scout_matches").update(row).eq("id", f.dataset.id).select().maybeSingle() : await sb.from("scout_matches").insert(row).select().maybeSingle(); ok(r);
       closeSheet(); toast("저장했어요"); await scoutLoad();
       if (!f.dataset.id && r.data && r.data.id) { pushInner(); state.scoutId = r.data.id; sc().tab = "court"; sc().sel.set = 1; state.dirty = false; render(); if (can("analysis")) ctLineupForm(); } // Next: Lineup Setup

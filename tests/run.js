@@ -439,6 +439,31 @@ const SUITES = {
     assert.deepStrictEqual(r, { orot: 3, rot: 2, serve: "opp", z1: 13 }, "상대 3번째 선수가 1번 자리에서 서브");
     clean(a); await a.ctx.close();
   },
+  // 영상 분석 경기 종류: 대회 · 교류전을 나눠 봄 (경기 목록 · 시즌 · 팀별), Match Setup 에서 고름
+  async sckind(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await a.go("scout"); await p.waitForTimeout(200);
+    await p.evaluate(() => { const S = sc(); S.matches.push({ id: "mf", title: "국민대 교류전", stage: "교류전", date: "2026-11-08", team: null, opponent: "국민대", division: "6", kind: "friendly", lineup: {} });
+      S.events.mf = [{ id: "fe1", match_id: "mf", set_no: 1, side: "us", player_id: sortedPlayers()[0].id, action: "kill", skill: "attack", grade: "#", point: "us", created_at: "2026-11-08T10:00:00Z" }]; S.points.mf = [];
+      S.matches.push({ id: "mm", title: "KUSF", stage: "8강", date: "2026-11-01", team: null, opponent: "경희대", division: "6", lineup: {} }); S.events.mm = []; S.points.mm = [];
+      S.all = true; state.dirty = false; render(); });
+    const list = () => a.text(".sc-list").catch(() => "");
+    assert.doesNotMatch(await list(), /국민대 교류전/, "기본은 대회만"); assert.match(await list(), /KUSF/);
+    await p.click('[data-act="scmk"][data-v="friendly"]'); await p.waitForTimeout(150);
+    assert.match(await list(), /국민대 교류전/); assert.doesNotMatch(await list(), /KUSF/);
+    // 시즌: 교류전 탭에선 교류전 기록, 대회 탭엔 안 섞임
+    await p.click('[data-act="scltab"][data-k="season"]'); await p.waitForTimeout(150);
+    assert.match(await a.text("main"), /국민대/);
+    await p.click('[data-act="scmk"][data-v="match"]'); await p.waitForTimeout(150);
+    assert.doesNotMatch(await a.text("main"), /국민대/, "대회 시즌에 교류전 안 들어감");
+    await p.click('[data-act="scltab"][data-k="opp"]'); await p.waitForTimeout(150);
+    assert.doesNotMatch(await p.$eval("#scOppSel", e => e.textContent).catch(() => ""), /국민대/, "팀별 대회에 교류전 상대 없음");
+    // Match Setup: 종류 칸 (지금 고른 종류가 기본)
+    await p.click('[data-act="scmk"][data-v="friendly"]'); await p.waitForTimeout(100);
+    await p.evaluate(() => openScoutForm()); await p.waitForTimeout(100);
+    assert.strictEqual(await p.$eval("#scf-kind", e => e.value), "friendly");
+    clean(a); await a.ctx.close();
+  },
   // 영상 분석: 공격 범실 Out → 아웃된 자리(코트 밖) 찍기 → 분석 지도에 빨간 점 · 고치기에서도
   async atkout(b) {
     const a = await openApp(b, "coach"), p = a.page;
