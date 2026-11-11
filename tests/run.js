@@ -439,6 +439,24 @@ const SUITES = {
     assert.deepStrictEqual(r, { orot: 3, rot: 2, serve: "opp", z1: 13 }, "상대 3번째 선수가 1번 자리에서 서브");
     clean(a); await a.ctx.close();
   },
+  // 일본 고교 대회 탭: 하루코 현 예선은 현을 골라서 (칩 → 그 현 결과 · 영상 · 유튜브 찾기)
+  async jpyosen(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await a.go("jp"); await p.waitForTimeout(400);
+    await p.evaluate(() => { const J = jp(); J.videos.push(
+      { id: "y1", source: "search", title: "清風 vs 近江 | 大阪 決勝 | 春の高校バレー2027", year: 2027, tourn: "haruko", gender: "m", rnd: "yosen:F", schools: ["seifu"], ch: "t", len: "1:00:00" },
+      { id: "y2", source: "search", title: "川内商工 vs A | 鹿児島 準決勝 | 春の高校バレー2027", year: 2027, tourn: "haruko", gender: "m", rnd: "yosen:SF", schools: ["sendai-shoko"], ch: "t", len: "1:00:00" });
+      J.prefTop = [{ pref: "大阪", gender: "m", tourn: "haruko", year: 2027, name: "清風", place: 1 }, { pref: "熊本", gender: "m", tourn: "haruko", year: 2027, name: "鎮西", place: 1 }];
+      J.tab = "tourn"; J.tourn = "haruko"; J.g = "m"; J.year = 2027; state.dirty = false; render(); });
+    await p.waitForTimeout(200);
+    const main = () => a.text("main");
+    assert.match(await main(), /현을 고르면/); assert.doesNotMatch(await main(), /準決勝|준결승 \|/, "고르기 전엔 영상 목록 없음");
+    assert.ok(await p.$('[data-act="jpypref"][data-v="熊本"]'), "결과만 있는 현도 칩");
+    await p.click('[data-act="jpypref"][data-v="大阪"]'); await p.waitForTimeout(150);
+    assert.match(await main(), /오사카 2027 결과/); assert.ok(await p.$('.jp-list'), "그 현 영상");
+    assert.match(await main(), /유튜브에서 더 찾기/);
+    clean(a); await a.ctx.close();
+  },
   // 영상 분석 경기 종류: 대회 · 교류전을 나눠 봄 (경기 목록 · 시즌 · 팀별), Match Setup 에서 고름
   async sckind(b) {
     const a = await openApp(b, "coach"), p = a.page;
