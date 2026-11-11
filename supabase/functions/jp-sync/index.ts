@@ -61,6 +61,30 @@ async function nextPage(key: string, ver: string, visitor: string, token: string
 // 짧은 이름이 긴 이름 안에 들어가면(鎮西 ⊂ 鎮西学院) 긴 쪽만.
 type S = { id: string; name_ja: string; aliases: string[] };
 let schools: { id: string; pref: string; res: RegExp[] }[] = [];
+// ---- 영어(로마자) 제목도 읽음: 「Fukuoka Finals: Higashi Fukuoka vs. Fukuoka University Ohori | 2026.11.07」 ----
+// 학교 읽기(kana) → 로마자(장음 줄임: おおほり → ohori, とうほく → tohoku). 같은 로마자 학교가 여럿이면 제목에 나온 현 쪽만
+let ROM = new Map<string, { id: string; pref: string }[]>();
+// 가나 → 로마자는 아래 romaji() (새 학교 id 만들 때 쓰는 것) 그대로
+const romN = (x: string) => x.toLowerCase().replace(/[^a-z]/g, "").replace(/ou/g, "o").replace(/oo/g, "o").replace(/uu/g, "u");
+let PREF_ROM: Map<string, string> | null = null;
+const prefRom = () => PREF_ROM || (PREF_ROM = new Map(Object.entries(PREF_KANA).map(([p, k]) => [romN(romaji(k)), p])));
+const enWords = (t: string) => t.normalize("NFKC").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter(Boolean);
+const isEn = (t: string) => !/[ぁ-んァ-ヶ一-龥]/.test(t) && /[a-z]{3}/i.test(t);
+// 로마자 학교 찾기: 긴 묶음(4~1 단어)부터, 현 이름 한 단어는 학교로 안 봄. 남은 단어도 돌려줌(현 · 라운드 보기용)
+function enSchools(t: string) {
+  const w = enWords(mainOf(t)), pr = prefRom(), ids: string[] = [], left: string[] = [];
+  for (let i = 0; i < w.length;) {
+    let hit = 0;
+    for (let n = Math.min(4, w.length - i); n >= 1 && !hit; n--) {
+      const key = romN(w.slice(i, i + n).join("")); if (key.length < 5 || (n === 1 && pr.has(key))) continue;
+      let c = ROM.get(key); if (!c) continue;
+      if (c.length > 1) { const inT = c.filter((x) => w.some((y) => pr.get(romN(y)) === x.pref)); c = inT.length === 1 ? inT : []; }
+      if (c.length === 1) { if (!ids.includes(c[0].id)) ids.push(c[0].id); hit = n; }
+    }
+    if (hit) i += hit; else { left.push(w[i]); i++; }
+  }
+  return { ids, left };
+}
 let schoolNames = new Map<string, string>();
 // 전국대회 대진(jp_matches) · 역대 결과(jp_results): 영상이 전국 본선인지 현 예선인지 가름
 type Side = { ids: string[]; raw: string };
@@ -97,6 +121,7 @@ function tag(title: string, pub: string | null = null, at: string | null = null)
   else if (/インカレ|大学|大学院/.test(t) && !/高校|高等学校/.test(t)) tourn = "univ";
   else if (/日本代表|VNL|ネーションズ|アジア(大会|選手権)|SVリーグ|Vリーグ|日本リーグ|天皇杯|オールスター|ドリームマッチ|JOC|JOS|TAURON|Lubin|エキシビション|ハイライト\||ワールドカップ|W杯|五輪|オリンピック|世界選手権|中学|さわやか杯|早慶|代表(MB|WS|OP|L)|全日本(?!高|バレーボール高等|ジュニア)/i.test(t)) tourn = "other";
   else if ((tourn = first(body) || first(t))) { /* 위에서 정함 */ }
+  else if ((tourn = (ts => /haruko|harukou|spring (high ?school |hs )?(volleyball|nationals|tournament|championships?)|all[- ]?japan high ?school/.test(ts) ? "haruko" : /inter[- ]?high/.test(ts) ? "ih" : /kokutai|national sports (festival|games)/.test(ts) ? "kokutai" : null)(title.normalize("NFKC").toLowerCase()))) { /* 영어 제목 (띄어쓰기 있는 원래 제목으로) */ }
   else if (/近畿総体/.test(t) && /2026/.test(t)) tourn = "ih";
   else if (/練習|潜入|密着/.test(t)) tourn = "practice";
   else if (/(九州|近畿|東北|関東|北信越|東海|中国|四国|北海道|中部日本)(総体|総合|選抜|大会|バレー|ブロック|インターハイ|新人)/.test(t)) tourn = "block";
@@ -114,6 +139,17 @@ function tag(title: string, pub: string | null = null, at: string | null = null)
   else { const r = t.match(/([1-5一二三四五])回戦/); if (r) add("R" + ("1一".includes(r[1]) ? 1 : "2二".includes(r[1]) ? 2 : "3三".includes(r[1]) ? 3 : "4四".includes(r[1]) ? 4 : 5)); }
   // 현 대표 결정전 = 현 결승
   if (repF && !/:/.test(rnd || "")) add("F");
+  // 영어 제목: 라운드 · 학교(로마자) · 현 · 남녀. 대회 이름이 없어도 같은 현 학교의 결승 · 준결승이고 날짜가 가을(8~12월)이면 하루코 현 예선, 봄(4~7월)이면 인터하이 현 예선
+  const en = isEn(t) ? enSchools(title) : null;
+  let enLocal = false, enG: string | null = null;
+  if (en) {
+    const e = title.normalize("NFKC").toLowerCase();
+    if (!rnd) { if (/quarter[- ]?finals?/.test(e)) add("QF"); else if (/semi[- ]?finals?/.test(e)) add("SF"); else if (/(3rd|third)[- ]place/.test(e)) add("3rd"); else if (/\bfinals?\b/.test(e)) add("F"); else { const r = e.match(/\bround (?:of )?([1-5])\b|\b([1-5])(?:st|nd|rd|th) round/); if (r) add("R" + (r[1] || r[2])); } }
+    const pr = prefRom(), ps = new Set(en.left.map((x) => pr.get(romN(x))).filter(Boolean)), sp = new Set(en.ids.map((i) => (schools.find((x) => x.id === i) || { pref: "" }).pref));
+    enLocal = ps.size === 1 && (sp.size === 0 || (sp.size === 1 && sp.has([...ps][0] as string))) && (!!rnd || /prefectur|qualif|prelim|representative/.test(e));
+    enG = /\b(women'?s?|girls)\b/.test(e) ? "w" : /\b(men'?s?|boys)\b/.test(e) ? "m" : null;
+    if (!tourn && enLocal && en.ids.length) { const dm = t.match(/(20[0-3]\d)[.\/-](1[0-2]|0?[1-9])[.\/-]\d{1,2}/), mo = dm ? Number(dm[2]) : 0; tourn = mo >= 8 ? "haruko" : mo >= 4 && mo <= 7 ? "ih" : null; }
+  }
   let year: number | null = null;
   // 하루코는 1월 대회라 현 예선이 전해 가을(6~12월)에 열림: 날짜(20251115·2025.11.15)나 「令和7年度」로 적힌 해는 대회 해(+1)로
   const late = (mo: number) => tourn === "haruko" && mo >= 6 ? 1 : 0;
@@ -136,13 +172,13 @@ function tag(title: string, pub: string | null = null, at: string | null = null)
   }
   // 아직 열리지 않은 대회 연도는 버림 (하루코는 다음 해 대회의 현 예선이 가을에 열려서 +1까지)
   if (year && year > new Date().getFullYear() + (tourn === "haruko" ? 1 : 0)) year = null;
-  let gender: string | null = /女子|女バレ|ガールズ/.test(t) ? "w" : /男子|男バレ/.test(t) ? "m" : null;
+  let gender: string | null = /女子|女バレ|ガールズ/.test(t) ? "w" : /男子|男バレ/.test(t) ? "m" : en ? enG : null;
   // 학교 이름은 띄어쓰기·「対」를 구분자(・)로 바꾼 제목에서 찾음: 「代表決定戦 相馬 対 郡山北工業」처럼 앞뒤가 한자여도 별칭 경계(앞이 한자가 아님)가 맞게
   const bodyS = mainOf(title).replace(/#[^\s#]+/g, " ").normalize("NFKC").trim().replace(/\s+/g, "・").replace(/対/g, "・対・");
   const hits: { id: string; a: number; b: number }[] = [];
   for (const s of schools) for (const re of s.res) { re.lastIndex = 0; let m; while ((m = re.exec(bodyS))) { hits.push({ id: s.id, a: m.index, b: m.index + m[0].length }); if (!m[0].length) break; } }
   const keep = hits.filter((h) => !hits.some((o) => o.id !== h.id && o.a <= h.a && o.b >= h.b && (o.b - o.a) > (h.b - h.a)));
-  const ids = [...new Set(keep.map((h) => h.id))];
+  const ids = [...new Set([...keep.map((h) => h.id), ...(en ? en.ids : [])])];
   // 지역 대회인데 고교가 하나도 안 나오면 실업·대학 대회(「近畿総合 サントリー vs 堺」)
   if (tourn === "block" && !ids.length && !/高校|高等学校/.test(t)) tourn = "other";
   // ---- 위계: 전국 본선 vs 현 예선 ----
@@ -151,7 +187,7 @@ function tag(title: string, pub: string | null = null, at: string | null = null)
   // 「徳島 決勝」「女子栃木 決勝」「男子 沖縄 決勝」처럼 현 이름만(県 없이) 붙은 라운드도 현 대회.
   // 단 전국 본선 제목은 학교마다 현을 붙임(「東山 京都 vs 清風 大阪 男子決勝」) → 다른 현이 둘 이상 나오면 현 대회 아님
   const restJ = rest.replace(/・/g, "").replace(/決勝トーナメント/g, "トーナメント"), prefs = new Set(restJ.match(prefAll()) || []);
-  const prefLocal = /[県都府](男子|女子|高等学校|高校総体|総体|大会|予選|代表|決勝|準決勝|準々決勝|バレー|新人)/.test(restJ) || (prefs.size === 1 && prefRound().test(restJ));
+  const prefLocal = /[県都府](男子|女子|高等学校|高校総体|総体|大会|予選|代表|決勝|準決勝|準々決勝|バレー|新人)/.test(restJ) || (prefs.size === 1 && prefRound().test(restJ)) || enLocal;
   if ((tourn === "haruko" || tourn === "ih") && !year && prefLocal) rnd = ["yosen", (rnd || "").split(":").filter((x) => x && x !== "yosen").join(":")].filter(Boolean).join(":");
   // 국스포 블록 예선(「国スポ2025九州ブロック」·ミニ国体)은 본선 대진에 넣지 않음
   if (tourn === "kokutai" && /ブロック|予選|ミニ国体/.test(body)) rnd = ["yosen", (rnd || "").split(":").filter((x) => x && x !== "yosen").join(":")].filter(Boolean).join(":");
@@ -215,7 +251,8 @@ function pubDate(pub: string | null | undefined, at: string | null = null) {
   return d;
 }
 async function loadSchools() {
-  const r = await sb.from("jp_schools").select("id,name_ja,aliases,pref");
+  const r = await sb.from("jp_schools").select("id,name_ja,aliases,pref,kana");
+  ROM = new Map(); for (const x of (r.data || []) as any[]) { const k = x.kana ? romN(romaji(x.kana)) : ""; if (k.length >= 5) { if (!ROM.has(k)) ROM.set(k, []); ROM.get(k)!.push({ id: x.id, pref: x.pref }); } }
   schoolNames = new Map(((r.data || []) as any[]).map((s) => [s.id, s.name_ja]));
   schools = ((r.data || []) as (S & { pref: string })[]).map((s) => ({ id: s.id, pref: s.pref, res: [s.name_ja, ...(s.aliases || [])].filter(Boolean).map((x) => x.startsWith("re:") ? new RegExp(x.slice(3), "g") : new RegExp(esc(norm(x)), "g")) }));
   MATCH = new Map(); RESULT = new Map(); IDS.clear();
@@ -557,7 +594,9 @@ async function schoolsFill(deadline: number, limit = 60) {
     const base = s.name_ja.replace(/高校$/, ""), gs = s.gender === "mw" ? ["男子", "女子"] : [s.gender === "w" ? "女子" : "男子"];
     let ok: V[] = [];
     for (const g of gs) {
-      const items = await ytSearch(`${s.pref} ${base} 高校 バレー ${g}`); searched++;
+      // 예선 철(하루코 8~11월 · 인터하이 5~6월)에는 대회 이름 · 해를 붙여 올해 영상이 먼저 나오게 (유명한 학교는 옛 인기 영상이 위를 차지함)
+      const now = new Date(), mo = now.getMonth() + 1, y = now.getFullYear(), season = mo >= 8 && mo <= 11 ? `春高 ${y + 1}` : mo >= 5 && mo <= 6 ? `インターハイ ${y}` : "";
+      const items = await ytSearch(`${s.pref} ${base} ${season ? season + " " : "高校 "}バレー ${g}`); searched++;
       ok.push(...items.filter((x) => {
         const t = norm(x.title), sec = secs(x.len), tg = tag(x.title, x.published);
         if (!tg.schools.includes(s.id) || tg.tourn === "univ" || tg.tourn === "other") return false;
