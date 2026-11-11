@@ -50,7 +50,16 @@ const romN = (x: string) => x.toLowerCase().replace(/[^a-z]/g, "").replace(/ou/g
 const enHas = (title: string, rom: string) => { if (rom.length < 5) return false; const w = title.normalize("NFKC").toLowerCase().replace(/[^a-z]+/g, " ").trim().split(" ").filter(Boolean);
   for (let i = 0; i < w.length; i++) for (let n = 1; n <= 4 && i + n <= w.length; n++) if (romN(w.slice(i, i + n).join("")) === rom) return true; return false; };
 // 경기 영상이 아닌 것 (하이라이트 · 인터뷰 · 같이 보기 · 짧은 클립)
-const NOT = /インタビュー|ハイライト|ダイジェスト|shorts|切り抜き|名場面|まとめ|highlight|interview|同時視聴|生観戦|リアクション|reaction|吹奏楽|応援/i;
+const NOT = /インタビュー|ハイライト|ダイジェスト|shorts|切り抜き|名場面|まとめ|highlight|interview|同時視聴|生観戦|リアクション|reaction|吹奏楽|応援|フリースパイク|公式練習|スパイク練習|サーブ練習|練習|アップ|warm ?up/i;
+// 제목에 적힌 대회 해: 「春高バレー2026」「第78回」(하루코 = 회차 + 1948, 인터하이 = + 1953)는 그 해 대회, 「2026.11.07」 같은 날짜는 하루코면 6월 이후 +1.
+// 이번 대회 해와 다르면 지난 대회 영상 → 버림 (해가 없으면 통과)
+function yearOk(t: string, tourn: string, year: number) {
+  const kw = t.match(/(?:春高|春の高校バレー|インターハイ|インハイ|高校総体)\D{0,8}(20[0-3]\d)|(20[0-3]\d)\D{0,4}(?:春高|春の高校バレー|インターハイ|インハイ)/);
+  if (kw) return Number(kw[1] || kw[2]) === year;
+  const n = t.match(/第\s*(\d{2})\s*回/); if (n) return Number(n[1]) + (tourn === "haruko" ? 1948 : 1953) === year;
+  const d = t.match(/(20[0-3]\d)\s*[.\/\-年]\s*(\d{1,2})/); if (d) return Number(d[1]) + (tourn === "haruko" && Number(d[2]) >= 6 ? 1 : 0) === year;
+  const ys = [...t.matchAll(/20[0-3]\d/g)].map((x) => Number(x[0])); return !ys.length || ys.includes(year) || (tourn === "haruko" && ys.includes(year - 1));
+}
 const secs = (len: string | null) => { if (!len) return null; const p = len.split(":").map(Number); return p.some(isNaN) ? null : p.reduce((a, x) => a * 60 + x, 0); };
 const RND: Record<string, string> = { F: "F", REP: "F", SF: "SF", "3rd": "3rd", QF: "QF" };
 const RJ: Record<string, string> = { F: "決勝", SF: "準決勝", "3rd": "3位決定戦", QF: "準々決勝" };
@@ -89,7 +98,7 @@ Deno.serve(async (req) => {
         const t = v.title.normalize("NFKC");
         if (!hitS(t, A, m.a_name) || !hitS(t, B, m.b_name)) continue;
         if (m.gender === "m" && /女子|women|girls/i.test(t) || m.gender === "w" && /男子|\bmen\b|boys/i.test(t)) continue;
-        const ys = [...t.matchAll(/20[0-3]\d/g)].map((x) => Number(x[0])); if (ys.length && !ys.some((x) => x === year || x === year - 1)) continue;
+        if (!yearOk(t, tourn, year)) continue;
         ok.push(v);
       }
     }

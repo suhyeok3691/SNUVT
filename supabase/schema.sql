@@ -2590,9 +2590,10 @@ begin
   return new;
 end $$;
 
--- ===== 2026-11-11 현 예선 영상 찾기(jp-yosen, 배포 대기): 경기마다 마지막으로 찾은 때 =====
+-- ===== 2026-11-11 현 예선 영상 찾기(jp-yosen): 경기마다 마지막으로 찾은 때 · 2시간마다 =====
 alter table public.jp_pref_matches add column if not exists searched_at timestamptz;
--- (배포 뒤) create or replace function private.jp_yosen_call() returns bigint language sql security definer set search_path = '' as $$
---   select net.http_post(url := 'https://juhcaodotxspzzzfzrnt.supabase.co/functions/v1/jp-yosen', body := '{}'::jsonb,
---     headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron', (select decrypted_secret from vault.decrypted_secrets where name = 'push_cron')), timeout_milliseconds := 150000) $$;
--- select cron.schedule('jp-yosen-2h', '35 */2 * * *', 'select private.jp_yosen_call()');
+create or replace function private.jp_yosen_call() returns bigint language sql security definer set search_path = '' as $$
+  select net.http_post(url := 'https://juhcaodotxspzzzfzrnt.supabase.co/functions/v1/jp-yosen', body := '{}'::jsonb,
+    headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron', (select decrypted_secret from vault.decrypted_secrets where name = 'push_cron')), timeout_milliseconds := 150000)
+$$;
+select cron.schedule('jp-yosen-2h', '35 */2 * * *', 'select private.jp_yosen_call()');
