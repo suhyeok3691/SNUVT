@@ -458,6 +458,16 @@ const SUITES = {
     assert.doesNotMatch(await a.text("main"), /국민대/, "대회 시즌에 교류전 안 들어감");
     await p.click('[data-act="scltab"][data-k="opp"]'); await p.waitForTimeout(150);
     assert.doesNotMatch(await p.$eval("#scOppSel", e => e.textContent).catch(() => ""), /국민대/, "팀별 대회에 교류전 상대 없음");
+    // 시즌 비교: 같은 선수 대회 vs 교류전, 교류전에서만 좋으면 표시
+    await p.evaluate(() => { const S = sc(), pid = sortedPlayers()[0].id, mk = (id, mid, action, set) => ({ id, match_id: mid, set_no: set, side: "us", player_id: pid, action, skill: "attack", grade: action === "kill" ? "#" : "=", created_at: "2026-11-0" + set + "T10:00:00Z" });
+      S.events.mf = [1, 2, 3, 4, 5, 6].map(i => mk("f" + i, "mf", "kill", 1 + (i % 2)));
+      S.events.mm = [1, 2, 3, 4, 5, 6].map(i => mk("m" + i, "mm", i <= 2 ? "kill" : "aerr", 1 + (i % 2))); state.dirty = false; render(); });
+    await p.click('[data-act="scltab"][data-k="season"]'); await p.waitForTimeout(100);
+    await p.click('[data-act="scmk"][data-v="cmp"]'); await p.waitForTimeout(150);
+    if (process.env.SHOT) await (await p.$("main")).screenshot({ path: process.env.SHOT });
+    { const t = await a.text("main"); assert.match(t, /교류전에서만 좋음/); assert.match(t, /1\.000/); assert.match(t, /-\.333/); assert.match(t, /\+1\.333/); }
+    await p.click('[data-act="scltab"][data-k="opp"]'); await p.waitForTimeout(100);
+    assert.strictEqual(await p.$('[data-act="scmk"][data-v="cmp"]'), null, "비교는 시즌 탭에서만");
     // Match Setup: 종류 칸 (지금 고른 종류가 기본)
     await p.click('[data-act="scmk"][data-v="friendly"]'); await p.waitForTimeout(100);
     await p.evaluate(() => openScoutForm()); await p.waitForTimeout(100);

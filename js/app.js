@@ -2086,7 +2086,7 @@ const scMatch = () => sc().matches.find(m => m.id === state.scoutId) || null;
 // 경기 종류: 대회(match) · 교류전(friendly). 경기 목록 · 시즌 · 팀별 · 엑셀(전체)은 고른 종류만 — 교류전 스탯이 시즌 · 팀별에 섞이지 않게
 const SC_KIND = [["match", "대회"], ["friendly", "교류전"]];
 const scKindOf = m => m && m.kind === "friendly" ? "friendly" : "match";
-const scMk = () => sc().mk === "friendly" ? "friendly" : "match";
+const scMk = () => sc().mk === "friendly" ? "friendly" : "match"; // '비교'(cmp)는 시즌 탭에서만, 다른 탭은 대회로
 const scMs = () => sc().matches.filter(m => scKindOf(m) === scMk());
 async function scoutLoad() {
   const S = sc();
@@ -2152,13 +2152,13 @@ function viewScout() {
 function scoutList() {
   const S = sc(), head = `<div class="sec-head"><h2>전력분석</h2><span class="row nowrap">${S.matches.length ? `<button class="btn link small" type="button" data-act="scxlsx" data-id="">엑셀</button>` : ""}${can("analysis") ? `<button class="btn add" type="button" data-act="scnew">+ 경기</button>` : ""}</span></div>`;
   const tabs = scSeg("scltab", [["match", "경기"], ["live", "실시간"], ["season", "시즌"], ["opp", "팀별"]], S.ltab)
-    + (S.ltab === "live" || !S.matches.length ? "" : `<div class="sc-row sc-kind">${SC_KIND.map(([k, l]) => scChip("scmk", k, scMk(), `${l} <span class="sc-n-in">${S.matches.filter(m => scKindOf(m) === k).length}</span>`)).join("")}</div>`);
+    + (S.ltab === "live" || !S.matches.length ? "" : `<div class="sc-row sc-kind">${SC_KIND.map(([k, l]) => scChip("scmk", k, S.ltab === "season" && S.mk === "cmp" ? "cmp" : scMk(), `${l} <span class="sc-n-in">${S.matches.filter(m => scKindOf(m) === k).length}</span>`)).join("")}${S.ltab === "season" ? scChip("scmk", "cmp", S.mk, "대회 vs 교류전") : ""}</div>`);
   let body;
   if (S.ltab === "live") body = scoutLiveList();
   else if (!S.matches.length) body = emptyLine(can("analysis") ? "경기 영상을 추가하면 다 같이 보면서 입력할 수 있어요." : "아직 분석할 경기가 없어요.");
   else if (S.ltab === "match") body = !scMs().length ? emptyLine(scMk() === "friendly" ? "영상으로 분석한 교류전이 없어요." : "영상으로 분석한 대회 경기가 없어요.") : `<div class="sc-list">${scMs().map(x => `<button type="button" class="panel sc-card" data-act="scopen" data-id="${esc(x.id)}"><b>${esc(x.title)}</b><span class="small muted">${scMeta(x)}</span><span class="go">›</span></button>`).join("")}</div>`;
   else if (S.all !== true) { scoutAll(); body = loaderHtml(true); }
-  else body = S.ltab === "season" ? scoutSeason() : scoutOpp();
+  else body = S.ltab === "season" ? (S.mk === "cmp" ? scoutCompare() : scoutSeason()) : scoutOpp();
   return `<section class="sec">${head}${tabs}${body}</section>`;
 }
 // 실시간 탭: 대회 · 교류전에서 만든 실시간 기록 전부 (최근 것 먼저). 누르면 그 경기 실시간 화면
@@ -2267,6 +2267,44 @@ const SC_METRICS = [
   ["pts", "득점", s => s.pts ? [String(s.pts), null] : null],
 ];
 const SC_MNOTE = { atk: "(득점 − 범실) ÷ 시도 · .300 이상 좋음", kill: "득점 ÷ 시도", rcv: "0~3점 평균 · 2.0 이상 좋음", srv: "0~4점 평균 (에이스 4 · 범실 0)", dig: "세트당 · 아래는 개수", blk: "세트당 · 아래는 개수", pts: "공격 · 블로킹 · 에이스" };
+// 시즌 비교: 같은 선수의 대회 vs 교류전 — 교류전에서만 잘하는(또는 대회에서 더 잘하는) 선수 찾기
+// [키, 이름, 값(합계, 세트) → 숫자, 보이기, 표본(시도), 최소 표본, 의미 있는 차이]
+const SC_CMP = [
+  ["atk", "공격 효율", s => s.at ? (s.ak - s.ae) / s.at : null, v => scEff(v * 1000, 1000), s => s.at, 5, .15],
+  ["kill", "공격 성공률", s => s.at ? s.ak / s.at : null, v => Math.round(v * 100) + "%", s => s.at, 5, .15],
+  ["rcv", "리시브 점수", s => s.rc ? s.rs : null, v => v.toFixed(2), s => s.rc, 5, .4],
+  ["srv", "서브 점수", s => s.sv ? s.ss : null, v => v.toFixed(2), s => s.sv, 5, .4],
+  ["pts", "세트당 득점", (s, n) => n ? s.pts / n : null, v => v.toFixed(1), (s, n) => n, 2, 1],
+  ["dig", "세트당 디그", (s, n) => n ? s.dok / n : null, v => v.toFixed(1), (s, n) => n, 2, 1],
+];
+function scoutCompare() {
+  const S = sc(), all = S.matches.filter(m => scSnuSide(m)), sys = [...new Set(all.filter(m => m.date).map(m => syOf(m.date)))].sort((a, b) => b - a);
+  if (S.sy && !sys.includes(S.sy)) S.sy = 0;
+  const syRow = sys.length > 1 ? `<select id="scSy" class="sm-select" aria-label="시즌"><option value="0">전체</option>${sys.map(y => `<option value="${y}" ${S.sy === y ? "selected" : ""}>${y} 시즌</option>`).join("")}</select>` : "";
+  const pick = k => all.filter(m => scKindOf(m) === k && (!S.sy || (m.date && syOf(m.date) === S.sy))).map(scAsSnu).map(x => x.ev.filter(e => e.side === "us"));
+  const M = pick("match"), F = pick("friendly"), evM = M.flat(), evF = F.flat();
+  if (!ctReal(evM).length || !ctReal(evF).length) return `<div class="sc-row">${syRow}</div>${emptyLine("대회와 교류전 둘 다 영상 분석한 기록이 있어야 비교할 수 있어요.")}`;
+  const nSets = l => new Set(ctReal(l).map(e => e.match_id + ":" + e.set_no)).size;
+  // 선수가 뛴 세트 = 그 선수 기록이 있는 세트
+  const one = (l, pid) => { const x = l.filter(e => e.player_id === pid); return [scSum(x), nSets(x)]; };
+  const met = SC_CMP.find(x => x[0] === S.cmpMet) || SC_CMP[0], [, , val, fmt, smp, minN, gap] = met;
+  const ps = sortedPlayers().filter(p => evM.some(e => e.player_id === p.id) || evF.some(e => e.player_id === p.id));
+  const rows = ps.map(p => { const [sm, nm] = one(evM, p.id), [sf, nf] = one(evF, p.id), vm = val(sm, nm), vf = val(sf, nf), okM = vm != null && smp(sm, nm) >= minN, okF = vf != null && smp(sf, nf) >= minN;
+    const d = okM && okF ? vf - vm : null, tag = d == null ? "" : d >= gap ? "fr" : d <= -gap ? "mt" : "";
+    return { p, vm, vf, nm: smp(sm, nm) || 0, nf: smp(sf, nf) || 0, okM, okF, d, tag }; })
+    .sort((a, b) => (b.d ?? -99) - (a.d ?? -99));
+  const cell = (v, n, ok) => v == null ? "—" : `<span class="${ok ? "" : "muted"}">${fmt(v)}</span><span class="sc-n">${n}</span>`;
+  const diff = r => r.d == null ? `<span class="muted">—</span>` : `<b class="${r.tag === "fr" ? "warn-t" : r.tag === "mt" ? "good" : ""}">${r.d > 0 ? "+" : r.d < 0 ? "−" : ""}${fmt(Math.abs(r.d))}</b>`;
+  const tagTxt = r => r.tag === "fr" ? `<span class="chip warn">교류전만</span>` : r.tag === "mt" ? `<span class="chip ok">대회에서 더</span>` : "";
+  const [tm, tmN] = [scSum(evM), nSets(evM)], [tf, tfN] = [scSum(evF), nSets(evF)];
+  const team = `<tr class="sc-team"><td><b>팀</b></td><td class="num">${cell(val(tm, tmN), smp(tm, tmN), true)}</td><td class="num">${cell(val(tf, tfN), smp(tf, tfN), true)}</td><td class="num">${val(tm, tmN) != null && val(tf, tfN) != null ? diff({ d: val(tf, tfN) - val(tm, tmN), tag: "" }) : "—"}</td></tr>`;
+  const fr = rows.filter(r => r.tag === "fr"), mt = rows.filter(r => r.tag === "mt");
+  return `<div class="sc-row">${syRow}<span class="small muted">대회 ${M.length}경기 · 교류전 ${F.length}경기</span></div>
+    <div class="sc-row">${SC_CMP.map(([k, l]) => scChip("sccmp", k, met[0], l)).join("")}</div>
+    ${fr.length || mt.length ? `<div class="panel lv-memo"><ul>${fr.length ? `<li class="bad">교류전에서만 좋음: <b>${fr.map(r => esc(r.p.name)).join(", ")}</b></li>` : ""}${mt.length ? `<li>대회에서 더 좋음: <b>${mt.map(r => esc(r.p.name)).join(", ")}</b></li>` : ""}</ul></div>` : ""}
+    <div class="tw"><table class="sc-season"><thead><tr><th>선수</th><th>대회</th><th>교류전</th><th>차이<br><small>교류전 − 대회</small></th></tr></thead><tbody>${team}${rows.map(r => `<tr><td><b>${pNo(r.p)}${esc(r.p.name)}</b>${tagTxt(r) ? `<br>${tagTxt(r)}` : ""}</td><td class="num">${cell(r.vm, r.nm, r.okM)}</td><td class="num">${cell(r.vf, r.nf, r.okF)}</td><td class="num">${diff(r)}</td></tr>`).join("")}</tbody></table></div>
+    <p class="small muted">숫자 아래는 ${met[0] === "pts" || met[0] === "dig" ? "뛴 세트 수" : "시도 수"} · 양쪽 다 ${minN}${met[0] === "pts" || met[0] === "dig" ? "세트" : "번"} 이상일 때만 차이 · 차이가 ${fmt(gap)} 이상이면 표시</p>`;
+}
 function scoutSeason() {
   const S = sc(), sys = [...new Set(scMs().filter(m => m.date).map(m => syOf(m.date)))].sort((a, b) => b - a);
   if (S.sy && !sys.includes(S.sy)) S.sy = 0;
@@ -3205,6 +3243,7 @@ document.addEventListener("click", async ev => {
     if (act === "sctab") S.tab = b.dataset.k;
     else if (act === "scltab") S.ltab = b.dataset.k;
     else if (act === "scmk") { S.mk = b.dataset.v; S.sy = 0; S.oppSel = ""; }
+    else if (act === "sccmp") S.cmpMet = v;
     else if (act === "scmetric") S.metric = v;
     else if (act === "scset") { if (S.ins) { toast("끼워 넣기를 끝내고 세트를 바꿔 주세요"); return; } x.set = Number(v); }
     else if (act === "scfset") S.fset = Number(v);
