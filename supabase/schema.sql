@@ -2552,3 +2552,40 @@ end $$;
 -- ===== 2026-11-11 전력분석 경기 종류: 대회(match) · 교류전(friendly) — 시즌 · 팀별 · 개인 스탯을 나눠 봄 =====
 alter table public.scout_matches add column if not exists kind text not null default 'match' check (kind in ('match', 'friendly'));
 update public.scout_matches set kind = 'friendly' where stage ~ '교류전|친선|연습' or title ~ '교류전|친선';
+
+-- ===== 2026-11-11 학교별 검색 2시간마다 (하루 720개교 ≥ 학교 수 → 현 예선 영상이 하루 안에) =====
+select cron.schedule('jp-schools-2h', '5 */2 * * *', 'select private.jp_sync_call(''schools'')');
+select cron.unschedule('jp-schools-daily');
+
+-- ===== 2026-11-11 jp_videos 트리거: 같은 이름 학교는 제목의 현 쪽으로, 남녀 비면 학교로 =====
+create or replace function private.jp_video_prenat() returns trigger language plpgsql set search_path = '' as $$
+declare n text; g text;
+begin
+  if tg_op = 'INSERT' and (new.title ~ '同時視聴|生観戦|リアクション|ウォッチパーティ|吹奏楽' or (coalesce(new.ch, '') ~* 'beequick|ビークイック' and new.title ~* 'live|ライブ')) then
+    return null;
+  end if;
+  if coalesce(array_length(new.schools, 1), 0) > 0 then
+    select array_agg(coalesce((select s2.id from public.jp_schools s2 where s1.id is not null and s2.name_ja = s1.name_ja and s2.id <> s1.id
+                                 and position(s2.pref in new.title) > 0 and position(s1.pref in new.title) = 0 limit 1), u.sid) order by u.ord)
+      into new.schools
+      from unnest(new.schools) with ordinality u(sid, ord) left join public.jp_schools s1 on s1.id = u.sid;
+  end if;
+  if new.gender is null and coalesce(array_length(new.schools, 1), 0) > 0 then
+    select case when bool_or(s.gender = 'w') and not bool_or(s.gender = 'm') then 'w' when bool_or(s.gender = 'm') and not bool_or(s.gender = 'w') then 'm' end
+      into g from public.jp_schools s where s.id = any (new.schools);
+    new.gender := g;
+  end if;
+  if new.rnd ~ '(^|:)F($|:)' and new.title ~ '決勝トーナメント' and new.title !~ '決勝(?!トーナメント)' then
+    n := substring(translate(new.title, '１２３４５一二三四五', '1234512345') from '決勝トーナメント[\s_]*([1-5])回戦');
+    new.rnd := nullif(array_to_string(array_remove(array_replace(string_to_array(new.rnd, ':'), 'F', case when n is null then '' else 'R' || n end), ''), ':'), '');
+  end if;
+  if new.tourn in ('haruko', 'ih') and not ('yosen' = any (string_to_array(coalesce(new.rnd, ''), ':')))
+     and (new.title ~ '代表決定'
+          or (new.year is not null and now() < make_date(new.year, case when new.tourn = 'haruko' then 1 else 7 end, case when new.tourn = 'haruko' then 3 else 20 end))) then
+    if new.title ~ '代表決定' then
+      new.rnd := case when new.title ~ '準々決勝' then 'QF' when new.title ~ '準決勝' then 'SF' when new.title ~ '[1-5一二三四五]回戦' then null else 'F' end;
+    end if;
+    new.rnd := array_to_string(array_remove(array['yosen'] || string_to_array(coalesce(new.rnd, ''), ':'), ''), ':');
+  end if;
+  return new;
+end $$;

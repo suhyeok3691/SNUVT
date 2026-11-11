@@ -846,8 +846,8 @@ const jpPrefOf = (id, g) => ((jp().prefRes || {})[id] || []).filter(r => !g || r
 const jpPrefTxt = r => `현 ${JP_PREF_T[r.tourn] || ""} ${r.year} ${JP_PLACE[r.place]}`;
 const jpGoogle = q => `https://www.google.com/search?q=${encodeURIComponent(q)}`;
 const jpGenderOk = (g, x) => x === "mw" || x === g;
-// 제목에 女子가 없어도 나온 학교가 모두 여자부면 여자 경기로
-const jpG = v => v.gender || ((v.schools || []).length && v.schools.every(id => (jpSchool(id) || {}).gender === "w") ? "w" : "m");
+// 남녀부 다 있는 학교(mw)와 여자부만인 학교가 붙으면 여자 경기 (「城南 vs 富岡東」), 남자부만인 학교가 하나라도 있으면 남자
+const jpG = v => { if (v.gender) return v.gender; const gs = (v.schools || []).map(id => (jpSchool(id) || {}).gender); return gs.includes("w") && !gs.includes("m") ? "w" : "m"; };
 // 학교 탐방: 탐방 재생목록 + 다른 채널의 잠입·밀착 영상(「연습·탐방」 태그). 대회 목록에는 안 나옴
 const jpIsVisit = v => v.tourn === "practice" || (jp().sources.find(s => s.id === v.source) || {}).role === "visit";
 function jpSchoolCount() {
