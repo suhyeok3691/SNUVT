@@ -439,6 +439,21 @@ const SUITES = {
     assert.deepStrictEqual(r, { orot: 3, rot: 2, serve: "opp", z1: 13 }, "상대 3번째 선수가 1번 자리에서 서브");
     clean(a); await a.ctx.close();
   },
+  // 메뉴 7칸: 훈련 · 피지컬 · 영상 | 홈 | 일정 · 대회 · 전력분석 (전력분석 · 영상은 따로)
+  async menu7(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    assert.deepStrictEqual(await p.$$eval("#tabbar .bt", x => x.map(e => e.textContent.trim())), ["훈련", "피지컬", "영상", "홈", "일정", "대회", "전력분석"]);
+    await a.go("cup"); assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["대회", "교류전"]);
+    await a.go("practice"); assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["훈련 계획", "훈련 노트"]);
+    await a.go("jp"); assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["팀 영상", "일본 고교"]);
+    assert.strictEqual(await a.text("#tabbar .bt.on"), "영상");
+    await a.go("scout"); assert.strictEqual(await a.text("#tabbar .bt.on"), "전력분석");
+    // 휴대폰 폭에서 7칸이 넘치지 않음
+    const w = await p.evaluate(() => [...document.querySelectorAll("#tabbar .bt")].map(e => e.scrollWidth <= e.clientWidth + 1));
+    assert.ok(w.every(Boolean), "칸 넘침 " + w);
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT });
+    clean(a); await a.ctx.close();
+  },
   // 일본 고교 대회 탭: 하루코 현 예선은 현을 골라서 (칩 → 그 현 결과 · 영상 · 유튜브 찾기)
   async jpyosen(b) {
     const a = await openApp(b, "coach"), p = a.page;
@@ -593,7 +608,7 @@ const SUITES = {
   async campustab(b) {
     const a = await openApp(b, "coach"), p = a.page;
     await a.go("cup"); await p.waitForTimeout(200);
-    assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["대회", "교류전", "전력분석"]);
+    assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["대회", "교류전"]);
     assert.match(await a.text("main"), /교내 대회/);
     await p.evaluate(() => { state.cups = [{ id: "c1", name: "2026 종합체육대회", kind: "gen", start: "2026-10-26", end: "2026-10-29", teams: [{ id: "t1", name: "종보상점" }, { id: "t2", name: "서울대 배구부" }], matches: [{ id: "f", stage: "f", label: "결승", a: "t2", b: "t1", winner: "t1", date: "2026-10-29", refs: {} }], photos: [], avail: {}, picks: {} }]; state.dirty = false; render(); });
     assert.match(await a.text("main"), /우승 종보상점/);

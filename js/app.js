@@ -110,14 +110,16 @@ const VIEWS = ["home", "practice", "notes", "video", "jp", "scout", "train", "pl
 const SECTIONS = {
   physical: { label: "피지컬", views: [["train", "오늘"], ["plan", "프로그램"], ["rec", "기록"]] },
   schedule: { label: "일정", views: [["season", "다가오는"], ["comps", "전체 일정"], ["sched", "훈련 관리", "attend"]] },
-  cup: { label: "대회", views: [["cup", "대회"], ["fr", "교류전"], ["scout", "전력분석"]] },
+  cup: { label: "대회", views: [["cup", "대회"], ["fr", "교류전"]] },
+  analysis: { label: "전력분석", views: [["scout", "전력분석"]] },
+  video: { label: "영상", views: [["video", "팀 영상"], ["jp", "일본 고교"]] },
   admin: { label: "관리", views: [["roster", "명단", "roster"], ["intake", "부원", "full"], ["report", "리포트", "training"]] },
-  practice: { label: "훈련", views: [["practice", "훈련 계획"], ["notes", "훈련 노트"], ["video", "영상"], ["jp", "일본 고교"]] },
+  practice: { label: "훈련", views: [["practice", "훈련 계획"], ["notes", "훈련 노트"]] },
 };
 // 위 탭 없이 다른 탭 안에 들어간 화면 (교내 대회는 1년에 두 번이라 '대회' 안 항목)
 const TAB_OF = { campus: "cup" };
 const tabOf = v => TAB_OF[v] || v;
-const SECTION_OF = { scout: "cup", practice: "practice", notes: "practice", video: "practice", jp: "practice", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", cup: "cup", fr: "cup", campus: "cup", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
+const SECTION_OF = { scout: "analysis", practice: "practice", notes: "practice", video: "video", jp: "video", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", cup: "cup", fr: "cup", campus: "cup", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
 // 직책: 관리자·주장 = 전체 / 부주장·훈련 담당·총무·피지컬 담당 = 맡은 일만 (서버 규칙 private.can 과 같게)
 const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", treasurer: "총무", ops: "훈련 담당", trainer: "피지컬 담당", analyst: "전력분석 담당", media: "영상 담당" };
 // 한 사람이 직책을 여러 개 맡을 수 있음 (players.titles)
@@ -378,12 +380,13 @@ function header() {
   if (bar._built) {
     for (const b of bar.querySelectorAll(".bt")) { const on = onOf(b.dataset.v); b.classList.toggle("on", on); if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); }
   } else {
-    bar.innerHTML = bt("practice", "ball", "훈련") + bt("train", "physical", "피지컬") + bt("home", "home", "홈", "center") + bt("season", "schedule", "일정") + bt("cup", "trophy", "대회");
+    // 7칸: 훈련 · 피지컬 · 영상 | 홈 | 일정 · 대회 · 전력분석
+    bar.innerHTML = bt("practice", "ball", "훈련") + bt("train", "physical", "피지컬") + bt("video", "video", "영상") + bt("home", "home", "홈", "center") + bt("season", "schedule", "일정") + bt("cup", "trophy", "대회") + bt("scout", "chart", "전력분석");
     bar._built = true;
   }
   bar.hidden = false; document.body.classList.add("has-bar");
   const vs = sec ? secViews(sec) : [];
-  if (!sec || vs.length < 2) { const h = sec ? `<span class="tab-title">${sec.label}</span>` : ""; setHtml(nav, h); nav._key = ""; nav.hidden = !h; return; }
+  if (!sec || vs.length < 2) { const h = sec && sec.views.length > 1 ? `<span class="tab-title">${sec.label}</span>` : ""; /* 화면이 하나뿐인 섹션(전력분석)은 제목 줄 없이 */ setHtml(nav, h); nav._key = ""; nav.hidden = !h; return; }
   nav.hidden = false;
   const key = secKey + "|" + vs.map(v => v[0] + v[1]).join(",");
   if (nav._key === key) {
@@ -1045,7 +1048,7 @@ function openDrawer() {
   el.querySelector(".drawer-body").innerHTML = `<div class="dr-top"><button type="button" class="dr-brand" data-act="view" data-v="home" aria-label="홈으로"><img class="logo logo-light" src="img/logo.png?v=5" alt="" width="32" height="31"><img class="logo logo-dark" src="img/logo-white.png?v=5" alt="" width="32" height="31"><b>SNUVT</b></button><button class="btn link" type="button" data-act="drawerclose" aria-label="닫기">닫기</button></div>
     ${state.staff ? `<div class="dr-group dr-view"><div class="dr-h"><span>화면 보기</span></div><div class="dr-roles"><select id="drViewAs" aria-label="화면 보기">${viewOptions().map(k => `<option value="${k}" ${state.viewAs === k ? "selected" : ""}>${VIEW_LABEL(k)}</option>`).join("")}</select></div></div>` : ""}
     <div class="dr-group">${link("home", "홈")}</div>
-    ${group("practice", "ball")}${group("physical", "physical")}${group("schedule", "schedule")}${group("cup", "trophy")}${secViews(SECTIONS.admin).length ? group("admin", "admin") : ""}
+    ${group("practice", "ball")}${group("physical", "physical")}${group("video", "video")}${group("schedule", "schedule")}${group("cup", "trophy")}${group("analysis", "chart")}${secViews(SECTIONS.admin).length ? group("admin", "admin") : ""}
     <div class="dr-group"><button type="button" class="dr-link" data-act="settings">설정</button></div>`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
