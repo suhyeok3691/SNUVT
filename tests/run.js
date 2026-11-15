@@ -450,31 +450,33 @@ const SUITES = {
     assert.deepStrictEqual(await p.$$eval("#tabbar .bt", x => x.map(e => e.offsetParent !== null)), [false, false, false, true, false, false, false]);
     assert.ok(await p.$(".dial-hint"), "처음엔 길게 눌러 메뉴 안내");
     const home = await (await p.$("#tabbar .bt.center .bi")).boundingBox(), cx = home.x + home.width / 2, cy = home.y + home.height / 2;
-    // 길게 누르기 → 다이얼, 손가락을 돌려 대회 쪽에서 떼면 이동
+    // 길게 누르기 → 전화기 다이얼: 지금 화면(영상)이 위 ▼에, 시계 방향으로 두 칸 돌리면 대회
     await p.mouse.move(cx, cy); await p.mouse.down(); await p.waitForTimeout(450);
     assert.ok(await p.$("#dial:not([hidden])"), "길게 누르면 다이얼");
-    assert.deepStrictEqual(await p.$$eval(".dial-it", x => x.map(e => e.textContent.trim())), ["훈련", "피지컬", "영상", "일정", "대회", "전력분석", "관리"]);
-    const box = async t => { const all = await p.$$eval(".dial-it", x => x.map(e => { const r = e.getBoundingClientRect(); return [e.textContent.trim(), r.x + r.width / 2, r.y + r.height / 2]; })); return all.find(x => x[0] === t); };
-    const [, tx, ty] = await box("대회");
-    await p.mouse.move(cx + (tx - cx) / 2, cy + (ty - cy) / 2, { steps: 4 }); await p.mouse.move(tx, ty, { steps: 4 });
+    assert.deepStrictEqual(await p.$$eval(".dial-it", x => x.map(e => e.textContent.trim())), ["홈", "훈련", "피지컬", "영상", "일정", "대회", "전력분석", "관리"]);
+    assert.strictEqual(await a.text(".dial-it.sel"), "영상", "처음엔 지금 화면");
+    const dw = await p.$eval(".dial-disc", e => e.offsetWidth); assert.ok(dw <= 240, "작은 원판 " + dw);
+    const at = deg => [cx + 90 * Math.sin(deg * Math.PI / 180), cy - 90 * Math.cos(deg * Math.PI / 180)];
+    for (let d = 0; d <= 84; d += 7) await p.mouse.move(...at(d));
     assert.strictEqual(await a.text(".dial-it.sel"), "대회"); assert.strictEqual(await a.text(".dial-label"), "대회");
     if (process.env.SHOT2) await p.screenshot({ path: process.env.SHOT2 });
-    await p.mouse.up(); await p.waitForTimeout(200);
+    await p.mouse.up(); await p.waitForTimeout(700);
     assert.strictEqual(await p.evaluate(() => state.view), "cup");
     assert.ok(await p.$("#dial[hidden]")); assert.strictEqual(await p.$(".dial-hint"), null, "한 번 쓰면 안내 없음");
     // 짧게 누르면 홈
     await p.mouse.click(cx, cy); await p.waitForTimeout(200);
     assert.strictEqual(await p.evaluate(() => state.view), "home"); assert.ok(await p.$("#dial[hidden]"));
-    // 홈에서 홈 버튼 → 다이얼(눌러서 고르기), 바깥 누르면 닫힘
-    await p.mouse.click(cx, cy); await p.waitForTimeout(150);
+    // 홈에서 홈 버튼 → 다이얼, 칸을 누르면 그 칸까지 돌아간 뒤 이동
+    await p.mouse.click(cx, cy); await p.waitForTimeout(300);
+    assert.strictEqual(await a.text(".dial-it.sel"), "홈");
     if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT });
-    await p.click('.dial-it:has-text("전력분석")'); await p.waitForTimeout(200);
-    assert.strictEqual(await p.evaluate(() => state.view), "scout");
-    // 길게 누르고 그냥 떼면 열린 채로 → 바깥 눌러 닫기
+    await p.click('.dial-it:has-text("피지컬")'); await p.waitForTimeout(800);
+    assert.strictEqual(await p.evaluate(() => state.view), "train");
+    // 길게 누르고 안 돌리고 떼면 열린 채로 → 바깥 눌러 닫기
     await p.mouse.move(cx, cy); await p.mouse.down(); await p.waitForTimeout(450); await p.mouse.up(); await p.waitForTimeout(100);
-    assert.ok(await p.$("#dial:not([hidden])"), "그냥 떼면 열린 채로"); assert.strictEqual(await p.evaluate(() => state.view), "scout");
+    assert.ok(await p.$("#dial:not([hidden])"), "그냥 떼면 열린 채로"); assert.strictEqual(await p.evaluate(() => state.view), "train");
     await p.mouse.click(20, 80); await p.waitForTimeout(100);
-    assert.ok(await p.$("#dial[hidden]")); assert.strictEqual(await p.evaluate(() => state.view), "scout");
+    assert.ok(await p.$("#dial[hidden]")); assert.strictEqual(await p.evaluate(() => state.view), "train");
     clean(a); await a.ctx.close();
     // 넓은 화면은 예전처럼 7칸이 위에
     const d = await openApp(b, "coach", { width: 1100 }), q = d.page;
