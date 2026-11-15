@@ -443,7 +443,7 @@ const SUITES = {
   async menu7(b) {
     const a = await openApp(b, "coach"), p = a.page;
     assert.deepStrictEqual(await p.$$eval("#tabbar .bt", x => x.map(e => e.textContent.trim())), ["훈련", "피지컬", "영상", "홈", "일정", "대회", "전력분석"]);
-    await a.go("cup"); assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["대회", "교류전"]);
+    await a.go("cup"); assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["대회", "교류전", "교내 대회"]);
     await a.go("practice"); assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["훈련 계획", "훈련 노트"]);
     await a.go("jp"); assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["팀 영상", "일본 고교"]);
     assert.strictEqual(await a.text("#tabbar .bt.on"), "영상");
@@ -614,15 +614,14 @@ const SUITES = {
   async campustab(b) {
     const a = await openApp(b, "coach"), p = a.page;
     await a.go("cup"); await p.waitForTimeout(200);
-    assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["대회", "교류전"]);
-    assert.match(await a.text("main"), /교내 대회/);
+    assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["대회", "교류전", "교내 대회"]);
+    assert.doesNotMatch(await a.text("main"), /교내 대회/, "대회 화면 안에 교내 대회 칸 없음");
     await p.evaluate(() => { state.cups = [{ id: "c1", name: "2026 종합체육대회", kind: "gen", start: "2026-10-26", end: "2026-10-29", teams: [{ id: "t1", name: "종보상점" }, { id: "t2", name: "서울대 배구부" }], matches: [{ id: "f", stage: "f", label: "결승", a: "t2", b: "t1", winner: "t1", date: "2026-10-29", refs: {} }], photos: [], avail: {}, picks: {} }]; state.dirty = false; render(); });
-    assert.match(await a.text("main"), /우승 종보상점/);
-    await p.click('[data-act="cmpgo"][data-id="c1"]'); await p.waitForTimeout(200);
+    await p.click('#tabs [data-act="view"][data-v="campus"]'); await p.waitForTimeout(200);
     assert.strictEqual(await p.evaluate(() => state.view), "campus");
-    assert.strictEqual(await a.text("#tabs .seg-tab.on"), "대회", "위 탭은 대회");
-    await p.click('main [data-act="view"][data-v="cup"]'); await p.waitForTimeout(200);
-    assert.strictEqual(await p.evaluate(() => state.view), "cup");
+    assert.strictEqual(await a.text("#tabs .seg-tab.on"), "교내 대회", "위 탭에서 바로");
+    assert.match(await a.text("main"), /2026 종합체육대회/);
+    assert.strictEqual(await p.$('main [data-act="view"][data-v="cup"]'), null, "‹ 대회 버튼 없음");
     clean(a); await a.ctx.close();
   },
   // 시즌 화면: 팀 카드(효율 .300 · 리시브 0~3 · 서브 0~4 · 세트당) · 예전 선수 × 경기 표 · 로테 · 공격 종류 · 패스 (번호로 넣은 서울대 경기 포함)

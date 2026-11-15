@@ -110,14 +110,14 @@ const VIEWS = ["home", "practice", "notes", "video", "jp", "scout", "train", "pl
 const SECTIONS = {
   physical: { label: "피지컬", views: [["train", "오늘"], ["plan", "프로그램"], ["rec", "기록"]] },
   schedule: { label: "일정", views: [["season", "다가오는"], ["comps", "전체 일정"], ["sched", "훈련 관리", "attend"]] },
-  cup: { label: "대회", views: [["cup", "대회"], ["fr", "교류전"]] },
+  cup: { label: "대회", views: [["cup", "대회"], ["fr", "교류전"], ["campus", "교내 대회"]] },
   analysis: { label: "전력분석", views: [["scout", "전력분석"]] },
   video: { label: "영상", views: [["video", "팀 영상"], ["jp", "일본 고교"]] },
   admin: { label: "관리", views: [["roster", "명단", "roster"], ["intake", "부원", "full"], ["report", "리포트", "training"]] },
   practice: { label: "훈련", views: [["practice", "훈련 계획"], ["notes", "훈련 노트"]] },
 };
-// 위 탭 없이 다른 탭 안에 들어간 화면 (교내 대회는 1년에 두 번이라 '대회' 안 항목)
-const TAB_OF = { campus: "cup" };
+// 위 탭 없이 다른 탭 안에 들어간 화면 (지금은 없음 — 교내 대회도 '대회' 위 탭 하나)
+const TAB_OF = {};
 const tabOf = v => TAB_OF[v] || v;
 const SECTION_OF = { scout: "analysis", practice: "practice", notes: "practice", video: "video", jp: "video", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", cup: "cup", fr: "cup", campus: "cup", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
 // 직책: 관리자·주장 = 전체 / 부주장·훈련 담당·총무·피지컬 담당 = 맡은 일만 (서버 규칙 private.can 과 같게)
@@ -2646,7 +2646,7 @@ function viewCup(kind = "event") {
   const card = x => { const en = entryOf(x.kind, x.id), st = startersOf(x.kind, x.id), vs = evVotesOf(x.kind, x.id), go = Object.values(vs).filter(v => v.going).length;
     return `<button type="button" class="panel sc-card cup-card ${x.end < t ? "past" : ""}" data-act="cupopen" data-k="${esc(x.kind + ":" + x.id)}"><b>${esc(x.name)} <span class="chip">${x.fmt === "9" ? "9인제" : "6인제"}</span></b><span class="small muted">${esc(x.when)}${seeVotes() ? ` · 참 ${go}` : ""} · 엔트리 ${en.size}${st.size ? ` · 주전 ${st.size}` : ""}</span><span class="go">›</span></button>`; };
   const l = items.filter(x => x.kind === kind), fr = kind === "friendly";
-  return `<section class="sec"><div class="sec-head"><h3>${fr ? "교류전" : "대회"}</h3>${can("schedule") ? addBtn(fr ? "friendly" : "event", fr ? "교류전" : "일정") : ""}</div>${l.length ? `<div class="boxes">${l.map(card).join("")}</div>` : emptyLine(fr ? "다가오는 교류전이 없어요." : "다가오는 대회가 없어요.")}</section>${fr ? "" : campusList()}`;
+  return `<section class="sec"><div class="sec-head"><h3>${fr ? "교류전" : "대회"}</h3>${can("schedule") ? addBtn(fr ? "friendly" : "event", fr ? "교류전" : "일정") : ""}</div>${l.length ? `<div class="boxes">${l.map(card).join("")}</div>` : emptyLine(fr ? "다가오는 교류전이 없어요." : "다가오는 대회가 없어요.")}</section>`;
 }
 async function cupLoadLineups(kind, id) {
   const C = cupState(), key = kind + ":" + id;
