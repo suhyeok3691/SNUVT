@@ -2166,10 +2166,16 @@ function viewScout() {
     ${scSeg("sctab", [["court", "코트"], ["stats", "분석"]], S.tab)}
     ${!ev ? loaderHtml(true) : S.tab === "stats" ? scoutStats(ev, S.points[m.id] || []) : ctPad(m, ev)}</section>`;
 }
+// 칩 옆 숫자: 시즌 탭은 시즌 표에 실제로 들어가는 우리(SNU) 경기만 — 고른 시즌 · 기록 있는 경기
+function scKindN(k) {
+  const S = sc(), ms = S.matches.filter(m => scKindOf(m) === k);
+  if (S.ltab !== "season") return ms.length;
+  return ms.filter(m => scSnuSide(m) && (!S.sy || (m.date && syOf(m.date) === S.sy)) && (!S.events[m.id] || ctReal(S.events[m.id]).length)).length;
+}
 function scoutList() {
   const S = sc(), head = `<div class="sec-head"><h2>전력분석</h2><span class="row nowrap">${S.matches.length ? `<button class="btn link small" type="button" data-act="scxlsx" data-id="">엑셀</button>` : ""}${can("analysis") ? `<button class="btn add" type="button" data-act="scnew">+ 경기</button>` : ""}</span></div>`;
   const tabs = scSeg("scltab", [["match", "경기"], ["live", "실시간"], ["season", "시즌"], ["opp", "팀별"]], S.ltab)
-    + (S.ltab === "live" || !S.matches.length ? "" : `<div class="sc-row sc-kind">${SC_KIND.map(([k, l]) => scChip("scmk", k, S.ltab === "season" && S.mk === "cmp" ? "cmp" : scMk(), `${l} <span class="sc-n-in">${S.matches.filter(m => scKindOf(m) === k).length}</span>`)).join("")}${S.ltab === "season" ? scChip("scmk", "cmp", S.mk, "대회 vs 교류전") : ""}</div>`);
+    + (S.ltab === "live" || !S.matches.length ? "" : `<div class="sc-row sc-kind">${SC_KIND.map(([k, l]) => scChip("scmk", k, S.ltab === "season" && S.mk === "cmp" ? "cmp" : scMk(), `${l} <span class="sc-n-in">${scKindN(k)}</span>`)).join("")}${S.ltab === "season" ? scChip("scmk", "cmp", S.mk, "대회 vs 교류전") : ""}</div>`);
   let body;
   if (S.ltab === "live") body = scoutLiveList();
   else if (!S.matches.length) body = emptyLine(can("analysis") ? "경기 영상을 추가하면 다 같이 보면서 입력할 수 있어요." : "아직 분석할 경기가 없어요.");

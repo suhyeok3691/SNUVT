@@ -489,6 +489,12 @@ const SUITES = {
     assert.match(await a.text("main"), /국민대/);
     await p.click('[data-act="scmk"][data-v="match"]'); await p.waitForTimeout(150);
     assert.doesNotMatch(await a.text("main"), /국민대/, "대회 시즌에 교류전 안 들어감");
+    // 시즌 칩 숫자 = 시즌 표에 들어가는 우리 경기만(다른 팀끼리 경기 · 기록 없는 경기 빼고)
+    { const n = k => p.$eval(`[data-act="scmk"][data-v="${k}"] .sc-n-in`, e => e.textContent);
+      assert.strictEqual(await n("match"), "0", "시즌 대회 숫자: A대 vs B대 · 기록 없는 경기 빼고"); assert.strictEqual(await n("friendly"), "1");
+      await p.click('[data-act="scltab"][data-k="match"]'); await p.waitForTimeout(100);
+      assert.strictEqual(await n("match"), "2", "경기 탭은 영상 경기 전부");
+      await p.click('[data-act="scltab"][data-k="season"]'); await p.waitForTimeout(100); }
     await p.click('[data-act="scltab"][data-k="opp"]'); await p.waitForTimeout(150);
     assert.doesNotMatch(await p.$eval("#scOppSel", e => e.textContent).catch(() => ""), /국민대/, "팀별 대회에 교류전 상대 없음");
     // 시즌 비교: 같은 선수 대회 vs 교류전, 교류전에서만 좋으면 표시
