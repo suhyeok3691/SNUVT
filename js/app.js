@@ -3035,10 +3035,10 @@ const reduceMotion = () => { try { return matchMedia("(prefers-reduced-motion: r
 // 불러오는 중: 가운데서 도는 배구공
 const BALL_SVG = '<svg class="ball-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M11.1 7.1a16.55 16.55 0 0 1 10.9 4M12 12a12.6 12.6 0 0 1-8.7 5M16.8 13.6a16.55 16.55 0 0 1-9 7.5M20.7 17a12.8 12.8 0 0 0-8.7-5 13.3 13.3 0 0 1 0-10M6.3 3.8a16.55 16.55 0 0 0 1.9 11.5"/></svg>';
 const loaderHtml = small => `<div class="loader ${small ? "sm" : ""}" role="status" aria-label="불러오는 중">${BALL_SVG}</div>`;
-/* ---------- 다이얼 메뉴 (휴대폰): 옛날 전화기 다이얼처럼 ----------
-   홈 버튼을 길게 누르면(또는 위로 밀면) 원판이 떠오름: 가운데 = 홈, 둘레에 칸이 한 바퀴. 손가락으로 원판을 끝없이 돌릴 수 있고
-   칸이 위 ▼를 지날 때마다 '틱'(진동). 떼면 ▼의 칸에 맞춰 멈췄다가 드르르륵 제자리로 돌며 그 화면으로. 안 돌리고 떼면 열린 채로 → 칸이나 가운데 홈을 누름.
-   홈 화면에서 홈 버튼을 눌러도 열림. 움직임은 transform(--rot 하나)만 바꿔 끊기지 않게 */
+/* ---------- 다이얼 메뉴 (휴대폰): 돌림판 ----------
+   홈 버튼을 길게 누르면(또는 위로 밀면) 원판이 떠오름: 가운데 = 홈, 둘레에 칸이 한 바퀴. 손가락으로 끝없이 돌리고(칸이 위 ▼를 지날 때 '틱')
+   천천히 돌리다 떼면 ▼ 칸으로 바로 이동. 휙 튕기면 돌림판처럼 관성으로 돌다 멈추고(열린 채, 돌던 원판을 잡아 다시 돌리기도 됨) → ▼ 칸 · 위 이름 · 아무 칸이나 눌러 이동.
+   안 돌리고 떼면 열린 채로. 홈 화면에서 홈 버튼을 눌러도 열림. 움직임은 transform(--rot 하나)만 바꿔 끊기지 않게 */
 const DIAL_MQ = "(max-width: 759px)";
 const dialHintOn = () => { try { return !localStorage.getItem("snuvt-dial"); } catch (e) { return false; } };
 function dialItems() {
@@ -3046,28 +3046,48 @@ function dialItems() {
   const ad = secViews(SECTIONS.admin); if (ad.length) l.push([ad[0][0], "admin", "관리"]);
   return l;
 }
-const DIAL = { el: null, wheel: null, open: false, mode: "", cx: 0, cy: 0, R: 84, step: 60, items: [], rot: 0, rest: 0, sel: -1, cur: -1, last: null, busy: false };
+const DIAL = { el: null, wheel: null, open: false, mode: "", cx: 0, cy: 0, R: 84, step: 60, items: [], rot: 0, rest: 0, sel: -1, cur: -1, last: null, busy: false, raf: 0, hist: [], grab: null };
 const dialBuzz = ms => { if (navigator.vibrate) try { navigator.vibrate(ms); } catch (e) {} };
 const dialMod = (a, n) => ((a % n) + n) % n;
 function dialOpen(btn, mode) {
   const D = DIAL, r = btn.querySelector(".bi").getBoundingClientRect(), W = D.R + 32;
   const bx = r.left + r.width / 2, by = r.top + r.height / 2;
-  D.items = dialItems(); D.step = 360 / D.items.length; D.mode = mode; D.open = true; D.last = null; D.busy = false; D.sel = -1;
+  D.items = dialItems(); D.step = 360 / D.items.length; D.mode = mode; D.open = true; D.last = null; D.busy = false; D.sel = -1; D.hist = []; D.grab = null; dialStop();
   // 원판이 다 보이게 홈 버튼 위로 띄움 (가운데 = 홈)
   D.cx = bx; D.cy = Math.min(by, innerHeight - W - 20);
   const cur = SECTION_OF[state.view] || "home"; D.cur = D.items.findIndex(x => SECTION_OF[x[0]] === cur);
   D.rest = D.rot = Math.max(0, D.cur) * D.step;
   if (!D.el) {
     D.el = document.createElement("div"); D.el.id = "dial"; D.el.className = "dial"; D.el.hidden = true; document.body.appendChild(D.el);
-    D.el.addEventListener("click", ev => { ev.stopPropagation(); if (DIAL.busy) return; const it = ev.target.closest(".dial-it"); if (it) return dialPick(+it.dataset.i); if (ev.target.closest(".dial-knob")) { dialClose(); return go("home"); } dialClose(); });
+    D.el.addEventListener("click", ev => {
+      ev.stopPropagation(); if (DIAL.busy) return;
+      if (DIAL.grab && DIAL.grab.moved) { DIAL.grab = null; return; } // 원판을 잡고 돌린 뒤의 click
+      const it = ev.target.closest(".dial-it"); if (it) return dialPick(+it.dataset.i);
+      if (ev.target.closest(".dial-label")) return dialPick(DIAL.sel);
+      if (ev.target.closest(".dial-knob")) { dialClose(); return go("home"); }
+      dialClose();
+    });
     D.el.addEventListener("contextmenu", ev => ev.preventDefault());
+    // 열린 원판을 직접 잡고 돌리기 (돌고 있으면 잡는 순간 멈춤)
+    D.el.addEventListener("pointerdown", ev => {
+      if (!DIAL.open || DIAL.mode !== "tap" || !ev.target.closest(".dial-disc")) return;
+      dialStop(); DIAL.busy = false; DIAL.grab = { id: ev.pointerId, x: ev.clientX, y: ev.clientY, moved: false }; DIAL.last = null; DIAL.hist = [];
+    });
+    D.el.addEventListener("pointermove", ev => {
+      const g = DIAL.grab; if (!g || g.id !== ev.pointerId) return;
+      if (!g.moved && Math.hypot(ev.clientX - g.x, ev.clientY - g.y) < 6) return;
+      if (!g.moved) { g.moved = true; try { DIAL.el.setPointerCapture(ev.pointerId); } catch (e) {} } // 돌리기 시작할 때만 잡음 (그냥 누르면 칸 click 그대로)
+      dialMove(ev.clientX, ev.clientY);
+    });
+    const up = ev => { const g = DIAL.grab; if (!g || g.id !== ev.pointerId) return; if (!g.moved) { DIAL.grab = null; return; } dialRelease(); };
+    D.el.addEventListener("pointerup", up); D.el.addEventListener("pointercancel", up);
   }
   D.el.innerHTML = `<div class="dial-disc" style="left:${D.cx - W}px;top:${D.cy - W}px;width:${2 * W}px;height:${2 * W}px;transform-origin:50% ${by - D.cy + W}px;--R:${D.R}px">
       <div class="dial-wheel"><span class="dial-ticks"></span>
       ${D.items.map((x, i) => `<button type="button" class="dial-it" data-i="${i}" style="--a:${-i * D.step}deg"><span class="bi">${svg(x[1])}</span><span>${x[2]}</span></button>`).join("")}</div>
       <button type="button" class="dial-knob" aria-label="홈">${svg("home")}</button></div>
     <span class="dial-stop" style="left:${D.cx}px;top:${D.cy - W - 2}px"></span>
-    <span class="dial-label" style="left:${D.cx}px;top:${D.cy - W - 12}px"></span>`;
+    <button type="button" class="dial-label" style="left:${D.cx}px;top:${D.cy - W - 12}px"></button>`;
   D.wheel = D.el.querySelector(".dial-wheel");
   D.el.hidden = false; document.body.classList.add("dial-on");
   dialSet(D.rot, true);
@@ -3088,36 +3108,49 @@ function dialSet(rot, quiet) {
     if (!quiet) dialBuzz(5);
   }
 }
-// 손가락이 원판을 돌림: 원판 중심 기준 각도 변화만큼 그대로 (시계 방향 = 다음 칸)
+// 손가락이 원판을 돌림: 원판 중심 기준 각도 변화만큼 그대로 (시계 방향 = 다음 칸). 속도는 최근 0.1초로
 function dialMove(x, y) {
   const D = DIAL, dx = x - D.cx, dy = y - D.cy;
-  if (Math.hypot(dx, dy) < 22) { D.last = null; return; }
-  const a = Math.atan2(dx, -dy) * 180 / Math.PI;
-  if (D.last == null) { D.last = a; return; }
+  if (Math.hypot(dx, dy) < 14) return; // 가운데 바로 위에선 각도가 튐 → 이전 각도 유지
+  const a = Math.atan2(dx, -dy) * 180 / Math.PI, t = performance.now();
+  if (D.last == null) { D.last = a; D.hist = [[t, D.rot]]; return; }
   let d = a - D.last; if (d > 180) d -= 360; if (d < -180) d += 360; D.last = a;
-  if (d) dialSet(D.rot + d);
+  if (!d) return;
+  dialSet(D.rot + d);
+  D.hist.push([t, D.rot]); while (D.hist.length > 2 && t - D.hist[0][0] > 100) D.hist.shift();
 }
+const dialVel = () => { const h = DIAL.hist; if (h.length < 2) return 0; const [t0, r0] = h[0], [t1, r1] = h[h.length - 1]; return performance.now() - t1 > 80 || t1 === t0 ? 0 : (r1 - r0) / (t1 - t0); }; // 도/ms
+function dialStop() { cancelAnimationFrame(DIAL.raf); DIAL.raf = 0; }
 function dialAnim(to, ms, done) {
-  const D = DIAL, from = D.rot, t0 = performance.now(); D.busy = true;
-  const step = t => { if (!D.open) return; const k = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - k, 3); dialSet(from + (to - from) * e); if (k < 1) requestAnimationFrame(step); else { D.busy = false; if (done) done(); } };
-  requestAnimationFrame(step);
+  const D = DIAL, from = D.rot, t0 = performance.now(); dialStop(); D.busy = true;
+  const step = t => { if (!D.open) return; const k = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - k, 3); dialSet(from + (to - from) * e); if (k < 1) D.raf = requestAnimationFrame(step); else { D.raf = 0; D.busy = false; if (done) done(); } };
+  D.raf = requestAnimationFrame(step);
 }
-// 고른 칸: ▼에 딱 맞춘 뒤 → 드르르륵 제자리(가까운 쪽)로 → 이동
+const dialSnapTo = i => { const D = DIAL, n = D.items.length, k = Math.round(D.rot / D.step), off = dialMod(i - k + Math.floor(n / 2), n) - Math.floor(n / 2); return (k + off) * D.step; };
+// 칸으로 이동: ▼에 맞춰 돌린 뒤 바로 그 화면으로 (제자리로 돌아가지 않음)
 function dialPick(i) {
   const D = DIAL, it = D.items[i]; if (!it) return dialClose();
-  const n = D.items.length, k = Math.round(D.rot / D.step), off = dialMod(i - k + Math.floor(n / 2), n) - Math.floor(n / 2), to = (k + off) * D.step;
-  const back = () => { D.el.querySelector(".dial-disc").classList.add("pick"); setTimeout(() => {
-    let r = D.rest; while (r - D.rot > 180) r -= 360; while (D.rot - r > 180) r += 360;
-    dialAnim(r, 240, () => { dialClose(); go(it[0]); }); }, 90); };
-  if (Math.abs(D.rot - to) > 0.5) dialAnim(to, 160 + 50 * Math.abs(off), back); else back();
+  const to = dialSnapTo(i), fin = () => { dialClose(); go(it[0]); };
+  if (Math.abs(D.rot - to) > 0.5) dialAnim(to, Math.min(320, 120 + 2 * Math.abs(D.rot - to)), fin); else fin();
+}
+// 돌림판: 튕긴 속도로 계속 돌다가 마찰로 느려져 칸에 맞춰 멈춤 (열린 채)
+function dialSpin(v) {
+  const D = DIAL; let t0 = performance.now(); dialStop(); D.mode = "tap";
+  const step = t => {
+    if (!D.open) return; const dt = Math.min(40, t - t0); t0 = t;
+    dialSet(D.rot + v * dt); v *= Math.pow(0.9965, dt);
+    if (Math.abs(v) > 0.04) D.raf = requestAnimationFrame(step); else dialAnim(dialSnapTo(D.sel), 180, () => { D.busy = false; });
+  };
+  D.raf = requestAnimationFrame(step);
 }
 function dialRelease() {
-  const D = DIAL;
-  if (D.sel !== D.cur && Math.abs(D.rot - D.rest) > D.step / 2) return dialPick(D.sel);
-  dialAnim(D.rest, 160);
-  D.mode = "tap"; // 안 돌리고 뗌 → 열린 채로, 칸이나 가운데 홈을 눌러 고름
+  const D = DIAL, v = dialVel(); D.last = null;
+  if (Math.abs(v) > 0.45) return dialSpin(v); // 휙 → 돌림판
+  if (Math.abs(D.rot - D.rest) > D.step / 2 || (D.grab && D.grab.moved)) return dialPick(D.sel); // 천천히 돌려 놓고 뗌 → 이동
+  dialAnim(D.rest, 140, () => { D.busy = false; });
+  D.mode = "tap"; // 안 돌리고 뗌 → 열린 채로
 }
-function dialClose() { const D = DIAL; if (!D.open) return; D.open = false; D.busy = false; if (D.el) D.el.hidden = true; document.body.classList.remove("dial-on"); }
+function dialClose() { const D = DIAL; if (!D.open) return; dialStop(); D.open = false; D.busy = false; D.grab = null; if (D.el) D.el.hidden = true; document.body.classList.remove("dial-on"); }
 function dialBind(bar) {
   const btn = bar.querySelector(".bt.center"); if (!btn) return;
   let t = 0, sx = 0, sy = 0, pid = null, skip = false;
@@ -4093,6 +4126,8 @@ async function switchTeam(t) {
   const r = await sb.rpc("switch_team", { t });
   if (r.error) { toast(r.error.code === "42501" ? r.error.message : failMsg(r.error)); return; }
   try { lsDel(snapKey()); } catch (e) {}
+  // 팀마다 따로 불러오는 화면 자료(전력분석 · 실시간 기록 · 대회 라인업)도 비움 — 안 그러면 다른 팀 경기가 그대로 보임
+  state.scout = null; state.live = null; state.cup = null; state.scoutId = null;
   closeSettings(); toast(`${t === "women" ? "여자부" : "남자부"}로 바꿨어요`);
   state.loaded = false; state.booting = true; render();
   return loadProfile();

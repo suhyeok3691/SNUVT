@@ -469,9 +469,23 @@ const SUITES = {
     for (let d = 236 + 360 / 7 * 4; d >= 236 + 360 / 7 * 1 - 2; d -= 4) await p.mouse.move(...at(d));
     assert.strictEqual(await a.text(".dial-it.sel"), "대회"); assert.strictEqual(await a.text(".dial-label"), "대회");
     if (process.env.SHOT2) await p.screenshot({ path: process.env.SHOT2 });
-    await p.mouse.up(); await p.waitForTimeout(700);
+    // 천천히 돌려 놓고 떼면 ▼ 칸으로 바로 (제자리로 돌아가지 않음)
+    await p.waitForTimeout(150); await p.mouse.up(); await p.waitForTimeout(400);
     assert.strictEqual(await p.evaluate(() => state.view), "cup");
     assert.ok(await p.$("#dial[hidden]")); assert.strictEqual(await p.$(".dial-hint"), null, "한 번 쓰면 안내 없음");
+    // 휙 튕기면 돌림판처럼 관성으로 돌다가 칸에 맞춰 멈추고 열린 채 → 위 이름을 누르면 그 칸으로
+    await p.mouse.move(cx, cy); await p.mouse.down(); await p.waitForTimeout(450);
+    { const kb2 = await (await p.$(".dial-knob")).boundingBox(), qx = kb2.x + kb2.width / 2, qy = kb2.y + kb2.height / 2;
+      const at2 = deg => [qx + 95 * Math.sin(deg * Math.PI / 180), qy - 95 * Math.cos(deg * Math.PI / 180)];
+      for (let d = 180; d <= 300; d += 20) await p.mouse.move(...at2(d)); }
+    const r0 = await p.evaluate(() => DIAL.rot); await p.mouse.up(); await p.waitForTimeout(120);
+    assert.ok(await p.evaluate(r => Math.abs(DIAL.rot - r) > 20, r0), "손을 떼도 계속 돎");
+    await p.waitForTimeout(2500);
+    assert.ok(await p.$("#dial:not([hidden])"), "돌림판은 멈춘 뒤 열린 채"); assert.strictEqual(await p.evaluate(() => state.view), "cup");
+    assert.ok(await p.evaluate(() => Math.abs(DIAL.rot / DIAL.step - Math.round(DIAL.rot / DIAL.step)) < 0.01), "칸에 맞춰 멈춤");
+    const pick = await a.text(".dial-label"), want = { 훈련: "practice", 피지컬: "train", 영상: "video", 일정: "season", 대회: "cup", 전력분석: "scout", 관리: "roster" }[pick];
+    await p.click(".dial-label"); await p.waitForTimeout(300);
+    assert.strictEqual(await p.evaluate(() => state.view), want, "▼ 칸 " + pick);
     // 짧게 누르면 홈
     await p.mouse.click(cx, cy); await p.waitForTimeout(200);
     assert.strictEqual(await p.evaluate(() => state.view), "home"); assert.ok(await p.$("#dial[hidden]"));
@@ -552,6 +566,10 @@ const SUITES = {
     await p.click('[data-act="scmk"][data-v="friendly"]'); await p.waitForTimeout(100);
     await p.evaluate(() => openScoutForm()); await p.waitForTimeout(100);
     assert.strictEqual(await p.$eval("#scf-kind", e => e.value), "friendly");
+    // 남녀부를 바꾸면 전력분석 경기 목록을 새로 받음 (다른 팀 경기가 남지 않음)
+    await p.evaluate(() => { closeSheet(); sc().matches = [{ id: "other-team", title: "남자부 경기", date: "2026-11-01", kind: "match", lineup: {} }]; sc().oldTeam = true; lv().oldTeam = true; });
+    await p.evaluate(() => switchTeam("women")); await p.waitForTimeout(600); await a.go("scout"); await p.waitForTimeout(300);
+    assert.ok(!(await p.evaluate(() => sc().oldTeam || lv().oldTeam || sc().matches.some(m => m.id === "other-team"))), "팀을 바꾸면 이전 팀 경기 없음");
     clean(a); await a.ctx.close();
   },
   // 영상 분석: 공격 범실 Out → 아웃된 자리(코트 밖) 찍기 → 분석 지도에 빨간 점 · 고치기에서도
