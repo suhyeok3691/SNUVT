@@ -381,8 +381,9 @@ function header() {
     for (const b of bar.querySelectorAll(".bt")) { const on = onOf(b.dataset.v); b.classList.toggle("on", on); if (on) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); }
   } else {
     // 7칸: 훈련 · 피지컬 · 영상 | 홈 | 일정 · 대회 · 전력분석
-    bar.innerHTML = bt("practice", "ball", "훈련") + bt("train", "physical", "피지컬") + bt("video", "video", "영상") + bt("home", "home", "홈", "center") + bt("season", "schedule", "일정") + bt("cup", "trophy", "대회") + bt("scout", "chart", "전력분석");
-    bar._built = true;
+    // 휴대폰은 가운데 홈 버튼만 보이고, 길게 누르면 다이얼 메뉴(dialBind)
+    bar.innerHTML = bt("practice", "ball", "훈련") + bt("train", "physical", "피지컬") + bt("video", "video", "영상") + bt("home", "home", "홈", "center") + bt("season", "schedule", "일정") + bt("cup", "trophy", "대회") + bt("scout", "chart", "전력분석") + (dialHintOn() ? `<span class="dial-hint" aria-hidden="true">길게 눌러 메뉴</span>` : "");
+    bar._built = true; dialBind(bar);
   }
   bar.hidden = false; document.body.classList.add("has-bar");
   const vs = sec ? secViews(sec) : [];
@@ -2964,6 +2965,7 @@ function runFinishHtml() {
 }
 function closeSheet() { clearInterval(timer.h); timer.running = false; document.getElementById("sheet").hidden = true; document.body.classList.remove("noscroll"); }
 document.addEventListener("keydown", ev => {
+  if (ev.key === "Escape" && DIAL.open) { dialClose(); return; }
   if (ev.key === "Escape") closeSheet();
   if ((ev.key === "Enter" || ev.key === " ") && ev.target.closest && ev.target.closest('li.tap')) { ev.preventDefault(); ev.target.closest("li.tap").click(); }
 });
@@ -3033,6 +3035,86 @@ const reduceMotion = () => { try { return matchMedia("(prefers-reduced-motion: r
 // 불러오는 중: 가운데서 도는 배구공
 const BALL_SVG = '<svg class="ball-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M11.1 7.1a16.55 16.55 0 0 1 10.9 4M12 12a12.6 12.6 0 0 1-8.7 5M16.8 13.6a16.55 16.55 0 0 1-9 7.5M20.7 17a12.8 12.8 0 0 0-8.7-5 13.3 13.3 0 0 1 0-10M6.3 3.8a16.55 16.55 0 0 0 1.9 11.5"/></svg>';
 const loaderHtml = small => `<div class="loader ${small ? "sm" : ""}" role="status" aria-label="불러오는 중">${BALL_SVG}</div>`;
+/* ---------- 다이얼 메뉴 (휴대폰): 홈 버튼을 길게 누르면 반원 다이얼, 손가락을 돌려 고르고 떼면 이동 ----------
+   길게 누르고 그냥 떼면 다이얼이 열린 채로 남아 눌러서 고름. 홈 화면에서 홈 버튼을 눌러도 열림. 위로 밀어 올려도 열림 */
+const DIAL_MQ = "(max-width: 759px)";
+const dialHintOn = () => { try { return !localStorage.getItem("snuvt-dial"); } catch (e) { return false; } };
+function dialItems() {
+  const l = [["practice", "ball", "훈련"], ["train", "physical", "피지컬"], ["video", "video", "영상"], ["season", "schedule", "일정"], ["cup", "trophy", "대회"], ["scout", "chart", "전력분석"]];
+  const ad = secViews(SECTIONS.admin); if (ad.length) l.push([ad[0][0], "admin", "관리"]);
+  return l;
+}
+const DIAL = { el: null, open: false, mode: "", cx: 0, cy: 0, R: 0, items: [], sel: -1, moved: false };
+function dialOpen(btn, mode) {
+  const D = DIAL, r = btn.querySelector(".bi").getBoundingClientRect();
+  D.cx = r.left + r.width / 2; D.cy = r.top + r.height / 2; D.R = Math.max(96, Math.min(132, innerWidth / 2 - 46));
+  D.items = dialItems(); D.sel = -1; D.moved = false; D.mode = mode; D.open = true;
+  const n = D.items.length, F = D.R + 44, cur = SECTION_OF[state.view] || "home";
+  D.items.forEach((x, i) => { x.a = n > 1 ? 165 - i * 150 / (n - 1) : 90; });
+  if (!D.el) {
+    D.el = document.createElement("div"); D.el.id = "dial"; D.el.className = "dial"; D.el.hidden = true; document.body.appendChild(D.el);
+    D.el.addEventListener("click", ev => { ev.stopPropagation(); const it = ev.target.closest(".dial-it"); if (it) dialGo(+it.dataset.i); else dialClose(); });
+    D.el.addEventListener("contextmenu", ev => ev.preventDefault());
+  }
+  // 판은 화면 아래 끝까지 (홈 버튼 아래도 덮음), 가운데 = 홈 버튼 중심
+  const below = Math.max(0, innerHeight - D.cy);
+  D.el.innerHTML = `<div class="dial-face" style="left:${D.cx - F}px;top:${D.cy - F}px;width:${2 * F}px;height:${F + below}px;--F:${F}px">
+      <span class="dial-label"></span><span class="dial-hand" style="height:${D.R - 34}px;top:${F - D.R + 34}px"></span>
+      ${D.items.map((x, i) => { const rad = x.a * Math.PI / 180; return `<button type="button" class="dial-it ${SECTION_OF[x[0]] === cur ? "cur" : ""}" data-i="${i}" style="left:${F + D.R * Math.cos(rad)}px;top:${F - D.R * Math.sin(rad)}px"><span class="bi">${svg(x[1])}</span><span>${x[2]}</span></button>`; }).join("")}
+      <span class="dial-knob">${svg("home")}</span></div>`;
+  D.el.hidden = false; document.body.classList.add("dial-on");
+  try { localStorage.setItem("snuvt-dial", "1"); } catch (e) {}
+  const h = document.querySelector(".dial-hint"); if (h) h.remove();
+  if (navigator.vibrate) try { navigator.vibrate(10); } catch (e) {}
+}
+function dialSel(i) {
+  const D = DIAL; if (i === D.sel) return; D.sel = i;
+  D.el.querySelectorAll(".dial-it").forEach(b => b.classList.toggle("sel", +b.dataset.i === i));
+  const hand = D.el.querySelector(".dial-hand"), lab = D.el.querySelector(".dial-label");
+  if (i >= 0) { hand.style.transform = `rotate(${90 - D.items[i].a}deg)`; hand.classList.add("on"); lab.textContent = D.items[i][2]; if (navigator.vibrate) try { navigator.vibrate(6); } catch (e) {} }
+  else { hand.classList.remove("on"); lab.textContent = ""; }
+}
+// 손가락 위치 → 가장 가까운 칸 (가운데 가까이면 아무것도 안 고름)
+function dialMove(x, y) {
+  const D = DIAL, dx = x - D.cx, dy = D.cy - y;
+  if (Math.hypot(dx, dy) < 40) return dialSel(-1);
+  let a = Math.atan2(dy, dx) * 180 / Math.PI; if (a < 0) a = dx < 0 ? 180 : 0;
+  let best = 0; D.items.forEach((it, i) => { if (Math.abs(it.a - a) < Math.abs(D.items[best].a - a)) best = i; });
+  D.moved = true; dialSel(best);
+}
+function dialGo(i) { const it = DIAL.items[i]; dialClose(); if (it) go(it[0]); }
+function dialClose() { const D = DIAL; if (!D.open) return; D.open = false; D.sel = -1; if (D.el) D.el.hidden = true; document.body.classList.remove("dial-on"); }
+function dialBind(bar) {
+  const btn = bar.querySelector(".bt.center"); if (!btn) return;
+  let t = 0, sx = 0, sy = 0, pid = null, skip = false;
+  const mob = () => matchMedia(DIAL_MQ).matches;
+  btn.addEventListener("contextmenu", ev => { if (mob()) ev.preventDefault(); });
+  btn.addEventListener("pointerdown", ev => {
+    if (!mob() || (ev.pointerType === "mouse" && ev.button !== 0)) return;
+    sx = ev.clientX; sy = ev.clientY; pid = ev.pointerId; skip = false;
+    try { btn.setPointerCapture(pid); } catch (e) {}
+    clearTimeout(t); t = setTimeout(() => { skip = true; dialOpen(btn, "drag"); }, 320);
+  });
+  btn.addEventListener("pointermove", ev => {
+    if (ev.pointerId !== pid) return;
+    if (DIAL.open && DIAL.mode === "drag") return dialMove(ev.clientX, ev.clientY);
+    if (!DIAL.open && sy - ev.clientY > 22) { clearTimeout(t); skip = true; dialOpen(btn, "drag"); return dialMove(ev.clientX, ev.clientY); } // 위로 밀어 올리기
+    if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 12) clearTimeout(t);
+  });
+  const up = ev => {
+    if (ev.pointerId !== pid) return; pid = null; clearTimeout(t);
+    if (!DIAL.open || DIAL.mode !== "drag") return;
+    if (ev.type === "pointerup" && DIAL.sel >= 0) return dialGo(DIAL.sel);
+    if (DIAL.moved) return dialClose();
+    DIAL.mode = "tap"; // 길게 누르고 그냥 뗌 → 열린 채로 두고 눌러서 고름
+  };
+  btn.addEventListener("pointerup", up); btn.addEventListener("pointercancel", up);
+  // 길게 누른 뒤의 click은 무시, 홈 화면에서 홈 버튼을 누르면 다이얼
+  btn.addEventListener("click", ev => {
+    if (skip) { skip = false; ev.preventDefault(); ev.stopPropagation(); return; }
+    if (mob() && state.view === "home") { ev.preventDefault(); ev.stopPropagation(); dialOpen(btn, "tap"); }
+  }, true);
+}
 function go(view) {
   const from = state.view;
   state.view = view; state.dirty = false; state.armed = null;
@@ -3062,7 +3144,7 @@ window.addEventListener("popstate", () => {
   popAt = now; popN++;
   const cf = document.getElementById("confirmBox");
   if (cf && !cf.hidden) { const x = cf.querySelector('[data-cf="0"]'); if (x) x.click(); else cf.hidden = true; try { history.pushState(null, "", "#" + state.view); } catch (e) {} return; }
-  const ov = [["sheet", () => closeSheet()], ["setpanel", () => closeSettings()], ["drawer", () => closeDrawer()]].find(([id]) => { const el = document.getElementById(id); return el && !el.hidden; });
+  const ov = [["dial", () => dialClose()], ["sheet", () => closeSheet()], ["setpanel", () => closeSettings()], ["drawer", () => closeDrawer()]].find(([id]) => { const el = document.getElementById(id); return el && !el.hidden; });
   if (ov) { ov[1](); try { history.pushState(null, "", "#" + state.view); } catch (e) {} return; }
   if (innerBack()) { state.dirty = false; render(); window.scrollTo(0, 0); return; }
   const h = (location.hash || "").replace("#", ""), v = VIEWS.includes(h) ? h : "home";
