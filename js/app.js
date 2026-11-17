@@ -2538,7 +2538,8 @@ function scSchedItems() {
   for (const e of normEvents(events())) if (e.id && (e.kind === "major" || e.kind === "minor") && e.start <= lim && e.end >= from)
     out.push({ k: "match", s: e.start, e: e.end, d: e.start <= t && t <= e.end ? t : e.start, title: e.name || "대회", opp: "", fmt: e.format === "9" ? "9" : "6", lab: `${md(parseD(e.start))}${e.end !== e.start ? "–" + md(parseD(e.end)) : ""} ${e.name || "대회"}` });
   for (const [d, fs] of Object.entries(state.friendlies || {})) if (d >= from && d <= lim) for (const f of fs)
-    out.push({ k: "friendly", s: d, e: d, d, title: `${frName(f.opponent)} 교류전`, opp: frName(f.opponent), fmt: f.format === "9" ? "9" : "6", lab: `${md(parseD(d))} ${frName(f.opponent)} 교류전` });
+    { const o = String(f.opponent || "").trim(), title = o === "OB전" ? "OB전" : o ? `${o} 교류전` : "교류전"; // frName은 "국민대와 교류전"이라 상대 이름을 그대로 씀
+      out.push({ k: "friendly", s: d, e: d, d, title, opp: o === "OB전" ? "" : o, fmt: f.format === "9" ? "9" : "6", lab: `${md(parseD(d))} ${title}` }); }
   return out.sort((a, b) => b.d.localeCompare(a.d));
 }
 function scSchedSel(m) {

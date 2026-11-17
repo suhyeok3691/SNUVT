@@ -696,7 +696,8 @@ const SUITES = {
     const fr = await p.$eval("#scf-sched", s => [...s.options].find(o => o.dataset.k === "friendly").value);
     await p.selectOption("#scf-sched", fr); await p.waitForTimeout(100);
     const v = await p.evaluate(() => ["scf-kind", "scf-title", "scf-opp", "scf-date"].map(id => document.getElementById(id).value));
-    assert.strictEqual(v[0], "friendly"); assert.match(v[1], /교류전$/); assert.ok(v[2].length > 0, "상대 채움"); assert.strictEqual(v[3], "2026-11-08");
+    assert.strictEqual(v[0], "friendly"); assert.strictEqual(v[1], "연세대 교류전"); assert.strictEqual(v[2], "연세대", "상대 = 팀 이름만");
+    assert.ok(opts.some(t => /^11\/8 연세대 교류전$/.test(t)) && !opts.some(t => /교류전 교류전|와 교류전/.test(t)), "교류전 두 번 안 붙음 " + opts.join("|")); assert.strictEqual(v[3], "2026-11-08");
     const ev = await p.$eval("#scf-sched", s => [...s.options].find(o => /9인제 OO배/.test(o.textContent)).value);
     await p.selectOption("#scf-sched", ev); await p.waitForTimeout(100);
     assert.deepStrictEqual(await p.evaluate(() => ["scf-kind", "scf-title", "scf-date", "scf-div"].map(id => document.getElementById(id).value)), ["match", "9인제 OO배", "2026-11-07", "6"]);
