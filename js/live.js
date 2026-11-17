@@ -488,16 +488,24 @@ function lvSection(x) {
   const list = (gs || []).map((g, i) => `<button type="button" class="box lv-g" data-act="lvopen" data-id="${esc(g.id)}"><span class="bn"><b>${esc(g.label || `${i + 1}경기`)}</b> ${g.team ? `${esc(g.team)} ` : ""}vs ${esc(g.opponent)}</span><span class="go">›</span></button>`).join("");
   return `<section class="panel sec"><div class="sec-head"><h3>실시간 기록</h3>${lvCan() ? `<button class="btn add" type="button" data-act="lvnew" data-k="${esc(key)}">+ 경기</button>` : ""}</div>${list ? `<div class="boxes">${list}</div>` : emptyLine("아직 기록한 경기가 없어요.")}</section>`;
 }
+// 경기 날짜: 저장한 날(live_games.date) → 고른 일정의 날(교류전 날 · 대회 기간이면 오늘, 아니면 첫날) → 만든 날
+function lvRefDate(kind, id) {
+  if (kind === "friendly") { for (const [d, fs] of Object.entries(state.friendlies || {})) if ((fs || []).some(f => String(f.id) === String(id))) return d; return ""; }
+  if (kind === "event") { const e = normEvents(events()).find(x => String(x.id) === String(id)); if (!e) return ""; const t = iso(today()); return e.start <= t && t <= e.end ? t : e.start; }
+  return "";
+}
+const lvDate = g => (g && (g.date || lvRefDate(g.ref_kind, g.ref_id) || (g.created_at ? iso(new Date(g.created_at)) : ""))) || "";
 function lvForm(key, gid) {
   // 전력분석 실시간 탭의 + 경기(key "pick"): 일정(대회 · 교류전)에서 고르거나 직접 입력(대회 / 교류전)
   if (key === "pick") {
     const items = scSchedItems(), t = iso(today()), mk = scMk(), def = items.find(x => x.k === mk && x.s <= t && t <= x.e) || items.find(x => x.s <= t && t <= x.e);
     key = def ? def.ref : `scout:${mk}`;
-    const pick = `<label class="fl wide">일정에서 고르기<select id="lv-ref">${[["scout:match", "직접 입력 · 대회"], ["scout:friendly", "직접 입력 · 교류전"]].map(([v, l]) => `<option value="${v}" ${key === v ? "selected" : ""}>${l}</option>`).join("")}${items.map(x => `<option value="${esc(x.ref)}" data-o="${esc(x.opp)}" ${key === x.ref ? "selected" : ""}>${esc(x.lab)}</option>`).join("")}</select></label>`;
+    const pick = `<label class="fl wide">일정에서 고르기<select id="lv-ref">${[["scout:match", "직접 입력 · 대회"], ["scout:friendly", "직접 입력 · 교류전"]].map(([v, l]) => `<option value="${v}" ${key === v ? "selected" : ""}>${l}</option>`).join("")}${items.map(x => `<option value="${esc(x.ref)}" data-o="${esc(x.opp)}" data-d="${x.d}" data-s="${x.s}" data-e="${x.e}" ${key === x.ref ? "selected" : ""}>${esc(x.lab)}</option>`).join("")}</select></label>`;
     lvForm(key); const f = document.getElementById("lvForm"); if (!f) return;
     f.querySelector(".fields").insertAdjacentHTML("afterbegin", pick);
     const sel = document.getElementById("lv-ref"), sync = () => { const o = sel.selectedOptions[0], v = sel.value, fr = v.startsWith("friendly:") || v === "scout:friendly";
-      f.dataset.k = v; const lb = document.getElementById("lv-label"); if (lb) lb.closest("label").hidden = fr; if (o && o.dataset.o) document.getElementById("lv-opp").value = o.dataset.o; };
+      f.dataset.k = v; const lb = document.getElementById("lv-label"); if (lb) lb.closest("label").hidden = fr; if (o && o.dataset.o) document.getElementById("lv-opp").value = o.dataset.o;
+      const dt = document.getElementById("lv-date"); if (dt) { if (o && o.dataset.d) { dt.value = o.dataset.d; dt.min = o.dataset.s; dt.max = o.dataset.e; } else { dt.removeAttribute("min"); dt.removeAttribute("max"); } dt.dispatchEvent(new Event("change", { bubbles: true })); } };
     if (!document.getElementById("lv-label")) f.querySelector(".fields").insertAdjacentHTML("beforeend", `<label class="fl">경기<input id="lv-label" maxlength="40" placeholder="예선 1경기 · 8강"></label>`);
     sel.addEventListener("change", sync); sync(); return;
   }
@@ -509,6 +517,7 @@ function lvForm(key, gid) {
       ${kind === "friendly" ? "" : `<label class="fl">경기<input id="lv-label" maxlength="40" value="${esc(g ? g.label || "" : "")}" placeholder="예선 1경기 · 8강"></label>`}
       <label class="fl">분석 팀<input id="lv-team" maxlength="60" value="${esc(g ? g.team || "" : "")}" placeholder="SNU"></label>
       <label class="fl">상대 팀<input id="lv-opp" required maxlength="60" value="${esc(g ? g.opponent : fr.opponent || "")}"></label>
+      <label class="fl">날짜<input type="date" id="lv-date" value="${esc(g ? lvDate(g) : lvRefDate(kind, id) || iso(today()))}"></label>
     </div><div class="row"><button class="btn primary" type="submit">${g ? "저장" : "시작"}</button></div></form>`;
   if (g) addDelZone(`data-act="lvdel" data-id="${esc(g.id)}"`, "경기 삭제");
   el.hidden = false; document.body.classList.add("noscroll");
@@ -519,9 +528,9 @@ async function lvSubmit(f) {
     const [kind, id] = f.dataset.k.split(":"), tm = v("lv-team").trim(), team = !tm || /^(snu|서울대)/i.test(tm) ? null : tm;
     if (f.dataset.id) { const g = lvGame();
       if (g && !!g.team !== !!team && (L.rallies[g.id] || []).some(r => r.kind)) { toast("기록이 있어서 SNU ↔ 다른 팀은 바꿀 수 없어요"); return; }
-      ok(await sb.from("live_games").update({ label: v("lv-label").trim() || null, team, opponent: v("lv-opp").trim() }).eq("id", f.dataset.id)); }
+      ok(await sb.from("live_games").update({ label: v("lv-label").trim() || null, team, opponent: v("lv-opp").trim(), date: v("lv-date") || null }).eq("id", f.dataset.id)); }
     else {
-      const r = await sb.from("live_games").insert({ ref_kind: kind, ref_id: id, label: v("lv-label").trim() || null, team, opponent: v("lv-opp").trim(), mode: "lite" /* 실시간 기록은 Lite 만 (전체 · 영상 분석 방식은 2026-11-01 뺌) */, sets: { 1: { rot: 1, orot: 1 } } }).select().maybeSingle(); ok(r);
+      const r = await sb.from("live_games").insert({ ref_kind: kind, ref_id: id, label: v("lv-label").trim() || null, team, opponent: v("lv-opp").trim(), date: v("lv-date") || null, mode: "lite" /* 실시간 기록은 Lite 만 (전체 · 영상 분석 방식은 2026-11-01 뺌) */, sets: { 1: { rot: 1, orot: 1 } } }).select().maybeSingle(); ok(r);
       if (r.data) { L.open = r.data.id; L.set = 1; L.side = "us"; L.pick = null; L.rallies[r.data.id] = []; pushInner(); if (state.view === "scout") sc().live = true; }
     }
     closeSheet();
@@ -720,7 +729,7 @@ function lvPage(x) {
   // Lite: 놓친 랠리는 점수판 팀 이름 옆 + 로 점수만 (컴퓨터 = 우리 · - 상대)
   const plus = sd => me && !end ? `<button type="button" class="lv-plus" data-act="lvpt" data-v="${sd}" aria-label="${esc(lvTN(g, sd))} 점수만 +1" title="점수만 +1${kb ? ` (${sd === "us" ? "=" : "-"})` : ""}">+</button>` : "";
   return `<section class="sec lv-page"><div class="row between"><button class="btn link small" type="button" data-act="lvback">‹ ${esc(x.name)}</button><span class="row nowrap"><button class="btn link small" type="button" data-act="lvxlsx">엑셀</button>${me ? `<button class="btn link small" type="button" data-act="lvedit">수정</button>` : ""}</span></div>
-    <div class="jp-head"><h2 class="dyn">${g.label ? `${esc(g.label)} · ` : ""}${esc(lvTA(g))} vs ${esc(g.opponent)}</h2><span class="small muted">세트 ${won} : ${lost}</span></div>
+    <div class="jp-head"><h2 class="dyn">${g.label ? `${esc(g.label)} · ` : ""}${esc(lvTA(g))} vs ${esc(g.opponent)}</h2><span class="small muted">${lvDate(g) ? `${esc(shortDate(parseD(lvDate(g))))} · ` : ""}세트 ${won} : ${lost}</span></div>
     <div class="sc-row">${chips}</div>
     <div class="panel lv-score"><span class="lv-t1 ${cur.serve === "us" ? "srv" : ""}">${esc(lvTA(g))} <small>R${cur.rot}</small>${plus("us")}</span><b class="num">${cur.us} : ${cur.op}</b><span class="lv-t2 ${cur.serve === "opp" ? "srv" : ""}">${plus("opp")}<small>R${cur.orot}</small> ${esc(g.opponent)}</span>
       ${cur.run <= -3 ? `<span class="chip warn lv-run">${-cur.run}연속 실점</span>` : cur.run >= 3 ? `<span class="chip ok lv-run">${cur.run}연속 득점</span>` : ""}</div>
@@ -831,7 +840,7 @@ async function lvXlsx(g) {
   toast("엑셀 만드는 중…");
   try {
     if (!window.ExcelJS) await loadScript("https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js");
-    const tA = lvTA(g), tB = lvTB(g), tm = sd => sd === "us" ? tA : tB, ref = lvRefOf(g), date = String(rs[0].created_at || "").slice(0, 10) || iso(today());
+    const tA = lvTA(g), tB = lvTB(g), tm = sd => sd === "us" ? tA : tB, ref = lvRefOf(g), date = lvDate(g) || iso(today());
     const who = r => lvSnu(g, r.side) ? (p => [p && p.number != null ? String(p.number) : "", p ? p.name : ""])(playerOf(r.player_id)) : [lvIdOf(r), ""];
     const hms = t => { const d = new Date(t); return t && !isNaN(d) ? d.toLocaleTimeString("en-GB", { hour12: false }) : ""; };
     const logs = [], ev = [], rot = [];

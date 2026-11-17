@@ -648,6 +648,7 @@ const SUITES = {
     const a = await openApp(b, "coach"), p = a.page;
     await p.evaluate(() => lvForm("friendly:f1")); await p.waitForTimeout(300);
     await p.evaluate(() => { document.getElementById("lv-opp").value = "연세대"; }); await p.click("#lvForm button[type=submit]"); await p.waitForTimeout(300);
+    assert.strictEqual((await a.writes("live_games"))[0][2].date, "2026-11-08", "기록하는 날이 아니라 교류전 날로 저장");
     await a.go("fr"); await p.waitForTimeout(200);
     await p.evaluate(() => { state.cup = state.cup || {}; state.cup.key = "friendly:f1"; state.live.open = (lv().games["friendly:f1"] || [])[0]?.id; render(); }); await p.waitForTimeout(400);
     const pts = async n => { for (let i = 0; i < n; i++) { await p.click('[data-act="lvpt"][data-v="us"]'); } await p.waitForTimeout(150); };
@@ -685,6 +686,7 @@ const SUITES = {
     assert.match(await a.text("main"), /실시간 기록한 대회 경기가 없어요/);
     await p.click('[data-act="scmk"][data-v="friendly"]'); await p.waitForTimeout(150);
     assert.ok(await p.$('[data-act="sclive"]'), "교류전 칩 → 교류전 실시간 기록");
+    assert.match(await a.text('[data-act="sclive"]'), /11\/8/, "목록에 교류전 날짜");
     // 실시간 탭의 + 경기 = 실시간 기록 경기 (영상 분석 Match Setup 아님)
     await p.click('[data-act="scnewlv"]'); await p.waitForTimeout(150);
     assert.ok(await p.$("#lvForm #lv-ref"), "실시간 경기 추가 창 (일정에서 고르기)"); assert.strictEqual(await p.$("#scForm"), null, "영상 분석 경기 창 아님");

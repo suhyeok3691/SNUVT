@@ -2204,7 +2204,8 @@ function scoutLiveList() {
   if (!gs.length) return emptyLine("실시간 기록한 경기가 없어요. 대회 · 교류전 화면에서 기록해요.");
   const ref = g => cupItems().find(y => y.kind === g.ref_kind && String(y.id) === String(g.ref_id)), l = gs.filter(g => lvKindOf(g) === scMk());
   if (!l.length) return emptyLine(scMk() === "friendly" ? "실시간 기록한 교류전이 없어요." : "실시간 기록한 대회 경기가 없어요.");
-  return `<div class="sc-list">${l.map(g => { const x = ref(g), d = g.created_at ? shortDate(new Date(g.created_at)) : "";
+  l.sort((a, b) => lvDate(b).localeCompare(lvDate(a)) || String(b.created_at).localeCompare(String(a.created_at))); // 경기 날짜(만든 날 아님) 최근 것부터
+  return `<div class="sc-list">${l.map(g => { const x = ref(g), d = lvDate(g) ? shortDate(parseD(lvDate(g))) : "";
     return `<button type="button" class="panel sc-card" data-act="sclive" data-id="${esc(g.id)}"><b>${g.label ? `${esc(g.label)} · ` : ""}${esc(lvTA(g))} vs ${esc(g.opponent || "")}</b><span class="small muted">${[d, x ? x.name : lvIsFr(g) ? "교류전" : "대회"].filter(Boolean).map(esc).join(" · ")}</span><span class="go">›</span></button>`; }).join("")}</div>`;
 }
 // 치지직 다시보기는 앱 안에 못 띄워서(퍼가기 없음) 새 창으로 열기만 (영상 시계는 2026-11-01 뺌)

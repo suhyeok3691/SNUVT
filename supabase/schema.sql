@@ -2617,3 +2617,5 @@ alter table public.scout_events drop constraint if exists scout_events_set_no_ch
 alter table public.scout_points drop constraint if exists scout_points_set_no_check, add constraint scout_points_set_no_check check (set_no between 1 and 30);
 -- 실시간 기록도 교류전은 세트 수 자유라 세트 번호 30까지
 alter table public.live_rallies drop constraint if exists live_rallies_set_no_check, add constraint live_rallies_set_no_check check (set_no between 1 and 30);
+-- 실시간 기록 경기 날짜 (일정에서 고른 대회 · 교류전 날, 직접 입력이면 고른 날). 비면 만든 날
+alter table public.live_games add column if not exists date date;
