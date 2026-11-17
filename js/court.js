@@ -85,6 +85,9 @@ const ctLu = m => m.lineup || {};
 // 세트별 라인업: lineup.sets[n].us · .opp 가 있으면 그 세트부터 그 라인업 (다음에 바뀐 세트 전까지). 없으면 경기 라인업(lineup.us · opp)
 const ctLuSrc = (L, side, n) => { let k = 0; for (const [x, v] of Object.entries(L.sets || {})) { const i = Number(x); if (i <= n && i > k && v && v[side]) k = i; } return k; };
 const ctLuAt = (m, n) => { const L = ctLu(m), o = { ...L }; for (const side of ["us", "opp"]) { const k = ctLuSrc(L, side, n); if (k) o[side] = L.sets[k][side]; } return o; };
+// 교류전(세트 수 자유)은 실제 대회처럼 세트마다 라인업: 2세트부터 그 세트 라인업이 없고 기록도 없으면 먼저 라인업을 넣음 (이전 세트 라인업 불러오기)
+const ctLuOwn = (m, n) => n === 1 ? ctReady(m) : !!(((ctLu(m).sets || {})[n] || {}).us || ((ctLu(m).sets || {})[n] || {}).opp);
+const ctLuNeed = (m, ev, n) => !ctNine(m) && !ctRules(m).bo && n > 1 && !ctLuOwn(m, n) && !ev.some(e => e.set_no === n && e.action);
 // 분석용: 모든 세트 라인업을 합친 것 (포지션 · 리베로 찾기)
 const ctLuAll = m => { const L = ctLu(m), o = { ...L }, ex = Object.values(L.sets || {}).filter(Boolean);
   for (const side of ["us", "opp"]) { const l = [L[side], ...ex.map(x => x[side])].filter(Boolean); if (l.length < 2) continue;
@@ -179,7 +182,10 @@ function ctPad(m, ev) {
   const S = sc(), setNo = S.sel.set || 1, L = ctLuAt(m, setNo);
   if (!ctReady(m)) return `<div class="panel ct-empty"><b>라인업이 아직 없어요</b>${can("analysis") ? `<button class="btn primary" type="button" data-act="ctlineup">라인업 넣기</button>` : `<span class="small muted">전력분석 담당이 넣을 수 있어요.</span>`}</div>`;
   if (!S.ins) ctAutoFix(m);
-  ev = ctEv(m); const s = ctState(m, ev, setNo), flip = ctFlip();
+  ev = ctEv(m);
+  if (ctLuNeed(m, ev, setNo)) return `<div class="panel ct-bar"><div class="sc-row"><span class="sc-k">세트</span>${ctSetNos(ev, m, true).map(n => scChip("scset", n, setNo, n)).join("")}</div></div>
+    <div class="panel ct-empty"><b>${setNo}세트 라인업</b>${can("analysis") ? `<div class="row"><button class="btn primary" type="button" data-act="ctluprev">이전 세트 라인업 불러오기</button><button class="btn" type="button" data-act="ctlineup">새로 넣기</button></div>` : `<span class="small muted">전력분석 담당이 넣을 수 있어요.</span>`}</div>`;
+  const s = ctState(m, ev, setNo), flip = ctFlip();
   // 아래 칸: 앞줄(네트) 4·3·2, 뒷줄 5·6·1 / 위 칸: 뒷줄 1·6·5, 앞줄 2·3·4 (영상 방향에 맞게 뒤집기)
   const half = (side, top) => { const srv = s.serve === side && !s.last;
     const rows = top ? [[1, 6, 5], [2, 3, 4]] : [[4, 3, 2], [5, 6, 1]];
@@ -572,11 +578,13 @@ function ctAutoUs(m) {
   if (arr.some(x => !x.v)) return null;
   return { slots: arr.map(x => x.v), pos: arr.map(x => CT_POS.includes(x.pos) ? x.pos : "OH"), libero: pool.filter(p => lvNormPos(p.pos) === "L").slice(0, 2).map(p => p.id) };
 }
-function ctLineupForm() {
-  const S = sc(), m = scMatch(), setNo = S.sel.set || 1, L = ctLuAt(m, setNo), prev = (L.sets || {})[setNo - 1];
+function ctLineupForm(src) {
+  const S = sc(), m = scMatch(), setNo = S.sel.set || 1, L = ctLuAt(m, setNo), prev = (L.sets || {})[setNo - 1], free = !ctRules(m).bo;
   const st = (L.sets || {})[setNo] || (prev ? { rot: prev.rot, opp_rot: prev.opp_rot, serve: prev.serve === "opp" ? "us" : "opp" } : {});
-  const U0 = L.us || {}, auto = !m.team && !ctNine(m) && !(U0.slots || []).length ? ctAutoUs(m) : null;
-  const ps = sortedPlayers().filter(p => !p.military), U = auto || U0, O = L.opp || {}, us = U.slots || [], op = O.slots || [];
+  // 보이는 라인업: 이전 세트 불러오기 / 교류전 새 세트는 빈 칸 / 나머지는 이 세트 라인업
+  const B = src === "prev" && setNo > 1 ? ctLuAt(m, setNo - 1) : ctLuNeed(m, S.events[m.id] || [], setNo) ? {} : L;
+  const U0 = B.us || {}, auto = setNo === 1 && !m.team && !ctNine(m) && !(U0.slots || []).length ? ctAutoUs(m) : null;
+  const ps = sortedPlayers().filter(p => !p.military), U = auto || U0, O = B.opp || {}, us = U.slots || [], op = O.slots || [];
   const posSel = (id, cur, blank) => `<select id="${id}" class="ct-pos" aria-label="포지션">${blank ? `<option value="">포지션</option>` : ""}${CT_POS.map(p => `<option ${p === cur ? "selected" : ""}>${p}</option>`).join("")}</select>`;
   const sel = i => `<div class="ct-lu-c"><span class="ct-lu-n">${i + 1}${i === 0 ? " 서브" : ""}</span><select id="ctu-${i}" aria-label="${i + 1}번 자리"><option value="">선택</option>${ps.map(p => `<option value="${p.id}" ${us[i] === p.id ? "selected" : ""}>${esc(pNo(p) + p.name)} · ${esc(p.pos === "Li" ? "L" : p.pos || "")}</option>`).join("")}</select>${posSel(`ctp-${i}`, (U.pos || [])[i] || (us[i] ? ctRosterPos(us[i]) : ""), !us[i])}</div>`;
   const lsel = k => `<label class="fl">리베로 ${k + 1}<select id="ctu-l${k}"><option value="">없음</option>${ps.map(p => `<option value="${p.id}" ${(U.libero || [])[k] === p.id ? "selected" : ""}>${esc(pNo(p) + p.name)}${p.pos === "Li" ? " · L" : ""}</option>`).join("")}</select></label>`;
@@ -597,14 +605,15 @@ function ctLineupForm() {
         <div class="row"><button class="btn primary" type="submit">저장</button></div></form>`;
     el.hidden = false; document.body.classList.add("noscroll"); return;
   }
-  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>Edit Lineup</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${setNo}세트 라인업</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    ${setNo > 1 ? `<div class="row"><button class="btn small" type="button" data-act="ctluprev">이전 세트 라인업 불러오기</button></div>` : ""}
     <form class="f" id="ctLineupForm">
       <h4>${esc(ctTA(m))}${ros ? ` ${qpBtn()}` : ""}</h4><div class="ct-lu"><span class="ct-netl">네트</span>${CT_SHEET.map(ros ? sel : unum).join("")}</div>
       <div class="pair">${ros ? lsel(0) + lsel(1) : num("ctn-l1", (U.libero || [])[0], "리베로 1") + num("ctn-l2", (U.libero || [])[1], "리베로 2")}</div>
       <h4>${esc(m.opponent || "상대")}</h4><div class="ct-lu"><span class="ct-netl">네트</span>${CT_SHEET.map(onum).join("")}</div>
       <div class="pair">${num("cto-l1", (O.libero || [])[0], "리베로 1")}${num("cto-l2", (O.libero || [])[1], "리베로 2")}</div>
       <h4>${setNo}세트 시작</h4><div class="fields">
-        ${setNo > 1 ? `<label class="fl wide">바꾼 라인업<select id="cts-from"><option value="set">${setNo}세트부터</option><option value="all">모든 세트</option></select></label>` : ""}
+        ${setNo > 1 && !free ? `<label class="fl wide">바꾼 라인업<select id="cts-from"><option value="set">${setNo}세트부터</option><option value="all">모든 세트</option></select></label>` : ""}
         <label class="fl">${esc(ctTA(m))} 로테<select id="cts-rot">${[1, 2, 3, 4, 5, 6].map(n => `<option ${n === (st.rot || 1) ? "selected" : ""}>${n}</option>`).join("")}</select></label>
         <label class="fl">${esc(ctTB(m))} 로테<select id="cts-orot">${[1, 2, 3, 4, 5, 6].map(n => `<option ${n === (st.opp_rot || 1) ? "selected" : ""}>${n}</option>`).join("")}</select></label>
         <label class="fl">첫 서브<select id="cts-serve"><option value="us" ${st.serve !== "opp" ? "selected" : ""}>${esc(ctTA(m))}</option><option value="opp" ${st.serve === "opp" ? "selected" : ""}>${esc(ctTB(m))}</option></select></label></div>
@@ -643,6 +652,7 @@ async function ctLineupSave(f) {
   for (const [k, x] of Object.entries(old.sets || {})) { const y = { ...x }; if (all && (Number(k) === 1 || v("cts-from") === "all")) { delete y.us; delete y.opp; } L.sets[k] = y; }
   const cur = L.sets[setNo] || {}, nx = { ...cur, rot: Number(v("cts-rot")) || 1, opp_rot: Number(v("cts-orot")) || 1, serve: v("cts-serve") || "us" };
   if (all) { L.us = nu; L.opp = no; delete nx.us; delete nx.opp; }
+  else if (!ctRules(m).bo) { nx.us = nu; nx.opp = no; } // 교류전: 세트마다 라인업
   else { const pv = ctLuAt({ lineup: L }, setNo - 1); delete nx.us; delete nx.opp; if (!same(pv.us, nu)) nx.us = nu; if (!same(pv.opp, no)) nx.opp = no; }
   L.sets[setNo] = nx;
   // 번호 고치기: 이 저장으로 라인업이 바뀌는 세트의 기록만
@@ -780,6 +790,7 @@ function courtClick(b, act) {
   if (act === "ctinsend") return ctInsEnd();
   if (act === "ctdelrec") return ctDelRec(b.dataset.id);
   if (act === "ctlineup") return ctLineupForm();
+  if (act === "ctluprev") return ctLineupForm("prev");
   if (act === "ctcfg") return ctCfgForm();
   if (act === "ctpts") return ctPtsForm();
   if (act === "ctptsv") { const x = document.getElementById("ctr-pts"); if (x) x.value = b.dataset.v; document.querySelectorAll(".ct-ptc").forEach(c => c.classList.toggle("on", c === b)); return; }

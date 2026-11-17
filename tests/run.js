@@ -613,25 +613,30 @@ const SUITES = {
     assert.match(await a.text("#sheet h3"), /R4/);
     clean(a); await a.ctx.close();
   },
-  // 세트 규칙: 교류전 = 세트 수 자유(경기 끝 없음 · 4세트 이상), 세트 점수 바꾸기, 세트별 라인업(N세트부터)
+  // 세트 규칙: 교류전 = 세트 수 자유(경기 끝 없음 · 4세트 이상), 세트 점수 바꾸기, 세트마다 라인업(이전 세트 불러오기)
   async setrules(b) {
     const a = await openApp(b, "coach"), p = a.page;
     await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(300);
     const fill = set => p.evaluate(n => { const S = sc(), m = scMatch(); m.kind = "friendly"; for (let i = 0; i < 21; i++) S.events.m1.push({ id: `p${n}-${i}`, match_id: "m1", set_no: n, side: "us", action: "pt", skill: "pt", point: "us", score: `${i + 1}:0`, created_at: `2026-11-01T0${n}:${String(10 + i).padStart(2, "0")}:00Z` }); state.dirty = false; render(); }, set);
-    for (const n of [1, 2, 3]) { await fill(n); await p.click(`[data-act="scset"][data-v="${n + 1}"]`); await p.waitForTimeout(100); }
-    assert.match(await a.text(".ct-info"), /Set 4 21점/, "교류전 4세트 · 21점");
+    for (const n of [1, 2, 3]) { await fill(n); await p.click(`[data-act="scset"][data-v="${n + 1}"]`); await p.waitForTimeout(100); if (n < 3) { await p.click('[data-act="ctluprev"]'); await p.waitForTimeout(100); await p.click('#ctLineupForm button[type="submit"]'); await p.waitForTimeout(200); } }
     assert.doesNotMatch(await a.text("main"), /경기 끝/, "세트 수 자유는 경기 끝 없음");
     assert.deepStrictEqual(await p.$$eval('.ct-bar [data-act="scset"]', x => x.map(e => e.textContent.trim())), ["1", "2", "3", "4"]);
+    // 교류전 새 세트 = 라인업부터 (실제 대회처럼): 이전 세트 불러오기 → 상대 1번 자리만 바꿔 저장 → 앞 세트는 그대로
+    assert.match(await a.text("main"), /4세트 라인업/);
+    await p.click('[data-act="ctlineup"]'); await p.waitForTimeout(100);
+    assert.strictEqual(await p.$eval("#cto-0", e => e.value), "", "새로 넣기는 빈 칸");
+    assert.strictEqual(await p.$("#cts-from"), null, "교류전은 세트마다 라인업이라 적용 범위 없음");
+    await p.click('#sheet [data-act="ctluprev"]'); await p.waitForTimeout(100);
+    assert.strictEqual(await p.$eval("#cto-0", e => e.value), "11", "이전 세트 라인업 불러옴");
+    await p.fill("#cto-0", "99"); await p.click('#ctLineupForm button[type="submit"]'); await p.waitForTimeout(300);
+    assert.deepStrictEqual(await p.evaluate(() => { const m = scMatch(); return [1, 3, 4].map(n => ctState(m, [], n).opSlots[0]); }), [11, 11, 99]);
+    assert.ok(await p.evaluate(() => { const x = scMatch().lineup.sets; return !!(x[2].us && x[2].opp && x[4].us && x[4].opp); }), "세트마다 두 팀 라인업 저장");
+    assert.strictEqual(await p.evaluate(() => scMatch().lineup.opp.slots[0]), 11, "경기 라인업은 그대로");
+    assert.match(await a.text(".ct-info"), /Set 4 21점/, "교류전 4세트 · 21점");
     // 4세트 점수 15점으로
     await p.click('[data-act="ctpts"]'); await p.click('[data-act="ctptsv"][data-v="15"]'); await p.click('#ctPtsForm button[type="submit"]'); await p.waitForTimeout(200);
     assert.match(await a.text(".ct-info"), /Set 4 15점/);
     assert.strictEqual(await p.evaluate(() => window.__db.scout_matches.find(x => x.id === "m1").rules.pts[4]), 15, "서버에 세트 점수");
-    // 4세트부터 상대 1번 자리 바꾸기 → 1~3세트는 그대로
-    await p.click('[data-act="ctlineup"]'); await p.waitForTimeout(100);
-    assert.strictEqual(await p.$eval("#cts-from", e => e.value), "set");
-    await p.fill("#cto-0", "99"); await p.click('#ctLineupForm button[type="submit"]'); await p.waitForTimeout(300);
-    assert.deepStrictEqual(await p.evaluate(() => { const m = scMatch(); return [1, 3, 4, 5].map(n => ctState(m, [], n).opSlots[0]); }), [11, 11, 99, 99]);
-    assert.strictEqual(await p.evaluate(() => scMatch().lineup.opp.slots[0]), 11, "경기 라인업은 그대로");
     // Match Setup: 교류전이면 세트 수 자유, 대회로 바꾸면 3판 2선승
     await p.evaluate(() => openScoutForm("m1")); await p.waitForTimeout(100);
     assert.strictEqual(await p.$eval("#scf-bo", e => e.value), "0");
