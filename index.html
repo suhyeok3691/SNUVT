@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="SNUVT">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Saira+Condensed:wght@600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Do+Hyeon&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans+KR:wght@400;500;600;700&family=Saira+Condensed:wght@600;700&display=swap">
 <script>try { const t = localStorage.getItem("snuvt-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <style>
 /* 레이아웃: 위에는 오늘·요일, 아래는 프로그램 블록을 빈칸 없이 쌓는다 (다단 배치) */
@@ -1294,14 +1294,14 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 </style>
 <style id="court">
 /* ===== 코트 라인 디자인 (2026-11) =====
-   흰 바탕 + 카드 대신 굵은 남색 선(코트 라인)으로 구역을 나눔, 날짜·숫자는 등번호 글꼴(Saira Condensed), 제목은 Black Han Sans,
-   노란색(공)은 오늘 · 고른 것 · D-day에만. 롤백: 이 <style id="court"> 블록과 글꼴 링크의 Black Han Sans · Saira Condensed만 지우면 예전 모양 */
+   흰 바탕 + 카드 대신 굵은 남색 선(코트 라인)으로 구역을 나눔, 날짜·숫자 · 로고 글자는 등번호 글꼴(Saira Condensed), 제목은 본문 글꼴 700(너무 두껍지 않게),
+   노란색(공)은 오늘 · 고른 것 · D-day에만. 롤백: 이 <style id="court"> 블록과 글꼴 링크의 Saira Condensed만 지우면 예전 모양 */
 :root {
   --bg: #ffffff; --surface: #ffffff; --surface-2: #f3f5f9; --ink: #0f1a3a; --muted: #586380; --line: #e1e5ee; --rule: #0f1a3a;
   --blue: #1c3c8c; --blue-soft: #e9eef9; --yellow: #ffc83d; --on-yellow: #2a1f00;
   --brand: #1c3c8c; --fill: #1c3c8c; --seg-track: transparent; --seg-thumb: var(--yellow);
   --c-team: #1c3c8c; --c-match: #e0612a; --c-fr: #1f7a4d;
-  --f-display: "Black Han Sans", "IBM Plex Sans KR", "Apple SD Gothic Neo", sans-serif;
+  --f-display: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   --f-data: "Saira Condensed", "IBM Plex Sans KR", system-ui, sans-serif;
   --r: 4px;
 }
@@ -1310,12 +1310,12 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 body { letter-spacing: -.005em; }
 /* 위: 흰 띠 + 아래 굵은 선 하나 */
 header.top { border-bottom: 3px solid var(--rule); }
-.brand h1 { font-family: var(--f-display); font-size: 23px; letter-spacing: .01em; }
-.dday strong { font-family: var(--f-data); font-weight: 800; font-size: 16px; letter-spacing: .02em; padding: 0 6px; border-radius: 2px; }
+.brand h1 { font-family: var(--f-data); font-weight: 700; font-size: 26px; letter-spacing: .02em; }
+.dday strong { font-family: var(--f-data); font-weight: 700; font-size: 16px; letter-spacing: .02em; padding: 0 6px; border-radius: 2px; }
 /* 제목: 스포츠 신문 같은 굵은 고딕 */
-h2 { font-family: var(--f-display); font-weight: 400; font-size: 24px; letter-spacing: .005em; }
-h2.dyn { font-family: var(--f-body); font-weight: 800; }
-.sec-head h3, .panel > h3:first-child, .cal-head h3, h3.sh { font-family: var(--f-display); font-weight: 400; font-size: 17px; letter-spacing: .01em; }
+h2 { font-family: var(--f-display); font-weight: 700; font-size: 21px; letter-spacing: -.02em; }
+h2.dyn { font-family: var(--f-body); font-weight: 700; }
+.sec-head h3, .panel > h3:first-child, .cal-head h3, h3.sh { font-family: var(--f-display); font-weight: 700; font-size: 16px; letter-spacing: -.01em; }
 /* 카드 없애기: 구역은 위쪽 코트 라인, 목록은 가는 선으로 나눈 줄 */
 main { gap: 22px; padding-top: 18px; }
 main .panel { background: transparent; border: 0; border-top: 2px solid var(--rule); border-radius: 0; padding: 12px 0 2px; }
@@ -1334,14 +1334,14 @@ main .sec > .boxes:first-child, main .sec-head + .boxes { border-top: 2px solid 
 .seg { background: transparent; padding: 0; border-radius: 0; border-bottom: 1px solid var(--line); gap: 0; }
 .seg-thumb { top: auto; bottom: -1px; height: 3px; border-radius: 0; box-shadow: none; background: var(--yellow); }
 .seg-tab { border-radius: 0; padding: 8px 14px; }
-.seg-tab.on { font-weight: 800; color: var(--ink); }
+.seg-tab.on { font-weight: 700; color: var(--ink); }
 /* 버튼 · 칩: 둥근 알약 대신 각진 테이프 */
 .btn, .btn.link, .btn.add, .btn.mode, .vote-btn, .chip-check span, .vote-pick span, .tile-btn, input, select, textarea { border-radius: 4px; }
 .chip { border-radius: 3px; }
 .btn.primary, .vote-btn.primary { box-shadow: none; }
-.btn.add { font-weight: 800; }
+.btn.add { font-weight: 600; }
 /* 숫자는 등번호 글꼴 */
-.ev-list .num, .watch .num, .cd .n, .num { font-family: var(--f-data); font-weight: 700; letter-spacing: .01em; font-variant-numeric: tabular-nums; }
+.ev-list .num, .watch .num, .cd .n, .num { font-family: var(--f-data); font-weight: 600; letter-spacing: .01em; font-variant-numeric: tabular-nums; }
 .ev-list .num { font-size: 15px; }
 /* 달력: 칸을 칠하지 않고 아래 짧은 띠로 종류 표시, 오늘은 노란 공 */
 .cal { gap: 2px; }
@@ -1351,7 +1351,7 @@ main .sec > .boxes:first-child, main .sec-head + .boxes { border-top: 2px solid 
 .cd.k-team { --k: var(--c-team); } .cd.k-fr { --k: var(--c-fr); } .cd.k-match { --k: var(--c-match); } .cd.k-try { --k: var(--c-try); } .cd.k-cup { --k: var(--c-cup); } .cd.k-open { --k: var(--c-open); } .cd.k-guest { --k: var(--c-guest); }
 .cd[class*="k-"]:not(.k-off)::after { content: ""; position: absolute; left: 22%; right: 22%; bottom: 3px; height: 3px; background: var(--k, transparent); }
 .cd.k-fr .n, .cd.k-match .n, .cd.k-try .n, .cd.k-cup .n, .cd.k-team .n, .cd.k-open .n, .cd.k-guest .n { color: var(--ink); }
-.cd.k-fr .cl, .cd.k-match .cl, .cd.k-try .cl, .cd.k-cup .cl, .cd.k-team .cl, .cd.k-open .cl, .cd.k-guest .cl { color: var(--k); opacity: 1; font-weight: 700; }
+.cd.k-fr .cl, .cd.k-match .cl, .cd.k-try .cl, .cd.k-cup .cl, .cd.k-team .cl, .cd.k-open .cl, .cd.k-guest .cl { color: var(--k); opacity: 1; font-weight: 600; }
 .cd.k-match .n, .cd.k-cup .n { color: var(--k); }
 .cd .opn { display: none; }
 .cd.today { border: 0; background: var(--yellow); }
@@ -1375,10 +1375,10 @@ i.dot.k-team { background: var(--c-team); } i.dot.k-open { background: var(--c-o
 .tile-btn .ic { border-radius: 4px; }
 /* 홈 맨 위: 큰 날짜 */
 .home-hero { display: flex; align-items: flex-end; gap: 12px; padding: 2px 0 0; }
-.hh-d { font-family: var(--f-data); font-weight: 800; font-size: 68px; line-height: .78; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+.hh-d { font-family: var(--f-data); font-weight: 700; font-size: 68px; line-height: .78; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .hh-t { display: grid; gap: 2px; padding-bottom: 1px; min-width: 0; }
-.hh-w { font-family: var(--f-display); font-size: 17px; }
-.hh-k { font-size: 13.5px; font-weight: 700; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hh-w { font-family: var(--f-display); font-weight: 700; font-size: 16px; }
+.hh-k { font-size: 13.5px; font-weight: 600; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hh-k[class*="k-"] { color: var(--c-team); } .hh-k.k-match, .hh-k.k-cup { color: var(--c-match); } .hh-k.k-fr { color: var(--c-fr); }
 :root[data-view="home"] .brand .today { display: none; }
 /* 화면 안 탭(학교 · 대회 / 경기 · 시즌 …)도 칠하지 않고 밑줄 */
@@ -1386,6 +1386,10 @@ i.dot.k-team { background: var(--c-team); } i.dot.k-open { background: var(--c-o
 .seg.fill { border-bottom: 1px solid var(--line); }
 /* 넓은 화면 달력은 정사각형 대신 낮은 칸 */
 @media (min-width: 760px) { .cd { aspect-ratio: auto; height: 58px; } .home-cal .cal, .home-cal .cal-head { max-width: 720px; } }
+/* 굵기는 한 단계 낮게: 예전 800 → 700, 본문 굵은 글씨 700 → 600 */
+.tab-title, .seg-tab.on, .vote-pick span, .ss-kv, .today-card .sub { font-weight: 700; }
+b, strong, h3, .btn { font-weight: 600; }
+h2 b, h3 b, .sec-head h3, .panel > h3:first-child, .cal-head h3 { font-weight: 700; }
 </style>
 </head>
 <body>

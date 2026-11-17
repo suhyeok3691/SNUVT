@@ -411,12 +411,12 @@ docs/archive/           예전에 만든 설계 · 자료 문서 사본 (앱에 
 
 배구 코트처럼 **흰 바탕에 굵은 남색 선**으로 구역을 나누고, 둥근 흰 카드를 쓰지 않아요. 디자인은 `index.html`의 `<style id="court">` 한 곳에 모여 있어요.
 - **색**: 바탕 흰색 · 글자와 선 남색 `#0f1a3a` · 버튼 서울대 파랑 `#1c3c8c` · **노란색 `#ffc83d`(공)은 오늘 · 고른 탭 밑줄 · D-day에만** · 대회 주황 `#e0612a` · 교류전 초록. 다크 모드도 같은 규칙(바탕 `#0b1124`)
-- **글꼴**: 제목 Black Han Sans, 날짜 · 숫자 · 점수는 등번호 글꼴 Saira Condensed, 본문 IBM Plex Sans KR
+- **글꼴**: 본문 · 제목 IBM Plex Sans KR(제목 700, 굵은 글씨 600 — 너무 두껍지 않게), 날짜 · 숫자 · 점수 · 로고 글자 SNUVT는 등번호 글꼴 Saira Condensed 600~700. 파랑 · 노랑은 미카사 공 색
 - **구역**: 구역 위에 2px 남색 선, 목록은 1px 가는 선으로 나눈 줄(상자 없음). 맨 위 띠 아래 3px 선
 - **탭**: 칠한 알약 대신 노란 밑줄이 미끄러짐(위 탭 · 화면 안 탭 모두)
 - **버튼 · 칩**: 둥근 알약 대신 4px 각진 모양
 - **달력**: 칸을 칠하지 않고 숫자 아래 짧은 색 띠(훈련 파랑 · 대회 주황 · 교류전 초록 …), 오늘은 노란 칸
 - **홈 맨 위**: 큰 날짜(`11.01`, 등번호 글꼴)와 요일 · 오늘 팀 일정 한 줄(`homeHero`). 홈에서는 위 띠의 날짜를 숨김(`html[data-view]`)
 - 설명 문구는 최소로, 버튼 · 칩은 작게. 일본어 학교 이름 같은 큰 제목은 본문 글꼴(`h2.dyn`)
-- **되돌리기**: 예전 디자인은 GitHub 브랜치 `pre-redesign`(커밋 547afc7). `<style id="court">` 블록과 글꼴 링크의 Black Han Sans · Saira Condensed, `homeHero()` 호출만 빼면 예전 모양
+- **되돌리기**: 예전 디자인은 GitHub 브랜치 `pre-redesign`(커밋 547afc7). `<style id="court">` 블록과 글꼴 링크의 Saira Condensed, `homeHero()` 호출만 빼면 예전 모양
 - 디자인 확인 사진: `SHOTDIR=/tmp/s node run.js shots`(휴대폰 · PC, `SHOTV=home,scout`로 화면 고르기, `DARK=1` 다크)
