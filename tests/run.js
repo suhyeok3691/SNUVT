@@ -652,7 +652,14 @@ const SUITES = {
     await a.go("fr"); await p.waitForTimeout(200);
     await p.evaluate(() => { state.cup = state.cup || {}; state.cup.key = "friendly:f1"; state.live.open = (lv().games["friendly:f1"] || [])[0]?.id; render(); }); await p.waitForTimeout(400);
     const pts = async n => { for (let i = 0; i < n; i++) { await p.click('[data-act="lvpt"][data-v="us"]'); } await p.waitForTimeout(150); };
-    await pts(21); await p.click('[data-act="lvnext"]'); await p.waitForTimeout(100);
+    await pts(21);
+    // 최근 기록 줄마다 누가 · 언제 (내 기록 = 내 이름, 다른 사람 = live_authors 이름)
+    await p.evaluate(() => { const g = lvGame(); lv().rallies[g.id].push({ id: "x-other", game_id: g.id, set_no: 1, side: "us", kind: "srv", res: "ok", author: "u-analyst", created_at: "2026-11-01T01:02:03Z" }); lv().recAll = true; state.dirty = false; render(); });
+    await p.waitForTimeout(200);
+    { const t = await a.text(".sc-recent"); assert.match(t, /김분석 · 10:02:03/, "다른 사람 기록: 이름 · 시각");
+      assert.match(t, new RegExp((await p.evaluate(() => playerOf(state.myPid).name)) + " · \\d{2}:\\d{2}:\\d{2}"), "내 기록: 내 이름 · 시각"); }
+    await p.evaluate(() => { const g = lvGame(); lv().rallies[g.id] = lv().rallies[g.id].filter(r => r.id !== "x-other"); lv().recAll = false; state.dirty = false; render(); });
+    await p.click('[data-act="lvnext"]'); await p.waitForTimeout(100);
     await pts(21); await p.click('[data-act="lvnext"]'); await p.waitForTimeout(100);
     await pts(15); assert.ok(await p.$('[data-act="lvpt"][data-v="us"]'), "교류전 3세트는 15점에 안 끝남 (21점)");
     await pts(6); assert.doesNotMatch(await a.text("main"), /경기 끝/, "세트 수 자유는 경기 끝 없음");

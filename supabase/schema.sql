@@ -2619,3 +2619,14 @@ alter table public.scout_points drop constraint if exists scout_points_set_no_ch
 alter table public.live_rallies drop constraint if exists live_rallies_set_no_check, add constraint live_rallies_set_no_check check (set_no between 1 and 30);
 -- 실시간 기록 경기 날짜 (일정에서 고른 대회 · 교류전 날, 직접 입력이면 고른 날). 비면 만든 날
 alter table public.live_games add column if not exists date date;
+
+-- 2026-11-17 실시간 기록 줄에 누가 기록했는지: 이 경기 기록자(author) → 부원 이름 (같은 팀만, 이름만)
+create or replace function public.live_authors(gid uuid) returns table(author uuid, name text)
+language sql stable security definer set search_path = '' as $$
+  select a.author, coalesce(pl.name, '?')
+  from (select distinct r.author from public.live_rallies r where r.game_id = gid and r.author is not null) a
+  left join public.profiles pr on pr.id = a.author left join public.players pl on pl.id = pr.player_id
+  where private.live_team(gid) = (select private.my_team())
+$$;
+revoke all on function public.live_authors(uuid) from public, anon;
+grant execute on function public.live_authors(uuid) to authenticated;

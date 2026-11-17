@@ -297,6 +297,21 @@ async function lvLoadAll() {
   catch (e) { L.games["scout:all"] = []; }
   if (state.view === "scout") { state.dirty = false; render(); }
 }
+// 기록 줄마다 누가 · 언제: 기록자 → 부원 이름 (서버 live_authors, 같은 팀만). 모르는 기록자(다른 기기 새 기록)가 보이면 한 번 더 받음
+async function lvAuthors(gid) {
+  const L = lv(); L.authors = L.authors || {}; if (L.authorsBusy) return; L.authorsBusy = true;
+  let ch = false;
+  try { const r = await sb.rpc("live_authors", { gid }); if (!r.error && r.data) { const m = Object.fromEntries(r.data.map(x => [x.author, x.name])); ch = JSON.stringify(m) !== JSON.stringify(L.authors[gid] || null); L.authors[gid] = m; } } catch (e) { /* 이름 없이 시각만 */ }
+  L.authorsBusy = false; if (ch && lvView() && document.getElementById("sheet").hidden) { state.dirty = false; render(); }
+}
+function lvBy(gid, r) {
+  const L = lv(), me = r.author && r.author === uid(), map = (L.authors || {})[gid];
+  const miss = L.authorsMiss = L.authorsMiss || {}, k = gid + ":" + r.author;
+  if (r.author && !me && !(map && r.author in map) && !L.authorsBusy && !miss[k]) { miss[k] = 1; setTimeout(() => lvAuthors(gid), 0); }
+  const nm = me ? ((playerOf(state.myPid) || {}).name || "나") : ((map || {})[r.author] || "");
+  const d = r.created_at ? new Date(r.created_at) : null, p2 = n => String(n).padStart(2, "0");
+  return [nm, d && !isNaN(d) ? `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}` : ""].filter(Boolean).join(" · ");
+}
 async function lvLoadRallies(gid, quiet) {
   const L = lv();
   try {
@@ -306,6 +321,7 @@ async function lvLoadRallies(gid, quiet) {
     const pend = [...(L.rallies[gid] || []).filter(x => x._pending), ...lvQ.list.filter(x => !x.del && x.game_id === gid).map(x => ({ ...x, _pending: true }))].filter((x, i, a) => !ids.has(x.id) && a.findIndex(y => y.id === x.id) === i);
     L.rallies[gid] = [...data, ...pend];
   } catch (e) { L.rallies[gid] = L.rallies[gid] || []; }
+  lvAuthors(gid);
   if (!quiet || lvView() && L.open === gid && document.getElementById("sheet").hidden) { state.dirty = false; render(); }
 }
 // 보는 사람도 바로 보이게: 경기를 열어 두면 Supabase Realtime으로 다른 사람 기록이 오자마자 다시 불러옴 (안 되면 6초마다)
@@ -345,7 +361,7 @@ async function lvFlush() {
       if (r.error && r.error.code === "23505" && row.id) r = { data: { id: row.id, created_at: it.created_at }, error: null }; // 끊겼다 다시 보낸 것: 이미 들어가 있음
       if (r.error) { if (!r.error.code || /fetch|network|JWT/i.test(r.error.message || "")) { setTimeout(lvFlush, 4000); break; } toast(failMsg(r.error)); }
       const l = lv().rallies[it.game_id] || [], loc = l.find(x => x.id === it.id);
-      if (loc) { if (r.error) lv().rallies[it.game_id] = l.filter(x => x !== loc); else { if (loc.id !== r.data.id && lvMine.has(String(loc.id))) mineAdd(lvMine, "snuvt-lvmine", r.data.id); loc.id = r.data.id; loc.created_at = r.data.created_at; delete loc._pending; } }
+      if (loc) { if (r.error) lv().rallies[it.game_id] = l.filter(x => x !== loc); else { if (loc.id !== r.data.id && lvMine.has(String(loc.id))) mineAdd(lvMine, "snuvt-lvmine", r.data.id); loc.id = r.data.id; loc.created_at = r.data.created_at || loc.created_at; delete loc._pending; } }
       lvQ.list.shift(); lvQSave();
     }
   } finally { lvQ.busy = false; }
@@ -735,7 +751,7 @@ function lvPage(x) {
       ${cur.run <= -3 ? `<span class="chip warn lv-run">${-cur.run}연속 실점</span>` : cur.run >= 3 ? `<span class="chip ok lv-run">${cur.run}연속 득점</span>` : ""}</div>
     ${endBox}${pad}
     ${cur.list.length ? `<section class="sec"><div class="row between"><h4>최근 기록</h4>${cur.list.length > 2 ? `<button type="button" class="btn link small" data-act="lvrecall">${L.recAll ? "접기" : `펼치기 (${cur.list.length})`}</button>` : ""}</div><ul class="watch sc-recent">${cur.list.map((r, i) => ({ r, sc: (() => { let u = 0, o = 0; for (const y of cur.list.slice(0, i + 1)) { if (y.point === "us") u++; else if (y.point === "opp") o++; } return `${u}:${o}`; })() })).slice(L.recAll ? 0 : -2).reverse().map(({ r, sc }) =>
-      `<li class="${r._pending ? "ct-pend" : ""}"><span class="num small">${sc}</span><span class="small ct-l">${lvLabel(r)}</span>${r.point ? `<span class="chip ${r.point === "us" ? "ok" : "warn"}">${esc(lvTN(g, r.point))}</span>` : ""}</li>`).join("")}</ul></section>` : ""}
+      `<li class="${r._pending ? "ct-pend" : ""}"><span class="num small">${sc}</span><span class="small ct-l">${lvLabel(r)}<small class="ct-by">${esc(lvBy(g.id, r))}</small></span>${r.point ? `<span class="chip ${r.point === "us" ? "ok" : "warn"}">${esc(lvTN(g, r.point))}</span>` : ""}</li>`).join("")}</ul></section>` : ""}
     <section class="sec"><div class="seg fill">${[["set", `${L.set}세트`], ["all", "경기 전체"]].map(([k, l]) => `<button type="button" class="seg-tab ${L.scope === k ? "on solid" : ""}" data-act="lvscope" data-v="${k}">${l}</button>`).join("")}</div>
       ${scope.length ? lvCoach(scope, g, cur) + lvStats(scope, g) : emptyLine(me ? "팀 · 선수를 고르고 동작 버튼을 눌러요." : "아직 기록이 없어요.")}</section>
   </section>`;
