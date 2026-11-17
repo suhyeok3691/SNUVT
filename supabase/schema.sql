@@ -2612,3 +2612,6 @@ grant execute on function public.scout_authors(uuid) to authenticated;
 -- 전력분석 경기 세트 규칙 (2026-11): {bo: 3판 2선승 여부, to: 기본 점수, pts: {세트: 점수}}. 비면 대회 21·21·15 3판 2선승, 교류전 세트 수 자유 21점
 -- 세트별 라인업은 lineup.sets[n].us · .opp (그 세트부터 다음에 바뀐 세트 전까지)
 alter table public.scout_matches add column if not exists rules jsonb;
+-- 교류전은 세트를 많이 해서 전력분석 세트 번호를 30까지 (예전 1~5)
+alter table public.scout_events drop constraint if exists scout_events_set_no_check, add constraint scout_events_set_no_check check (set_no between 1 and 30);
+alter table public.scout_points drop constraint if exists scout_points_set_no_check, add constraint scout_points_set_no_check check (set_no between 1 and 30);
