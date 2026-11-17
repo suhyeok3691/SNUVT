@@ -2608,3 +2608,7 @@ language sql stable security definer set search_path = '' as $$
 $$;
 revoke all on function public.scout_authors(uuid) from public, anon;
 grant execute on function public.scout_authors(uuid) to authenticated;
+
+-- 전력분석 경기 세트 규칙 (2026-11): {bo: 3판 2선승 여부, to: 기본 점수, pts: {세트: 점수}}. 비면 대회 21·21·15 3판 2선승, 교류전 세트 수 자유 21점
+-- 세트별 라인업은 lineup.sets[n].us · .opp (그 세트부터 다음에 바뀐 세트 전까지)
+alter table public.scout_matches add column if not exists rules jsonb;

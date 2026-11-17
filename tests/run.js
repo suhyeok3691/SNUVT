@@ -613,6 +613,31 @@ const SUITES = {
     assert.match(await a.text("#sheet h3"), /R4/);
     clean(a); await a.ctx.close();
   },
+  // 세트 규칙: 교류전 = 세트 수 자유(경기 끝 없음 · 4세트 이상), 세트 점수 바꾸기, 세트별 라인업(N세트부터)
+  async setrules(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(300);
+    const fill = set => p.evaluate(n => { const S = sc(), m = scMatch(); m.kind = "friendly"; for (let i = 0; i < 21; i++) S.events.m1.push({ id: `p${n}-${i}`, match_id: "m1", set_no: n, side: "us", action: "pt", skill: "pt", point: "us", score: `${i + 1}:0`, created_at: `2026-11-01T0${n}:${String(10 + i).padStart(2, "0")}:00Z` }); state.dirty = false; render(); }, set);
+    for (const n of [1, 2, 3]) { await fill(n); await p.click(`[data-act="scset"][data-v="${n + 1}"]`); await p.waitForTimeout(100); }
+    assert.match(await a.text(".ct-info"), /Set 4 21점/, "교류전 4세트 · 21점");
+    assert.doesNotMatch(await a.text("main"), /경기 끝/, "세트 수 자유는 경기 끝 없음");
+    assert.deepStrictEqual(await p.$$eval('.ct-bar [data-act="scset"]', x => x.map(e => e.textContent.trim())), ["1", "2", "3", "4"]);
+    // 4세트 점수 15점으로
+    await p.click('[data-act="ctpts"]'); await p.click('[data-act="ctptsv"][data-v="15"]'); await p.click('#ctPtsForm button[type="submit"]'); await p.waitForTimeout(200);
+    assert.match(await a.text(".ct-info"), /Set 4 15점/);
+    assert.strictEqual(await p.evaluate(() => window.__db.scout_matches.find(x => x.id === "m1").rules.pts[4]), 15, "서버에 세트 점수");
+    // 4세트부터 상대 1번 자리 바꾸기 → 1~3세트는 그대로
+    await p.click('[data-act="ctlineup"]'); await p.waitForTimeout(100);
+    assert.strictEqual(await p.$eval("#cts-from", e => e.value), "set");
+    await p.fill("#cto-0", "99"); await p.click('#ctLineupForm button[type="submit"]'); await p.waitForTimeout(300);
+    assert.deepStrictEqual(await p.evaluate(() => { const m = scMatch(); return [1, 3, 4, 5].map(n => ctState(m, [], n).opSlots[0]); }), [11, 11, 99, 99]);
+    assert.strictEqual(await p.evaluate(() => scMatch().lineup.opp.slots[0]), 11, "경기 라인업은 그대로");
+    // Match Setup: 교류전이면 세트 수 자유, 대회로 바꾸면 3판 2선승
+    await p.evaluate(() => openScoutForm("m1")); await p.waitForTimeout(100);
+    assert.strictEqual(await p.$eval("#scf-bo", e => e.value), "0");
+    await p.selectOption("#scf-kind", "match"); assert.strictEqual(await p.$eval("#scf-bo", e => e.value), "1");
+    clean(a); await a.ctx.close();
+  },
   // Match Setup: 일정에서 고르면 종류 · 이름 · 상대 · 날짜 · 인원이 채워짐
   async scsched(b) {
     const a = await openApp(b, "coach"), p = a.page;

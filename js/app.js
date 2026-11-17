@@ -2407,11 +2407,11 @@ function scoutOpp() {
 /* ---- 시작 로테 · 로테별 득실 (상대 전략 보기용, 엑셀 · 팀별 탭) ---- */
 // 세트마다 두 팀 시작 로테 번호 + 자리 1~6 선수(등번호 · 포지션) + 리베로 + 첫 서브
 function scStartRows(m) {
-  const L = ctLu(m), out = []; if (ctNine(m)) return out;
-  const ev = sc().events[m.id] || [], sets = [...new Set([...Object.keys(L.sets || {}).map(Number), ...ev.map(e => e.set_no)])].filter(n => n >= 1 && n <= 5).sort((a, b) => a - b);
+  const L0 = ctLu(m), out = []; if (ctNine(m)) return out;
+  const ev = sc().events[m.id] || [], sets = [...new Set([...Object.keys(L0.sets || {}).map(Number), ...ev.map(e => e.set_no)])].filter(n => n >= 1).sort((a, b) => a - b);
   const base = { Date: m.date || "", Tournament: m.title || "", Stage: m.stage || "" };
   for (const n of sets) {
-    const cfg = ev.find(e => e.set_no === n && e.action === CT_CFG), st = (L.sets || {})[n] || (cfg ? { rot: cfg.rot, opp_rot: cfg.opp_rot, serve: cfg.serve } : {});
+    const L = ctLuAt(m, n), cfg = ev.find(e => e.set_no === n && e.action === CT_CFG), st = (L.sets || {})[n] || (cfg ? { rot: cfg.rot, opp_rot: cfg.opp_rot, serve: cfg.serve } : {});
     for (const side of ["us", "opp"]) {
       const T = L[side] || {}, slots = T.slots || []; if (slots.length !== 6) continue;
       const r = (side === "us" ? st.rot : st.opp_rot) || 1, ros = ctRos(m, side);
@@ -2440,10 +2440,10 @@ function scRotRows(m) {
 const SC_T1 = "SNU";
 function scLogRows(m) {
   const ev = (sc().events[m.id] || []).slice().sort((a, b) => a.set_no - b.set_no || String(a.created_at).localeCompare(String(b.created_at)));
-  const t2 = m.opponent || "Opponent", nine = ctNine(m), L = ctLu(m), rows = [];
+  const t2 = m.opponent || "Opponent", nine = ctNine(m), rows = [];
   const tm = x => x === "us" ? ctTA(m) : t2, hms = t => { try { return new Date(t).toLocaleTimeString("en-GB", { hour12: false }); } catch (e) { return ""; } };
   for (const set of [...new Set(ev.map(e => e.set_no))]) {
-    const l = ev.filter(e => e.set_no === set);
+    const l = ev.filter(e => e.set_no === set), L = ctLuAt(m, set);
     l.forEach((e, k) => {
       const a = CT_ACT[e.action]; if (!a) return; // 플레이만 (교체 · Settings 제외)
       const pre = ctState(m, l.slice(0, k), set), post = ctState(m, l.slice(0, k + 1), set);
@@ -2461,9 +2461,9 @@ function scLogRows(m) {
 // 팀 기록지: 라인업 선수 + 기록에 나온 선수 (배번 순)
 function scTeamRows(ms, side) {
   const ev = ms.flatMap(m => sc().events[m.id] || []), keys = new Map();
-  if (side === "us" && ms.every(m => !m.team)) { for (const m of ms) { const U = ctLu(m).us || {}; for (const id of [...(U.slots || []), ...(U.libero || [])]) if (id) keys.set(id, 1); }
+  if (side === "us" && ms.every(m => !m.team)) { for (const m of ms) { const U = ctLuAll(m).us || {}; for (const id of [...(U.slots || []), ...(U.libero || [])]) if (id) keys.set(id, 1); }
     for (const e of ev) if (e.side === "us" && e.player_id && CT_ACT[e.action]) keys.set(e.player_id, 1); }
-  else { for (const m of ms) { const O = ctLu(m)[side] || {}; for (const n of [...(O.slots || []), ...(O.libero || [])]) if (n !== "" && n != null) keys.set(Number(n), 1); }
+  else { for (const m of ms) { const O = ctLuAll(m)[side] || {}; for (const n of [...(O.slots || []), ...(O.libero || [])]) if (n !== "" && n != null) keys.set(Number(n), 1); }
     for (const e of ev) if (e.side === side && e.opp_no != null && CT_ACT[e.action]) keys.set(e.opp_no, 1); }
   const m0 = ms[0], list = [...keys.keys()].map(k => typeof k === "string" ? (p => [k, p && p.number != null ? String(p.number) : "", p ? p.name : ""])(playerOf(k)) : [k, String(k), m0 && ctSnuNo(m0, side) ? ((ctByNo(k) || {}).name || "") : ""])
     .sort((a, b) => (Number(a[1]) || 999) - (Number(b[1]) || 999));
@@ -2542,6 +2542,8 @@ function scSchedSel(m) {
   const cur = m.id ? l.findIndex(x => x.title === m.title && x.s <= (m.date || "") && (m.date || "") <= x.e) : -1;
   return `<label class="fl wide">일정에서 고르기<select id="scf-sched"><option value="">직접 입력</option>${l.map((x, i) => `<option value="${i}" ${i === cur ? "selected" : ""} data-k="${x.k}" data-s="${x.s}" data-e="${x.e}" data-d="${x.d}" data-t="${esc(x.title)}" data-o="${esc(x.opp)}" data-f="${x.fmt}">${esc(x.lab)}</option>`).join("")}</select></label>`;
 }
+// 종류를 바꾸면 세트 방식도: 교류전 = 세트 수 자유, 대회 = 3판 2선승
+["change", "input"].forEach(t => document.addEventListener(t, e => { const x = e.target; if (!x || x.id !== "scf-kind") return; const b = document.getElementById("scf-bo"); if (b) b.value = x.value === "friendly" ? "0" : "1"; }));
 document.addEventListener("change", e => {
   const x = e.target; if (!x || x.id !== "scf-sched") return;
   const o = x.selectedOptions[0], d = document.getElementById("scf-date"); if (!o || !o.value) { if (d) { d.removeAttribute("min"); d.removeAttribute("max"); } return; }
@@ -2563,6 +2565,8 @@ function openScoutForm(id) {
       <label class="fl">날짜<input type="date" id="scf-date" value="${esc(m.date || iso(today()))}"></label>
       <label class="fl">기록자<input id="scf-rec" maxlength="30" value="${esc(m.recorder || (me ? me.name : ""))}"></label>
       <label class="fl">인원<select id="scf-div">${[["6", "6인제"], ["9", "9인제"]].map(([v, l]) => `<option value="${v}" ${div === v ? "selected" : ""}>${l}</option>`).join("")}</select></label>
+      ${(R => `<label class="fl">세트 방식<select id="scf-bo"><option value="1" ${R.bo ? "selected" : ""}>3판 2선승</option><option value="0" ${R.bo ? "" : "selected"}>세트 수 자유</option></select></label>
+      <label class="fl">세트 점수<input id="scf-to" type="number" inputmode="numeric" min="1" max="99" value="${R.to}"></label>`)(ctRules(id ? m : { kind: scMk() }))}
       <label class="fl wide">유튜브<input id="scf-yt" maxlength="200" value="${esc(m.yt || "")}" placeholder="https://youtu.be/..."></label>
       <label class="fl wide">치지직 다시보기<input id="scf-vod" maxlength="200" value="${esc(m.vod || "")}" placeholder="chzzk.naver.com/video/… 또는 naver.me/…"></label>
     </div><div class="row"><button class="btn primary" type="submit">${id ? "저장" : "다음: 라인업"}</button></div></form>`;
@@ -3945,6 +3949,8 @@ document.addEventListener("submit", async ev => {
       await lvSubmit(f); return;
     } else if (f.id === "ctEditForm") {
       await ctEditSave(f); return;
+    } else if (f.id === "ctPtsForm") {
+      await ctPtsSave(); return;
     } else if (f.id === "ctCfgForm") {
       ctCfgSave(); return;
     } else if (f.id === "ctLineupForm") {
@@ -3961,7 +3967,9 @@ document.addEventListener("submit", async ev => {
       if (vodIn && !vod) { toast("치지직 다시보기 주소를 확인해 주세요"); return; }
       const tmIn = txt("scf-team"), team = !tmIn || /^(snu|서울대)/i.test(tmIn) ? null : tmIn, old = f.dataset.id ? sc().matches.find(x => x.id === f.dataset.id) : null;
       if (old && !!old.team !== !!team && (ctReady(old) || (sc().events[old.id] || []).length)) { toast("라인업·기록이 있어서 SNU ↔ 다른 팀은 바꿀 수 없어요"); return; }
-      const row = { title: txt("scf-title"), stage: txt("scf-stage") || null, date: txt("scf-date") || null, team, opponent: txt("scf-opp") || null, recorder: txt("scf-rec") || null, division: txt("scf-div") === "9" ? "9" : "6", yt: yt || null, vod, kind: txt("scf-kind") === "friendly" ? "friendly" : "match" };
+      const R0 = old ? ctRules(old) : { pts: {} }, to = Math.round(Number(txt("scf-to"))) || 21;
+      const rules = { bo: txt("scf-bo") !== "0", to: to >= 1 && to <= 99 ? to : 21, pts: R0.pts || {} };
+      const row = { rules, title: txt("scf-title"), stage: txt("scf-stage") || null, date: txt("scf-date") || null, team, opponent: txt("scf-opp") || null, recorder: txt("scf-rec") || null, division: txt("scf-div") === "9" ? "9" : "6", yt: yt || null, vod, kind: txt("scf-kind") === "friendly" ? "friendly" : "match" };
       sc().mk = row.kind; // 저장한 종류 목록으로
       const r = f.dataset.id ? await sb.from("scout_matches").update(row).eq("id", f.dataset.id).select().maybeSingle() : await sb.from("scout_matches").insert(row).select().maybeSingle(); ok(r);
       closeSheet(); toast("저장했어요"); await scoutLoad();
