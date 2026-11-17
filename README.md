@@ -418,5 +418,5 @@ docs/archive/           예전에 만든 설계 · 자료 문서 사본 (앱에 
 - **달력**: 칸을 칠하지 않고 숫자 아래 짧은 색 띠(훈련 파랑 · 대회 주황 · 교류전 초록 …), 오늘은 노란 칸
 - **홈 맨 위**: 큰 날짜(`11.01`, 등번호 글꼴)와 요일 · 오늘 팀 일정 한 줄(`homeHero`). 홈에서는 위 띠의 날짜를 숨김(`html[data-view]`)
 - 설명 문구는 최소로, 버튼 · 칩은 작게. 일본어 학교 이름 같은 큰 제목은 본문 글꼴(`h2.dyn`)
-- **되돌리기**: 예전 디자인은 git 태그 `pre-redesign`. `<style id="court">` 블록과 글꼴 링크의 Black Han Sans · Saira Condensed, `homeHero()` 호출만 빼면 예전 모양
+- **되돌리기**: 예전 디자인은 GitHub 브랜치 `pre-redesign`(커밋 547afc7). `<style id="court">` 블록과 글꼴 링크의 Black Han Sans · Saira Condensed, `homeHero()` 호출만 빼면 예전 모양
 - 디자인 확인 사진: `SHOTDIR=/tmp/s node run.js shots`(휴대폰 · PC, `SHOTV=home,scout`로 화면 고르기, `DARK=1` 다크)
