@@ -38,7 +38,7 @@ db.friendlies=[{id:"f1",team_id:"men",date:"2026-11-08",opponent:"연세대",for
 const GUEST_CAL={team:{id:"women",label:"여자부",swap_days:true},events:[],off:["2026-11-09"],times:[{key:"2026-11-12",start:"19:00",end:"21:00"}],fr:["2026-11-05"]};
 const GUEST_LIST=role==="coach"?[{date:"2026-11-04",name:"김여부",pos:"S",team:"women",start_time:"19:00",end_time:"21:00"}]:[];
 const JP_COLS=["id","source","title","published","year","tourn","gender","rnd","schools","ch","len","noembed"];
-window.supabase={createClient:()=>{client.functions={invoke:async()=>({data:{}})};client.rpc=async n=>n==="jp_videos_pack"?{data:db.jp_videos.map(v=>JP_COLS.map(k=>v[k]===undefined?null:v[k])),error:null}:n==="guest_cal"?{data:GUEST_CAL,error:null}:n==="guest_list"?{data:GUEST_LIST,error:null}:{data:null,error:null};return client;}};
+window.supabase={createClient:()=>{client.functions={invoke:async()=>({data:{}})};client.rpc=async n=>n==="jp_videos_pack"?{data:db.jp_videos.map(v=>JP_COLS.map(k=>v[k]===undefined?null:v[k])),error:null}:n==="guest_cal"?{data:GUEST_CAL,error:null}:n==="guest_list"?{data:GUEST_LIST,error:null}:n==="scout_authors"?{data:[{author:"u-analyst",name:"김분석"}],error:null}:{data:null,error:null};return client;}};
 `;
 const mockScript = role => `(function(){const role=${JSON.stringify(role)};${DB};window.__db=db;})();`; // __db: 테스트에서 가짜 서버 표 확인
 module.exports = { mockScript };

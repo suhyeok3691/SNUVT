@@ -2132,6 +2132,8 @@ async function scoutEvents(mid) {
     const [ev, pt] = await Promise.all([scPaged("scout_events", q => q.eq("match_id", mid)), scPaged("scout_points", q => q.eq("match_id", mid))]);
     [S.events[mid], S.points[mid]] = ctQApply(mid, ev, pt);
   } catch (e) { S.events[mid] = S.events[mid] || []; S.points[mid] = S.points[mid] || []; }
+  // 기록 로그에 누가 기록했는지: 이 경기 기록자 → 이름 (서버 scout_authors, 같은 팀만)
+  try { const r = await sb.rpc("scout_authors", { mid }); if (!r.error && r.data) S.authors = Object.assign(S.authors || {}, { [mid]: Object.fromEntries(r.data.map(x => [x.author, x.name])) }); } catch (e) { /* 이름 없이 */ }
   if (state.view === "scout" && state.scoutId === mid) render();
 }
 async function scoutAll() {

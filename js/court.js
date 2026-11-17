@@ -208,8 +208,14 @@ function ctPad(m, ev) {
     <div class="ct-court ${land ? "h" : ""}">${court}</div>
     ${land ? `<div class="ct-last small">${recent[0] ? ctLabel(recent[0]) : "Ready… 선수를 눌러 기록"}</div>` : `<div class="ct-extra">${flip ? libRow("us") + libRow("opp") : libRow("opp") + libRow("us")}</div>`}
     <section class="sec ct-recs"><div class="sec-head"><h3>${S.recAll ? `${setNo}세트 전체 기록` : "방금 기록"} <span class="small muted">${s.list.length}개</span></h3>${s.list.length ? `<button class="btn link small" type="button" data-act="ctrecall">${S.recAll ? "접기" : "전체 기록 · 고치기"}</button>` : ""}</div>
-      ${recent.length ? `<ul class="watch sc-recent ct-rec">${(S.recAll ? s.list.slice().reverse() : recent).map(e => `<li class="${e._pending ? "ct-pend" : ""}"><span class="num small">${esc(e.score || "")}</span><span class="small ct-l">${ctLabel(e)}</span>${e.point ? `<span class="chip ${e.point === "us" ? "ok" : "warn"}">${esc(ctTN(m, e.point))} 점수</span>` : ""}${ctCanEdit(e) ? `<button class="btn link small ct-ed" type="button" data-act="ctrec" data-id="${esc(e.id)}" aria-label="고치기 · 지우기 · 넣기">⋯</button>` : ""}</li>`).join("")}</ul>` : emptyLine("선수를 눌러 기록을 시작해요.")}
+      ${recent.length ? `<ul class="watch sc-recent ct-rec">${(S.recAll ? s.list.slice().reverse() : recent).map(e => `<li class="${e._pending ? "ct-pend" : ""}"><span class="num small">${esc(e.score || "")}</span><span class="small ct-l">${ctLabel(e)}<small class="ct-by">${esc(ctBy(e))}</small></span>${e.point ? `<span class="chip ${e.point === "us" ? "ok" : "warn"}">${esc(ctTN(m, e.point))} 점수</span>` : ""}${ctCanEdit(e) ? `<button class="btn link small ct-ed" type="button" data-act="ctrec" data-id="${esc(e.id)}" aria-label="고치기 · 지우기 · 넣기">⋯</button>` : ""}</li>`).join("")}</ul>` : emptyLine("선수를 눌러 기록을 시작해요.")}
     </section></div>`;
+}
+// 기록 줄 아래 작게: 누가 · 언제(시:분:초)
+function ctBy(e) {
+  const me = e.author && e.author === uid(), nm = me ? ((playerOf(state.myPid) || {}).name || "나") : (((sc().authors || {})[e.match_id] || {})[e.author] || "");
+  const d = e.created_at ? new Date(e.created_at) : null, p2 = n => String(n).padStart(2, "0");
+  return [nm, d && !isNaN(d) ? `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}` : ""].filter(Boolean).join(" · ");
 }
 function ctLabel(e) {
   const m = scMatch(), a = CT_ACT[e.action], who = ctRos(m, e.side) ? (() => { const p = playerOf(e.player_id); return p ? `${pNo(p)}${esc(p.name)}` : "SNU"; })() : `${esc(ctTN(m, e.side))} #${e.opp_no ?? "?"}${(n => n ? ` ${esc(n)}` : "")(e.opp_no != null ? ctName(e.side, e.opp_no).nm : "")}`;

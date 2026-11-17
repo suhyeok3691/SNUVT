@@ -2597,3 +2597,14 @@ create or replace function private.jp_yosen_call() returns bigint language sql s
     headers := jsonb_build_object('Content-Type', 'application/json', 'x-cron', (select decrypted_secret from vault.decrypted_secrets where name = 'push_cron')), timeout_milliseconds := 150000)
 $$;
 select cron.schedule('jp-yosen-2h', '35 */2 * * *', 'select private.jp_yosen_call()');
+
+-- 2026-11-17 전력분석 기록 로그에 누가 기록했는지: 이 경기 기록자(author) → 부원 이름 (같은 팀만, 이름만)
+create or replace function public.scout_authors(mid uuid) returns table(author uuid, name text)
+language sql stable security definer set search_path = '' as $$
+  select a.author, coalesce(pl.name, '?')
+  from (select distinct e.author from public.scout_events e where e.match_id = mid and e.author is not null) a
+  left join public.profiles pr on pr.id = a.author left join public.players pl on pl.id = pr.player_id
+  where private.scout_team(mid) = (select private.my_team())
+$$;
+revoke all on function public.scout_authors(uuid) from public, anon;
+grant execute on function public.scout_authors(uuid) to authenticated;

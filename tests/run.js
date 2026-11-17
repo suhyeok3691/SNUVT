@@ -584,6 +584,18 @@ const SUITES = {
     assert.ok(!(await p.evaluate(() => sc().oldTeam || lv().oldTeam || sc().matches.some(m => m.id === "other-team"))), "팀을 바꾸면 이전 팀 경기 없음");
     clean(a); await a.ctx.close();
   },
+  // 전력분석 기록 로그: 누가 · 언제 기록했는지 작게 (내 기록은 내 이름, 다른 사람은 scout_authors 이름)
+  async recby(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(400);
+    await p.click('.ct-court .ct-p.us[data-v="1"]'); await p.click('[data-act="ctcat"][data-v="serve"]'); await p.click('[data-act="ctact"][data-a="foot"]'); await p.waitForTimeout(200);
+    await p.evaluate(() => { const S = sc(); S.events.m1.unshift({ id: "x-other", match_id: "m1", set_no: 1, side: "us", opp_no: 2, skill: "serve", action: "ace", grade: "#", score: "0:0", author: "u-analyst", created_at: "2026-11-01T01:02:03Z" }); state.dirty = false; render(); });
+    await p.click('[data-act="ctrecall"]'); await p.waitForTimeout(150);
+    const t = await a.text(".ct-rec");
+    assert.match(t, /김분석 · 10:02:03/, "다른 사람 기록: 이름 · 시각(한국 시간)");
+    assert.match(t, new RegExp((await p.evaluate(() => playerOf(state.myPid).name)) + " · \\d{2}:\\d{2}:\\d{2}"), "내 기록: 내 이름 · 시각");
+    clean(a); await a.ctx.close();
+  },
   // 영상 분석: 공격 범실 Out → 아웃된 자리(코트 밖) 찍기 → 분석 지도에 빨간 점 · 고치기에서도
   async atkout(b) {
     const a = await openApp(b, "coach"), p = a.page;

@@ -1278,7 +1278,7 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
   .ct-wrap.h .ct-court { margin: 0; max-width: none; height: 100%; min-height: 0; padding: 6px; }
   .ct-wrap.h .ct-court .ct-col .ct-p { min-height: 0; padding: 2px; } .ct-wrap.h .ct-court .ct-p b { font-size: clamp(16px, 5.2vh, 26px); }
 }
-.ct-rec li .ct-l { flex: 1; text-align: left; } .ct-rec li .num { min-width: 34px; flex: none; }
+.ct-rec li .ct-l { flex: 1; text-align: left; } .ct-rec li .ct-by { display: block; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; } .ct-rec li .ct-by:empty { display: none; } .ct-rec li .num { min-width: 34px; flex: none; }
 /* 참·불참: 목록엔 숫자만, 명단은 투표 창에서 */
 .ev-vote { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ev-cnt { display: inline-flex; gap: 8px; align-items: center; font: inherit; font-size: 13px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--ink); cursor: pointer; }
@@ -1390,6 +1390,7 @@ i.dot.k-team { background: var(--c-team); } i.dot.k-open { background: var(--c-o
 .tab-title, .seg-tab.on, .vote-pick span, .ss-kv, .today-card .sub { font-weight: 700; }
 b, strong, h3, .btn { font-weight: 600; }
 h2 b, h3 b, .sec-head h3, .panel > h3:first-child, .cal-head h3 { font-weight: 700; }
+.dr-brand { font-family: var(--f-data); font-size: 24px; } .dr-brand b { font-weight: 700; letter-spacing: .02em; }
 </style>
 </head>
 <body>
@@ -1415,8 +1416,8 @@ h2 b, h3 b, .sec-head h3, .panel > h3:first-child, .cal-head h3 { font-weight: 7
 <script src="js/guide.js?v=194"></script>
 <script src="js/library.js?v=196"></script>
 <script src="js/campus.js?v=198"></script>
-<script src="js/court.js?v=242"></script>
+<script src="js/court.js?v=243"></script>
 <script src="js/live.js?v=241"></script>
-<script src="js/app.js?v=264"></script>
+<script src="js/app.js?v=265"></script>
 </body>
 </html>
