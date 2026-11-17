@@ -96,7 +96,7 @@ const lvTN = (g, side) => side === "us" ? lvTA(g) : lvTB(g);
 const lvSnu = (g, side) => side === "us" && !(g && g.team);
 // 교류전 상대: 명단을 안 넣었으면 이름표로 시작 (OH1 · OH2 · MB1 · MB2 · OP · S · Li)
 const LV_FR_ROS = [["S", "S"], ["OH1", "OH"], ["OH2", "OH"], ["MB1", "MB"], ["MB2", "MB"], ["OP", "OP"], ["Li", "L"]].map(([no, pos]) => ({ no, pos }));
-const lvRos = (g, side) => { const r = ((g && g.roster) || {})[side]; if (r) return r; return g && side === "opp" && g.ref_kind === "friendly" ? LV_FR_ROS : []; }; // [{no, pos}]
+const lvRos = (g, side) => { const r = ((g && g.roster) || {})[side]; if (r) return r; return g && side === "opp" && lvIsFr(g) ? LV_FR_ROS : []; }; // [{no, pos}]
 const lvNos = (g, side) => [...new Set([...(lv().rallies[g.id] || []).filter(r => r.side === side).map(lvIdOf).filter(Boolean), ...lvRos(g, side).map(x => String(x.no))])].sort(lvIdSort);
 const lvPosOf = (g, side, v) => lvSnu(g, side) ? lvNormPos((playerOf(v) || {}).pos) : lvNormPos((lvRos(g, side).find(x => String(x.no) === String(v)) || {}).pos) || lvTagPos(v);
 const LV_POS = ["OH", "OP", "MB", "S", "L"];
@@ -115,7 +115,7 @@ const lvCupLu = (g, setNo) => { const d = ((cupState().lineups[g.ref_kind + ":" 
 function lvDefLu(g, side, setNo) {
   if (!g) return null;
   const rot = (((g.sets || {})[setNo] || {})[side === "us" ? "rot" : "orot"]) || 1;
-  if (side === "opp" && g.ref_kind === "friendly" && !(g.roster || {}).opp) return { rot, slots: ["S", "OH1", "MB1", "OP", "OH2", "MB2"], lib: "Li" };
+  if (side === "opp" && lvIsFr(g) && !(g.roster || {}).opp) return { rot, slots: ["S", "OH1", "MB1", "OP", "OH2", "MB2"], lib: "Li" };
   if (!lvSnu(g, side)) return null;
   { const c = lvCupLu(g, setNo); if (c) return { rot, slots: [...c.slots], lib: (c.lib || [])[0] || "" }; } // 대회에 낸 라인업 그대로
   const ps = lvSnuPool(g, setNo), court = ps.filter(p => lvNormPos(p.pos) !== "L").map(p => ({ v: p.id, pos: lvNormPos(p.pos) }));
@@ -278,7 +278,9 @@ function lvState(g, rs, setNo) {
   return s;
 }
 // 대회: 3판 2선승 21 · 21 · 15 (court.js) / 교류전: 세트 수 자유, 세트마다 21점(sets[n].to 로 바꿈) · "+ 세트"로 늘림
-const lvFree = g => !!g && g.ref_kind === "friendly";
+// 교류전 실시간 기록: 교류전 화면에서 만든 것 + 전력분석 실시간 탭에서 "직접 입력 · 교류전"으로 만든 것(ref_kind scout · ref_id friendly)
+const lvIsFr = g => !!g && (g.ref_kind === "friendly" || (g.ref_kind === "scout" && g.ref_id === "friendly"));
+const lvFree = lvIsFr;
 const lvTarget = (g, n) => Number((((g && g.sets) || {})[n] || {}).to) || (lvFree(g) ? 21 : setTarget(n));
 const lvEnd = (s, setNo, g = lvGame()) => Math.max(s.us, s.op) >= lvTarget(g, setNo) && Math.abs(s.us - s.op) >= 2 ? (s.us > s.op ? "us" : "opp") : null;
 const lvMine = mineLoad("snuvt-lvmine"); // 이 기기에서 넣은 기록 (되돌리기는 이것만)
@@ -487,6 +489,18 @@ function lvSection(x) {
   return `<section class="panel sec"><div class="sec-head"><h3>실시간 기록</h3>${lvCan() ? `<button class="btn add" type="button" data-act="lvnew" data-k="${esc(key)}">+ 경기</button>` : ""}</div>${list ? `<div class="boxes">${list}</div>` : emptyLine("아직 기록한 경기가 없어요.")}</section>`;
 }
 function lvForm(key, gid) {
+  // 전력분석 실시간 탭의 + 경기(key "pick"): 일정(대회 · 교류전)에서 고르거나 직접 입력(대회 / 교류전)
+  if (key === "pick") {
+    const items = scSchedItems(), t = iso(today()), mk = scMk(), def = items.find(x => x.k === mk && x.s <= t && t <= x.e) || items.find(x => x.s <= t && t <= x.e);
+    key = def ? def.ref : `scout:${mk}`;
+    const pick = `<label class="fl wide">일정에서 고르기<select id="lv-ref">${[["scout:match", "직접 입력 · 대회"], ["scout:friendly", "직접 입력 · 교류전"]].map(([v, l]) => `<option value="${v}" ${key === v ? "selected" : ""}>${l}</option>`).join("")}${items.map(x => `<option value="${esc(x.ref)}" data-o="${esc(x.opp)}" ${key === x.ref ? "selected" : ""}>${esc(x.lab)}</option>`).join("")}</select></label>`;
+    lvForm(key); const f = document.getElementById("lvForm"); if (!f) return;
+    f.querySelector(".fields").insertAdjacentHTML("afterbegin", pick);
+    const sel = document.getElementById("lv-ref"), sync = () => { const o = sel.selectedOptions[0], v = sel.value, fr = v.startsWith("friendly:") || v === "scout:friendly";
+      f.dataset.k = v; const lb = document.getElementById("lv-label"); if (lb) lb.closest("label").hidden = fr; if (o && o.dataset.o) document.getElementById("lv-opp").value = o.dataset.o; };
+    if (!document.getElementById("lv-label")) f.querySelector(".fields").insertAdjacentHTML("beforeend", `<label class="fl">경기<input id="lv-label" maxlength="40" placeholder="예선 1경기 · 8강"></label>`);
+    sel.addEventListener("change", sync); sync(); return;
+  }
   const [kind, id] = key.split(":"), g = gid ? lvGame() : null;
   const fr = kind === "friendly" ? ((state.friendlies && Object.values(state.friendlies).flat().find(f => String(f.id) === id)) || {}) : {};
   const el = document.getElementById("sheet");
@@ -508,7 +522,7 @@ async function lvSubmit(f) {
       ok(await sb.from("live_games").update({ label: v("lv-label").trim() || null, team, opponent: v("lv-opp").trim() }).eq("id", f.dataset.id)); }
     else {
       const r = await sb.from("live_games").insert({ ref_kind: kind, ref_id: id, label: v("lv-label").trim() || null, team, opponent: v("lv-opp").trim(), mode: "lite" /* 실시간 기록은 Lite 만 (전체 · 영상 분석 방식은 2026-11-01 뺌) */, sets: { 1: { rot: 1, orot: 1 } } }).select().maybeSingle(); ok(r);
-      if (r.data) { L.open = r.data.id; L.set = 1; L.side = "us"; L.pick = null; L.rallies[r.data.id] = []; pushInner(); }
+      if (r.data) { L.open = r.data.id; L.set = 1; L.side = "us"; L.pick = null; L.rallies[r.data.id] = []; pushInner(); if (state.view === "scout") sc().live = true; }
     }
     closeSheet();
     if (kind === "scout" || state.view === "scout") { await lvLoadAll(); return; }

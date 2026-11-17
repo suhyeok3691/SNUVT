@@ -2177,7 +2177,7 @@ function viewScout() {
     ${!ev ? loaderHtml(true) : S.tab === "stats" ? scoutStats(ev, S.points[m.id] || []) : ctPad(m, ev)}</section>`;
 }
 // 칩 옆 숫자: 시즌 탭은 시즌 표에 실제로 들어가는 우리(SNU) 경기만 — 고른 시즌 · 기록 있는 경기
-const lvKindOf = g => g.ref_kind === "friendly" ? "friendly" : "match"; // 실시간 기록: 교류전 / 그 밖(대회)
+const lvKindOf = g => lvIsFr(g) ? "friendly" : "match"; // 실시간 기록: 교류전 / 그 밖(대회)
 function scKindN(k) {
   if (sc().ltab === "live") return (lv().games["scout:all"] || []).filter(g => lvKindOf(g) === k).length;
   const S = sc(), ms = S.matches.filter(m => scKindOf(m) === k);
@@ -2185,7 +2185,7 @@ function scKindN(k) {
   return ms.filter(m => scSnuSide(m) && (!S.sy || (m.date && syOf(m.date) === S.sy)) && (!S.events[m.id] || ctReal(S.events[m.id]).length)).length;
 }
 function scoutList() {
-  const S = sc(), head = `<div class="sec-head"><h2>전력분석</h2><span class="row nowrap">${S.matches.length ? `<button class="btn link small" type="button" data-act="scxlsx" data-id="">엑셀</button>` : ""}${can("analysis") ? `<button class="btn add" type="button" data-act="scnew">+ 경기</button>` : ""}</span></div>`;
+  const S = sc(), head = `<div class="sec-head"><h2>전력분석</h2><span class="row nowrap">${S.matches.length ? `<button class="btn link small" type="button" data-act="scxlsx" data-id="">엑셀</button>` : ""}${S.ltab === "live" ? (lvCan() ? `<button class="btn add" type="button" data-act="scnewlv">+ 경기</button>` : "") : can("analysis") ? `<button class="btn add" type="button" data-act="scnew">+ 경기</button>` : ""}</span></div>`;
   const tabs = scSeg("scltab", [["match", "경기"], ["live", "실시간"], ["season", "시즌"], ["opp", "팀별"]], S.ltab)
     + (!(S.ltab === "live" ? (lv().games["scout:all"] || []).length : S.matches.length) ? "" : `<div class="sc-row sc-kind">${SC_KIND.map(([k, l]) => scChip("scmk", k, S.ltab === "season" && S.mk === "cmp" ? "cmp" : scMk(), `${l} <span class="sc-n-in">${scKindN(k)}</span>`)).join("")}${S.ltab === "season" ? scChip("scmk", "cmp", S.mk, "대회 vs 교류전") : ""}</div>`);
   let body;
@@ -2205,7 +2205,7 @@ function scoutLiveList() {
   const ref = g => cupItems().find(y => y.kind === g.ref_kind && String(y.id) === String(g.ref_id)), l = gs.filter(g => lvKindOf(g) === scMk());
   if (!l.length) return emptyLine(scMk() === "friendly" ? "실시간 기록한 교류전이 없어요." : "실시간 기록한 대회 경기가 없어요.");
   return `<div class="sc-list">${l.map(g => { const x = ref(g), d = g.created_at ? shortDate(new Date(g.created_at)) : "";
-    return `<button type="button" class="panel sc-card" data-act="sclive" data-id="${esc(g.id)}"><b>${g.label ? `${esc(g.label)} · ` : ""}${esc(lvTA(g))} vs ${esc(g.opponent || "")}</b><span class="small muted">${[d, x ? x.name : g.ref_kind === "friendly" ? "교류전" : "대회"].filter(Boolean).map(esc).join(" · ")}</span><span class="go">›</span></button>`; }).join("")}</div>`;
+    return `<button type="button" class="panel sc-card" data-act="sclive" data-id="${esc(g.id)}"><b>${g.label ? `${esc(g.label)} · ` : ""}${esc(lvTA(g))} vs ${esc(g.opponent || "")}</b><span class="small muted">${[d, x ? x.name : lvIsFr(g) ? "교류전" : "대회"].filter(Boolean).map(esc).join(" · ")}</span><span class="go">›</span></button>`; }).join("")}</div>`;
 }
 // 치지직 다시보기는 앱 안에 못 띄워서(퍼가기 없음) 새 창으로 열기만 (영상 시계는 2026-11-01 뺌)
 const parseVod = u => { const x = /^(?:https?:\/\/)?(?:m\.)?chzzk\.naver\.com\/video\/(\d+)/.exec(String(u || "").trim()); return x ? `https://chzzk.naver.com/video/${x[1]}` : null; };
@@ -2536,10 +2536,10 @@ async function scoutDock() {
 function scSchedItems() {
   const t = iso(today()), lim = dAdd(t, 14), from = dAdd(t, -400), out = [];
   for (const e of normEvents(events())) if (e.id && (e.kind === "major" || e.kind === "minor") && e.start <= lim && e.end >= from)
-    out.push({ k: "match", s: e.start, e: e.end, d: e.start <= t && t <= e.end ? t : e.start, title: e.name || "대회", opp: "", fmt: e.format === "9" ? "9" : "6", lab: `${md(parseD(e.start))}${e.end !== e.start ? "–" + md(parseD(e.end)) : ""} ${e.name || "대회"}` });
+    out.push({ k: "match", ref: `event:${e.id}`, s: e.start, e: e.end, d: e.start <= t && t <= e.end ? t : e.start, title: e.name || "대회", opp: "", fmt: e.format === "9" ? "9" : "6", lab: `${md(parseD(e.start))}${e.end !== e.start ? "–" + md(parseD(e.end)) : ""} ${e.name || "대회"}` });
   for (const [d, fs] of Object.entries(state.friendlies || {})) if (d >= from && d <= lim) for (const f of fs)
     { const o = String(f.opponent || "").trim(), title = o === "OB전" ? "OB전" : o ? `${o} 교류전` : "교류전"; // frName은 "국민대와 교류전"이라 상대 이름을 그대로 씀
-      out.push({ k: "friendly", s: d, e: d, d, title, opp: o === "OB전" ? "" : o, fmt: f.format === "9" ? "9" : "6", lab: `${md(parseD(d))} ${title}` }); }
+      out.push({ k: "friendly", ref: `friendly:${f.id}`, s: d, e: d, d, title, opp: o === "OB전" ? "" : o, fmt: f.format === "9" ? "9" : "6", lab: `${md(parseD(d))} ${title}` }); }
   return out.sort((a, b) => b.d.localeCompare(a.d));
 }
 function scSchedSel(m) {
@@ -3444,6 +3444,7 @@ document.addEventListener("click", async ev => {
   if (act.startsWith("sc")) {
     const S = sc(), x = S.sel, v = b.dataset.v;
     if (act === "scnew") return openScoutForm("");
+    if (act === "scnewlv") return lvForm("pick"); // 실시간 탭의 + 경기 = 실시간 기록 경기 (일정에서 고르거나 직접)
     if (act === "scedit") return openScoutForm(b.dataset.id);
     if (act === "sclive") { const L = lv(); pushInner(); S.live = true; L.open = b.dataset.id; L.set = 1; L.pick = null; L.side = "us"; L.scope = "set"; state.dirty = false; render(); window.scrollTo(0, 0);
       const g = lvGame(); if (g) lvLoadRallies(g.id).then(() => { const l = (L.rallies[g.id] || []).filter(r => r.kind); if (l.length) { L.set = Math.max(...l.map(r => r.set_no)); state.dirty = false; render(); } }); return; }

@@ -685,6 +685,14 @@ const SUITES = {
     assert.match(await a.text("main"), /실시간 기록한 대회 경기가 없어요/);
     await p.click('[data-act="scmk"][data-v="friendly"]'); await p.waitForTimeout(150);
     assert.ok(await p.$('[data-act="sclive"]'), "교류전 칩 → 교류전 실시간 기록");
+    // 실시간 탭의 + 경기 = 실시간 기록 경기 (영상 분석 Match Setup 아님)
+    await p.click('[data-act="scnewlv"]'); await p.waitForTimeout(150);
+    assert.ok(await p.$("#lvForm #lv-ref"), "실시간 경기 추가 창 (일정에서 고르기)"); assert.strictEqual(await p.$("#scForm"), null, "영상 분석 경기 창 아님");
+    await p.selectOption("#lv-ref", "scout:friendly"); await p.fill("#lv-opp", "한양대"); await p.click("#lvForm button[type=submit]"); await p.waitForTimeout(400);
+    const w = (await a.writes("live_games")).map(x => x[2]).filter(x => x && x.opponent === "한양대");
+    assert.ok(w.length && w[0].ref_kind === "scout" && w[0].ref_id === "friendly", "직접 입력 · 교류전으로 저장 " + JSON.stringify(w));
+    assert.ok(await p.evaluate(() => sc().live && !!lvGame()), "만든 실시간 경기 화면이 열림");
+    assert.ok(await p.$('[data-act="lvaddset"]'), "직접 입력 교류전도 + 세트");
     clean(a); await a.ctx.close();
   },
   // Match Setup: 일정에서 고르면 종류 · 이름 · 상대 · 날짜 · 인원이 채워짐
