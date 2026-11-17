@@ -643,6 +643,32 @@ const SUITES = {
     await p.selectOption("#scf-kind", "match"); assert.strictEqual(await p.$eval("#scf-bo", e => e.value), "1");
     clean(a); await a.ctx.close();
   },
+  // 실시간 기록 교류전: 세트 수 자유(+ 세트, 경기 끝 없음 · 3세트도 21점), 세트 점수, 이전 세트 라인업 불러오기
+  async lvfree(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await p.evaluate(() => lvForm("friendly:f1")); await p.waitForTimeout(300);
+    await p.evaluate(() => { document.getElementById("lv-opp").value = "연세대"; }); await p.click("#lvForm button[type=submit]"); await p.waitForTimeout(300);
+    await a.go("fr"); await p.waitForTimeout(200);
+    await p.evaluate(() => { state.cup = state.cup || {}; state.cup.key = "friendly:f1"; state.live.open = (lv().games["friendly:f1"] || [])[0]?.id; render(); }); await p.waitForTimeout(400);
+    const pts = async n => { for (let i = 0; i < n; i++) { await p.click('[data-act="lvpt"][data-v="us"]'); } await p.waitForTimeout(150); };
+    await pts(21); await p.click('[data-act="lvnext"]'); await p.waitForTimeout(100);
+    await pts(21); await p.click('[data-act="lvnext"]'); await p.waitForTimeout(100);
+    await pts(15); assert.ok(await p.$('[data-act="lvpt"][data-v="us"]'), "교류전 3세트는 15점에 안 끝남 (21점)");
+    await pts(6); assert.doesNotMatch(await a.text("main"), /경기 끝/, "세트 수 자유는 경기 끝 없음");
+    assert.ok(await p.$('[data-act="lvnext"]'), "3세트 뒤에도 다음 세트");
+    await p.click('[data-act="lvaddset"]'); await p.waitForTimeout(100);
+    assert.strictEqual(await p.evaluate(() => lv().set), 4);
+    await p.click('[data-act="lvaddset"]'); await p.waitForTimeout(100);
+    assert.strictEqual(await p.evaluate(() => lv().set), 5, "+ 세트로 계속 늘림");
+    await p.click('[data-act="lvpts"]'); await p.click('[data-act="lvptsv"][data-v="15"]'); await p.click('#lvPtsForm button[type="submit"]'); await p.waitForTimeout(200);
+    assert.match(await a.text(".lv-pts"), /5세트 15점/);
+    // 2세트 라인업: 이전 세트 불러오기
+    await p.click('[data-act="lvset"][data-v="2"]'); await p.waitForTimeout(100);
+    await p.evaluate(() => { const g = lvGame(); g.sets = { ...(g.sets || {}), 1: { ...(g.sets || {})[1], lu: { opp: { rot: 1, slots: [1, 2, 3, 4, 5, 6], lib: 7 } } } }; });
+    await p.evaluate(() => lvLineupForm()); await p.waitForTimeout(100); await p.click('[data-act="lvluprev"]'); await p.waitForTimeout(100);
+    assert.strictEqual(await p.$eval("#lvl-opp-1", e => e.value), "1", "이전 세트 상대 라인업");
+    clean(a); await a.ctx.close();
+  },
   // Match Setup: 일정에서 고르면 종류 · 이름 · 상대 · 날짜 · 인원이 채워짐
   async scsched(b) {
     const a = await openApp(b, "coach"), p = a.page;

@@ -150,8 +150,10 @@ const lvNormPos = p => { p = String(p || "").toUpperCase(); return p === "LI" ? 
 // 라인업 (전력분석 Edit Lineup 처럼): 두 팀 코트 6자리(라인업 용지 순서 앞줄 4·3·2 / 뒷줄 5·6·1) · 리베로 · 이 세트 시작 로테 · 첫 서브를 한 창에서.
 // 칸은 세트 시작 자리. SNU(분석 팀 칸이 비어 있음)는 명단 선수로 고르고, 저장한 게 없으면 주전 → 엔트리 → 부원을 명단 포지션으로 자동 배치(lvDefLu)한 채로 열림
 // 다른 팀은 번호(교류전 상대는 이름표 S · OH1 … 그대로 써도 됨) + 포지션. 한 팀 6칸을 다 비우면 그 팀은 코트 없이 번호로만 기록
-function lvLineupForm() {
-  const L = lv(), g = lvGame(), setNo = L.set, sets = g.sets || {}, prev = sets[setNo - 1], st = sets[setNo] || (prev ? { rot: prev.rot, orot: prev.orot, serve: prev.serve === "opp" ? "us" : "opp" } : {});
+function lvLineupForm(src) {
+  const L = lv(), g0 = lvGame(), setNo = L.set;
+  // 이전 세트 라인업 불러오기: 이 세트 칸에 앞 세트 코트 · 리베로를 채움 (저장해야 반영)
+  const g = src === "prev" && setNo > 1 ? { ...g0, sets: { ...(g0.sets || {}), [setNo]: { ...((g0.sets || {})[setNo] || {}), lu: { us: lvLu(g0, "us", setNo - 1), opp: lvLu(g0, "opp", setNo - 1) } } } } : g0, sets = g.sets || {}, prev = sets[setNo - 1], st = sets[setNo] || (prev ? { rot: prev.rot, orot: prev.orot, serve: prev.serve === "opp" ? "us" : "opp" } : {});
   const start = { rot: st.rot || 1, orot: st.orot || 1, serve: st.serve || "us" }, ps = sortedPlayers().filter(p => !p.military), el = document.getElementById("sheet");
   const posSel = (id, cur) => `<select id="${id}" class="ct-pos" aria-label="포지션"><option value="">포지션</option>${LV_POS.map(p => `<option ${p === cur ? "selected" : ""}>${p}</option>`).join("")}</select>`;
   const team = side => {
@@ -167,6 +169,7 @@ function lvLineupForm() {
       <div class="fields"><label class="fl">리베로${libF}</label></div>`;
   };
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${setNo}세트 라인업</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    ${setNo > 1 ? `<div class="row"><button class="btn small" type="button" data-act="lvluprev">이전 세트 라인업 불러오기</button></div>` : ""}
     <form class="f" id="lvLineupForm">${team("us")}${team("opp")}
       <div class="row"><button class="btn primary" type="submit">저장</button></div></form>`;
   el.hidden = false; document.body.classList.add("noscroll");
@@ -272,7 +275,10 @@ function lvState(g, rs, setNo) {
   }
   return s;
 }
-const lvEnd = (s, setNo) => setWinner(s.us, s.op, setNo); // 1 · 2세트 21점, 3세트 15점 (court.js)
+// 대회: 3판 2선승 21 · 21 · 15 (court.js) / 교류전: 세트 수 자유, 세트마다 21점(sets[n].to 로 바꿈) · "+ 세트"로 늘림
+const lvFree = g => !!g && g.ref_kind === "friendly";
+const lvTarget = (g, n) => Number((((g && g.sets) || {})[n] || {}).to) || (lvFree(g) ? 21 : setTarget(n));
+const lvEnd = (s, setNo, g = lvGame()) => Math.max(s.us, s.op) >= lvTarget(g, setNo) && Math.abs(s.us - s.op) >= 2 ? (s.us > s.op ? "us" : "opp") : null;
 const lvMine = mineLoad("snuvt-lvmine"); // 이 기기에서 넣은 기록 (되돌리기는 이것만)
 async function lvLoadGames(x) {
   const L = lv(), key = x.kind + ":" + x.id; L.games[key] = L.games[key] || null;
@@ -455,6 +461,21 @@ async function lvUndo() {
   else { lvQ.list.push({ del: r.id, game_id: g.id }); lvQSave(); } // 서버에 있는 것: 화면에서 먼저 빼고 지우기는 대기열로
   L.rallies[g.id] = L.rallies[g.id].filter(x => x !== r); state.dirty = false; render(); lvFlush();
 }
+// 교류전 세트 점수 (15 · 21 · 25 · 직접): sets[n].to
+function lvPtsForm() {
+  const L = lv(), g = lvGame(), cur = lvTarget(g, L.set), el = document.getElementById("sheet");
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${L.set}세트 점수</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <form class="f" id="lvPtsForm"><div class="sc-row">${[15, 21, 25].map(n => `<button type="button" class="chip sc-chip lv-ptc ${n === cur ? "on" : ""}" data-act="lvptsv" data-v="${n}">${n}점</button>`).join("")}</div>
+      <div class="fields"><label class="fl">점수<input id="lvr-pts" type="number" inputmode="numeric" min="1" max="99" value="${cur}"></label></div>
+      <div class="row"><button class="btn primary" type="submit">저장</button></div></form>`;
+  el.hidden = false; document.body.classList.add("noscroll");
+}
+async function lvPtsSave() {
+  const L = lv(), g = lvGame(), p = Math.round(Number((document.getElementById("lvr-pts") || {}).value)); if (!(p >= 1 && p <= 99)) { toast("점수를 1~99로 넣어 주세요"); return; }
+  const sets = { ...(g.sets || {}) }, st = { ...(sets[L.set] || {}) }; if (p === 21) delete st.to; else st.to = p; sets[L.set] = st;
+  try { ok(await sb.from("live_games").update({ sets }).eq("id", g.id)); } catch (e) { toast(failMsg(e)); return; }
+  g.sets = sets; closeSheet(); toast("저장했어요"); state.dirty = false; render();
+}
 // 대회 · 교류전 페이지 안 목록
 function lvSection(x) {
   const L = lv(), key = x.kind + ":" + x.id, gs = L.games[key];
@@ -492,6 +513,7 @@ async function lvSubmit(f) {
     const x = cupItems().find(y => y.kind === kind && String(y.id) === id); if (x) await lvLoadGames(x); if (L.games["scout:all"]) lvLoadAll(); return;
   }
   if (f.id === "lvLineupForm") return lvLineupSave();
+  if (f.id === "lvPtsForm") return lvPtsSave();
 }
 const lvPct = (a, b) => b ? Math.round(100 * a / b) + "%" : "—";
 const lvGrade = r => r.res === "ok" ? 2 : r.res === "err" ? 0 : Number(r.res) || 0;
@@ -633,12 +655,14 @@ function lvPage(x) {
   if (!g) { L.open = null; return ""; }
   lvSub(g.id);
   if (!L.rallies[g.id]) { lvLoadRallies(g.id); return loaderHtml(); }
-  const rs = L.rallies[g.id], sets = [1, 2, 3, 4, 5].map(n => ({ n, s: lvState(g, rs, n) })), cur = sets[L.set - 1].s, end = lvEnd(cur, L.set);
-  const won = sets.filter(({ n, s }) => lvEnd(s, n) === "us").length, lost = sets.filter(({ n, s }) => lvEnd(s, n) === "opp").length;
-  const lastSet = Math.max(1, ...rs.map(r => r.set_no), ...Object.keys(g.sets || {}).map(Number).filter(n => n >= 1 && n <= 5));
+  const rs = L.rallies[g.id], free = lvFree(g), lastSet = Math.max(1, ...rs.map(r => r.set_no), ...Object.keys(g.sets || {}).map(Number).filter(n => n >= 1 && n <= 30));
+  const sets = Array.from({ length: Math.max(5, lastSet + 1, L.set) }, (_, i) => ({ n: i + 1, s: lvState(g, rs, i + 1) })), cur = sets[L.set - 1].s, end = lvEnd(cur, L.set, g);
+  const won = sets.filter(({ n, s }) => lvEnd(s, n, g) === "us").length, lost = sets.filter(({ n, s }) => lvEnd(s, n, g) === "opp").length;
   // 3판 2선승: 한 팀이 2세트를 먼저 이기면 다음 세트 칩은 안 나옴
-  const decided = sets.filter(({ n, s }) => lvEnd(s, n) === "us").length >= 2 || sets.filter(({ n, s }) => lvEnd(s, n) === "opp").length >= 2;
-  const chips = sets.filter(({ n }) => n <= Math.min(Math.max(SET_MAX, lastSet), lastSet + (lvEnd(sets[lastSet - 1].s, lastSet) && !decided ? 1 : 0))).map(({ n, s }) => `<button type="button" class="chip sc-chip ${n === L.set ? "on" : ""}" data-act="lvset" data-v="${n}">${n}세트${s.list.length ? ` <span class="num">${s.us}:${s.op}</span>` : ""}</button>`).join("");
+  const decided = !free && (won >= 2 || lost >= 2);
+  const shown = free ? Math.max(lastSet, L.set) : Math.min(Math.max(SET_MAX, lastSet), lastSet + (lvEnd(sets[lastSet - 1].s, lastSet, g) && !decided ? 1 : 0));
+  const chips = sets.filter(({ n }) => n <= shown).map(({ n, s }) => `<button type="button" class="chip sc-chip ${n === L.set ? "on" : ""}" data-act="lvset" data-v="${n}">${n}세트${s.list.length ? ` <span class="num">${s.us}:${s.op}</span>` : ""}</button>`).join("")
+    + (free && lvCan() ? `<button type="button" class="chip sc-chip lv-addset" data-act="lvaddset" data-v="${shown + 1}" aria-label="세트 늘리기">+ 세트</button><button type="button" class="btn link small lv-pts" data-act="lvpts">${L.set}세트 ${lvTarget(g, L.set)}점</button>` : "");
   // 교류전: 그 세트 출전 명단 · 6인제 대회: 그 세트 라인업(코트 · 리베로 · 교체)이 있으면 그 사람들이 주전으로
   const cupK = (x.kind === "friendly" || x.kind === "event") && !g.team, lu = cupK ? cupState().lineups[x.kind + ":" + x.id] : null;
   if (cupK && !lu) cupLoadLineups(x.kind, x.id);
@@ -670,7 +694,7 @@ function lvPage(x) {
       ${board}
       <div class="row between"><button type="button" class="btn small" data-act="lvundo" ${cur.list.length ? "" : "disabled"}>되돌리기${kb ? " <kbd>⌫</kbd>" : ""}</button><span class="row nowrap">${lvQ.list.length ? `<span class="chip warn">대기 ${lvQ.list.length}</span>` : ""}</span></div>
     </div>` : "";
-  const endBox = end ? `<div class="panel lv-end"><b>${L.set}세트 ${esc(lvTN(g, end))} 승 · ${cur.us}:${cur.op}${won >= 2 || lost >= 2 ? ` — 경기 끝 ${won}:${lost}` : ""}</b>${me && L.set < SET_MAX && !(won >= 2 || lost >= 2) ? `<button class="btn primary small" type="button" data-act="lvnext">${L.set + 1}세트 시작</button>` : ""}</div>` : "";
+  const endBox = end ? `<div class="panel lv-end"><b>${L.set}세트 ${esc(lvTN(g, end))} 승 · ${cur.us}:${cur.op}${decided ? ` — 경기 끝 ${won}:${lost}` : ""}</b>${me && (free || (L.set < SET_MAX && !decided)) ? `<button class="btn primary small" type="button" data-act="lvnext">${L.set + 1}세트 시작</button>` : ""}</div>` : "";
   const scope = L.scope === "all" ? rs.filter(r => r.kind) : cur.list;
   // Lite: 놓친 랠리는 점수판 팀 이름 옆 + 로 점수만 (컴퓨터 = 우리 · - 상대)
   const plus = sd => me && !end ? `<button type="button" class="lv-plus" data-act="lvpt" data-v="${sd}" aria-label="${esc(lvTN(g, sd))} 점수만 +1" title="점수만 +1${kb ? ` (${sd === "us" ? "=" : "-"})` : ""}">+</button>` : "";
@@ -702,6 +726,10 @@ async function liveClick(b, act) {
     try { ok(await sb.from("live_games").delete().eq("id", g.id)); for (const k in L.games) if (L.games[k]) L.games[k] = L.games[k].filter(x => x.id !== g.id); L.open = null; closeSheet(); toast("지웠어요"); } catch (e) { toast(failMsg(e)); }
     state.dirty = false; return render(); }
   if (act === "lvset") { L.set = Number(b.dataset.v); L.pick = null; state.dirty = false; return render(); }
+  if (act === "lvaddset") { L.set = Number(b.dataset.v); L.pick = null; state.dirty = false; return render(); }
+  if (act === "lvpts") return lvPtsForm();
+  if (act === "lvptsv") { const x = document.getElementById("lvr-pts"); if (x) x.value = b.dataset.v; document.querySelectorAll(".lv-ptc").forEach(c => c.classList.toggle("on", c === b)); return; }
+  if (act === "lvluprev") return lvLineupForm("prev");
   if (act === "lvnext") { L.set = L.set + 1; L.pick = null; state.dirty = false; return render(); } // 첫 서브는 그 세트 기록 화면에서 고름
   if (act === "lvfirst") return lvFirstServe(b.dataset.v);
   if (act === "lvside") { lvSideTo(b.dataset.v); state.dirty = false; return render(); }

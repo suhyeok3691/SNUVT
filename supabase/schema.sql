@@ -2615,3 +2615,5 @@ alter table public.scout_matches add column if not exists rules jsonb;
 -- 교류전은 세트를 많이 해서 전력분석 세트 번호를 30까지 (예전 1~5)
 alter table public.scout_events drop constraint if exists scout_events_set_no_check, add constraint scout_events_set_no_check check (set_no between 1 and 30);
 alter table public.scout_points drop constraint if exists scout_points_set_no_check, add constraint scout_points_set_no_check check (set_no between 1 and 30);
+-- 실시간 기록도 교류전은 세트 수 자유라 세트 번호 30까지
+alter table public.live_rallies drop constraint if exists live_rallies_set_no_check, add constraint live_rallies_set_no_check check (set_no between 1 and 30);
