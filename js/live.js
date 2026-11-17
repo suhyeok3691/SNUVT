@@ -146,6 +146,8 @@ function lvCourtOn(g, side, s, setNo) {
   const vals = base.map((v, i) => { const z = i + 1; if (lvPosOf(g, side, v) === "MB" && (z === 5 || z === 6 || (z === 1 && s.serve !== side))) { libZ.push(z); return lib; } return v; });
   return { vals, libZ };
 }
+const LV_FIX = [3, 2, 1, 4, 5, 0]; // 자리 고정 칸 순서 = 라인업 자리 4 · 3 · 2 / 5 · 6 · 1
+const lvFix = () => { try { return localStorage.getItem("snuvt-lvfix") === "1"; } catch (e) { return false; } };
 const lvNormPos = p => { p = String(p || "").toUpperCase(); return p === "LI" ? "L" : p; };
 // 라인업 (전력분석 Edit Lineup 처럼): 두 팀 코트 6자리(라인업 용지 순서 앞줄 4·3·2 / 뒷줄 5·6·1) · 리베로 · 이 세트 시작 로테 · 첫 서브를 한 창에서.
 // 칸은 세트 시작 자리. SNU(분석 팀 칸이 비어 있음)는 명단 선수로 고르고, 저장한 게 없으면 주전 → 엔트리 → 부원을 명단 포지션으로 자동 배치(lvDefLu)한 채로 열림
@@ -678,8 +680,13 @@ function lvPage(x) {
     if (!nos) { const p = playerOf(v); return `<button type="button" class="lv-n us ${on ? "on" : ""}${lb}" data-act="lvpick" data-v="${esc(v)}">${z ? `<i>${z}</i>` : ""}<b>${esc(p && p.number != null ? p.number : "–")}</b><span>${esc(p ? p.name : "?")}${lb ? " · L" : ""}</span></button>`; }
     return `<button type="button" class="lv-n ${side} ${on ? "on" : ""}${lb}" data-act="lvpick" data-v="${esc(v)}">${z ? `<i>${z}</i>` : ""}<b>${esc(v)}</b>${pos && !lvTagPos(v) ? `<span>${esc(pos)}</span>` : ""}</button>`; };
   const rosBtn = me ? `${now ? `<button type="button" class="btn small" data-act="lvsub">교체</button>` : ""}<button type="button" class="btn small" data-act="lvros">라인업</button>` : "";
-  const players = now
-    ? `<div class="lv-c6">${[4, 3, 2, 5, 6, 1].map(z => nb(now[z - 1], z)).join("")}</div><div class="lv-ns">${(nos ? nos.filter(n => !now.some(v => String(v) === String(n))) : ps.filter(p => !now.includes(p.id)).map(p => p.id)).map(v => nb(v).replace('class="lv-n', 'class="lv-n sub')).join("")}${rosBtn}</div>`
+  // 자리 고정(이 기기 설정): 세트 시작 라인업 그대로(앞줄 4·3·2 / 뒷줄 5·6·1) 6칸 + 아래 리베로 한 칸, 로테가 돌아도 칸이 안 움직임. 교체는 그 칸에 반영
+  const fixLu = now && lvFix() ? lvLu(g, side, L.set) : null, fixLib = fixLu ? lvLib(g, side, L.set) : null;
+  const fixBtn = me && now ? `<button type="button" class="btn small ${fixLu ? "primary" : ""}" data-act="lvfix" aria-pressed="${!!fixLu}">자리 고정</button>` : "";
+  const players = fixLu
+    ? `<div class="lv-c6 fix">${LV_FIX.map(i => nb(fixLu.slots[i])).join("")}</div>${fixLib != null ? `<div class="lv-c6 fix lv-libr"><span></span>${nb(fixLib).replace('class="lv-n', 'class="lv-n lib')}<span></span></div>` : ""}<div class="lv-ns">${(nos ? nos.filter(n => !fixLu.slots.some(v => String(v) === String(n)) && String(n) !== String(fixLib)) : ps.filter(p => !fixLu.slots.includes(p.id) && p.id !== fixLib).map(p => p.id)).map(v => nb(v).replace('class="lv-n', 'class="lv-n sub')).join("")}${fixBtn}${rosBtn}</div>`
+    : now
+    ? `<div class="lv-c6">${[4, 3, 2, 5, 6, 1].map(z => nb(now[z - 1], z)).join("")}</div><div class="lv-ns">${(nos ? nos.filter(n => !now.some(v => String(v) === String(n))) : ps.filter(p => !now.includes(p.id)).map(p => p.id)).map(v => nb(v).replace('class="lv-n', 'class="lv-n sub')).join("")}${fixBtn}${rosBtn}</div>`
     : !nos
     ? ps.map(p => `<button type="button" class="lv-n us ${L.pick === p.id ? "on" : ""} ${st.has(p.id) ? "" : "sub"}" data-act="lvpick" data-v="${esc(p.id)}"><b>${esc(p.number ?? "–")}</b><span>${esc(p.name)}</span></button>`).join("")
     : nos.map(n => nb(n)).join("");
@@ -726,6 +733,7 @@ async function liveClick(b, act) {
     try { ok(await sb.from("live_games").delete().eq("id", g.id)); for (const k in L.games) if (L.games[k]) L.games[k] = L.games[k].filter(x => x.id !== g.id); L.open = null; closeSheet(); toast("지웠어요"); } catch (e) { toast(failMsg(e)); }
     state.dirty = false; return render(); }
   if (act === "lvset") { L.set = Number(b.dataset.v); L.pick = null; state.dirty = false; return render(); }
+  if (act === "lvfix") { try { localStorage.setItem("snuvt-lvfix", lvFix() ? "0" : "1"); } catch (e) {} state.dirty = false; return render(); }
   if (act === "lvaddset") { L.set = Number(b.dataset.v); L.pick = null; state.dirty = false; return render(); }
   if (act === "lvpts") return lvPtsForm();
   if (act === "lvptsv") { const x = document.getElementById("lvr-pts"); if (x) x.value = b.dataset.v; document.querySelectorAll(".lv-ptc").forEach(c => c.classList.toggle("on", c === b)); return; }
@@ -781,9 +789,9 @@ document.addEventListener("keydown", ev => {
   const g = lvGame(); if (!g || !L.rallies[g.id]) return;
   if (k === "tab") { ev.preventDefault(); lvSideTo(lvOther(L.side)); state.dirty = false; return render(); }
   if (k === "backspace") { ev.preventDefault(); return lvUndo(); }
-  if (/^[0-9]$/.test(k)) { ev.preventDefault(); const z = Number(k); if (z < 1 || z > 6) return; // 숫자 1~6 = 코트 그 자리 선수 (7~9 · 0은 아무것도 안 함)
+  if (/^[0-9]$/.test(k)) { ev.preventDefault(); const z = Number(k); if (z < 1 || z > (lvFix() ? 7 : 6)) return; // 숫자 1~6 = 코트 그 자리 선수 (자리 고정이면 1~6 = 칸 순서, 7 = 리베로)
     const cur = lvState(g, L.rallies[g.id] || [], L.set), on = lvCourtOn(g, L.side, cur, L.set); if (!on) return;
-    const v = on.vals[z - 1]; if (v == null || v === "") return; L.pick = lvSnu(g, L.side) ? v : String(v); L.atype = null;
+    const fl = lvFix() ? lvLu(g, L.side, L.set) : null, v = fl ? (z === 7 ? lvLib(g, L.side, L.set) : fl.slots[LV_FIX[z - 1]]) : on.vals[z - 1]; if (v == null || v === "") return; L.pick = lvSnu(g, L.side) ? v : String(v); L.atype = null;
     state.dirty = false; return render(); }
   if (k === "=" || k === "-") { ev.preventDefault(); return lvPt(k === "=" ? "us" : "opp"); }
   const x = LV_KEYS_LITE[k]; if (x) { ev.preventDefault(); return lvCode(x.kind + ":" + x.res); }

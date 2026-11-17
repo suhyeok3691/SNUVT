@@ -643,7 +643,7 @@ const SUITES = {
     await p.selectOption("#scf-kind", "match"); assert.strictEqual(await p.$eval("#scf-bo", e => e.value), "1");
     clean(a); await a.ctx.close();
   },
-  // 실시간 기록 교류전: 세트 수 자유(+ 세트, 경기 끝 없음 · 3세트도 21점), 세트 점수, 이전 세트 라인업 불러오기, 전력분석 실시간 탭 대회 · 교류전
+  // 실시간 기록 교류전: 세트 수 자유(+ 세트, 경기 끝 없음 · 3세트도 21점), 세트 점수, 이전 세트 라인업 불러오기, 자리 고정, 전력분석 실시간 탭 대회 · 교류전
   async lvfree(b) {
     const a = await openApp(b, "coach"), p = a.page;
     await p.evaluate(() => lvForm("friendly:f1")); await p.waitForTimeout(300);
@@ -662,6 +662,16 @@ const SUITES = {
     assert.strictEqual(await p.evaluate(() => lv().set), 5, "+ 세트로 계속 늘림");
     await p.click('[data-act="lvpts"]'); await p.click('[data-act="lvptsv"][data-v="15"]'); await p.click('#lvPtsForm button[type="submit"]'); await p.waitForTimeout(200);
     assert.match(await a.text(".lv-pts"), /5세트 15점/);
+    // 자리 고정: 세트 시작 라인업 그대로 6칸(4·3·2 / 5·6·1) + 아래 리베로, 로테가 달라도 칸이 안 움직임
+    await p.evaluate(() => { const g = lvGame(); g.sets = { ...(g.sets || {}), 5: { ...(g.sets || {})[5], orot: 1, lu: { opp: { rot: 3, slots: [9, 32, 10, 30, 99, 12], lib: 26 } } } }; lv().side = "opp"; state.dirty = false; render(); });
+    await p.waitForTimeout(100);
+    const box = () => p.$$eval(".lv-c6 .lv-n b", x => x.map(e => e.textContent.trim()));
+    assert.notDeepStrictEqual((await box()).slice(0, 6), ["30", "10", "32", "99", "12", "9"], "평소엔 로테 따라 돎");
+    await p.click('[data-act="lvfix"]'); await p.waitForTimeout(100);
+    assert.deepStrictEqual(await box(), ["30", "10", "32", "99", "12", "9", "26"], "자리 고정: 위 6명 + 아래 리베로");
+    if (process.env.SHOT) { await (await p.$(".lv-pad")).screenshot({ path: process.env.SHOT }); }
+    await p.keyboard.press("7"); assert.strictEqual(await p.evaluate(() => lv().pick), "26", "7 = 리베로");
+    await p.click('[data-act="lvfix"]'); await p.waitForTimeout(100);
     // 2세트 라인업: 이전 세트 불러오기
     await p.click('[data-act="lvset"][data-v="2"]'); await p.waitForTimeout(100);
     await p.evaluate(() => { const g = lvGame(); g.sets = { ...(g.sets || {}), 1: { ...(g.sets || {})[1], lu: { opp: { rot: 1, slots: [1, 2, 3, 4, 5, 6], lib: 7 } } } }; });
