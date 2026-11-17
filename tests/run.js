@@ -613,6 +613,21 @@ const SUITES = {
     assert.match(await a.text("#sheet h3"), /R4/);
     clean(a); await a.ctx.close();
   },
+  // Match Setup: 일정에서 고르면 종류 · 이름 · 상대 · 날짜 · 인원이 채워짐
+  async scsched(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await a.go("scout"); await p.evaluate(() => openScoutForm()); await p.waitForTimeout(150);
+    const opts = await p.$$eval("#scf-sched option", x => x.map(e => e.textContent.trim()));
+    assert.ok(opts[0] === "직접 입력" && opts.some(t => /9인제 OO배/.test(t)) && opts.some(t => /교류전/.test(t)), "일정 목록 " + opts.join("|"));
+    const fr = await p.$eval("#scf-sched", s => [...s.options].find(o => o.dataset.k === "friendly").value);
+    await p.selectOption("#scf-sched", fr); await p.waitForTimeout(100);
+    const v = await p.evaluate(() => ["scf-kind", "scf-title", "scf-opp", "scf-date"].map(id => document.getElementById(id).value));
+    assert.strictEqual(v[0], "friendly"); assert.match(v[1], /교류전$/); assert.ok(v[2].length > 0, "상대 채움"); assert.strictEqual(v[3], "2026-11-08");
+    const ev = await p.$eval("#scf-sched", s => [...s.options].find(o => /9인제 OO배/.test(o.textContent)).value);
+    await p.selectOption("#scf-sched", ev); await p.waitForTimeout(100);
+    assert.deepStrictEqual(await p.evaluate(() => ["scf-kind", "scf-title", "scf-date", "scf-div"].map(id => document.getElementById(id).value)), ["match", "9인제 OO배", "2026-11-07", "6"]);
+    clean(a); await a.ctx.close();
+  },
   // 영상 분석: 공격 범실 Out → 아웃된 자리(코트 밖) 찍기 → 분석 지도에 빨간 점 · 고치기에서도
   async atkout(b) {
     const a = await openApp(b, "coach"), p = a.page;

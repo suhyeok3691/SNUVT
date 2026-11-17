@@ -2528,11 +2528,33 @@ async function scoutDock() {
   new YT.Player("scYt", { host: "https://www.youtube-nocookie.com", width: "100%", height: "100%", ...(y.kind === "playlist" ? { playerVars: { listType: "playlist", list: y.yt, playsinline: 1, rel: 0 } } : { videoId: y.yt, playerVars: { playsinline: 1, rel: 0 } }),
     events: { onReady: e => { if (dock.dataset.mid === m.id) scPlayer = e.target; } } });
 }
+// Match Setup: 일정(대회 · 교류전)에서 고르면 종류 · 이름 · 상대 · 날짜 · 인원이 채워짐 (직접 입력도 그대로 됨)
+function scSchedItems() {
+  const t = iso(today()), lim = dAdd(t, 14), from = dAdd(t, -400), out = [];
+  for (const e of normEvents(events())) if (e.id && (e.kind === "major" || e.kind === "minor") && e.start <= lim && e.end >= from)
+    out.push({ k: "match", s: e.start, e: e.end, d: e.start <= t && t <= e.end ? t : e.start, title: e.name || "대회", opp: "", fmt: e.format === "9" ? "9" : "6", lab: `${md(parseD(e.start))}${e.end !== e.start ? "–" + md(parseD(e.end)) : ""} ${e.name || "대회"}` });
+  for (const [d, fs] of Object.entries(state.friendlies || {})) if (d >= from && d <= lim) for (const f of fs)
+    out.push({ k: "friendly", s: d, e: d, d, title: `${frName(f.opponent)} 교류전`, opp: frName(f.opponent), fmt: f.format === "9" ? "9" : "6", lab: `${md(parseD(d))} ${frName(f.opponent)} 교류전` });
+  return out.sort((a, b) => b.d.localeCompare(a.d));
+}
+function scSchedSel(m) {
+  const l = scSchedItems(); if (!l.length) return "";
+  const cur = m.id ? l.findIndex(x => x.title === m.title && x.s <= (m.date || "") && (m.date || "") <= x.e) : -1;
+  return `<label class="fl wide">일정에서 고르기<select id="scf-sched"><option value="">직접 입력</option>${l.map((x, i) => `<option value="${i}" ${i === cur ? "selected" : ""} data-k="${x.k}" data-s="${x.s}" data-e="${x.e}" data-d="${x.d}" data-t="${esc(x.title)}" data-o="${esc(x.opp)}" data-f="${x.fmt}">${esc(x.lab)}</option>`).join("")}</select></label>`;
+}
+document.addEventListener("change", e => {
+  const x = e.target; if (!x || x.id !== "scf-sched") return;
+  const o = x.selectedOptions[0], d = document.getElementById("scf-date"); if (!o || !o.value) { if (d) { d.removeAttribute("min"); d.removeAttribute("max"); } return; }
+  const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) { el.value = v; el.dispatchEvent(new Event("input", { bubbles: true })); } };
+  set("scf-kind", o.dataset.k); set("scf-title", o.dataset.t); if (o.dataset.o) set("scf-opp", o.dataset.o); set("scf-div", o.dataset.f); set("scf-date", o.dataset.d);
+  if (d) { d.min = o.dataset.s; d.max = o.dataset.e; d.dispatchEvent(new Event("change", { bubbles: true })); }
+});
 function openScoutForm(id) {
   const m = sc().matches.find(x => x.id === id) || {}, el = document.getElementById("sheet"), me = playerOf(state.myPid);
   const div = m.division || "6";
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${id ? "경기 수정" : "Match Setup"}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="scForm" data-id="${esc(id || "")}"><div class="fields">
+      ${scSchedSel(m)}
       <label class="fl">종류<select id="scf-kind">${SC_KIND.map(([k, l]) => `<option value="${k}" ${(id ? scKindOf(m) : scMk()) === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <label class="fl wide">대회명<input id="scf-title" required maxlength="80" value="${esc(m.title || "")}" placeholder="대회명 / 교류전 상대"></label>
       <label class="fl">스테이지<input id="scf-stage" maxlength="30" value="${esc(m.stage || "")}" placeholder="예선 · 16강 · 8강 · 4강 · 결승"></label>
