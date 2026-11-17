@@ -2248,13 +2248,13 @@ function scPassTable(ev) {
   return `<div class="tw"><table><thead><tr><th>공격 직전 패스</th><th>시도</th><th>성공률</th><th>효율</th></tr></thead><tbody>${qs.map(([q, l]) => { const x = rows.filter(r => r.q === q); return x.length ? `<tr><td>${l}</td>${scAtkCells(x)}</tr>` : ""; }).join("")}</tbody></table></div>`;
 }
 // 로테이션별 득실: 사이드아웃(상대 서브 때) · 브레이크(우리 서브 때) · 득실. 3랠리 이상인 로테 중 가장 좋은 · 나쁜 로테 표시
-function scRotTable(pts) {
+function scRotTable(pts, m, side = "us") {
   if (!pts.length) return emptyLine("코트에서 기록하면 나와요.");
   const rs = [1, 2, 3, 4, 5, 6].map(r => { const l = pts.filter(p => p.rot === r), so = l.filter(p => p.serve === "opp"), bp = l.filter(p => p.serve === "us"), w = l.filter(p => p.won).length; return { r, n: l.length, so, bp, d: w * 2 - l.length }; });
   const ok = rs.filter(x => x.n >= 3), best = ok.slice().sort((a, b) => b.d - a.d)[0], worst = ok.slice().sort((a, b) => a.d - b.d)[0];
   const pc = l => { const w = l.filter(p => p.won).length; return l.length ? `${scPct(w, l.length)} <span class="small muted">${w}/${l.length}</span>` : "—"; };
   return `<div class="tw"><table><thead><tr><th>로테</th><th>사이드아웃</th><th>브레이크</th><th>득실</th></tr></thead><tbody>${rs.map(x =>
-    `<tr class="${best && x.r === best.r && best.d > 0 ? "ss-best" : worst && x.r === worst.r && worst.d < 0 ? "ss-worst" : ""}"><td><b>R${x.r}</b></td><td class="num">${pc(x.so)}</td><td class="num">${pc(x.bp)}</td><td class="num ${x.d > 0 ? "good" : x.d < 0 ? "crit" : ""}">${x.n ? (x.d > 0 ? "+" : "") + x.d : "—"}</td></tr>`).join("")}</tbody></table></div>
+    `<tr class="${best && x.r === best.r && best.d > 0 ? "ss-best" : worst && x.r === worst.r && worst.d < 0 ? "ss-worst" : ""}"><td>${ctRotBtn(m, side, x.r)}</td><td class="num">${pc(x.so)}</td><td class="num">${pc(x.bp)}</td><td class="num ${x.d > 0 ? "good" : x.d < 0 ? "crit" : ""}">${x.n ? (x.d > 0 ? "+" : "") + x.d : "—"}</td></tr>`).join("")}</tbody></table></div>
     <p class="small muted">사이드아웃 = 상대 서브 때 딴 비율 · 브레이크 = 우리 서브 때 딴 비율</p>`;
 }
 function scoutStats(ev, pts) {
@@ -2266,8 +2266,8 @@ function scoutStats(ev, pts) {
     <section class="sec"><h3>공격 종류</h3>${ctAtkTypes(all)}</section>
     <section class="sec"><h3>공격이 떨어진 자리</h3>${ctSpotStats(all)}</section>
     <section class="sec"><h3>서브가 떨어진 자리</h3>${ctSpotStats(all, "serve")}</section>
-    ${ctNine(m) ? "" : `<section class="sec"><h3>로테이션별 득실 · ${esc(ctTA(m))}</h3>${scRotTable(pl)}</section>
-    <section class="sec"><h3>로테이션별 득실 · ${esc((m && m.opponent) || "상대")}</h3>${ctOppRotTable(pl)}</section>`}`;
+    ${ctNine(m) ? "" : `<section class="sec"><h3>로테이션별 득실 · ${esc(ctTA(m))}</h3>${scRotTable(pl, m)}</section>
+    <section class="sec"><h3>로테이션별 득실 · ${esc((m && m.opponent) || "상대")}</h3>${ctOppRotTable(pl, m)}</section>`}`;
 }
 // 시즌에 넣는 우리 경기 = 명단으로 넣은 경기 + 번호로 넣은 서울대 · SNU · SNUVT 팀이 있는 경기 (분석 팀이든 상대든)
 const scSnuSide = m => !m.team ? "us" : ctSnuNo(m, "us") ? "us" : ctSnuNo(m, "opp") ? "opp" : null;
@@ -2372,7 +2372,7 @@ function scoutSeason() {
     <section class="sec"><div class="sc-row">${SC_METRICS.map(([k, l]) => scChip("scmetric", k, met[0], l)).join("")}</div>
       <div class="tw"><table class="sc-season"><thead><tr><th>선수</th>${ms.map(m => `<th><button type="button" class="btn link small" data-act="scopen" data-id="${esc(m.id)}">${m.date ? md(parseD(m.date)) : ""}<br>${esc(vs(m))}</button></th>`).join("")}<th>누적</th></tr></thead><tbody>${team}${rows}</tbody></table></div>
       <p class="small muted">${SC_MNOTE[met[0]]}${met[0] === "dig" || met[0] === "blk" || met[0] === "pts" ? "" : " · 숫자 아래는 시도 수"}</p></section>
-    <section class="sec"><h3>로테이션별 득실 (누적)</h3>${scRotTable(as.flatMap(x => x.pts))}</section>
+    <section class="sec"><h3>로테이션별 득실 (누적)</h3>${(() => { const lm = ms.slice().reverse().find(x => ctReady(x) && !ctNine(x)); return scRotTable(as.flatMap(x => x.pts), lm, lm ? scSnuSide(lm) : "us"); })()}</section>
     <div class="cols"><div class="col"><section class="sec"><h3>공격 종류별</h3>${scAtkTypeTable(evAll)}</section></div>
       <div class="col"><section class="sec"><h3>패스에 따른 공격</h3>${scPassTable(evAll)}</section></div></div>`;
 }

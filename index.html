@@ -1158,6 +1158,15 @@ i.dot.k-ob { background: var(--c-fr); }
 .ct-acts .sc-g { min-height: 48px; }
 .ct-lu { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 8px; margin-bottom: 8px; }
 .ct-lu .fl { min-width: 0; } .ct-lu select { width: 100%; min-width: 0; }
+/* 로테 R 누르면: 그 로테에서 서 있는 자리 */
+.rv-r { font-weight: 700; padding: 1px 8px; }
+.rv-court { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 10px; border-radius: 4px; background: var(--court); }
+.rv-c { display: grid; justify-items: center; gap: 1px; padding: 8px 4px; border-radius: 4px; background: var(--surface); border: 1px solid var(--line); text-align: center; min-width: 0; }
+.rv-c.rv-s { border-color: var(--yellow); box-shadow: inset 0 0 0 1px var(--yellow); }
+.rv-z { font-size: 10.5px; color: var(--muted); }
+.rv-p { font-family: var(--f-data); font-size: 20px; line-height: 1.1; }
+.rv-n { font-size: 12.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-l { font-size: 10.5px; color: var(--c-open, var(--muted)); }
 .ct-netl { grid-column: 1 / -1; text-align: center; font-size: 11px; color: var(--muted); border-top: 3px solid var(--ink); padding-top: 2px; }
 .ct-sheet td.ct-hi { background: #fff6c8; } .ct-sheet td.ct-up { background: #d8f5dc; } .ct-sheet td.ct-dn { background: #fbdada; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ct-sheet td.ct-hi { background: #3a3417; } :root:not([data-theme="light"]) .ct-sheet td.ct-up { background: #173d22; } :root:not([data-theme="light"]) .ct-sheet td.ct-dn { background: #4a1d1d; } }
@@ -1416,8 +1425,8 @@ h2 b, h3 b, .sec-head h3, .panel > h3:first-child, .cal-head h3 { font-weight: 7
 <script src="js/guide.js?v=194"></script>
 <script src="js/library.js?v=196"></script>
 <script src="js/campus.js?v=198"></script>
-<script src="js/court.js?v=243"></script>
+<script src="js/court.js?v=244"></script>
 <script src="js/live.js?v=241"></script>
-<script src="js/app.js?v=265"></script>
+<script src="js/app.js?v=266"></script>
 </body>
 </html>

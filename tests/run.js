@@ -596,6 +596,23 @@ const SUITES = {
     assert.match(t, new RegExp((await p.evaluate(() => playerOf(state.myPid).name)) + " · \\d{2}:\\d{2}:\\d{2}"), "내 기록: 내 이름 · 시각");
     clean(a); await a.ctx.close();
   },
+  // 로테이션별 득실: R 누르면 그 로테에서 서 있는 자리 (앞줄 4·3·2 / 뒷줄 5·6·1, 세터 앞줄 · 뒷줄)
+  async rotview(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(300);
+    await p.evaluate(() => { const S = sc(); S.points.m1 = [{ match_id: "m1", set_no: 1, rot: 2, opp_rot: 1, serve: "opp", won: true }]; S.tab = "stats"; state.dirty = false; render(); });
+    await p.waitForTimeout(200);
+    await p.click('[data-act="ctrotview"][data-side="opp"][data-r="2"]'); await p.waitForTimeout(150);
+    const cells = await p.$$eval(".rv-c", x => x.map(e => e.querySelector(".rv-z").textContent.trim().split(" ")[0] + ":" + e.querySelector(".rv-n").textContent.trim()));
+    // 상대 slots [11..16], R2 → 자리 z = slots[(z-1+1)%6]: 4→15 3→14 2→13 / 5→16 6→11 1→12
+    assert.deepStrictEqual(cells, ["4:#15", "3:#14", "2:#13", "5:#16", "6:#11", "1:#12"]);
+    assert.match(await a.text("#sheet"), /세터 6번 자리 · 뒷줄이라 앞 공격수 3명/);
+    assert.match(await a.text("#sheet"), /받을 때 리베로 #17/, "뒷줄 MB는 리베로");
+    if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT });
+    await p.click('#sheet [data-act="ctrotview"][data-r="4"]'); await p.waitForTimeout(100);
+    assert.match(await a.text("#sheet h3"), /R4/);
+    clean(a); await a.ctx.close();
+  },
   // 영상 분석: 공격 범실 Out → 아웃된 자리(코트 밖) 찍기 → 분석 지도에 빨간 점 · 고치기에서도
   async atkout(b) {
     const a = await openApp(b, "coach"), p = a.page;

@@ -709,6 +709,7 @@ async function ctReset() {
 }
 function courtClick(b, act) {
   const S = sc();
+  if (act === "ctrotview") return ctRotView(b.dataset.mid, b.dataset.side, Number(b.dataset.r));
   if (act === "ctpick") return ctOpen(b.dataset.side, b.dataset.v, b.dataset.z);
   if (act === "ctsubopen") return ctSubOpen(b.dataset.side, {});
   if (act === "ctcat") { if (b.dataset.v === "sub") { const m = scMatch(), s = ctState(m, ctEv(m), S.sel.set || 1), slots = S.ct.side === "us" ? s.usSlots : s.opSlots, i = slots.findIndex(x => ctSame(x, S.ct.v));
@@ -804,14 +805,33 @@ function ctSheetTable(l, side) {
     <td class="num">${fr(x.s.sa, x.s.sv)}</td><td class="num">${f2(x.서브점수)}</td><td class="num">${fr(x.s.bk, x.s.bt)}</td><td class="num">${fr(x.s.dok, x.s.dg)}</td><td class="num">${fr(x.s.r3, x.s.rc)}</td><td class="num">${f2(x.리시브점수)}</td><td class="num">${fr(x.s.setOk, x.s.st)}</td><td class="num">${f2(x.세트점수)}</td><td class="num">${d(x.범실)}</td></tr>`).join("");
   return `<div class="tw"><table class="ct-sheet"><thead><tr><th>배번</th><th>선수명</th><th>포지션</th><th>득점</th><th>공격</th><th>공격 성공률</th><th>공격 효율</th><th>공격 점유율</th><th>서브</th><th>서브 점수</th><th>블로킹</th><th>디그</th><th>리시브</th><th>리시브 점수</th><th>세트</th><th>세트 점수</th><th>범실</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
+/* ---- 로테이션별 득실의 R1~R6을 누르면: 그 로테에서 어떻게 서 있는지 (앞줄 4·3·2 / 뒷줄 5·6·1) ---- */
+// 자리 z(1~6)에 서는 선수 = 라인업 slots[(z-1 + r-1) % 6] (코트 화면과 같은 규칙). 교체 전 처음 라인업 기준
+const ctRotBtn = (m, side, r) => m && !ctNine(m) && ctReady(m) ? `<button type="button" class="btn link small rv-r" data-act="ctrotview" data-mid="${esc(m.id)}" data-side="${side}" data-r="${r}" aria-label="R${r} 서 있는 자리 보기">R${r}</button>` : `<b>R${r}</b>`;
+function ctRotView(mid, side, r) {
+  const S = sc(), m = S.matches.find(x => x.id === mid); if (!m) return;
+  const L = ctLu(m), st = ctState(m, [], 1), slots = side === "us" ? st.usSlots : st.opSlots, pos = side === "us" ? st.usPos : st.opPos, lib = ctLibs(L, side)[0];
+  const who = v => { if (v == null || v === "") return { no: "", nm: "?" }; if (ctRos(m, side)) { const p = playerOf(v); return p ? { no: p.number != null ? String(p.number) : "", nm: p.name } : { no: "", nm: "?" }; }
+    const p = ctSnuNo(m, side) ? ctByNo(v) : null; return { no: String(v), nm: p ? p.name : "" }; };
+  const at = z => ((z - 1) + (r - 1)) % 6, back = z => z === 1 || z === 5 || z === 6;
+  const cell = z => { const i = at(z), w = who(slots[i]), ps = pos[i] || "", li = ps === "MB" && back(z) && lib != null ? who(lib) : null;
+    return `<div class="rv-c ${ps === "S" ? "rv-s" : ""}"><span class="rv-z">${z}${z === 1 ? " 서브" : ""}</span><b class="rv-p">${esc(ps || "—")}</b><span class="rv-n">${w.no ? "#" + esc(w.no) + " " : ""}${esc(w.nm)}</span>${li ? `<span class="rv-l">받을 때 리베로${li.nm || li.no ? ` ${li.no ? "#" + esc(li.no) + " " : ""}${esc(li.nm)}` : ""}</span>` : ""}</div>`; };
+  const sz = [1, 2, 3, 4, 5, 6].find(z => pos[at(z)] === "S"), front = sz && !back(sz);
+  const team = side === "us" ? ctTA(m) : (m.opponent || "상대"), el = document.getElementById("sheet");
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${esc(team)} 로테 R${r}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <div class="sc-row">${[1, 2, 3, 4, 5, 6].map(n => `<button type="button" class="chip sc-chip ${n === r ? "on" : ""}" data-act="ctrotview" data-mid="${esc(m.id)}" data-side="${side}" data-r="${n}">R${n}</button>`).join("")}</div>
+    <div class="rv-court"><span class="ct-netl">네트</span>${[4, 3, 2, 5, 6, 1].map(cell).join("")}</div>
+    <p class="small muted">${sz ? `세터 ${sz}번 자리 · ${front ? "앞줄이라 앞 공격수 2명" : "뒷줄이라 앞 공격수 3명"} · ` : ""}${m.date ? md(parseD(m.date)) + " " : ""}${esc(m.title || "")} 처음 라인업 기준</p>`;
+  el.hidden = false; document.body.classList.add("noscroll");
+}
 // 상대 로테이션별: 상대가 서브 받을 때(사이드아웃) · 서브할 때(브레이크) 얼마나 따는지
-function ctOppRotTable(pts) {
+function ctOppRotTable(pts, m) {
   const l = pts.filter(p => p.opp_rot);
   if (!l.length) return emptyLine("코트 입력으로 기록하면 상대 로테이션도 같이 쌓여요.");
   const rows = [1, 2, 3, 4, 5, 6].map(r => { const x = l.filter(p => p.opp_rot === r), so = x.filter(p => p.serve === "us"), br = x.filter(p => p.serve === "opp"), w = x.filter(p => !p.won).length;
     return { r, so, br, w, n: x.length, d: w - (x.length - w) }; });
   const best = rows.filter(x => x.n >= 3).sort((a, b) => b.d - a.d)[0], worst = rows.filter(x => x.n >= 3).sort((a, b) => a.d - b.d)[0];
-  return `<div class="tw"><table><thead><tr><th>상대 로테</th><th>상대 사이드아웃</th><th>상대 브레이크</th><th>상대 득실</th></tr></thead><tbody>${rows.map(x => `<tr class="${best && x.r === best.r ? "ct-strong" : worst && x.r === worst.r && worst.d < 0 ? "ct-weak" : ""}"><td><b>R${x.r}</b></td><td class="num">${x.so.length ? `${scPct(x.so.filter(p => !p.won).length, x.so.length)} <span class="small muted">${x.so.filter(p => !p.won).length}/${x.so.length}</span>` : "—"}</td><td class="num">${x.br.length ? `${scPct(x.br.filter(p => !p.won).length, x.br.length)} <span class="small muted">${x.br.filter(p => !p.won).length}/${x.br.length}</span>` : "—"}</td><td class="num">${x.n ? (x.d > 0 ? "+" : "") + x.d : "—"}</td></tr>`).join("")}</tbody></table></div>
+  return `<div class="tw"><table><thead><tr><th>상대 로테</th><th>상대 사이드아웃</th><th>상대 브레이크</th><th>상대 득실</th></tr></thead><tbody>${rows.map(x => `<tr class="${best && x.r === best.r ? "ct-strong" : worst && x.r === worst.r && worst.d < 0 ? "ct-weak" : ""}"><td>${ctRotBtn(m, "opp", x.r)}</td><td class="num">${x.so.length ? `${scPct(x.so.filter(p => !p.won).length, x.so.length)} <span class="small muted">${x.so.filter(p => !p.won).length}/${x.so.length}</span>` : "—"}</td><td class="num">${x.br.length ? `${scPct(x.br.filter(p => !p.won).length, x.br.length)} <span class="small muted">${x.br.filter(p => !p.won).length}/${x.br.length}</span>` : "—"}</td><td class="num">${x.n ? (x.d > 0 ? "+" : "") + x.d : "—"}</td></tr>`).join("")}</tbody></table></div>
     ${best && best.d > 0 ? `<p class="small">상대가 가장 강한 로테: <b>R${best.r}</b>${worst && worst.d < 0 ? ` · 가장 약한 로테: <b>R${worst.r}</b>` : ""}</p>` : ""}`;
 }
 // 분석 탭: 공이 떨어진 자리 (팀마다 상대 코트). 공격 = 득점 칠한 점 · Hit In Play 빈 점
