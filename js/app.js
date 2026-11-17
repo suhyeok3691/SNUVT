@@ -1121,8 +1121,8 @@ function viewHome() {
   ].join("");
   const tm = can("schedule") ? termsMissing() : [];
   const termPill = tm.length ? `<button type="button" class="pending-pill" data-act="termedit" data-id="${tm[0]}"><span class="chip warn">학사일정</span><span class="small">${termLab(tm[0])} 개강·종강 넣기 ›</span></button>` : "";
-  // 공지는 무조건 홈 맨 위
-  return `${noticesHtml()}${homeHero()}${pendingHtml()}${termPill}<div id="pushNudge"></div>${me ? todoHtml(me) : ""}${myVotesHtml()}<section class="panel home-cal">${calHtml(me)}</section>${todayAbsHtml()}${can("full") || can("training") ? teamStatusHtml() : ""}
+  // 큰 날짜 바로 다음이 공지
+  return `${homeHero()}${noticesHtml()}${pendingHtml()}${termPill}<div id="pushNudge"></div>${me ? todoHtml(me) : ""}${myVotesHtml()}<section class="panel home-cal">${calHtml(me)}</section>${todayAbsHtml()}${can("full") || can("training") ? teamStatusHtml() : ""}
     ${!me && state.admin ? `<nav class="tiles-grid" aria-label="기능">${tiles}</nav>` : ""}`;
 }
 // 홈 맨 위 큰 날짜(등번호 숫자) + 오늘 팀 일정 한 줄

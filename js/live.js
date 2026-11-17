@@ -714,7 +714,7 @@ function lvPage(x) {
     ${cur.list.length ? `<section class="sec"><div class="row between"><h4>최근 기록</h4>${cur.list.length > 2 ? `<button type="button" class="btn link small" data-act="lvrecall">${L.recAll ? "접기" : `펼치기 (${cur.list.length})`}</button>` : ""}</div><ul class="watch sc-recent">${cur.list.map((r, i) => ({ r, sc: (() => { let u = 0, o = 0; for (const y of cur.list.slice(0, i + 1)) { if (y.point === "us") u++; else if (y.point === "opp") o++; } return `${u}:${o}`; })() })).slice(L.recAll ? 0 : -2).reverse().map(({ r, sc }) =>
       `<li class="${r._pending ? "ct-pend" : ""}"><span class="num small">${sc}</span><span class="small ct-l">${lvLabel(r)}</span>${r.point ? `<span class="chip ${r.point === "us" ? "ok" : "warn"}">${esc(lvTN(g, r.point))}</span>` : ""}</li>`).join("")}</ul></section>` : ""}
     <section class="sec"><div class="seg fill">${[["set", `${L.set}세트`], ["all", "경기 전체"]].map(([k, l]) => `<button type="button" class="seg-tab ${L.scope === k ? "on solid" : ""}" data-act="lvscope" data-v="${k}">${l}</button>`).join("")}</div>
-      ${scope.length ? lvCoach(scope, g, cur) + `<div class="row"><button type="button" class="btn small" data-act="lvmore">${L.more ? "자세한 기록 접기" : "자세한 기록"}</button></div>` + (L.more ? lvStats(scope, g) : "") : emptyLine(me ? "팀 · 선수를 고르고 동작 버튼을 눌러요." : "아직 기록이 없어요.")}</section>
+      ${scope.length ? lvCoach(scope, g, cur) + lvStats(scope, g) : emptyLine(me ? "팀 · 선수를 고르고 동작 버튼을 눌러요." : "아직 기록이 없어요.")}</section>
   </section>`;
 }
 // 점수만 올리기: 그 팀 점수 (선수 없음)
@@ -768,7 +768,6 @@ async function liveClick(b, act) {
   if (act === "lvxlsx") { const g = lvGame(); return g && lvXlsx(g); }
   if (act === "lvpt") return lvPt(b.dataset.v);
   if (act === "lvrecall") { L.recAll = !L.recAll; state.dirty = false; return render(); }
-  if (act === "lvmore") { L.more = !L.more; state.dirty = false; return render(); }
 }
 // 컴퓨터 단축키: 동작 글자 · 숫자 = 선수 번호(이어서 치면 두 자리) · Tab = 팀 · Backspace = 되돌리기
 document.addEventListener("keydown", ev => {
