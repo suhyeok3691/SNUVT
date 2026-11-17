@@ -2630,3 +2630,52 @@ language sql stable security definer set search_path = '' as $$
 $$;
 revoke all on function public.live_authors(uuid) from public, anon;
 grant execute on function public.live_authors(uuid) to authenticated;
+
+-- 2026-11-18 유튜브에서 지워진 영상(저작권 신고 · 비공개 · 삭제) 숨기기
+-- gone_at = 지워진 걸 확인한 때(앱 목록 jp_videos_pack 에서 빠짐), alive_at = 마지막으로 oEmbed 확인한 때
+alter table public.jp_videos add column if not exists gone_at timestamptz, add column if not exists alive_at timestamptz;
+create index if not exists jp_videos_alive on public.jp_videos (alive_at nulls first);
+create or replace function public.jp_videos_pack()
+returns json language sql stable set search_path to '' as $$
+  select coalesce(json_agg(json_build_array(v.id, v.source, v.title, v.published, v.year, v.tourn, v.gender, v.rnd, v.schools, v.ch, v.len, v.noembed) order by v.added_at desc), '[]'::json)
+  from public.jp_videos v where v.gone_at is null
+$$;
+create table if not exists private.jp_alive_req (req bigint primary key, vid text not null, at timestamptz not null default now());
+-- oEmbed 요청 n개 보내기 (pg_net): 올해 대회 영상은 6시간마다, 나머지 · 지워진 것은 7일마다, 처음 보는 것 먼저
+create or replace function private.jp_alive_send(n int default 80) returns int language plpgsql security definer set search_path = '' as $$
+declare k int := 0; r record; y int := extract(year from now())::int;
+begin
+  for r in
+    select v.id from public.jp_videos v
+    where not exists (select 1 from private.jp_alive_req q where q.vid = v.id)
+      and (v.alive_at is null or v.alive_at < now() - case when v.gone_at is null and coalesce(v.year, 0) >= y then interval '6 hours' else interval '7 days' end)
+    order by v.alive_at is not null, coalesce(v.year, 0) >= y desc, v.alive_at nulls first, v.added_at desc
+    limit n
+  loop
+    insert into private.jp_alive_req(req, vid) values (net.http_get('https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=' || r.id || '&format=json', timeout_milliseconds := 15000), r.id);
+    k := k + 1;
+  end loop;
+  return k;
+end $$;
+-- 답 받기: 200 = 있음, 401 · 403 = 있지만 다른 사이트 재생 막음(noembed), 400 · 404 = 지워짐(gone_at). 429 · 시간 초과는 다음에 다시. 다시 살아나면 gone_at 비움
+create or replace function private.jp_alive_collect() returns int language plpgsql security definer set search_path = '' as $$
+declare k int := 0;
+begin
+  with res as (
+    select q.req, q.vid, s.status_code c from private.jp_alive_req q join net._http_response s on s.id = q.req
+  ), upd as (
+    update public.jp_videos v set alive_at = now(),
+      noembed = case when res.c = 200 then false when res.c in (401, 403) then true else v.noembed end,
+      gone_at = case when res.c in (400, 404) then coalesce(v.gone_at, now()) else null end
+    from res where v.id = res.vid and res.c in (200, 400, 401, 403, 404)
+    returning v.id
+  ), del as (
+    delete from private.jp_alive_req q using res where q.req = res.req returning q.req
+  ) select count(*) into k from upd;
+  delete from private.jp_alive_req where at < now() - interval '1 hour';
+  return k;
+end $$;
+revoke all on function private.jp_alive_send(int) from public, anon, authenticated;
+revoke all on function private.jp_alive_collect() from public, anon, authenticated;
+-- 예약 작업 (사용자 승인 후 적용): 10분마다 받기 → 80개 보내기 (하루 약 11,500개 확인)
+-- select cron.schedule('jp-alive-10m', '*/10 * * * *', 'select private.jp_alive_collect(); select private.jp_alive_send(80);');
