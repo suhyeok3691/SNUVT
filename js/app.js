@@ -2176,7 +2176,9 @@ function viewScout() {
     ${!ev ? loaderHtml(true) : S.tab === "stats" ? scoutStats(ev, S.points[m.id] || []) : ctPad(m, ev)}</section>`;
 }
 // 칩 옆 숫자: 시즌 탭은 시즌 표에 실제로 들어가는 우리(SNU) 경기만 — 고른 시즌 · 기록 있는 경기
+const lvKindOf = g => g.ref_kind === "friendly" ? "friendly" : "match"; // 실시간 기록: 교류전 / 그 밖(대회)
 function scKindN(k) {
+  if (sc().ltab === "live") return (lv().games["scout:all"] || []).filter(g => lvKindOf(g) === k).length;
   const S = sc(), ms = S.matches.filter(m => scKindOf(m) === k);
   if (S.ltab !== "season") return ms.length;
   return ms.filter(m => scSnuSide(m) && (!S.sy || (m.date && syOf(m.date) === S.sy)) && (!S.events[m.id] || ctReal(S.events[m.id]).length)).length;
@@ -2184,7 +2186,7 @@ function scKindN(k) {
 function scoutList() {
   const S = sc(), head = `<div class="sec-head"><h2>전력분석</h2><span class="row nowrap">${S.matches.length ? `<button class="btn link small" type="button" data-act="scxlsx" data-id="">엑셀</button>` : ""}${can("analysis") ? `<button class="btn add" type="button" data-act="scnew">+ 경기</button>` : ""}</span></div>`;
   const tabs = scSeg("scltab", [["match", "경기"], ["live", "실시간"], ["season", "시즌"], ["opp", "팀별"]], S.ltab)
-    + (S.ltab === "live" || !S.matches.length ? "" : `<div class="sc-row sc-kind">${SC_KIND.map(([k, l]) => scChip("scmk", k, S.ltab === "season" && S.mk === "cmp" ? "cmp" : scMk(), `${l} <span class="sc-n-in">${scKindN(k)}</span>`)).join("")}${S.ltab === "season" ? scChip("scmk", "cmp", S.mk, "대회 vs 교류전") : ""}</div>`);
+    + (!(S.ltab === "live" ? (lv().games["scout:all"] || []).length : S.matches.length) ? "" : `<div class="sc-row sc-kind">${SC_KIND.map(([k, l]) => scChip("scmk", k, S.ltab === "season" && S.mk === "cmp" ? "cmp" : scMk(), `${l} <span class="sc-n-in">${scKindN(k)}</span>`)).join("")}${S.ltab === "season" ? scChip("scmk", "cmp", S.mk, "대회 vs 교류전") : ""}</div>`);
   let body;
   if (S.ltab === "live") body = scoutLiveList();
   else if (!S.matches.length) body = emptyLine(can("analysis") ? "경기 영상을 추가하면 다 같이 보면서 입력할 수 있어요." : "아직 분석할 경기가 없어요.");
@@ -2199,8 +2201,9 @@ function scoutLiveList() {
   if (gs === undefined) { lvLoadAll(); return loaderHtml(true); }
   if (gs === null) return loaderHtml(true);
   if (!gs.length) return emptyLine("실시간 기록한 경기가 없어요. 대회 · 교류전 화면에서 기록해요.");
-  const ref = g => cupItems().find(y => y.kind === g.ref_kind && String(y.id) === String(g.ref_id));
-  return `<div class="sc-list">${gs.map(g => { const x = ref(g), d = g.created_at ? shortDate(new Date(g.created_at)) : "";
+  const ref = g => cupItems().find(y => y.kind === g.ref_kind && String(y.id) === String(g.ref_id)), l = gs.filter(g => lvKindOf(g) === scMk());
+  if (!l.length) return emptyLine(scMk() === "friendly" ? "실시간 기록한 교류전이 없어요." : "실시간 기록한 대회 경기가 없어요.");
+  return `<div class="sc-list">${l.map(g => { const x = ref(g), d = g.created_at ? shortDate(new Date(g.created_at)) : "";
     return `<button type="button" class="panel sc-card" data-act="sclive" data-id="${esc(g.id)}"><b>${g.label ? `${esc(g.label)} · ` : ""}${esc(lvTA(g))} vs ${esc(g.opponent || "")}</b><span class="small muted">${[d, x ? x.name : g.ref_kind === "friendly" ? "교류전" : "대회"].filter(Boolean).map(esc).join(" · ")}</span><span class="go">›</span></button>`; }).join("")}</div>`;
 }
 // 치지직 다시보기는 앱 안에 못 띄워서(퍼가기 없음) 새 창으로 열기만 (영상 시계는 2026-11-01 뺌)

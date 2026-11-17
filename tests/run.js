@@ -643,7 +643,7 @@ const SUITES = {
     await p.selectOption("#scf-kind", "match"); assert.strictEqual(await p.$eval("#scf-bo", e => e.value), "1");
     clean(a); await a.ctx.close();
   },
-  // 실시간 기록 교류전: 세트 수 자유(+ 세트, 경기 끝 없음 · 3세트도 21점), 세트 점수, 이전 세트 라인업 불러오기
+  // 실시간 기록 교류전: 세트 수 자유(+ 세트, 경기 끝 없음 · 3세트도 21점), 세트 점수, 이전 세트 라인업 불러오기, 전력분석 실시간 탭 대회 · 교류전
   async lvfree(b) {
     const a = await openApp(b, "coach"), p = a.page;
     await p.evaluate(() => lvForm("friendly:f1")); await p.waitForTimeout(300);
@@ -667,6 +667,14 @@ const SUITES = {
     await p.evaluate(() => { const g = lvGame(); g.sets = { ...(g.sets || {}), 1: { ...(g.sets || {})[1], lu: { opp: { rot: 1, slots: [1, 2, 3, 4, 5, 6], lib: 7 } } } }; });
     await p.evaluate(() => lvLineupForm()); await p.waitForTimeout(100); await p.click('[data-act="lvluprev"]'); await p.waitForTimeout(100);
     assert.strictEqual(await p.$eval("#lvl-opp-1", e => e.value), "1", "이전 세트 상대 라인업");
+    // 전력분석 실시간 탭도 대회 · 교류전 나눠 보기
+    await p.evaluate(() => { closeSheet(); lv().open = null; state.cup.key = null; }); await a.go("scout"); await p.waitForTimeout(300);
+    await p.click('[data-act="scltab"][data-k="live"]'); await p.waitForTimeout(400);
+    const n = k => p.$eval(`[data-act="scmk"][data-v="${k}"] .sc-n-in`, e => e.textContent);
+    assert.strictEqual(await n("friendly"), "1"); assert.strictEqual(await n("match"), "0");
+    assert.match(await a.text("main"), /실시간 기록한 대회 경기가 없어요/);
+    await p.click('[data-act="scmk"][data-v="friendly"]'); await p.waitForTimeout(150);
+    assert.ok(await p.$('[data-act="sclive"]'), "교류전 칩 → 교류전 실시간 기록");
     clean(a); await a.ctx.close();
   },
   // Match Setup: 일정에서 고르면 종류 · 이름 · 상대 · 날짜 · 인원이 채워짐
