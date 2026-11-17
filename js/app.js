@@ -1121,8 +1121,14 @@ function viewHome() {
   ].join("");
   const tm = can("schedule") ? termsMissing() : [];
   const termPill = tm.length ? `<button type="button" class="pending-pill" data-act="termedit" data-id="${tm[0]}"><span class="chip warn">학사일정</span><span class="small">${termLab(tm[0])} 개강·종강 넣기 ›</span></button>` : "";
-  return `${pendingHtml()}${termPill}<div id="pushNudge"></div>${me ? todoHtml(me) : ""}${noticesHtml()}${myVotesHtml()}<section class="panel home-cal">${calHtml(me)}</section>${todayAbsHtml()}${can("full") || can("training") ? teamStatusHtml() : ""}
+  return `${homeHero()}${pendingHtml()}${termPill}<div id="pushNudge"></div>${me ? todoHtml(me) : ""}${noticesHtml()}${myVotesHtml()}<section class="panel home-cal">${calHtml(me)}</section>${todayAbsHtml()}${can("full") || can("training") ? teamStatusHtml() : ""}
     ${!me && state.admin ? `<nav class="tiles-grid" aria-label="기능">${tiles}</nav>` : ""}`;
+}
+// 홈 맨 위 큰 날짜(등번호 숫자) + 오늘 팀 일정 한 줄
+function homeHero() {
+  const d = today(), t = iso(d), i = infoOn(t), k = CAL_KIND(i, t);
+  const line = k === "match" ? (i.event && i.event.name) || "대회" : isTeamDay(i) ? tdLabel(i) : i.cup ? (i.cup.name || "교내 대회") : k ? CAL_LABEL[k] : "팀 일정 없는 날";
+  return `<section class="home-hero"><b class="hh-d" aria-label="${longDate(d)}">${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}</b><span class="hh-t"><span class="hh-w">${["일", "월", "화", "수", "목", "금", "토"][d.getDay()]}요일</span><span class="hh-k${k ? " k-" + k : ""}">${esc(line)}</span></span></section>`;
 }
 // 홈 맨 위: 오늘 할 것 — 오늘 피지컬 · 오늘 팀 훈련(훈련 계획). 둘 다 없으면 안 보임
 // 피지컬이 그날 팀 훈련·교류전 그 자체면(같은 일정) 한 줄만 보임
@@ -3018,6 +3024,7 @@ function render(soft) {
   else if (needsSelfReg() || (state.coach && state.editingSelf)) html = viewSelfReg();
   else {
     const v = state.view;
+    document.documentElement.dataset.view = v;
     html = v === "train" ? viewTrain() : v === "comps" ? viewComps() : v === "cup" ? viewCup("event") : v === "fr" ? viewCup("friendly") : v === "campus" ? viewCampus() : v === "sched" ? viewSched() : v === "report" ? viewReport() : v === "practice" ? viewPractice() : v === "notes" ? viewNotes() : v === "video" ? viewVideo() : v === "scout" ? viewScout() : v === "jp" ? viewJp() : v === "roster" ? viewRoster() : v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : viewHome();
   }
   const q = state.session ? queue().length : 0;

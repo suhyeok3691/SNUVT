@@ -11,13 +11,14 @@ const NOW = new Date("2026-11-01T10:00:00+09:00");
 const VIEWS = ["home", "practice", "notes", "video", "jp", "scout", "train", "plan", "rec", "season", "comps", "cup", "fr", "campus", "sched", "report", "roster", "intake"];
 const TYPES = { js: "text/javascript", html: "text/html", css: "text/css", png: "image/png", webmanifest: "application/manifest+json", json: "application/json" };
 
-async function openApp(browser, role, { width = 390, height = 844, now = NOW } = {}) {
+async function openApp(browser, role, { width = 390, height = 844, now = NOW, fonts = false } = {}) {
   const ctx = await browser.newContext({ viewport: { width, height }, serviceWorkers: "block" });
   const page = await ctx.newPage(), errs = [], missing = [];
   await page.clock.setFixedTime(now);
   await page.route("**/*", r => {
     const u = new URL(r.request().url());
     if (u.hostname === "cdn.jsdelivr.net" && u.pathname.includes("supabase")) return r.fulfill({ body: mockScript(role), contentType: "text/javascript" });
+    if (fonts && /fonts\.(googleapis|gstatic)\.com$/.test(u.hostname)) return r.continue(); // 디자인 사진만 웹 글꼴 받음
     if (u.hostname !== "local.test") return r.abort();
     const p = u.pathname === "/" ? "index.html" : decodeURIComponent(u.pathname.slice(1));
     try { return r.fulfill({ body: fs.readFileSync(ROOT + p), contentType: TYPES[p.split(".").pop()] || "application/octet-stream" }); }
@@ -36,6 +37,17 @@ async function openApp(browser, role, { width = 390, height = 844, now = NOW } =
 const clean = a => { assert.deepStrictEqual(a.errs, [], "화면 오류"); assert.deepStrictEqual(a.missing, [], "없는 파일"); };
 
 const SUITES = {
+  // 디자인 확인용 화면 사진 (SHOTDIR 있을 때만): node run.js shots → SHOTDIR/역할-화면.png
+  async shots(b) {
+    const dir = process.env.SHOTDIR; if (!dir) return;
+    for (const [w, tag] of [[390, "m"], [1200, "d"]]) {
+      const a = await openApp(b, "coach", { width: w, height: w === 390 ? 844 : 900, fonts: true });
+      if (process.env.DARK) await a.page.emulateMedia({ colorScheme: "dark" });
+      for (const v of (process.env.SHOTV || "home,season,cup,scout,train,practice,jp").split(",")) { await a.go(v); await a.page.waitForTimeout(500); await a.page.screenshot({ path: `${dir}/${tag}-${v}.png`, fullPage: !!process.env.FULL }); }
+      if (tag === "m") { await a.go("scout"); await a.page.click('[data-act="scopen"][data-id="m1"]').catch(() => {}); await a.page.waitForTimeout(600); await a.page.screenshot({ path: `${dir}/${tag}-court.png` }); }
+      await a.ctx.close();
+    }
+  },
   // 모든 화면을 코치·부원으로 열어 보고, 새로고침(저장본으로 먼저 그리기)까지
   async smoke(b) {
     for (const role of ["coach", "player"]) {
