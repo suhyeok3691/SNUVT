@@ -606,7 +606,7 @@ const SUITES = {
     const cells = await p.$$eval(".rv-c", x => x.map(e => e.querySelector(".rv-z").textContent.trim().split(" ")[0] + ":" + e.querySelector(".rv-n").textContent.trim()));
     // 상대 slots [11..16], R2 → 자리 z = slots[(z-1+1)%6]: 4→15 3→14 2→13 / 5→16 6→11 1→12
     assert.deepStrictEqual(cells, ["4:#15", "3:#14", "2:#13", "5:#16", "6:#11", "1:#12"]);
-    assert.match(await a.text("#sheet"), /세터 6번 자리 · 뒷줄이라 앞 공격수 3명/);
+    assert.doesNotMatch(await a.text("#sheet"), /처음 라인업 기준|앞 공격수/, "부연 설명 없음");
     assert.match(await a.text("#sheet"), /받을 때 리베로 #17/, "뒷줄 MB는 리베로");
     if (process.env.SHOT) await p.screenshot({ path: process.env.SHOT });
     await p.click('#sheet [data-act="ctrotview"][data-r="4"]'); await p.waitForTimeout(100);

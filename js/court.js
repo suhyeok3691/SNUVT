@@ -816,12 +816,10 @@ function ctRotView(mid, side, r) {
   const at = z => ((z - 1) + (r - 1)) % 6, back = z => z === 1 || z === 5 || z === 6;
   const cell = z => { const i = at(z), w = who(slots[i]), ps = pos[i] || "", li = ps === "MB" && back(z) && lib != null ? who(lib) : null;
     return `<div class="rv-c ${ps === "S" ? "rv-s" : ""}"><span class="rv-z">${z}${z === 1 ? " 서브" : ""}</span><b class="rv-p">${esc(ps || "—")}</b><span class="rv-n">${w.no ? "#" + esc(w.no) + " " : ""}${esc(w.nm)}</span>${li ? `<span class="rv-l">받을 때 리베로${li.nm || li.no ? ` ${li.no ? "#" + esc(li.no) + " " : ""}${esc(li.nm)}` : ""}</span>` : ""}</div>`; };
-  const sz = [1, 2, 3, 4, 5, 6].find(z => pos[at(z)] === "S"), front = sz && !back(sz);
   const team = side === "us" ? ctTA(m) : (m.opponent || "상대"), el = document.getElementById("sheet");
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${esc(team)} 로테 R${r}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <div class="sc-row">${[1, 2, 3, 4, 5, 6].map(n => `<button type="button" class="chip sc-chip ${n === r ? "on" : ""}" data-act="ctrotview" data-mid="${esc(m.id)}" data-side="${side}" data-r="${n}">R${n}</button>`).join("")}</div>
-    <div class="rv-court"><span class="ct-netl">네트</span>${[4, 3, 2, 5, 6, 1].map(cell).join("")}</div>
-    <p class="small muted">${sz ? `세터 ${sz}번 자리 · ${front ? "앞줄이라 앞 공격수 2명" : "뒷줄이라 앞 공격수 3명"} · ` : ""}${m.date ? md(parseD(m.date)) + " " : ""}${esc(m.title || "")} 처음 라인업 기준</p>`;
+    <div class="rv-court"><span class="ct-netl">네트</span>${[4, 3, 2, 5, 6, 1].map(cell).join("")}</div>`;
   el.hidden = false; document.body.classList.add("noscroll");
 }
 // 상대 로테이션별: 상대가 서브 받을 때(사이드아웃) · 서브할 때(브레이크) 얼마나 따는지
