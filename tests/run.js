@@ -681,6 +681,13 @@ const SUITES = {
     if (process.env.SHOT) { await (await p.$(".lv-pad")).screenshot({ path: process.env.SHOT }); }
     await p.keyboard.press("7"); assert.strictEqual(await p.evaluate(() => lv().pick), "26", "7 = 리베로");
     await p.click('[data-act="lvfix"]'); await p.waitForTimeout(100);
+    // 로테별 득실의 R 누르면 그 로테에서 서 있는 자리 (5세트 상대 라인업 R3 그대로)
+    await p.evaluate(() => { lv().scope = "all"; state.dirty = false; render(); }); await p.waitForTimeout(150);
+    await p.click('[data-act="lvrotview"][data-side="opp"][data-r="3"]'); await p.waitForTimeout(150);
+    assert.deepStrictEqual(await p.$$eval(".rv-c", x => x.map(e => e.querySelector(".rv-z").textContent.trim().split(" ")[0] + ":" + e.querySelector(".rv-n").textContent.trim())), ["4:#30", "3:#10", "2:#32", "5:#99", "6:#12", "1:#9"]);
+    await p.click('#sheet [data-act="lvrotview"][data-r="4"]'); await p.waitForTimeout(100);
+    assert.match(await a.text("#sheet h3"), /R4/); assert.strictEqual(await p.$eval(".rv-c .rv-n", e => e.textContent.trim()), "#99", "R4: 5번 자리에 있던 선수가 4번 자리로");
+    await p.evaluate(() => { closeSheet(); lv().scope = "set"; state.dirty = false; render(); });
     // 2세트 라인업: 이전 세트 불러오기
     await p.click('[data-act="lvset"][data-v="2"]'); await p.waitForTimeout(100);
     await p.evaluate(() => { const g = lvGame(); g.sets = { ...(g.sets || {}), 1: { ...(g.sets || {})[1], lu: { opp: { rot: 1, slots: [1, 2, 3, 4, 5, 6], lib: 7 } } } }; });

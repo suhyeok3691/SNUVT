@@ -481,6 +481,21 @@ async function lvUndo() {
   else { lvQ.list.push({ del: r.id, game_id: g.id }); lvQSave(); } // 서버에 있는 것: 화면에서 먼저 빼고 지우기는 대기열로
   L.rallies[g.id] = L.rallies[g.id].filter(x => x !== r); state.dirty = false; render(); lvFlush();
 }
+// 로테별 득실의 R1~R6을 누르면 그 로테에서 어떻게 서 있는지 (전력분석 ctRotView 와 같은 그림). 지금 고른 세트 라인업 기준
+const lvRotLu = (g, side) => { const lu = lvLu(g, side, lv().set); return lu && (lu.slots || []).filter(x => x !== "" && x != null).length === 6 ? lu : null; };
+const lvRotBtn = (g, side, r) => lvRotLu(g, side) ? `<button type="button" class="btn link small rv-r" data-act="lvrotview" data-side="${side}" data-r="${r}" aria-label="R${r} 서 있는 자리 보기">R${r}</button>` : `<b>R${r}</b>`;
+function lvRotView(side, r) {
+  const g = lvGame(), lu = g && lvRotLu(g, side); if (!lu) return;
+  const k = ((r - (lu.rot || 1)) % 6 + 6) % 6, lib = lvLib(g, side, lv().set), snu = lvSnu(g, side), back = z => z === 1 || z === 5 || z === 6;
+  const who = v => { if (v == null || v === "") return { no: "", nm: "?" }; if (snu) { const p = playerOf(v); return p ? { no: p.number != null ? String(p.number) : "", nm: p.name } : { no: "", nm: "?" }; } return { no: String(v), nm: "" }; };
+  const cell = z => { const v = lu.slots[((z - 1) + k) % 6], w = who(v), ps = lvPosOf(g, side, v) || "", li = ps === "MB" && back(z) && lib != null ? who(lib) : null;
+    return `<div class="rv-c ${ps === "S" ? "rv-s" : ""}"><span class="rv-z">${z}${z === 1 ? " 서브" : ""}</span><b class="rv-p">${esc(ps || "—")}</b><span class="rv-n">${w.no ? (lvTagPos(w.no) ? esc(w.no) : "#" + esc(w.no)) + " " : ""}${esc(w.nm)}</span>${li ? `<span class="rv-l">받을 때 리베로${li.nm || li.no ? ` ${li.no ? (lvTagPos(li.no) ? esc(li.no) : "#" + esc(li.no)) + " " : ""}${esc(li.nm)}` : ""}</span>` : ""}</div>`; };
+  const el = document.getElementById("sheet");
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${esc(lvTN(g, side))} 로테 R${r}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <div class="sc-row">${[1, 2, 3, 4, 5, 6].map(n => `<button type="button" class="chip sc-chip ${n === r ? "on" : ""}" data-act="lvrotview" data-side="${side}" data-r="${n}">R${n}</button>`).join("")}</div>
+    <div class="rv-court"><span class="ct-netl">네트</span>${[4, 3, 2, 5, 6, 1].map(cell).join("")}</div>`;
+  el.hidden = false; document.body.classList.add("noscroll");
+}
 // 교류전 세트 점수 (15 · 21 · 25 · 직접): sets[n].to
 function lvPtsForm() {
   const L = lv(), g = lvGame(), cur = lvTarget(g, L.set), el = document.getElementById("sheet");
@@ -679,9 +694,9 @@ function lvStats(rs, g) {
     for (const r of l) { const x = LV_RES[r.kind + ":" + r.res], nm = (r.side === winner ? `${x.kname} ${x.name}` : `상대 ${x.kname} ${x.name}`).trim(); m[nm] = (m[nm] || 0) + 1; }
     const tot = l.length; return `<div class="lv-bars">${Object.entries(m).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<div class="lv-bar ${winner}"><span>${esc(k)}</span><i style="--w:${tot ? Math.round(100 * v / tot) : 0}%"></i><b class="num">${v}</b></div>`).join("") || `<span class="small muted">—</span>`}</div>`; };
   const orot = [1, 2, 3, 4, 5, 6].map(nr => { const l = pts.filter(r => r._orot === nr), a = l.filter(r => r.serve === "us"), b = l.filter(r => r.serve === "opp"), w = l.filter(r => r.point === "opp").length, dd = w * 2 - l.length;
-    return `<tr><td><b>R${nr}</b></td><td class="num">${a.length ? `${lvPct(a.filter(r => r.point === "opp").length, a.length)} <small>${a.filter(r => r.point === "opp").length}/${a.length}</small>` : "—"}</td><td class="num">${b.length ? `${lvPct(b.filter(r => r.point === "opp").length, b.length)} <small>${b.filter(r => r.point === "opp").length}/${b.length}</small>` : "—"}</td><td class="num ${dd > 0 ? "good" : dd < 0 ? "crit" : ""}">${l.length ? (dd > 0 ? "+" : "") + dd : "—"}</td></tr>`; }).join("");
+    return `<tr><td>${lvRotBtn(g, "opp", nr)}</td><td class="num">${a.length ? `${lvPct(a.filter(r => r.point === "opp").length, a.length)} <small>${a.filter(r => r.point === "opp").length}/${a.length}</small>` : "—"}</td><td class="num">${b.length ? `${lvPct(b.filter(r => r.point === "opp").length, b.length)} <small>${b.filter(r => r.point === "opp").length}/${b.length}</small>` : "—"}</td><td class="num ${dd > 0 ? "good" : dd < 0 ? "crit" : ""}">${l.length ? (dd > 0 ? "+" : "") + dd : "—"}</td></tr>`; }).join("");
   const rot = [1, 2, 3, 4, 5, 6].map(nr => { const l = pts.filter(r => r.rot === nr), a = l.filter(r => r.serve === "opp"), b = l.filter(r => r.serve === "us"), dd = l.filter(r => r.point === "us").length * 2 - l.length;
-    return `<tr><td><b>R${nr}</b></td><td class="num">${a.length ? `${lvPct(a.filter(r => r.point === "us").length, a.length)} <small>${a.filter(r => r.point === "us").length}/${a.length}</small>` : "—"}</td><td class="num">${b.length ? `${lvPct(b.filter(r => r.point === "us").length, b.length)} <small>${b.filter(r => r.point === "us").length}/${b.length}</small>` : "—"}</td><td class="num ${dd > 0 ? "good" : dd < 0 ? "crit" : ""}">${l.length ? (dd > 0 ? "+" : "") + dd : "—"}</td></tr>`; }).join("");
+    return `<tr><td>${lvRotBtn(g, "us", nr)}</td><td class="num">${a.length ? `${lvPct(a.filter(r => r.point === "us").length, a.length)} <small>${a.filter(r => r.point === "us").length}/${a.length}</small>` : "—"}</td><td class="num">${b.length ? `${lvPct(b.filter(r => r.point === "us").length, b.length)} <small>${b.filter(r => r.point === "us").length}/${b.length}</small>` : "—"}</td><td class="num ${dd > 0 ? "good" : dd < 0 ? "crit" : ""}">${l.length ? (dd > 0 ? "+" : "") + dd : "—"}</td></tr>`; }).join("");
   return `
     <div class="cols lv-two"><div class="col"><h4>${esc(lvTA(g))} 득점 ${pts.filter(r => r.point === "us").length}</h4>${src("us")}</div><div class="col"><h4>${esc(g.opponent)} 득점 ${pts.filter(r => r.point === "opp").length}</h4>${src("opp")}</div></div>
     <h4>${esc(lvTA(g))}</h4>${lvTeam(rs, "us", g)}<h4>${esc(g.opponent)}</h4>${lvTeam(rs, "opp", g)}
@@ -775,6 +790,7 @@ async function liveClick(b, act) {
   if (act === "lvfix") { try { localStorage.setItem("snuvt-lvfix", lvFix() ? "0" : "1"); } catch (e) {} state.dirty = false; return render(); }
   if (act === "lvaddset") { L.set = Number(b.dataset.v); L.pick = null; state.dirty = false; return render(); }
   if (act === "lvpts") return lvPtsForm();
+  if (act === "lvrotview") return lvRotView(b.dataset.side, Number(b.dataset.r));
   if (act === "lvptsv") { const x = document.getElementById("lvr-pts"); if (x) x.value = b.dataset.v; document.querySelectorAll(".lv-ptc").forEach(c => c.classList.toggle("on", c === b)); return; }
   if (act === "lvluprev") return lvLineupForm("prev");
   if (act === "lvnext") { L.set = L.set + 1; L.pick = null; state.dirty = false; return render(); } // 첫 서브는 그 세트 기록 화면에서 고름
