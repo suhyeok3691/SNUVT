@@ -2677,5 +2677,5 @@ begin
 end $$;
 revoke all on function private.jp_alive_send(int) from public, anon, authenticated;
 revoke all on function private.jp_alive_collect() from public, anon, authenticated;
--- 예약 작업 (사용자 승인 후 적용): 10분마다 받기 → 80개 보내기 (하루 약 11,500개 확인)
--- select cron.schedule('jp-alive-10m', '*/10 * * * *', 'select private.jp_alive_collect(); select private.jp_alive_send(80);');
+-- 예약 작업 (2026-11-18 켬): 10분마다 받기 → 80개 보내기 (하루 약 11,500개 확인)
+select cron.schedule('jp-alive-10m', '*/10 * * * *', 'select private.jp_alive_collect(); select private.jp_alive_send(80);');
