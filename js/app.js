@@ -2490,6 +2490,7 @@ async function scoutXlsx(mid) {
       const cols = Object.keys(rows[0] || { "": "" }); ws.columns = cols.map(k => ({ header: k, key: k, width: Math.max(8, Math.min(28, k.length + 4)) }));
       rows.forEach(r => ws.addRow(r)); ws.getRow(1).font = { bold: true }; return ws; };
     sheet("Logs", logs);
+    if (mid && ms[0].note) sheet("Memo", ms[0].note.split("\n").map(l => ({ Memo: l })));
     { const sr = ms.flatMap(scStartRows), rr = ms.flatMap(scRotRows); if (sr.length) sheet("Start Rotation", sr); if (rr.length) sheet("Rotation", rr); }
     const t2 = mid ? (ms[0].opponent || "Opponent") : "Opponents", t1 = mid ? ctTA(ms[0]) : SC_T1;
     let n1 = t1.slice(0, 31), n2 = t2.slice(0, 31); if (n1 === n2) { n1 += "_1"; n2 += "_2"; }
@@ -2513,6 +2514,88 @@ async function scoutXlsx(mid) {
 }
 // 경기 영상: #main 밖(위)의 고정 칸에 둬서 버튼을 눌러 화면을 다시 그려도 끊기지 않음
 let scPlayer = null;
+/* ---------- 경기 메모 (전력분석 · 실시간 기록): 경기마다 자유 메모장 하나 ----------
+ * 넓은 화면(1100px 이상)은 오른쪽 여백에 붙박이, 좁은 화면(휴대폰 · 패드 세로)은 오른쪽 아래 "메모" 버튼 → 아래에서 올라오는 창.
+ * main 밖(#mnote)이라 기록할 때마다 화면을 다시 그려도 쓰던 글이 안 날아감. 쓰고 1초 쉬면 저절로 저장(match_note_save).
+ * 여러 기기가 같이 쓰다 겹치면(판 번호 note_ver가 다름) 서버 글에 내가 더하고 뺀 줄을 합쳐 다시 저장. 보기 부원 모두, 쓰기는 그 기록을 넣을 수 있는 사람 */
+const MN = { key: null, st: {}, busy: {}, poll: 0 };
+function mnoteCtx() {
+  if (state.view === "scout" && !sc().live && state.scoutId && document.querySelector("#main .sc-page")) { const m = scMatch(); if (m) return { kind: "scout", rec: m, can: !!state.role && state.role !== "pending" }; }
+  if (document.querySelector("#main .lv-page")) { const g = lvGame(); if (g) return { kind: "live", rec: g, can: lvCan() }; }
+  return null;
+}
+const mnoteRec = (kind, id) => kind === "scout" ? sc().matches.find(m => m.id === id) : (() => { for (const l of Object.values(lv().games || {})) { const g = (l || []).find(x => x.id === id); if (g) return g; } return null; })();
+function mnoteMerge(base, mine, theirs) {
+  const B = base.split("\n"), M = mine.split("\n"), T = theirs.split("\n"), cnt = a => a.reduce((m, x) => m.set(x, (m.get(x) || 0) + 1), new Map());
+  const added = [], removed = new Map();
+  { const c = cnt(B); for (const x of M) { if ((c.get(x) || 0) > 0) c.set(x, c.get(x) - 1); else added.push(x); } }
+  { const c = cnt(M); for (const x of B) { if ((c.get(x) || 0) > 0) c.set(x, c.get(x) - 1); else removed.set(x, (removed.get(x) || 0) + 1); } }
+  const out = []; for (const x of T) { if ((removed.get(x) || 0) > 0) { removed.set(x, removed.get(x) - 1); continue; } out.push(x); }
+  const tc = cnt(out); for (const x of added) { if ((tc.get(x) || 0) > 0) { tc.set(x, tc.get(x) - 1); continue; } out.push(x); }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n");
+}
+function mnoteEl() {
+  let el = document.getElementById("mnote"); if (el) return el;
+  document.body.insertAdjacentHTML("beforeend", `<aside id="mnote" class="mnote" hidden aria-label="경기 메모"><div class="mnote-h"><b>메모</b><span class="mnote-st" id="mnoteSt"></span><button type="button" class="btn link small mnote-x" id="mnoteX">닫기</button></div><textarea id="mnoteTa" placeholder="경기 보면서 메모 · 저절로 저장" spellcheck="false" maxlength="20000"></textarea></aside><button type="button" id="mnoteBtn" class="mnote-btn" hidden aria-label="메모 열기">메모</button>`);
+  el = document.getElementById("mnote"); const ta = document.getElementById("mnoteTa");
+  ta.addEventListener("input", () => { const x = MN.st[MN.key]; if (!x) return; x.text = ta.value; x.dirty = true; mnoteStatus("입력 중"); clearTimeout(x.timer); x.timer = setTimeout(() => mnoteSave(MN.key), 1000); });
+  ta.addEventListener("blur", () => { if (MN.key) mnoteSave(MN.key); });
+  document.getElementById("mnoteBtn").addEventListener("click", () => { document.body.classList.add("mnote-open"); setTimeout(() => ta.focus(), 50); });
+  document.getElementById("mnoteX").addEventListener("click", () => { document.body.classList.remove("mnote-open"); if (MN.key) mnoteSave(MN.key); });
+  return el;
+}
+function mnoteStatus(t) {
+  const st = document.getElementById("mnoteSt"); if (!st) return;
+  if (t) { st.textContent = t; return; }
+  const x = MN.st[MN.key], r = x && mnoteRec(x.kind, x.id), d = r && r.note_at ? new Date(r.note_at) : null, p2 = n => String(n).padStart(2, "0");
+  st.textContent = d && !isNaN(d) ? `${d.getMonth() + 1}/${d.getDate()} ${p2(d.getHours())}:${p2(d.getMinutes())} 저장` : "";
+}
+function mnoteSync() {
+  const c = state.session ? mnoteCtx() : null, el = c || MN.key ? mnoteEl() : null; if (!el) return;
+  const ta = document.getElementById("mnoteTa"), btn = document.getElementById("mnoteBtn");
+  if (!c) { if (MN.key) mnoteSave(MN.key); MN.key = null; el.hidden = btn.hidden = true; document.body.classList.remove("has-note", "mnote-open"); return; }
+  const key = c.kind + ":" + c.rec.id, r = c.rec;
+  if (key !== MN.key) {
+    if (MN.key) mnoteSave(MN.key);
+    MN.key = key; const x = MN.st[key] || (MN.st[key] = { kind: c.kind, id: r.id, ver: r.note_ver || 0, base: r.note || "", text: r.note || "", dirty: false });
+    if (!x.dirty && (r.note_ver || 0) > x.ver) Object.assign(x, { ver: r.note_ver, base: r.note || "", text: r.note || "" });
+    ta.value = x.text; mnoteStatus();
+  } else { const x = MN.st[key]; // 다른 기기에서 고친 것: 내가 안 쓰는 중이면 바로 바꿈
+    if (x && !x.dirty && document.activeElement !== ta && (r.note_ver || 0) > x.ver) { Object.assign(x, { ver: r.note_ver, base: r.note || "", text: r.note || "" }); ta.value = x.text; mnoteStatus(); } }
+  ta.readOnly = !c.can; ta.placeholder = c.can ? "경기 보면서 메모 · 저절로 저장" : "메모 없음";
+  el.hidden = btn.hidden = false; document.body.classList.add("has-note");
+  btn.textContent = ta.value.trim() ? "메모 ✎" : "메모";
+  const hd = document.querySelector("header.top"); el.style.setProperty("--mn-top", ((hd ? hd.getBoundingClientRect().bottom : 0) + 12) + "px");
+  if (!MN.poll) MN.poll = setInterval(mnotePoll, 20000);
+}
+async function mnoteSave(key) {
+  const x = MN.st[key]; if (!x || !x.dirty || MN.busy[key]) return; clearTimeout(x.timer); MN.busy[key] = true;
+  const txt = x.text, cur = () => MN.key === key; if (cur()) mnoteStatus("저장 중…");
+  try {
+    let r = await sb.rpc("match_note_save", { k: x.kind, rid: x.id, body: txt, ver: x.ver }); if (r.error) throw r.error;
+    let d = (r.data || [])[0], sent = txt;
+    if (d && !d.ok) { // 다른 기기에서 먼저 고침: 서버 글 + 내가 바꾼 줄
+      sent = mnoteMerge(x.base, txt, d.note || "");
+      r = await sb.rpc("match_note_save", { k: x.kind, rid: x.id, body: sent, ver: d.note_ver }); if (r.error) throw r.error; d = (r.data || [])[0];
+      if (d && d.ok && x.text === txt) { x.text = sent; if (cur()) document.getElementById("mnoteTa").value = sent; }
+      if (d && d.ok) toast("다른 사람이 쓴 메모와 합쳤어요");
+    }
+    if (d && d.ok) {
+      x.ver = d.note_ver; x.base = d.note || ""; x.dirty = x.text !== sent;
+      const rec = mnoteRec(x.kind, x.id); if (rec) Object.assign(rec, { note: d.note, note_ver: d.note_ver, note_at: d.note_at });
+      if (cur()) { mnoteStatus(); const b = document.getElementById("mnoteBtn"); if (b) b.textContent = x.text.trim() ? "메모 ✎" : "메모"; }
+    } else if (cur()) mnoteStatus("저장 못 함 · 다시 시도");
+  } catch (e) { if (cur()) mnoteStatus(e && e.code === "42501" ? "쓸 권한이 없어요" : "저장 못 함 · 다시 시도"); }
+  MN.busy[key] = false;
+  if (x.dirty) { clearTimeout(x.timer); x.timer = setTimeout(() => mnoteSave(key), 3000); }
+}
+// 다른 기기에서 고친 메모 받기 (20초마다, 보고 있을 때만)
+async function mnotePoll() {
+  const x = MN.st[MN.key]; if (!x || x.dirty || document.hidden) return;
+  try { const r = await sb.from(x.kind === "scout" ? "scout_matches" : "live_games").select("note,note_ver,note_at").eq("id", x.id).maybeSingle();
+    const rec = mnoteRec(x.kind, x.id); if (r.data && rec && (r.data.note_ver || 0) > (rec.note_ver || 0)) { Object.assign(rec, r.data); mnoteSync(); } } catch (e) { /* 다음에 */ }
+}
+window.addEventListener("pagehide", () => { for (const k of Object.keys(MN.st)) mnoteSave(k); });
 async function scoutDock() {
   const dock = document.getElementById("dock"); if (!dock) return;
   // 영상: 전력분석 경기의 유튜브 (실시간 기록은 영상 없음)
@@ -3069,6 +3152,7 @@ function render(soft) {
   navSave();
   refreshSettings();
   scoutDock();
+  mnoteSync();
   pushNudge();
 }
 // 화면 넘김: 새 화면만 짧게 서서히 나타남 (투명도만 바꿔서 휴대폰에서도 가볍게)

@@ -652,6 +652,7 @@ const SUITES = {
     await a.go("fr"); await p.waitForTimeout(200);
     await p.evaluate(() => { state.cup = state.cup || {}; state.cup.key = "friendly:f1"; state.live.open = (lv().games["friendly:f1"] || [])[0]?.id; render(); }); await p.waitForTimeout(400);
     const pts = async n => { for (let i = 0; i < n; i++) { await p.click('[data-act="lvpt"][data-v="us"]'); } await p.waitForTimeout(150); };
+    assert.ok(await p.isVisible("#mnoteBtn"), "실시간 기록 화면에도 메모 버튼");
     await pts(21);
     // 최근 기록 줄마다 누가 · 언제 (내 기록 = 내 이름, 다른 사람 = live_authors 이름)
     await p.evaluate(() => { const g = lvGame(); lv().rallies[g.id].push({ id: "x-other", game_id: g.id, set_no: 1, side: "us", kind: "srv", res: "ok", author: "u-analyst", created_at: "2026-11-01T01:02:03Z" }); lv().recAll = true; state.dirty = false; render(); });
@@ -703,6 +704,39 @@ const SUITES = {
     assert.ok(await p.evaluate(() => sc().live && !!lvGame()), "만든 실시간 경기 화면이 열림");
     assert.ok(await p.$('[data-act="lvaddset"]'), "직접 입력 교류전도 + 세트");
     clean(a); await a.ctx.close();
+  },
+  // 경기 메모: 넓은 화면은 오른쪽 여백 붙박이(코트와 안 겹침), 저절로 저장, 다시 그려도 그대로, 다른 기기와 겹치면 합침 / 휴대폰은 메모 버튼 → 아래 창
+  async memo(b) {
+    { const a = await openApp(b, "coach", { width: 1280, height: 800 }), p = a.page;
+      await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(400);
+      assert.ok(await p.isVisible("#mnote"), "넓은 화면: 메모 칸이 바로 보임");
+      const [mb, nb] = await Promise.all([p.$eval("#main", e => e.getBoundingClientRect().right), p.$eval("#mnote", e => e.getBoundingClientRect())]);
+      assert.ok(nb.left >= mb - 1 && nb.right <= 1280, `코트와 안 겹침 main ${mb} note ${nb.left}-${nb.right}`);
+      assert.ok(!(await p.isVisible("#mnoteBtn")), "넓은 화면엔 버튼 없음");
+      await p.click("#mnoteTa"); await p.keyboard.type("상대 7번 퀵 A쪽"); await p.waitForTimeout(1600);
+      assert.strictEqual(await p.evaluate(() => window.__db.scout_matches.find(x => x.id === "m1").note), "상대 7번 퀵 A쪽", "저절로 저장");
+      assert.match(await a.text("#mnoteSt"), /저장/);
+      await p.click('.ct-court .ct-p.us[data-v="1"]'); await p.click('[data-act="ctcat"][data-v="serve"]'); await p.click('[data-act="ctact"][data-a="foot"]'); await p.waitForTimeout(200);
+      assert.strictEqual(await p.$eval("#mnoteTa", e => e.value), "상대 7번 퀵 A쪽", "기록해서 화면을 다시 그려도 그대로");
+      // 다른 기기에서 먼저 고침 → 합쳐서 저장
+      await p.evaluate(() => { const r = window.__db.scout_matches.find(x => x.id === "m1"); r.note = "다른 사람 줄\n상대 7번 퀵 A쪽"; r.note_ver = (r.note_ver || 0) + 1; });
+      await p.click("#mnoteTa"); await p.keyboard.press("End"); await p.keyboard.type("\n서브 짧게"); await p.waitForTimeout(1800);
+      const n = await p.evaluate(() => window.__db.scout_matches.find(x => x.id === "m1").note);
+      assert.ok(/다른 사람 줄/.test(n) && /서브 짧게/.test(n) && /상대 7번 퀵 A쪽/.test(n), "합침: " + n);
+      assert.strictEqual(await p.$eval("#mnoteTa", e => e.value), n, "칸도 합친 글");
+      await p.evaluate(() => { state.scoutId = null; state.dirty = false; render(); }); await p.waitForTimeout(200);
+      assert.ok(!(await p.isVisible("#mnote")), "경기 밖에선 메모 없음");
+      if (process.env.SHOT) { await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(400); await p.screenshot({ path: process.env.SHOT }); }
+      clean(a); await a.ctx.close(); }
+    { const a = await openApp(b, "coach"), p = a.page;
+      await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(400);
+      assert.ok(!(await p.isVisible("#mnote")) && await p.isVisible("#mnoteBtn"), "휴대폰: 버튼만");
+      await p.click("#mnoteBtn"); await p.waitForTimeout(150);
+      assert.ok(await p.isVisible("#mnote"), "버튼 → 아래 창");
+      const r = await p.$eval("#mnote", e => e.getBoundingClientRect()); assert.ok(r.bottom >= 840 && r.top > 300, "아래 절반 " + JSON.stringify(r));
+      if (process.env.SHOT2) await p.screenshot({ path: process.env.SHOT2 });
+      await p.click("#mnoteX"); await p.waitForTimeout(100); assert.ok(!(await p.isVisible("#mnote")));
+      clean(a); await a.ctx.close(); }
   },
   // Match Setup: 일정에서 고르면 종류 · 이름 · 상대 · 날짜 · 인원이 채워짐
   async scsched(b) {

@@ -2679,3 +2679,36 @@ revoke all on function private.jp_alive_send(int) from public, anon, authenticat
 revoke all on function private.jp_alive_collect() from public, anon, authenticated;
 -- 예약 작업 (2026-11-18 켬): 10분마다 받기 → 80개 보내기 (하루 약 11,500개 확인)
 select cron.schedule('jp-alive-10m', '*/10 * * * *', 'select private.jp_alive_collect(); select private.jp_alive_send(80);');
+
+-- 2026-11-18 전력분석 · 실시간 기록 경기 메모 (자유 메모장, 경기마다 하나). 보기 = 표 읽기 규칙(부원 모두), 쓰기 = match_note_save
+alter table public.scout_matches add column if not exists note_ver int not null default 0, add column if not exists note_by uuid, add column if not exists note_at timestamptz;
+alter table public.live_games add column if not exists note text, add column if not exists note_ver int not null default 0, add column if not exists note_by uuid, add column if not exists note_at timestamptz;
+alter table public.live_games drop constraint if exists live_games_note_len, add constraint live_games_note_len check (note is null or char_length(note) <= 20000);
+alter table public.scout_matches drop constraint if exists scout_matches_note_len, add constraint scout_matches_note_len check (note is null or char_length(note) <= 20000);
+-- 저장: 내가 본 판(ver)이 지금 판과 같을 때만 바꿈(ok). 다르면 안 바꾸고 지금 내용을 돌려줌 → 화면에서 줄 단위로 합쳐 다시 저장
+-- 쓰기 권한: 전력분석 = 부원(기록 넣는 사람 모두), 실시간 = 전력분석 · 일정 담당(기록 넣는 사람)
+create or replace function public.match_note_save(k text, rid uuid, body text, ver int)
+returns table(ok boolean, note text, note_ver int, note_at timestamptz, by_name text)
+language plpgsql security definer set search_path = '' as $$
+declare cur_ver int; t text; nm text;
+begin
+  if char_length(coalesce(body, '')) > 20000 then raise exception 'too long' using errcode = '22001'; end if;
+  if k = 'scout' then
+    select m.note_ver, m.team_id into cur_ver, t from public.scout_matches m where m.id = rid for update;
+    if t is null or t <> (select private.my_team()) or not private.is_member() then raise exception 'forbidden' using errcode = '42501'; end if;
+  elsif k = 'live' then
+    select g.note_ver, g.team_id into cur_ver, t from public.live_games g where g.id = rid for update;
+    if t is null or t <> (select private.my_team()) or not (private.can('analysis') or private.can('schedule')) then raise exception 'forbidden' using errcode = '42501'; end if;
+  else raise exception 'bad kind' using errcode = '22023'; end if;
+  select pl.name into nm from public.profiles pr left join public.players pl on pl.id = pr.player_id where pr.id = auth.uid();
+  if cur_ver = ver then
+    if k = 'scout' then update public.scout_matches set note = nullif(body, ''), note_ver = cur_ver + 1, note_by = auth.uid(), note_at = now() where id = rid;
+    else update public.live_games set note = nullif(body, ''), note_ver = cur_ver + 1, note_by = auth.uid(), note_at = now() where id = rid; end if;
+    return query select true, nullif(body, ''), cur_ver + 1, now(), nm;
+  else
+    if k = 'scout' then return query select false, m.note, m.note_ver, m.note_at, (select pl.name from public.profiles pr left join public.players pl on pl.id = pr.player_id where pr.id = m.note_by) from public.scout_matches m where m.id = rid;
+    else return query select false, g.note, g.note_ver, g.note_at, (select pl.name from public.profiles pr left join public.players pl on pl.id = pr.player_id where pr.id = g.note_by) from public.live_games g where g.id = rid; end if;
+  end if;
+end $$;
+revoke all on function public.match_note_save(text, uuid, text, int) from public, anon;
+grant execute on function public.match_note_save(text, uuid, text, int) to authenticated;

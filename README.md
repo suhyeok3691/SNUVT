@@ -246,6 +246,14 @@ docs/archive/           예전에 만든 설계 · 자료 문서 사본 (앱에 
 - 엑셀(경기 화면 위): 전력분석과 같은 형식(Logs는 예전 프로그램 동작 이름으로 바꿔서) · 팀별 기록지(포지션 포함) · Start Rotation · Rotation
 - DB: `live_games`(ref_kind · ref_id, label, date, team(비면 SNU), opponent, roster, sets, mode = `lite`) · `live_rallies`(side, kind srv · atk · blk · dig · err · opt · ovr · cov, res, player_id · opp_no · tag, atype, shot, miss, x · y · zone, point, rot, serve). 읽기 부원, 쓰기 전력분석 담당 · 관리자
 
+## 6-8-1. 경기 메모 (전력분석 · 실시간 기록)
+- 경기마다 **자유 메모장** 하나(`scout_matches.note` · `live_games.note`). 경기 화면(전력분석 코트 · 분석 탭, 실시간 기록 화면)에서만 보임
+- **넓은 화면(1100px 이상 — 노트북 · 패드 가로)**: 오른쪽 여백에 붙박이(폭 300px, 본문을 왼쪽으로 조금 밀어 코트와 안 겹침). **좁은 화면(휴대폰 · 패드 세로)**: 오른쪽 아래 "메모" 버튼(글이 있으면 "메모 ✎") → 아래에서 올라오는 창(화면 아래 절반), "닫기"
+- 화면 본문(main) 밖에 있어서 기록할 때마다 화면을 다시 그려도 쓰던 글이 그대로. 쓰고 1초 쉬면(또는 칸을 벗어나면) 저절로 저장, 위에 "11/18 14:32 저장"
+- 여러 기기가 같이 씀: 판 번호(`note_ver`)가 맞을 때만 저장(`match_note_save` RPC). 다른 기기가 먼저 고쳤으면 그 글에 내가 더하고 뺀 줄을 합쳐 다시 저장("다른 사람이 쓴 메모와 합쳤어요", `mnoteMerge`). 다른 기기 글은 20초마다(실시간은 Realtime으로 바로) 받아서, 내가 안 쓰는 중이면 바로 바꿈
+- 보기: 부원 모두. 쓰기: 전력분석 = 부원(기록 넣는 사람), 실시간 = 실시간 기록 넣는 사람(전력분석 · 일정 담당 이상). 못 쓰는 사람은 읽기만
+- 엑셀(경기 하나)에 Memo 시트(한 줄씩). 코드 `mnoteSync` · `mnoteSave` · `mnotePoll`
+
 ## 6-9. 전력분석 (`court.js`)
 예전 전력분석 담당이 쓰던 PC 프로그램(VolleyballLogger) 기능을 그대로 옮기고 화면만 정리. 목록 탭: 경기 · 실시간(6-8) · 시즌(SNU 경기 누적: 명단으로 넣은 경기 + 번호로 넣은 서울대 · SNU · SNUVT 팀이 있는 경기 — 분석 팀이든 상대든. 그 쪽 기록을 우리 쪽으로 뒤집고 등번호로 부원에 붙임, `scSnuSide` · `scAsSnu`)
 
@@ -408,7 +416,7 @@ docs/archive/           예전에 만든 설계 · 자료 문서 사본 (앱에 
 4. 서버 함수를 바꾸면 `supabase/functions/<이름>/index.ts`도 같이 올려요.
 5. 올리기 전에 테스트: `cd tests && npm install && npm test` (처음 한 번 `npx playwright install chromium`). 하나만은 `node run.js guest`
    - 진짜 서버에 안 붙고 `tests/mock.js`의 가짜 데이터(2026년 10~11월, 코치 p1 · 부원 p2)로 돌아요. 브라우저 시계는 2026-11-01로 고정(`openApp(b, role, { now })`로 바꿈), 가짜 서버 표는 `window.__db`
-   - 34개: `rotrally` 랠리 중 리시브 · 로테 / `insert` 끼워 넣기 · 지우기 / `clock` 기기 시계 어긋남 안내 / `smoke` 모든 화면 × 코치·부원 + 새로고침 / `picker` 날짜·시간 / `guest` 다른 팀 훈련 합류 / `friendly` 교류전 투표 대상 / `rotation` 실시간 라인업 창 · 교체 / `scout` 전력분석 공격 떨어진 자리 / `todo` 홈 오늘 할 것 / `errors` 앱 오류 기록 / `landscape` 가로 코트 / `serve` 서브 종류 · 서브 자리 / `libero` 리베로 자동 교대 / `menu7` 메뉴 7칸 · 휴대폰 돌림판 다이얼(길게 누르기 · 끝없이 돌리기 · 튕기면 관성 · 그냥 떼기 · 칸 · 가운데 홈 누르기) / `jpyosen` 일본 고교 현 예선 현 고르기 / `sckind` 대회 · 교류전 나눠 보기 · 남녀부 바꾸면 전력분석 다시 받기 / `atkout` 공격 아웃 자리 / `dock` 전력분석 영상 고정 · 접기 / `qpadd` 남녀부 바꾸기 권한 · 빠른 선수 추가 / `lvcoach` 실시간 감독 요약 / `lite` 실시간 기록 · 팀 자동 전환 · 코트 밖 득점 자리 · 3단 처리 미스 · 커버 바로 · 전력분석 실시간 탭 / `lineup6` 6인제 대회 라인업 → 실시간 / `edit` 기록 고치기 · Block Out · 공격 종류 / `campustab` 교내 대회는 대회 위 탭 / `seasonview` 시즌 화면 / `spotedit` 고치기에서 떨어진 자리 · SNUVT 쪽 시즌 누적 / `lurename` 라인업 번호 고치기 · 숫자 칸 휠 / `rules` 21·21·15 규칙 · 서울대 번호 팀 · Undo 내 기록만 · 되살리기 / `undo` Undo 대기열(새로고침 · 끊김) / `practice` 훈련 계획 기본 틀 / `recby` 전력분석 기록 줄의 기록자 · 시각(실시간은 `lvfree`) / `rotview` 로테 R 누르면 서 있는 자리 / `scsched` Match Setup 일정에서 고르기 / `setrules` 교류전 세트 수 자유 · 세트 점수 · 세트마다 라인업(이전 세트 불러오기) / `lvfree` 실시간 교류전 + 세트 · 세트 점수 · 이전 세트 라인업 · 자리 고정 · 전력분석 실시간 탭 대회 · 교류전
+   - 35개: `rotrally` 랠리 중 리시브 · 로테 / `insert` 끼워 넣기 · 지우기 / `clock` 기기 시계 어긋남 안내 / `smoke` 모든 화면 × 코치·부원 + 새로고침 / `picker` 날짜·시간 / `guest` 다른 팀 훈련 합류 / `friendly` 교류전 투표 대상 / `rotation` 실시간 라인업 창 · 교체 / `scout` 전력분석 공격 떨어진 자리 / `todo` 홈 오늘 할 것 / `errors` 앱 오류 기록 / `landscape` 가로 코트 / `serve` 서브 종류 · 서브 자리 / `libero` 리베로 자동 교대 / `menu7` 메뉴 7칸 · 휴대폰 돌림판 다이얼(길게 누르기 · 끝없이 돌리기 · 튕기면 관성 · 그냥 떼기 · 칸 · 가운데 홈 누르기) / `jpyosen` 일본 고교 현 예선 현 고르기 / `sckind` 대회 · 교류전 나눠 보기 · 남녀부 바꾸면 전력분석 다시 받기 / `atkout` 공격 아웃 자리 / `dock` 전력분석 영상 고정 · 접기 / `qpadd` 남녀부 바꾸기 권한 · 빠른 선수 추가 / `lvcoach` 실시간 감독 요약 / `lite` 실시간 기록 · 팀 자동 전환 · 코트 밖 득점 자리 · 3단 처리 미스 · 커버 바로 · 전력분석 실시간 탭 / `lineup6` 6인제 대회 라인업 → 실시간 / `edit` 기록 고치기 · Block Out · 공격 종류 / `campustab` 교내 대회는 대회 위 탭 / `seasonview` 시즌 화면 / `spotedit` 고치기에서 떨어진 자리 · SNUVT 쪽 시즌 누적 / `lurename` 라인업 번호 고치기 · 숫자 칸 휠 / `rules` 21·21·15 규칙 · 서울대 번호 팀 · Undo 내 기록만 · 되살리기 / `undo` Undo 대기열(새로고침 · 끊김) / `practice` 훈련 계획 기본 틀 / `recby` 전력분석 기록 줄의 기록자 · 시각(실시간은 `lvfree`) / `rotview` 로테 R 누르면 서 있는 자리 / `scsched` Match Setup 일정에서 고르기 / `memo` 경기 메모(넓은 화면 붙박이 · 저절로 저장 · 겹치면 합침 · 휴대폰 아래 창) / `setrules` 교류전 세트 수 자유 · 세트 점수 · 세트마다 라인업(이전 세트 불러오기) / `lvfree` 실시간 교류전 + 세트 · 세트 점수 · 이전 세트 라인업 · 자리 고정 · 전력분석 실시간 탭 대회 · 교류전
    - 새 기능을 만들면 `run.js`의 `SUITES`에 하나 더하고, 필요한 가짜 데이터는 `mock.js`에
 
 ## 8. 지켜야 할 것

@@ -333,7 +333,7 @@ function lvSub(gid) {
   lvRt.ch = sb.channel("lv-" + gid)
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "live_rallies", filter: `game_id=eq.${gid}` }, p => { const l = lv().rallies[gid]; if (p.new && !(l || []).some(x => x.id === p.new.id)) kick(); })
     .on("postgres_changes", { event: "DELETE", schema: "public", table: "live_rallies" }, p => { const l = lv().rallies[gid]; if (p.old && (l || []).some(x => x.id === p.old.id)) kick(); })
-    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "live_games", filter: `id=eq.${gid}` }, p => { const g = lvGame(); if (g && g.id === gid && p.new) { Object.assign(g, { sets: p.new.sets, roster: p.new.roster, team: p.new.team, opponent: p.new.opponent, label: p.new.label }); if (document.getElementById("sheet").hidden && lvView()) { state.dirty = false; render(); } } })
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "live_games", filter: `id=eq.${gid}` }, p => { const g = lvGame(); if (g && g.id === gid && p.new) { Object.assign(g, { sets: p.new.sets, roster: p.new.roster, team: p.new.team, opponent: p.new.opponent, label: p.new.label, date: p.new.date, note: p.new.note, note_ver: p.new.note_ver, note_at: p.new.note_at }); if (document.getElementById("sheet").hidden && lvView()) { state.dirty = false; render(); } } })
     .subscribe(st => { lvRt.ok = st === "SUBSCRIBED"; if (lvRt.ok) kick(); });
 }
 function lvUnsub() { if (lvRt.ch) { try { sb.removeChannel(lvRt.ch); } catch (e) {} } lvRt.ch = null; lvRt.gid = null; lvRt.ok = false; }
@@ -901,6 +901,7 @@ async function lvXlsx(g) {
       const cols = Object.keys(rows[0] || { "": "" }); ws.columns = cols.map(k => ({ header: k, key: k, width: Math.max(8, Math.min(28, k.length + 4)) }));
       rows.forEach(r => ws.addRow(r)); ws.getRow(1).font = { bold: true }; return ws; };
     sheet("Logs", logs);
+    if (g.note) sheet("Memo", g.note.split("\n").map(l => ({ Memo: l })));
     const red = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFCCCC" } }, green = { type: "pattern", pattern: "solid", fgColor: { argb: "FFCCFFCC" } }, yellow = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFFCC" } };
     let n1 = tA.slice(0, 31), n2 = tB.slice(0, 31); if (n1 === n2) { n1 += "_1"; n2 += "_2"; }
     for (const [name, rows] of [[n1, team("us")], [n2, team("opp")]]) { if (!rows.length) continue; const ws = sheet(name, rows);

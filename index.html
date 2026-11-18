@@ -1303,6 +1303,24 @@ tr.ct-strong td { background: var(--warn-soft); } tr.ct-weak td { background: co
 .who-c.me { font-weight: 800; } .who-c small { color: var(--muted); font-size: 11px; } .who-c em { font-style: normal; font-size: 10px; color: var(--muted); }
 .terms-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 14px 0 4px; }
 .sc-vod { display: grid; gap: 6px; padding: 8px 10px; margin: 8px 0; } .sc-vod .sc-row { gap: 6px; flex-wrap: nowrap; } .sc-vod .sc-row .btn { flex: none; }
+
+/* 경기 메모 (전력분석 · 실시간): 넓은 화면은 오른쪽 여백 붙박이, 좁은 화면은 버튼 → 아래에서 올라오는 창 */
+.mnote { position: fixed; z-index: 40; display: flex; flex-direction: column; background: var(--surface); border: 2px solid var(--ink); border-radius: var(--r, 4px); }
+.mnote[hidden], .mnote-btn[hidden] { display: none !important; }
+.mnote-h { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.mnote-h b { font-weight: 700; } .mnote-st { flex: 1; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mnote textarea { flex: 1; min-height: 0; width: 100%; border: 0; resize: none; padding: 10px 12px; font: 14px/1.6 inherit; font-family: inherit; background: transparent; color: var(--ink); outline: none; }
+.mnote-btn { position: fixed; z-index: 39; right: max(14px, env(safe-area-inset-right, 0px)); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); padding: 9px 14px; font: inherit; font-weight: 700; color: var(--ink); background: var(--surface); border: 2px solid var(--ink); border-radius: var(--r, 4px); box-shadow: 0 2px 0 var(--ink); cursor: pointer; }
+@media (max-width: 1099px) {
+  .mnote { left: 0; right: 0; bottom: 0; height: min(46vh, 420px); border-width: 2px 0 0; border-radius: 0; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  body:not(.mnote-open) .mnote { display: none; } body.mnote-open .mnote-btn { display: none; }
+  body.mnote-open main { padding-bottom: calc(min(46vh, 420px) + 16px); }
+}
+@media (min-width: 1100px) {
+  body.has-note .wrap { margin-left: max(16px, calc((100vw - 1080px - 316px) / 2)); max-width: min(1080px, calc(100vw - 348px)); }
+  .mnote { top: var(--mn-top, 80px); bottom: 16px; width: 300px; left: calc(max(16px, calc((100vw - 1080px - 316px) / 2)) + min(1080px, calc(100vw - 348px)) + 16px); }
+  .mnote-btn, .mnote-x { display: none; }
+}
 </style>
 <style id="court">
 /* ===== 코트 라인 디자인 (2026-11) =====
@@ -1428,8 +1446,8 @@ h2 b, h3 b, .sec-head h3, .panel > h3:first-child, .cal-head h3 { font-weight: 7
 <script src="js/guide.js?v=194"></script>
 <script src="js/library.js?v=196"></script>
 <script src="js/campus.js?v=198"></script>
-<script src="js/court.js?v=247"></script>
-<script src="js/live.js?v=247"></script>
-<script src="js/app.js?v=275"></script>
+<script src="js/court.js?v=248"></script>
+<script src="js/live.js?v=248"></script>
+<script src="js/app.js?v=276"></script>
 </body>
 </html>
