@@ -18,6 +18,7 @@ async function openApp(browser, role, { width = 390, height = 844, now = NOW, fo
   await page.route("**/*", r => {
     const u = new URL(r.request().url());
     if (u.hostname === "cdn.jsdelivr.net" && u.pathname.includes("supabase")) return r.fulfill({ body: mockScript(role), contentType: "text/javascript" });
+    if (u.hostname === "cdn.jsdelivr.net" && u.pathname.includes("pptxgenjs")) return r.fulfill({ body: fs.readFileSync(__dirname + "/vendor/pptxgen.bundle.js"), contentType: "text/javascript" }); // PPT 만들기 (리포트)
     if (fonts && /fonts\.(googleapis|gstatic)\.com$/.test(u.hostname)) return r.continue(); // 디자인 사진만 웹 글꼴 받음
     if (u.hostname !== "local.test") return r.abort();
     const p = u.pathname === "/" ? "index.html" : decodeURIComponent(u.pathname.slice(1));
@@ -797,6 +798,26 @@ const SUITES = {
     // 글 칸 저장
     await p.fill('textarea[data-rk="style"]', "빠른 토스"); await p.waitForTimeout(1100);
     assert.strictEqual(await p.evaluate(() => sc().rp.list[0].body.style), "빠른 토스", "글 칸 저장");
+    // PPT: 표지 · 팀 개요 · 스탯 요약 · 선수(공격 · 서브 + 경기별 지도) · 로테이션 2장 · 경기 전 공유
+    await p.fill('textarea[data-rk="atk.12"]', "스트레이트가 열리면 그쪽으로\n각은 안 냄"); await p.fill('input[data-rk="pn.12"]', "김공격"); await p.fill('textarea[data-rk="pnote.17"]', "블록 커버 잘함"); await p.waitForTimeout(1100);
+    assert.ok(await p.$('[data-act="rpppt"]'), "PPT 만들기 버튼");
+    const b64 = await p.evaluate(async () => { const pr = await rpPptx(sc().rp.list[0]); return pr.write({ outputType: "base64" }); });
+    fs.writeFileSync("/tmp/snuvt-report.pptx", Buffer.from(b64, "base64"));
+    const info = JSON.parse(require("child_process").execFileSync("python3", ["-c", `
+import json; from pptx import Presentation
+p = Presentation("/tmp/snuvt-report.pptx"); out = []
+for s in p.slides:
+  out.append({"t": " / ".join(sh.text_frame.text for sh in s.shapes if sh.has_text_frame), "img": sum(1 for sh in s.shapes if sh.shape_type == 13), "tbl": sum(1 for sh in s.shapes if sh.has_table)})
+print(json.dumps(out, ensure_ascii=False))`]).toString());
+    const all = info.map(x => x.t).join("\n");
+    assert.ok(info.length >= 8, "슬라이드 " + info.length);
+    assert.match(info[0].t, /B대/); assert.match(info[1].t, /세터는 11번/); assert.strictEqual(info[2].tbl, 1, "스탯 요약 표");
+    const atk = info.find(x => /12번 김공격 · OH/.test(x.t) && /공격 습관/.test(x.t)); assert.ok(atk && /스트레이트가 열리면/.test(atk.t) && atk.img >= 1, "12번 공격 장 + 지도 " + JSON.stringify(atk));
+    assert.ok(info.some(x => /11번/.test(x.t) && /서브 5회, 에이스 1/.test(x.t) && x.img >= 1), "11번 서브 장 + 지도");
+    assert.ok(info.some(x => /리시브와 커버 특징/.test(x.t) && /17번/.test(x.t) && /블록 커버 잘함/.test(x.t)), "리베로 장 (글만 있어도)");
+    assert.ok(!info.some(x => /13번 · MB/.test(x.t) && /관찰한 내용/.test(x.t)), "리시브만 몇 번 한 선수는 장 없음");
+    assert.strictEqual(info.filter(x => /로테이션별 강약/.test(x.t)).length, 2, "로테이션 2장"); assert.ok(info.filter(x => /로테이션별 강약/.test(x.t)).every(x => x.img === 3));
+    assert.match(info[info.length - 1].t, /실전 대응 포인트[\s\S]*서브 1순위는 13번/, "경기 전 공유");
     // 경기 빼기 → 숫자 칸 비움
     await p.click('input[data-rf="excl"]'); await p.waitForTimeout(300);
     assert.deepStrictEqual(await p.evaluate(() => sc().rp.list[0].excl), ["m1"]);
