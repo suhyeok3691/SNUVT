@@ -868,17 +868,21 @@ function ctSheetTable(l, side) {
 const ctRotBtn = (m, side, r) => m && !ctNine(m) && ctReady(m) ? `<button type="button" class="btn link small rv-r" data-act="ctrotview" data-mid="${esc(m.id)}" data-side="${side}" data-r="${r}" aria-label="R${r} 서 있는 자리 보기">R${r}</button>` : `<b>R${r}</b>`;
 function ctRotView(mid, side, r) {
   const S = sc(), m = S.matches.find(x => x.id === mid); if (!m) return;
+  const team = side === "us" ? ctTA(m) : (m.opponent || "상대"), el = document.getElementById("sheet");
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${esc(team)} 로테 R${r}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+    <div class="sc-row">${[1, 2, 3, 4, 5, 6].map(n => `<button type="button" class="chip sc-chip ${n === r ? "on" : ""}" data-act="ctrotview" data-mid="${esc(m.id)}" data-side="${side}" data-r="${n}">R${n}</button>`).join("")}</div>
+    ${ctRotCourt(m, side, r)}`;
+  el.hidden = false; document.body.classList.add("noscroll");
+}
+// 그 로테 자리 그림 (창 · 상대 분석 리포트 같이 씀)
+function ctRotCourt(m, side, r, mini) {
   const L = ctLu(m), st = ctState(m, [], 1), slots = side === "us" ? st.usSlots : st.opSlots, pos = side === "us" ? st.usPos : st.opPos, lib = ctLibs(L, side)[0];
   const who = v => { if (v == null || v === "") return { no: "", nm: "?" }; if (ctRos(m, side)) { const p = playerOf(v); return p ? { no: p.number != null ? String(p.number) : "", nm: p.name } : { no: "", nm: "?" }; }
     const p = ctSnuNo(m, side) ? ctByNo(v) : null; return { no: String(v), nm: p ? p.name : "" }; };
   const at = z => ((z - 1) + (r - 1)) % 6, back = z => z === 1 || z === 5 || z === 6;
   const cell = z => { const i = at(z), w = who(slots[i]), ps = pos[i] || "", li = ps === "MB" && back(z) && lib != null ? who(lib) : null;
     return `<div class="rv-c ${ps === "S" ? "rv-s" : ""}"><span class="rv-z">${z}${z === 1 ? " 서브" : ""}</span><b class="rv-p">${esc(ps || "—")}</b><span class="rv-n">${w.no ? "#" + esc(w.no) + " " : ""}${esc(w.nm)}</span>${li ? `<span class="rv-l">받을 때 리베로${li.nm || li.no ? ` ${li.no ? "#" + esc(li.no) + " " : ""}${esc(li.nm)}` : ""}</span>` : ""}</div>`; };
-  const team = side === "us" ? ctTA(m) : (m.opponent || "상대"), el = document.getElementById("sheet");
-  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${esc(team)} 로테 R${r}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
-    <div class="sc-row">${[1, 2, 3, 4, 5, 6].map(n => `<button type="button" class="chip sc-chip ${n === r ? "on" : ""}" data-act="ctrotview" data-mid="${esc(m.id)}" data-side="${side}" data-r="${n}">R${n}</button>`).join("")}</div>
-    <div class="rv-court"><span class="ct-netl">네트</span>${[4, 3, 2, 5, 6, 1].map(cell).join("")}</div>`;
-  el.hidden = false; document.body.classList.add("noscroll");
+  return `<div class="rv-court ${mini ? "mini" : ""}"><span class="ct-netl">네트</span>${[4, 3, 2, 5, 6, 1].map(cell).join("")}</div>`;
 }
 // 상대 로테이션별: 상대가 서브 받을 때(사이드아웃) · 서브할 때(브레이크) 얼마나 따는지
 function ctOppRotTable(pts, m) {

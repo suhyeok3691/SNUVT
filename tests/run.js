@@ -746,6 +746,40 @@ const SUITES = {
       await p.click("#mnoteX"); await p.waitForTimeout(100); assert.ok(!(await p.isVisible("#mnote")));
       clean(a); await a.ctx.close(); }
   },
+  // 상대 분석 리포트: 리포트 탭 → + 리포트(팀 · 기간 · 종류) → 숫자 칸 자동(선수 · 서브 순서 · 로테 강약 · 서브 타깃) · 글 칸 저장 · 경기 빼기
+  async report(b) {
+    const a = await openApp(b, "coach", { width: 1280, height: 900 }), p = a.page;
+    await p.evaluate(() => { const db = window.__db, E = (i, o) => ({ id: "e" + i, match_id: "m1", set_no: 1, created_at: `2026-10-30T10:${String(i).padStart(2, "0")}:00Z`, ...o });
+      let i = 0; const add = o => db.scout_events.push(E(i++, o));
+      for (let k = 0; k < 6; k++) add({ side: "opp", opp_no: 12, skill: "attack", action: k < 4 ? "kill" : "aerr", grade: k < 4 ? "#" : "=", kind: "lo", x: 20 + k * 5, y: 60, zone: 5, opp_rot: 2, serve: "us", point: k < 4 ? "opp" : "us" });
+      for (let k = 0; k < 5; k++) add({ side: "opp", opp_no: 11, skill: "serve", action: k === 0 ? "ace" : "s2", grade: k === 0 ? "#" : "!", kind: "jump", x: 50, y: 80, opp_rot: 3, serve: "opp", point: k === 0 ? "opp" : null });
+      for (let k = 0; k < 4; k++) add({ side: "opp", opp_no: 13, skill: "receive", action: k < 3 ? "r1" : "r3", grade: "!", opp_rot: 2, serve: "us" });
+      for (let k = 0; k < 4; k++) add({ side: "opp", opp_no: 14, skill: "receive", action: "r3", grade: "#", opp_rot: 2, serve: "us" });
+      for (let k = 0; k < 6; k++) db.scout_points.push({ id: "p" + k, match_id: "m1", set_no: 1, rot: 1, opp_rot: 1 + (k % 6), serve: k % 2 ? "us" : "opp", won: k % 3 === 0 }); });
+    await a.go("scout"); await p.waitForTimeout(300);
+    await p.click('[data-act="scltab"][data-k="report"]'); await p.waitForTimeout(400);
+    assert.match(await a.text("main"), /리포트를 만들어요/);
+    await p.click('[data-act="rpnew"]'); await p.waitForTimeout(150);
+    await p.selectOption("#rpn-opp", "B대"); await p.waitForTimeout(100);
+    assert.match(await a.text("#rpn-n"), /B대 경기 1개/, "기간 안 경기 수");
+    await p.click('#rpNewForm button[type="submit"]'); await p.waitForTimeout(500);
+    const w = (await a.writes("scout_reports")).map(x => x[2])[0]; assert.ok(w && w.opponent === "B대" && w.kinds.includes("match"), "리포트 저장 " + JSON.stringify(w));
+    const t = await a.text("main");
+    for (const k of ["1. 팀 전반 요약", "2. 선수 스탯 요약", "3. 서브", "4. 공격", "5. 수비", "6. 우리 로테이션 플랜", "7. 교체", "8. 경기 중 체크리스트", "9. 목표 달성치", "10. 최종 요약"]) assert.ok(t.includes(k), "섹션 " + k);
+    assert.match(t, /세터\s*#11/, "세터 = 라인업 S"); assert.match(t, /서브로 시작|캐치로 시작/);
+    assert.match(await a.text(".rp-cards"), /#11[\s\S]*5개 · 에이스 1/, "서브 카드");
+    assert.ok(await p.$(".rp-rot .rv-court.mini"), "로테 그림");
+    assert.match(await a.text(".rp-sec:nth-of-type(6)"), /1순위[\s\S]*13/, "서브 타깃 1순위 = 리시브 가장 낮은 13번");
+    // 글 칸 저장
+    await p.fill('textarea[data-rk="style"]', "빠른 토스"); await p.waitForTimeout(1100);
+    assert.strictEqual(await p.evaluate(() => sc().rp.list[0].body.style), "빠른 토스", "글 칸 저장");
+    // 경기 빼기 → 숫자 칸 비움
+    await p.click('input[data-rf="excl"]'); await p.waitForTimeout(300);
+    assert.deepStrictEqual(await p.evaluate(() => sc().rp.list[0].excl), ["m1"]);
+    assert.ok(!(await a.text("main")).includes("2. 선수 스탯 요약"), "뺀 경기만 있으면 분석 없음");
+    if (process.env.SHOT) { await p.click('input[data-rf="excl"]'); await p.waitForTimeout(300); await p.screenshot({ path: process.env.SHOT, fullPage: true }); }
+    clean(a); await a.ctx.close();
+  },
   // Match Setup: 일정에서 고르면 종류 · 이름 · 상대 · 날짜 · 인원이 채워짐
   async scsched(b) {
     const a = await openApp(b, "coach"), p = a.page;

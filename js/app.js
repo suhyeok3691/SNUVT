@@ -2168,6 +2168,7 @@ function viewScout() {
   S.live = false; S.track = "video";
   if (!S.loaded) { scoutLoad(); return loaderHtml(); }
   const m = scMatch();
+  if (!m && S.rp && S.rp.open && S.ltab === "report") return `<section class="sec rp-page">${scoutReport()}</section>`;
   if (!m) return scoutList();
   const ev = S.events[m.id];
   if (!ev) scoutEvents(m.id);
@@ -2187,11 +2188,12 @@ function scKindN(k) {
   return ms.filter(m => scSnuSide(m) && (!S.sy || (m.date && syOf(m.date) === S.sy)) && (!S.events[m.id] || ctReal(S.events[m.id]).length)).length;
 }
 function scoutList() {
-  const S = sc(), head = `<div class="sec-head"><h2>전력분석</h2><span class="row nowrap">${S.matches.length ? `<button class="btn link small" type="button" data-act="scxlsx" data-id="">엑셀</button>` : ""}${S.ltab === "live" ? (lvCan() ? `<button class="btn add" type="button" data-act="scnewlv">+ 경기</button>` : "") : can("analysis") ? `<button class="btn add" type="button" data-act="scnew">+ 경기</button>` : ""}</span></div>`;
-  const tabs = scSeg("scltab", [["match", "경기"], ["live", "실시간"], ["season", "시즌"], ["opp", "팀별"]], S.ltab)
-    + (!(S.ltab === "live" ? (lv().games["scout:all"] || []).length : S.matches.length) ? "" : `<div class="sc-row sc-kind">${SC_KIND.map(([k, l]) => scChip("scmk", k, S.ltab === "season" && S.mk === "cmp" ? "cmp" : scMk(), `${l} <span class="sc-n-in">${scKindN(k)}</span>`)).join("")}${S.ltab === "season" ? scChip("scmk", "cmp", S.mk, "대회 vs 교류전") : ""}</div>`);
+  const S = sc(), head = `<div class="sec-head"><h2>전력분석</h2><span class="row nowrap">${S.matches.length ? `<button class="btn link small" type="button" data-act="scxlsx" data-id="">엑셀</button>` : ""}${S.ltab === "report" ? (can("analysis") ? `<button class="btn add" type="button" data-act="rpnew">+ 리포트</button>` : "") : S.ltab === "live" ? (lvCan() ? `<button class="btn add" type="button" data-act="scnewlv">+ 경기</button>` : "") : can("analysis") ? `<button class="btn add" type="button" data-act="scnew">+ 경기</button>` : ""}</span></div>`;
+  const tabs = scSeg("scltab", [["match", "경기"], ["live", "실시간"], ["season", "시즌"], ["opp", "팀별"], ["report", "리포트"]], S.ltab)
+    + (S.ltab === "report" || !(S.ltab === "live" ? (lv().games["scout:all"] || []).length : S.matches.length) ? "" : `<div class="sc-row sc-kind">${SC_KIND.map(([k, l]) => scChip("scmk", k, S.ltab === "season" && S.mk === "cmp" ? "cmp" : scMk(), `${l} <span class="sc-n-in">${scKindN(k)}</span>`)).join("")}${S.ltab === "season" ? scChip("scmk", "cmp", S.mk, "대회 vs 교류전") : ""}</div>`);
   let body;
   if (S.ltab === "live") body = scoutLiveList();
+  else if (S.ltab === "report") body = S.all !== true ? (scoutAll(), loaderHtml(true)) : scoutReports();
   else if (!S.matches.length) body = emptyLine(can("analysis") ? "경기 영상을 추가하면 다 같이 보면서 입력할 수 있어요." : "아직 분석할 경기가 없어요.");
   else if (S.ltab === "match") body = !scMs().length ? emptyLine(scMk() === "friendly" ? "영상으로 분석한 교류전이 없어요." : "영상으로 분석한 대회 경기가 없어요.") : `<div class="sc-list">${scMs().map(x => `<button type="button" class="panel sc-card" data-act="scopen" data-id="${esc(x.id)}"><b>${esc(x.title)}</b><span class="small muted">${scMeta(x)}</span><span class="go">›</span></button>`).join("")}</div>`;
   else if (S.all !== true) { scoutAll(); body = loaderHtml(true); }
@@ -3155,6 +3157,7 @@ function render(soft) {
   refreshSettings();
   scoutDock();
   mnoteSync();
+  if (document.getElementById("rpForm")) rpFit();
   pushNudge();
 }
 // 화면 넘김: 새 화면만 짧게 서서히 나타남 (투명도만 바꿔서 휴대폰에서도 가볍게)
@@ -3326,6 +3329,7 @@ function innerBack() {
   if (v === "jp") { const J = jp(); if (J.school) { J.school = null; J.open = null; return true; } }
   if (v === "scout" && state.live && state.live.open) { state.live.open = null; return true; }
   if (v === "scout" && state.scoutId) { state.scoutId = null; return true; }
+  if (v === "scout" && state.scout && state.scout.rp && state.scout.rp.open) { state.scout.rp.open = null; return true; }
   return false;
 }
 // 뒤로 가기: 열린 창 닫기 → 안쪽 화면 나가기 → 이전 화면
@@ -3528,6 +3532,7 @@ document.addEventListener("click", async ev => {
   }
   if (act.startsWith("ct")) return courtClick(b, act);
   if (act.startsWith("lv")) return liveClick(b, act);
+  if (act.startsWith("rp")) return rpClick(b, act);
   if (act.startsWith("sc")) {
     const S = sc(), x = S.sel, v = b.dataset.v;
     if (act === "scnew") return openScoutForm("");
@@ -3738,6 +3743,8 @@ document.addEventListener("submit", async ev => {
   const f = ev.target;
   if (!sb) return toast("서버에 연결되어 있지 않아요.");
   if (f.id === "qpForm") { await qpSave(); return; }
+  if (f.id === "rpNewForm") { await rpNewSave(); return; }
+  if (f.id === "rpForm") return;
   if (f.id === "guestForm") {
     const st = txt("gs-s"), en = txt("gs-e") || null, d = f.dataset.d, btn = f.querySelector('button[type="submit"]');
     if (en && en <= st) { toast("끝 시간이 시작보다 앞이에요."); return; }

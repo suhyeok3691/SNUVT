@@ -2712,3 +2712,39 @@ begin
 end $$;
 revoke all on function public.match_note_save(text, uuid, text, int) from public, anon;
 grant execute on function public.match_note_save(text, uuid, text, int) to authenticated;
+
+-- 2026-11-20 상대 분석 리포트 (노션 "어택라인" 양식): 상대 팀 · 기간 · 종류로 경기를 골라 숫자는 앱이 채우고, 글 칸(body)만 사람이 씀
+create table if not exists public.scout_reports (
+  id uuid primary key default gen_random_uuid(),
+  team_id text not null default private.my_team() references public.teams(id),
+  opponent text not null check (char_length(opponent) between 1 and 60),
+  title text check (title is null or char_length(title) <= 80),
+  date_from date, date_to date,
+  kinds text[] not null default array['match'],
+  excl uuid[] not null default '{}',
+  body jsonb not null default '{}'::jsonb,
+  created_by uuid default auth.uid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists scout_reports_team on public.scout_reports (team_id, updated_at desc);
+alter table public.scout_reports enable row level security;
+create policy "team scope" on public.scout_reports as restrictive for all using (team_id = (select private.my_team())) with check (team_id = (select private.my_team()));
+create policy "report read" on public.scout_reports for select using (private.is_member());
+create policy "report write" on public.scout_reports for all using (private.can('analysis')) with check (private.can('analysis'));
+create trigger keep_deleted before delete on public.scout_reports for each row execute function private.keep_deleted();
+-- 글 칸 하나만 바꾸기 (여러 명이 다른 칸을 같이 써도 안 겹침). 빈 글이면 칸을 지움
+create or replace function public.report_set(rid uuid, k text, v text) returns timestamptz
+language plpgsql security definer set search_path = '' as $$
+declare t timestamptz := now();
+begin
+  if not private.can('analysis') then raise exception 'forbidden' using errcode = '42501'; end if;
+  if char_length(coalesce(v, '')) > 5000 or char_length(k) > 40 then raise exception 'too long' using errcode = '22001'; end if;
+  update public.scout_reports r set body = case when coalesce(v, '') = '' then r.body - k else jsonb_set(r.body, array[k], to_jsonb(v)) end, updated_at = t
+  where r.id = rid and r.team_id = (select private.my_team());
+  if not found then raise exception 'not found' using errcode = 'P0002'; end if;
+  return t;
+end $$;
+revoke all on function public.report_set(uuid, text, text) from public, anon;
+grant execute on function public.report_set(uuid, text, text) to authenticated;
+-- 매일 스냅샷 목록에 scout_reports 더함 (private.take_snapshot)
