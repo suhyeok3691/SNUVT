@@ -76,9 +76,9 @@ const SUITES = {
     await a.go("video"); await p.waitForTimeout(300);
     await p.click('[data-act="vidopen"][data-id="pl1"]'); await p.waitForTimeout(200);
     assert.deepStrictEqual(await p.$$eval(".vid-items button", l => l.map(x => x.textContent)), ["211.18 국교 2", "111.18 국교 1"], "최근 것 위");
-    assert.match(await p.$eval(".vid-frame iframe", f => f.src), /embed\/aaaaaaaaaa2\?rel=0&playlist=aaaaaaaaaa1/);
+    assert.match(await p.$eval(".vid-frame iframe", f => f.src), /embed\/aaaaaaaaaa2\?rel=0&playlist=aaaaaaaaaa2,aaaaaaaaaa1$/);
     await p.click('.vid-items li:nth-child(2) button'); await p.waitForTimeout(100);
-    assert.match(await p.$eval(".vid-frame iframe", f => f.src), /embed\/aaaaaaaaaa1\?/);
+    assert.match(await p.$eval(".vid-frame iframe", f => f.src), /embed\/aaaaaaaaaa1\?rel=0&playlist=aaaaaaaaaa1,aaaaaaaaaa2&autoplay=1$/);
     // 새 영상이 올라옴 → 1분 지나 다시 열면 목록에 바로
     await p.evaluate(() => { window.__ytItems = [...window.__ytItems, { id: "aaaaaaaaaa3", t: "11.19 교대교류전" }]; ytUpdAt = 0; });
     await a.go("home"); await a.go("video"); await p.waitForTimeout(300);

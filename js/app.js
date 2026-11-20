@@ -513,8 +513,9 @@ function parseYt(url) {
 // 재생목록: 유튜브 퍼가기(videoseries)는 재생목록에 넣은 영상이 늦게 보여서, yt-latest 가 읽어 온 영상 목록(최근 것 위)으로 고른 영상을 바로 틂
 const vidList = v => { const u = (state.ytUpd || {})[v.id]; return v.kind === "playlist" && u && u.items && u.items.length ? u.items.slice().reverse() : null; };
 const vidSelOf = v => { const l = vidList(v); if (!l) return null; const s = (state.vidSel || {})[v.id]; return l.find(x => x.id === s) || l[0]; };
-const vidSrc = v => { const l = vidList(v), cur = vidSelOf(v); if (!cur) return ytEmbed(v); const rest = l.filter(x => x.id !== cur.id).map(x => x.id).slice(0, 150);
-  return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(cur.id)}?rel=0${rest.length ? "&playlist=" + rest.map(encodeURIComponent).join(",") : ""}`; };
+// playlist= 를 주면 유튜브는 주소의 영상이 아니라 playlist 첫 영상부터 틂(2026-11 확인) → 고른 영상을 playlist 맨 앞에도 넣음
+const vidSrc = v => { const l = vidList(v), cur = vidSelOf(v); if (!cur) return ytEmbed(v); const ids = [cur.id, ...l.filter(x => x.id !== cur.id).map(x => x.id)].slice(0, 150);
+  return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(cur.id)}?rel=0&playlist=${ids.map(encodeURIComponent).join(",")}`; };
 const vidItems = v => { const l = vidList(v), cur = vidSelOf(v); return !l ? "" : `<ol class="vid-items">${l.map((x, i) => `<li><button type="button" class="${x.id === cur.id ? "on" : ""}" data-act="vidsel" data-id="${esc(v.id)}" data-v="${esc(x.id)}"><span class="vid-n">${l.length - i}</span>${esc(x.t || "영상")}</button></li>`).join("")}</ol>`; };
 const vidMeta = v => { const u = (state.ytUpd || {})[v.id]; return `${v.kind === "playlist" ? `재생목록${u && u.count ? " " + u.count + "개" : ""}` : "영상"} · ${VID_CATS[v.cat] || ""}${u && u.updated ? ` · ${md(parseD(u.updated))} 업데이트` : v.date ? ` · ${md(parseD(v.date))}` : ""}${v.note ? ` · ${esc(v.note)}` : ""}`; };
 const vidCard = (v, open) => `<article class="panel vid ${open ? "open" : ""}">
