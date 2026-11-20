@@ -746,6 +746,30 @@ const SUITES = {
       await p.click("#mnoteX"); await p.waitForTimeout(100); assert.ok(!(await p.isVisible("#mnote")));
       clean(a); await a.ctx.close(); }
   },
+  // Edit Lineup 교체 선수(번호 + 포지션): 교체 창에 바로 뜨고, 들어오면 그 포지션(나간 선수 포지션 아님) · 분석 표도
+  async bench(b) {
+    const a = await openApp(b, "coach", { width: 1280, height: 900 }), p = a.page;
+    await a.go("scout"); await p.click('[data-act="scopen"][data-id="m1"]'); await p.waitForTimeout(300);
+    await p.click('[data-act="ctlineup"]'); await p.waitForTimeout(150);
+    assert.ok(await p.$("#ctb-opp .ct-bno") && await p.$("#ctb-us .ct-bno"), "두 팀 다 교체 선수 칸");
+    const r0 = await p.$("#ctb-opp .ct-bench-r"); await (await r0.$(".ct-bno")).fill("21"); await (await r0.$(".ct-bpos")).selectOption("MB");
+    await p.click('[data-act="ctbenchadd"][data-side="opp"]'); assert.ok((await p.$$("#ctb-opp .ct-bench-r")).length >= 6, "+ 줄");
+    await p.click('#ctLineupForm button[type="submit"]'); await p.waitForTimeout(300);
+    assert.deepStrictEqual(await p.evaluate(() => scMatch().lineup.opp.bench), [{ no: 21, pos: "MB" }]);
+    // 교체: 나가는 선수가 OH 여도 들어오는 #21 은 MB
+    await p.click('.ct-lrow.opp [data-act="ctsubopen"], .ct-side.opp [data-act="ctsubopen"]').catch(async () => p.evaluate(() => ctSubOpen("opp", {})));
+    await p.waitForTimeout(150);
+    const outOH = await p.$$eval('#sheet [data-act="ctsubout"]', x => { const e = x.find(b => b.querySelector("small") && b.querySelector("small").textContent === "OH"); return e ? e.dataset.i : null; });
+    await p.click(`#sheet [data-act="ctsubout"][data-i="${outOH}"]`); await p.waitForTimeout(80);
+    assert.ok(await p.$('#sheet [data-act="ctsubin"][data-v="21"]'), "교체 창에 #21");
+    await p.click('#sheet [data-act="ctsubin"][data-v="21"]'); await p.waitForTimeout(80);
+    assert.strictEqual(await p.evaluate(() => sc().ct.pos), "MB", "들어오는 포지션 = 교체 선수 포지션");
+    await p.click('#sheet [data-act="ctsubok"]'); await p.waitForTimeout(250);
+    assert.strictEqual(await p.evaluate(() => { const m = scMatch(), s = ctState(m, ctEv(m), 1); return s.opPos[s.opSlots.findIndex(x => String(x) === "21")]; }), "MB");
+    // 예전에 OH 로 잘못 넣은 교체 기록이 있어도 분석 표는 교체 선수 포지션
+    assert.strictEqual(await p.evaluate(() => { const m = scMatch(); return ctPosOf(m, "opp", 21, [{ action: "sub", side: "opp", opp_no: 21, kind: "OH" }]); }), "MB");
+    clean(a); await a.ctx.close();
+  },
   // 상대 분석 리포트: 리포트 탭 → + 리포트(팀 · 기간 · 종류) → 숫자 칸 자동(선수 · 서브 순서 · 로테 강약 · 서브 타깃) · 글 칸 저장 · 경기 빼기
   async report(b) {
     const a = await openApp(b, "coach", { width: 1280, height: 900 }), p = a.page;

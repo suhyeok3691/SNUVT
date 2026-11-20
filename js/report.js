@@ -83,7 +83,8 @@ function scoutReport() {
   const nSets = new Set(N.flatMap(x => x.ev.filter(e => e.action).map(e => x.m.id + ":" + e.set_no))).size;
   // 선수 번호 · 포지션 (경기마다 라인업 포지션 → 가장 많이 나온 것)
   const posVotes = {};
-  for (const x of N) { const L = ctLuAll(x.m), T = L[x.side] || {}; (T.slots || []).forEach((n, i) => { if (n == null || n === "") return; (posVotes[n] = posVotes[n] || []).push((T.pos || [])[i] || ""); }); (T.libero || []).forEach(n => (posVotes[n] = posVotes[n] || []).push("L")); }
+  for (const x of N) { const L = ctLuAll(x.m), T = L[x.side] || {}; (T.slots || []).forEach((n, i) => { if (n == null || n === "") return; (posVotes[n] = posVotes[n] || []).push((T.pos || [])[i] || ""); }); (T.libero || []).forEach(n => (posVotes[n] = posVotes[n] || []).push("L"));
+    (T.bench || []).forEach(b => { if (b.no != null && b.pos) (posVotes[b.no] = posVotes[b.no] || []).push(b.pos, b.pos); }); } // 교체 선수 포지션(Edit Lineup)도
   // 공격 · 서브 점 색: 득점 파랑 · 범실 빨강 · 이어짐 회색 (전력분석 지도와 같음)
   const posOf = n => { const v = (posVotes[n] || []).filter(Boolean); return v.length ? rpTop(v, 1)[0][0] : ""; };
   const nos = [...new Set([...te.map(e => e.opp_no).filter(n => n != null), ...Object.keys(posVotes).map(Number)])].sort((a, b) => a - b);

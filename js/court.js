@@ -88,10 +88,12 @@ const ctLuAt = (m, n) => { const L = ctLu(m), o = { ...L }; for (const side of [
 // 교류전(세트 수 자유)은 실제 대회처럼 세트마다 라인업: 2세트부터 그 세트 라인업이 없고 기록도 없으면 먼저 라인업을 넣음 (이전 세트 라인업 불러오기)
 const ctLuOwn = (m, n) => n === 1 ? ctReady(m) : !!(((ctLu(m).sets || {})[n] || {}).us || ((ctLu(m).sets || {})[n] || {}).opp);
 const ctLuNeed = (m, ev, n) => !ctNine(m) && !ctRules(m).bo && n > 1 && !ctLuOwn(m, n) && !ev.some(e => e.set_no === n && e.action);
+// 교체 선수(번호 팀): lineup[side].bench = [{no, pos}] — Edit Lineup 에서 넣음. 들어올 때 · 분석 표 포지션은 이것 먼저
+const ctBenchPos = (L, side, v) => { const b = ((L[side] || {}).bench || []).find(x => ctSame(x.no, v)); return b ? b.pos || "" : ""; };
 // 분석용: 모든 세트 라인업을 합친 것 (포지션 · 리베로 찾기)
 const ctLuAll = m => { const L = ctLu(m), o = { ...L }, ex = Object.values(L.sets || {}).filter(Boolean);
   for (const side of ["us", "opp"]) { const l = [L[side], ...ex.map(x => x[side])].filter(Boolean); if (l.length < 2) continue;
-    o[side] = { slots: l.flatMap(x => x.slots || []), pos: l.flatMap(x => (x.slots || []).map((_, i) => (x.pos || [])[i] || "")), libero: [...new Set(l.flatMap(x => x.libero || []))] }; }
+    o[side] = { slots: l.flatMap(x => x.slots || []), pos: l.flatMap(x => (x.slots || []).map((_, i) => (x.pos || [])[i] || "")), libero: [...new Set(l.flatMap(x => x.libero || []))], bench: l.flatMap(x => x.bench || []) }; }
   return o; };
 // 번호로 넣는 팀 이름이 서울대 · SNU · SNUVT 면 우리 부원 정보(이름 · 포지션)를 등번호로 붙이고 시즌 누적에도 넣음
 const SNU_RE = /^\s*(서울대(학교)?|snu\s*vt|snu)(\s*배구부)?\s*$/i;
@@ -120,7 +122,7 @@ function ctState(m, ev, setNo) {
     if (e.action === CT_CFG) { if (!nine) { if (e.rot) s.rot = e.rot; if (e.opp_rot) s.orot = e.opp_rot; } if (e.serve) s.serve = e.serve; if (e.rally) s.rally = e.rally; s.done = false; s.served = false; s.last = null; continue; }
     if (e.action === CT_LIB) { if (ctIsLib(L, v, e.side) && !slots.some(x => ctSame(x, v))) { if (us) s.lib = v; else s.olib = v; } continue; }
     if (e.action === CT_SUB) { const i = (e.zone || 0) - 1;
-      if (i >= 0 && i < slots.length) { slots[i] = v; if (!nine) (us ? s.usPos : s.opPos)[i] = e.kind || (ctRos(m, e.side) ? ctRosterPos(v) : ctNoPos(m, e.side, v) || (us ? s.usPos : s.opPos)[i]); }
+      if (i >= 0 && i < slots.length) { slots[i] = v; if (!nine) (us ? s.usPos : s.opPos)[i] = (!ctRos(m, e.side) && ctBenchPos(L, e.side, v)) || e.kind || (ctRos(m, e.side) ? ctRosterPos(v) : ctNoPos(m, e.side, v) || (us ? s.usPos : s.opPos)[i]); }
       // 리베로(L)를 일반 선수(OH 등)로 넣으면 리베로 자리는 다른 리베로가 (없으면 리베로 없이)
       const cur = us ? s.lib : s.olib;
       if (ctSame(cur, v)) { const nx = ctLibs(L, e.side).find(x => !ctSame(x, v) && !slots.some(y => ctSame(y, x))) ?? null; if (us) s.lib = nx; else s.olib = nx; }
@@ -143,6 +145,7 @@ function ctPosOf(m, side, v, ev) {
   const L = ctLuAll(m); if (ctIsLib(L, v, side)) return "L";
   if (ctRos(m, side)) { const p = playerOf(v); const q = p ? String(p.pos || "").toUpperCase() : ""; return q === "LI" ? "L" : q; }
   const T = L[side] || {}, i = (T.slots || []).findIndex(x => ctSame(x, v)); if (i >= 0 && (T.pos || [])[i]) return T.pos[i];
+  { const bp = ctBenchPos(L, side, v); if (bp) return bp; }
   const sb = (ev || []).filter(e => e.action === CT_SUB && e.side === side && ctSame(e.opp_no, v) && e.kind).pop(); if (sb) return sb.kind;
   return ctNoPos(m, side, v);
 }
@@ -267,13 +270,16 @@ function ctSubOpen(side, o) {
   if (o.inn != null && slots.some(x => ctSame(x, o.inn))) S.ct.inn = null;
   ctSheet();
 }
+// 교체 번호를 치면 교체 선수로 넣어 둔 번호의 포지션으로
+document.addEventListener("input", e => { if (!e.target || e.target.id !== "ctSubNo") return; const S = sc(), m = scMatch(); if (!S.ct || !m) return;
+  const bp = ctBenchPos(ctLuAt(m, S.sel.set || 1), S.ct.side, e.target.value.trim()); if (bp && bp !== S.ct.pos) { S.ct.inn = e.target.value.trim(); S.ct.pos = bp; document.querySelectorAll('#sheet [data-act="ctsubpos"]').forEach(x => x.classList.toggle("on", x.dataset.v === bp)); } });
 // 교체 창: 나갈 선수(코트 6명) · 들어올 선수(벤치 · 리베로 / 상대는 번호) · 포지션 → 교체
 function ctSubHtml(m, s) {
   const c = sc().ct, side = c.side, us = side === "us", L = ctLuAt(m, s.n), slots = us ? s.usSlots : s.opSlots, pos = us ? s.usPos : s.opPos, r = us ? s.rot : s.orot, cur = us ? s.lib : s.olib;
   const nm = v => { const n = ctName(side, v); return `${n.no ? "#" + n.no : ""} ${n.nm}`.trim(); };
   const outs = (s.nine ? CT_ROWS9.flat().map(i => [i, ""]) : [4, 3, 2, 5, 6, 1].map(z => [((z - 1) + (r - 1)) % 6, z])).map(([i, z]) => `<button type="button" class="ct-sb ${c.out === i ? "on" : ""}" data-act="ctsubout" data-i="${i}">${z ? `<i>${z}</i>` : ""}<b>${esc(nm(slots[i]))}</b><small>${esc(pos[i] || "")}</small></button>`).join("");
   const ins = ctRos(m, side) ? sortedPlayers().filter(p => !p.military && !slots.includes(p.id)).map(p => `<button type="button" class="ct-sb ${ctSame(c.inn, p.id) ? "on" : ""}" data-act="ctsubin" data-v="${esc(p.id)}"><b>${esc(pNo(p) + p.name)}</b><small>${esc(p.pos === "Li" ? "L" : p.pos || "")}</small></button>`).join("")
-    : `<label class="fl sc-opp">번호<input id="ctSubNo" type="number" inputmode="numeric" min="0" max="99" value="${esc(c.inn ?? "")}"></label>${ctLibs(L, side).filter(x => !slots.some(y => ctSame(y, x))).map(n => `<button type="button" class="ct-sb ${ctSame(c.inn, n) ? "on" : ""}" data-act="ctsubin" data-v="${esc(n)}"><b>#${esc(n)}</b><small>L</small></button>`).join("")}`;
+    : `<label class="fl sc-opp">번호<input id="ctSubNo" type="number" inputmode="numeric" min="0" max="99" value="${esc(c.inn ?? "")}"></label>${((L[side] || {}).bench || []).filter(b => !slots.some(y => ctSame(y, b.no))).map(b => `<button type="button" class="ct-sb ${ctSame(c.inn, b.no) ? "on" : ""}" data-act="ctsubin" data-v="${esc(b.no)}"><b>#${esc(b.no)}</b><small>${esc(b.pos || "")}</small></button>`).join("")}${ctLibs(L, side).filter(x => !slots.some(y => ctSame(y, x))).map(n => `<button type="button" class="ct-sb ${ctSame(c.inn, n) ? "on" : ""}" data-act="ctsubin" data-v="${esc(n)}"><b>#${esc(n)}</b><small>L</small></button>`).join("")}`;
   const libs = ctLibs(L, side).filter(x => !slots.some(y => ctSame(y, x)));
   return `${libs.length > 1 ? `<div class="sc-row"><span class="sc-k">코트 리베로</span>${libs.map(v => `<button type="button" class="chip sc-chip ${ctSame(v, cur) ? "on" : ""}" data-act="ctlib" data-side="${side}" data-v="${esc(v)}">${esc(nm(v))}</button>`).join("")}</div>` : ""}
     <div class="ct-subg"><div><p class="sc-k">나감</p><div class="ct-subl out">${outs}</div></div><div><p class="sc-k">들어옴</p><div class="ct-subl">${ins || `<span class="small muted">벤치 선수가 없어요</span>`}</div></div></div>
@@ -592,6 +598,13 @@ function ctLineupForm(src) {
   // 서울대 · SNU 라고 넣은 번호 팀은 등번호로 부원 포지션을 미리 채움
   const numc = (pre, ppre, sl, P, side) => i => `<div class="ct-lu-c"><span class="ct-lu-n">${i + 1}${i === 0 ? " 서브" : ""}</span><input id="${pre}-${i}" type="number" inputmode="numeric" min="0" max="99" placeholder="번호" value="${esc(sl[i] ?? "")}" aria-label="${i + 1}번 자리 번호">${posSel(`${ppre}-${i}`, (P.pos || [])[i] || ctNoPos(m, side, sl[i]), true)}</div>`;
   const onum = numc("cto", "cop", op, O, "opp"), unum = numc("ctn", "cnp", us, U, "us"), ros = !m.team;
+  // 교체 선수 (번호 팀): 넣어 둔 것 + 이 팀 기록에 나왔는데 라인업에 없는 번호(교체로 들어온 선수)를 미리 채움
+  const benchOf = (side, T) => { const have = (T.bench || []).map(b => ({ no: b.no, pos: b.pos || "" })), inL = n => [...(T.slots || []), ...(T.libero || [])].some(x => ctSame(x, n)) || have.some(b => ctSame(b.no, n));
+    for (const e of (S.events[m.id] || []).filter(e => e.side === side && e.opp_no != null)) if (!inL(e.opp_no)) have.push({ no: e.opp_no, pos: e.action === CT_SUB ? e.kind || "" : "" });
+    return have; };
+  const benchRow = side => (b, i) => `<div class="ct-bench-r"><input class="ct-bno" data-bench="${side}" type="number" inputmode="numeric" min="0" max="99" placeholder="번호" value="${esc(b.no ?? "")}" aria-label="교체 선수 ${i + 1} 번호">${posSel(`ctb-${side}-${i}`, b.pos || "", true).replace('class="ct-pos"', `class="ct-pos ct-bpos" data-bench-pos="${side}"`)}</div>`;
+  const bench = (side, T) => { const l = benchOf(side, T); while (l.length < Math.max(4, (T.bench || []).length + 2)) l.push({ no: "", pos: "" });
+    return `<div class="ct-bench"><span class="sc-k">교체 선수</span><div class="ct-bench-l" id="ctb-${side}">${l.map(benchRow(side)).join("")}</div><button class="btn link small" type="button" data-act="ctbenchadd" data-side="${side}">+ 줄</button></div>`; };
   const num = (id, v, l) => `<label class="fl">${l}<input id="${id}" type="number" inputmode="numeric" min="0" max="99" value="${esc(v ?? "")}"></label>`;
   const el = document.getElementById("sheet");
   if (ctNine(m)) { // 9인제: 자리별 포지션 고정, 리베로·로테 없음
@@ -609,9 +622,9 @@ function ctLineupForm(src) {
     ${setNo > 1 ? `<div class="row"><button class="btn small" type="button" data-act="ctluprev">이전 세트 라인업 불러오기</button></div>` : ""}
     <form class="f" id="ctLineupForm">
       <h4>${esc(ctTA(m))}${ros ? ` ${qpBtn()}` : ""}</h4><div class="ct-lu"><span class="ct-netl">네트</span>${CT_SHEET.map(ros ? sel : unum).join("")}</div>
-      <div class="pair">${ros ? lsel(0) + lsel(1) : num("ctn-l1", (U.libero || [])[0], "리베로 1") + num("ctn-l2", (U.libero || [])[1], "리베로 2")}</div>
+      <div class="pair">${ros ? lsel(0) + lsel(1) : num("ctn-l1", (U.libero || [])[0], "리베로 1") + num("ctn-l2", (U.libero || [])[1], "리베로 2")}</div>${ros ? "" : bench("us", U)}
       <h4>${esc(m.opponent || "상대")}</h4><div class="ct-lu"><span class="ct-netl">네트</span>${CT_SHEET.map(onum).join("")}</div>
-      <div class="pair">${num("cto-l1", (O.libero || [])[0], "리베로 1")}${num("cto-l2", (O.libero || [])[1], "리베로 2")}</div>
+      <div class="pair">${num("cto-l1", (O.libero || [])[0], "리베로 1")}${num("cto-l2", (O.libero || [])[1], "리베로 2")}</div>${bench("opp", O)}
       <h4>${setNo}세트 시작</h4><div class="fields">
         ${setNo > 1 && !free ? `<label class="fl wide">바꾼 라인업<select id="cts-from"><option value="set">${setNo}세트부터</option><option value="all">모든 세트</option></select></label>` : ""}
         <label class="fl">${esc(ctTA(m))} 로테<select id="cts-rot">${[1, 2, 3, 4, 5, 6].map(n => `<option ${n === (st.rot || 1) ? "selected" : ""}>${n}</option>`).join("")}</select></label>
@@ -645,8 +658,11 @@ async function ctLineupSave(f) {
   if (new Set(op).size !== 6) { toast("상대 등번호가 겹쳐요"); return false; }
   const olibs = [v("cto-l1"), v("cto-l2")].filter(x => x !== "");
   if (olibs.some(x => op.includes(x))) { toast("상대 코트 6명 번호는 리베로로 넣을 수 없어요"); return false; }
-  const nu = ros ? { slots: us, pos: us.map((id, i) => v(`ctp-${i}`) || ctRosterPos(id)), libero: libs } : { slots: us.map(Number), pos: us.map((x, i) => v(`cnp-${i}`)), libero: libs.map(Number) };
-  const no = { slots: op.map(Number), pos: op.map((x, i) => v(`cop-${i}`)), libero: olibs.map(Number) };
+  // 교체 선수: 번호가 있는 줄만, 코트 · 리베로 번호와 겹치는 것 · 같은 번호 두 번은 뺌
+  const benchGet = (side, taken) => { const out = []; document.querySelectorAll(`#ctb-${side} .ct-bench-r`).forEach(r => { const n = (r.querySelector(".ct-bno") || {}).value, p = (r.querySelector(".ct-bpos") || {}).value || "";
+    if (n === "" || n == null) return; const x = Number(n); if (taken.some(t => ctSame(t, x)) || out.some(b => b.no === x)) return; out.push({ no: x, pos: p }); }); return out; };
+  const nu = ros ? { slots: us, pos: us.map((id, i) => v(`ctp-${i}`) || ctRosterPos(id)), libero: libs } : { slots: us.map(Number), pos: us.map((x, i) => v(`cnp-${i}`)), libero: libs.map(Number), bench: benchGet("us", [...us, ...libs]) };
+  const no = { slots: op.map(Number), pos: op.map((x, i) => v(`cop-${i}`)), libero: olibs.map(Number), bench: benchGet("opp", [...op, ...olibs]) };
   // 1세트 · "모든 세트" = 경기 라인업, N세트부터 = 그 세트 라인업(앞 세트와 같으면 따로 안 둠)
   const old = ctLu(m), all = setNo === 1 || v("cts-from") === "all", L = { ...old, sets: {} }, same = (a, b) => JSON.stringify(a || {}) === JSON.stringify(b || {});
   for (const [k, x] of Object.entries(old.sets || {})) { const y = { ...x }; if (all && (Number(k) === 1 || v("cts-from") === "all")) { delete y.us; delete y.opp; } L.sets[k] = y; }
@@ -772,7 +788,7 @@ function courtClick(b, act) {
     S.ct.cat = b.dataset.v; S.ct.act = null; return ctSheet(); }
   if (act === "ctback") { if (S.ct.spot) { S.ct.spot = null; S.ct.spotDet = null; } else if (S.ct.act) S.ct.act = null; else if (S.ct.cat === "sub") S.ct = { side: S.ct.side, v: S.ct.v, z: null, cat: null, act: null }; else S.ct.cat = null; return ctSheet(); }
   if (act === "ctsubout") { const m = scMatch(), s = ctState(m, ctEv(m), S.sel.set || 1), i = Number(b.dataset.i); S.ct.out = i; S.ct.pos = (S.ct.side === "us" ? s.usPos : s.opPos)[i] || S.ct.pos; return ctSheet(); }
-  if (act === "ctsubin") { S.ct.inn = b.dataset.v; const n = document.getElementById("ctSubNo"); if (n) n.value = ""; return ctSheet(); }
+  if (act === "ctsubin") { S.ct.inn = b.dataset.v; const n = document.getElementById("ctSubNo"); if (n) n.value = ""; const m = scMatch(), bp = !ctRos(m, S.ct.side) && ctBenchPos(ctLuAt(m, S.sel.set || 1), S.ct.side, b.dataset.v); if (bp) S.ct.pos = bp; return ctSheet(); }
   if (act === "ctsubpos") { S.ct.pos = b.dataset.v; return ctSheet(); }
   if (act === "ctsubok") return ctSubSave();
   if (act === "ctact") { const a = CT_ACT[b.dataset.a]; if (a.det) { S.ct.act = a.code; return ctSheet(); } if (CT_SPOT(a)) { S.ct.spot = a.code; return ctSheet(); } return ctSave(a.code, null); }
@@ -791,6 +807,8 @@ function courtClick(b, act) {
   if (act === "ctdelrec") return ctDelRec(b.dataset.id);
   if (act === "ctlineup") return ctLineupForm();
   if (act === "ctluprev") return ctLineupForm("prev");
+  if (act === "ctbenchadd") { const box = document.getElementById("ctb-" + b.dataset.side); if (box) { const k = box.children.length, sel = `<select class="ct-pos ct-bpos" data-bench-pos="${b.dataset.side}" aria-label="포지션"><option value="">포지션</option>${CT_POS.map(p => `<option>${p}</option>`).join("")}</select>`;
+    box.insertAdjacentHTML("beforeend", [0, 1].map(j => `<div class="ct-bench-r"><input class="ct-bno" data-bench="${b.dataset.side}" type="number" inputmode="numeric" min="0" max="99" placeholder="번호" aria-label="교체 선수 ${k + j + 1} 번호">${sel}</div>`).join("")); } return; }
   if (act === "ctcfg") return ctCfgForm();
   if (act === "ctpts") return ctPtsForm();
   if (act === "ctptsv") { const x = document.getElementById("ctr-pts"); if (x) x.value = b.dataset.v; document.querySelectorAll(".ct-ptc").forEach(c => c.classList.toggle("on", c === b)); return; }
