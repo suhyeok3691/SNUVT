@@ -67,6 +67,25 @@ const SUITES = {
     assert.strictEqual(await p.evaluate(() => ctTA({})), "서울대배구부");
     clean(a); await a.ctx.close();
   },
+  // 팀 영상 재생목록: yt-latest 영상 목록(최근 것 위) · 고르면 그 영상 · 다시 열면 새로 받음(켜 둔 앱에도 새 영상)
+  async vidlist(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await p.evaluate(() => { window.__ytItems = [{ id: "aaaaaaaaaa1", t: "11.18 국교 1" }, { id: "aaaaaaaaaa2", t: "11.18 국교 2" }];
+      sb.functions.invoke = async () => ({ data: { playlists: { pl1: { updated: "2026-11-01", count: window.__ytItems.length, items: window.__ytItems } } } });
+      state.videos = [{ id: "pl1", kind: "playlist", cat: "friendly", title: "검은 폭격기들", yt: "PLtest", date: null, note: "" }]; state.ytUpd = null; });
+    await a.go("video"); await p.waitForTimeout(300);
+    await p.click('[data-act="vidopen"][data-id="pl1"]'); await p.waitForTimeout(200);
+    assert.deepStrictEqual(await p.$$eval(".vid-items button", l => l.map(x => x.textContent)), ["211.18 국교 2", "111.18 국교 1"], "최근 것 위");
+    assert.match(await p.$eval(".vid-frame iframe", f => f.src), /embed\/aaaaaaaaaa2\?rel=0&playlist=aaaaaaaaaa1/);
+    await p.click('.vid-items li:nth-child(2) button'); await p.waitForTimeout(100);
+    assert.match(await p.$eval(".vid-frame iframe", f => f.src), /embed\/aaaaaaaaaa1\?/);
+    // 새 영상이 올라옴 → 1분 지나 다시 열면 목록에 바로
+    await p.evaluate(() => { window.__ytItems = [...window.__ytItems, { id: "aaaaaaaaaa3", t: "11.19 교대교류전" }]; ytUpdAt = 0; });
+    await a.go("home"); await a.go("video"); await p.waitForTimeout(300);
+    assert.match(await a.text(".vid-items"), /교대교류전/);
+    assert.match(await a.text(".vid-head"), /재생목록 3개/);
+    clean(a); await a.ctx.close();
+  },
   // 날짜·시간 고르기: 달력(오늘) · 시·분 바퀴(15분) · 같은 칸 끝 시간은 시작 다음 정각부터
   async picker(b) {
     const a = await openApp(b, "coach"), p = a.page;

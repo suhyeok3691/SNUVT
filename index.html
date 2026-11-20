@@ -724,6 +724,11 @@ table.roster td.num, table.roster th.num { text-align: center; width: 44px; padd
 .vid-chev { flex: none; color: var(--muted); font-size: 22px; line-height: 1; transition: transform .2s ease; }
 .vid.open .vid-chev { transform: rotate(90deg); }
 .vid-body { display: grid; gap: 8px; padding: 0 14px 12px; animation: fade-in .2s ease; }
+.vid-items { list-style: none; margin: 0; padding: 0; max-height: 264px; overflow-y: auto; border-top: 1px solid var(--line); }
+.vid-items li + li { border-top: 1px solid var(--line); }
+.vid-items button { display: flex; gap: 10px; align-items: baseline; width: 100%; padding: 9px 2px; font: inherit; font-size: 14px; color: inherit; text-align: left; background: none; border: 0; cursor: pointer; }
+.vid-items button.on { font-weight: 600; color: var(--blue); }
+.vid-items .vid-n { flex: none; min-width: 1.6em; color: var(--muted); font-variant-numeric: tabular-nums; }
 /* 불러오는 중: 가운데서 도는 배구공 */
 .loader { display: grid; place-items: center; min-height: 42vh; color: var(--blue); }
 .loader.sm { min-height: 44px; place-items: start; }
@@ -1490,6 +1495,6 @@ h2 b, h3 b, .sec-head h3, .panel > h3:first-child, .cal-head h3 { font-weight: 7
 <script src="js/court.js?v=251"></script>
 <script src="js/live.js?v=250"></script>
 <script src="js/report.js?v=4"></script>
-<script src="js/app.js?v=279"></script>
+<script src="js/app.js?v=280"></script>
 </body>
 </html>

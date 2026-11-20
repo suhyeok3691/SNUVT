@@ -510,9 +510,16 @@ function parseYt(url) {
   if (list) return { kind: "playlist", yt: list[1] };
   return null;
 }
+// 재생목록: 유튜브 퍼가기(videoseries)는 재생목록에 넣은 영상이 늦게 보여서, yt-latest 가 읽어 온 영상 목록(최근 것 위)으로 고른 영상을 바로 틂
+const vidList = v => { const u = (state.ytUpd || {})[v.id]; return v.kind === "playlist" && u && u.items && u.items.length ? u.items.slice().reverse() : null; };
+const vidSelOf = v => { const l = vidList(v); if (!l) return null; const s = (state.vidSel || {})[v.id]; return l.find(x => x.id === s) || l[0]; };
+const vidSrc = v => { const l = vidList(v), cur = vidSelOf(v); if (!cur) return ytEmbed(v); const rest = l.filter(x => x.id !== cur.id).map(x => x.id).slice(0, 150);
+  return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(cur.id)}?rel=0${rest.length ? "&playlist=" + rest.map(encodeURIComponent).join(",") : ""}`; };
+const vidItems = v => { const l = vidList(v), cur = vidSelOf(v); return !l ? "" : `<ol class="vid-items">${l.map((x, i) => `<li><button type="button" class="${x.id === cur.id ? "on" : ""}" data-act="vidsel" data-id="${esc(v.id)}" data-v="${esc(x.id)}"><span class="vid-n">${l.length - i}</span>${esc(x.t || "영상")}</button></li>`).join("")}</ol>`; };
+const vidMeta = v => { const u = (state.ytUpd || {})[v.id]; return `${v.kind === "playlist" ? `재생목록${u && u.count ? " " + u.count + "개" : ""}` : "영상"} · ${VID_CATS[v.cat] || ""}${u && u.updated ? ` · ${md(parseD(u.updated))} 업데이트` : v.date ? ` · ${md(parseD(v.date))}` : ""}${v.note ? ` · ${esc(v.note)}` : ""}`; };
 const vidCard = (v, open) => `<article class="panel vid ${open ? "open" : ""}">
-    <button type="button" class="vid-head" data-act="vidopen" data-id="${esc(v.id)}" aria-expanded="${open}"><span class="vid-ic">${svg("video")}</span><span class="vid-t"><b>${esc(v.title)}</b><span class="small muted">${(() => { const u = (state.ytUpd || {})[v.id]; return `${v.kind === "playlist" ? `재생목록${u && u.count ? " " + u.count + "개" : ""}` : "영상"} · ${VID_CATS[v.cat] || ""}${u && u.updated ? ` · ${md(parseD(u.updated))} 업데이트` : v.date ? ` · ${md(parseD(v.date))}` : ""}`; })()}${v.note ? ` · ${esc(v.note)}` : ""}</span></span><span class="vid-chev" aria-hidden="true">›</span></button>
-    ${open ? `<div class="vid-body"><div class="vid-frame"><iframe src="${ytEmbed(v)}" title="${esc(v.title)}" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+    <button type="button" class="vid-head" data-act="vidopen" data-id="${esc(v.id)}" aria-expanded="${open}"><span class="vid-ic">${svg("video")}</span><span class="vid-t"><b>${esc(v.title)}</b><span class="small muted">${vidMeta(v)}</span></span><span class="vid-chev" aria-hidden="true">›</span></button>
+    ${open ? `<div class="vid-body"><div class="vid-frame"><iframe src="${vidSrc(v)}" title="${esc(v.title)}" loading="lazy" allow="autoplay; accelerometer; encrypted-media; gyroscope; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>${vidItems(v)}
     <div class="row vid-foot"><a class="btn link small" href="${ytLink(v)}" target="_blank" rel="noopener noreferrer">유튜브에서 열기 ↗</a>${can("video") ? `<button class="btn link small" type="button" data-act="videdit" data-id="${esc(v.id)}">수정</button>` : ""}</div></div>` : ""}
   </article>`;
 let ytApi = null;
@@ -528,10 +535,20 @@ function loadYtApi() {
   return ytApi;
 }
 // 재생목록마다 유튜브 '마지막 업데이트' 날짜 (서버 함수 yt-latest) → 최근에 올라온 재생목록이 위로
-async function loadYtUpd() {
-  if (state.ytUpd) return; state.ytUpd = {};
-  try { const r = await sb.functions.invoke("yt-latest", { body: {} }); if (r.data && r.data.playlists) { state.ytUpd = r.data.playlists; if (state.view === "video") { state.dirty = false; render(); } } } catch (e) { /* 못 읽으면 추가한 순서 */ }
+// 영상 화면을 열 때마다(1분 넘었으면) · 앱으로 돌아올 때 다시 받음 — 예전엔 앱을 켤 때 한 번뿐이라 켜 둔 앱엔 새 영상이 안 보였음
+let ytUpdAt = 0, ytUpdBusy = false;
+async function loadYtUpd(force) {
+  if (ytUpdBusy || (!force && state.ytUpd && Date.now() - ytUpdAt < 60000)) return;
+  ytUpdBusy = true; ytUpdAt = Date.now(); if (!state.ytUpd) state.ytUpd = {};
+  try { const r = await sb.functions.invoke("yt-latest", { body: {} });
+    if (r.data && r.data.playlists) { const same = JSON.stringify(r.data.playlists) === JSON.stringify(state.ytUpd); state.ytUpd = r.data.playlists;
+      if (!same && state.view === "video") { if (state.vidOpen) { // 보는 영상은 그대로 두고 글자만 바꿈
+          for (const h of document.querySelectorAll(".vid-head[data-id]")) { const v = state.videos.find(x => x.id === h.dataset.id), t = h.querySelector(".vid-t .small"); if (v && t) t.innerHTML = vidMeta(v); }
+          const l = document.querySelector(".vid.open .vid-items"), fr = document.querySelector(".vid.open .vid-frame"), v = state.videos.find(x => x.id === state.vidOpen);
+          if (v && l) l.outerHTML = vidItems(v); else if (v && fr) fr.insertAdjacentHTML("afterend", vidItems(v)); } else if (!state.dirty) render(); } }
+  } catch (e) { /* 못 읽으면 추가한 순서 */ } finally { ytUpdBusy = false; }
 }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && state.view === "video") loadYtUpd(); });
 const vidKey = v => { const u = (state.ytUpd || {})[v.id]; return (u && u.updated) || v.date || ""; };
 function viewVideo() {
   loadYtUpd();
@@ -3592,6 +3609,8 @@ document.addEventListener("click", async ev => {
   if (act === "edtest") return openTestEdit(b.dataset.id);
   if (act === "vidcat") { state.vidCat = b.dataset.c; state.dirty = false; return render(); }
   if (act === "vidopen") { state.vidOpen = state.vidOpen === b.dataset.id ? null : b.dataset.id; state.dirty = false; return render(); }
+  if (act === "vidsel") { state.vidSel = { ...(state.vidSel || {}), [b.dataset.id]: b.dataset.v }; const v = state.videos.find(x => x.id === b.dataset.id), card = b.closest(".vid");
+    if (v && card) { const f = card.querySelector(".vid-frame iframe"); if (f) f.src = vidSrc(v) + "&autoplay=1"; card.querySelectorAll(".vid-items button").forEach(x => x.classList.toggle("on", x === b)); } return; }
   if (act === "videdit") return openVidForm(b.dataset.id);
   if (act === "viddel") { if (!await confirmDel("이 영상을 목록에서 지울까요? (유튜브 영상은 그대로)")) return; try { ok(await sb.from("videos").delete().eq("id", b.dataset.id)); toast("지웠어요"); await loadAll(); } catch (e) { toast(failMsg(e)); } return; }
   if (act === "noteedit") { state.noteDate = b.dataset.d; state.dirty = false; render(); window.scrollTo(0, 0); return; }
