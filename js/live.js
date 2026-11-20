@@ -82,7 +82,7 @@ const lvTagPos = t => { const m = /^(OH|OP|MB|S|LI|L)\d*$/i.exec(String(t)); ret
 const LV_TAGO = ["S", "OH", "MB", "OP", "L"];
 const lvIdSort = (a, b) => { const na = lvIdNum(a), nb = lvIdNum(b); if (na && nb) return a - b; if (na !== nb) return na ? -1 : 1;
   return (LV_TAGO.indexOf(lvTagPos(a)) - LV_TAGO.indexOf(lvTagPos(b))) || String(a).localeCompare(String(b), "en", { numeric: true }); };
-const lvWho = r => { const g = lvGame(); if (lvSnu(g, r.side)) { const p = playerOf(r.player_id); return p ? `${pNo(p)}${esc(p.name)}` : "SNU"; } const id = lvIdOf(r); return `${esc(lvTN(g, r.side))}${id ? ` ${esc(lvShowId(id))}` : ""}`; };
+const lvWho = r => { const g = lvGame(); if (lvSnu(g, r.side)) { const p = playerOf(r.player_id); return p ? `${pNo(p)}${esc(p.name)}` : SNU_NAME; } const id = lvIdOf(r); return `${esc(lvTN(g, r.side))}${id ? ` ${esc(lvShowId(id))}` : ""}`; };
 const lvLabel = r => { const x = LV_RES[r.kind + ":" + r.res], sh = lvShot(r);
   return `${lvWho(r)} · ${x ? `${x.kind === "err" ? "" : x.kname}${x.kind !== "err" && x.name ? " " : ""}${x.name}` : esc(r.kind || "")}${r.atype ? ` · ${LV_AT[r.atype] || r.atype}` : ""}${sh ? ` · ${sh}` : ""}${lvSetLbl(r)}${r.miss ? ` · ${r.miss === "set" ? "토스 미스" : "공격 미스"}` : ""}${r.zone ? ` → ${r.zone}구역` : r.x != null && lvOut(r) ? " → 코트 밖" : ""}`; };
 const lv = () => state.live || (state.live = { games: {}, rallies: {}, open: null, set: 1, scope: "set", side: "us", pick: null, atype: null, shot: null, extra: {} });
@@ -90,7 +90,7 @@ const lvCan = () => can("analysis") || can("schedule");
 const lvGame = () => { const L = lv(); for (const l of Object.values(L.games)) { const g = (l || []).find(x => x.id === L.open); if (g) return g; } return null; };
 const lvView = () => state.view === "cup" || state.view === "fr" || (state.view === "scout" && !!sc().live);
 // 분석 팀(us) · 상대 팀(opp). team이 비어 있으면 분석 팀 = SNU(명단 선수로 고름), 아니면 두 팀 다 번호로
-const lvTA = g => (g && g.team) || "SNU";
+const lvTA = g => (g && g.team) || SNU_NAME;
 const lvTB = g => (g && g.opponent) || "상대";
 const lvTN = (g, side) => side === "us" ? lvTA(g) : lvTB(g);
 const lvSnu = (g, side) => side === "us" && !(g && g.team);
@@ -417,7 +417,7 @@ function lvCourt(dots, big, flip) {
   return `<svg class="lv-c ${big ? "big" : ""} ${wide ? "wide" : ""}" viewBox="${vb}" ${big ? 'id="lvCourtTap"' : ""} role="img" aria-label="코트">${lines}${labs}${pts}</svg>`;
 }
 // 고른 선수 이름
-const lvWhoPick = () => { const L = lv(), g = lvGame(); if (lvSnu(g, L.side)) { const p = playerOf(L.pick); return p ? `${pNo(p)}${esc(p.name)}` : "SNU"; } return `${esc(lvTN(g, L.side))}${L.pick != null && L.pick !== "" ? ` ${esc(lvShowId(L.pick))}` : ""}`; };
+const lvWhoPick = () => { const L = lv(), g = lvGame(); if (lvSnu(g, L.side)) { const p = playerOf(L.pick); return p ? `${pNo(p)}${esc(p.name)}` : SNU_NAME; } return `${esc(lvTN(g, L.side))}${L.pick != null && L.pick !== "" ? ` ${esc(lvShowId(L.pick))}` : ""}`; };
 const lvKb = () => matchMedia("(hover: hover) and (pointer: fine)").matches;
 // 공격 득점 → 종류 · 떨어진 자리 고르기
 function lvSpotSheet(code) {
@@ -546,7 +546,7 @@ function lvForm(key, gid) {
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${g ? "경기 수정" : "경기 추가"}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="lvForm" data-k="${esc(key)}" data-id="${esc(gid || "")}"><div class="fields">
       ${kind === "friendly" ? "" : `<label class="fl">경기<input id="lv-label" maxlength="40" value="${esc(g ? g.label || "" : "")}" placeholder="예선 1경기 · 8강"></label>`}
-      <label class="fl">분석 팀<input id="lv-team" maxlength="60" value="${esc(g ? g.team || "" : "")}" placeholder="SNU"></label>
+      <label class="fl">분석 팀<input id="lv-team" maxlength="60" value="${esc(g ? g.team || "" : "")}" placeholder="서울대배구부"></label>
       <label class="fl">상대 팀<input id="lv-opp" required maxlength="60" value="${esc(g ? g.opponent : fr.opponent || "")}"></label>
       <label class="fl">날짜<input type="date" id="lv-date" value="${esc(g ? lvDate(g) : lvRefDate(kind, id) || iso(today()))}"></label>
     </div><div class="row"><button class="btn primary" type="submit">${g ? "저장" : "시작"}</button></div></form>`;
@@ -556,12 +556,12 @@ function lvForm(key, gid) {
 async function lvSubmit(f) {
   const L = lv(), v = id => (document.getElementById(id) || {}).value || "";
   if (f.id === "lvForm") {
-    const [kind, id] = f.dataset.k.split(":"), tm = v("lv-team").trim(), team = !tm || /^(snu|서울대)/i.test(tm) ? null : tm;
+    const [kind, id] = f.dataset.k.split(":"), tm = teamNorm(v("lv-team")), team = !tm || tm === SNU_NAME ? null : tm;
     if (f.dataset.id) { const g = lvGame();
-      if (g && !!g.team !== !!team && (L.rallies[g.id] || []).some(r => r.kind)) { toast("기록이 있어서 SNU ↔ 다른 팀은 바꿀 수 없어요"); return; }
-      ok(await sb.from("live_games").update({ label: v("lv-label").trim() || null, team, opponent: v("lv-opp").trim(), date: v("lv-date") || null }).eq("id", f.dataset.id)); }
+      if (g && !!g.team !== !!team && (L.rallies[g.id] || []).some(r => r.kind)) { toast("기록이 있어서 서울대배구부 ↔ 다른 팀은 바꿀 수 없어요"); return; }
+      ok(await sb.from("live_games").update({ label: v("lv-label").trim() || null, team, opponent: teamNorm(v("lv-opp")), date: v("lv-date") || null }).eq("id", f.dataset.id)); }
     else {
-      const r = await sb.from("live_games").insert({ ref_kind: kind, ref_id: id, label: v("lv-label").trim() || null, team, opponent: v("lv-opp").trim(), date: v("lv-date") || null, mode: "lite" /* 실시간 기록은 Lite 만 (전체 · 영상 분석 방식은 2026-11-01 뺌) */, sets: { 1: { rot: 1, orot: 1 } } }).select().maybeSingle(); ok(r);
+      const r = await sb.from("live_games").insert({ ref_kind: kind, ref_id: id, label: v("lv-label").trim() || null, team, opponent: teamNorm(v("lv-opp")), date: v("lv-date") || null, mode: "lite" /* 실시간 기록은 Lite 만 (전체 · 영상 분석 방식은 2026-11-01 뺌) */, sets: { 1: { rot: 1, orot: 1 } } }).select().maybeSingle(); ok(r);
       if (r.data) { L.open = r.data.id; L.set = 1; L.side = "us"; L.pick = null; L.rallies[r.data.id] = []; pushInner(); if (state.view === "scout") sc().live = true; }
     }
     closeSheet();

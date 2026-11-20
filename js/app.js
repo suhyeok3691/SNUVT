@@ -2446,7 +2446,7 @@ function scRotRows(m) {
   return out;
 }
 /* ---- 엑셀 (예전 프로그램 Export Excel 그대로: Logs + 팀별 기록지, 색 · 0은 "-") ---- */
-const SC_T1 = "SNU";
+const SC_T1 = SNU_NAME;
 function scLogRows(m) {
   const ev = (sc().events[m.id] || []).slice().sort((a, b) => a.set_no - b.set_no || String(a.created_at).localeCompare(String(b.created_at)));
   const t2 = m.opponent || "Opponent", nine = ctNine(m), rows = [];
@@ -2653,7 +2653,7 @@ function openScoutForm(id) {
       <label class="fl">종류<select id="scf-kind">${SC_KIND.map(([k, l]) => `<option value="${k}" ${(id ? scKindOf(m) : scMk()) === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <label class="fl wide">대회명<input id="scf-title" required maxlength="80" value="${esc(m.title || "")}" placeholder="대회명 / 교류전 상대"></label>
       <label class="fl">스테이지<input id="scf-stage" maxlength="30" value="${esc(m.stage || "")}" placeholder="예선 · 16강 · 8강 · 4강 · 결승"></label>
-      <label class="fl">분석 팀<input id="scf-team" maxlength="60" value="${esc(m.team || "")}" placeholder="SNU"></label>
+      <label class="fl">분석 팀<input id="scf-team" maxlength="60" value="${esc(m.team || "")}" placeholder="서울대배구부"></label>
       <label class="fl">상대 팀<input id="scf-opp" maxlength="60" value="${esc(m.opponent || "")}"></label>
       <label class="fl">날짜<input type="date" id="scf-date" value="${esc(m.date || iso(today()))}"></label>
       <label class="fl">기록자<input id="scf-rec" maxlength="30" value="${esc(m.recorder || (me ? me.name : ""))}"></label>
@@ -4032,7 +4032,7 @@ document.addEventListener("submit", async ev => {
       if (st && en && en <= st) { toast("끝 시간이 시작보다 앞이에요."); return; }
       const pick = (f.querySelector('[name="fr-to"]:checked') || {}).value === "pick", to = pick ? [...f.querySelectorAll("#fr-to-list input:checked")].map(x => x.value) : null;
       if (pick && !to.length) { toast("투표할 사람을 골라 주세요."); return; }
-      const row = { date: txt("fr-date"), opponent: txt("fr-opp"), format: document.getElementById("fr-fmt").value, start_time: st, end_time: en, place: txt("fr-place") || null, note: txt("fr-note") || null, vote_to: to };
+      const row = { date: txt("fr-date"), opponent: teamNorm(txt("fr-opp")), format: document.getElementById("fr-fmt").value, start_time: st, end_time: en, place: txt("fr-place") || null, note: txt("fr-note") || null, vote_to: to };
       ok(f.dataset.id ? await sb.from("friendlies").update(row).eq("id", f.dataset.id) : await sb.from("friendlies").insert(row));
       toast(f.dataset.id ? "저장했어요" : "교류전을 넣었어요 · 그 주 프로그램이 맞춰졌어요");
     } else if (f.id === "openForm") {
@@ -4065,11 +4065,11 @@ document.addEventListener("submit", async ev => {
         vodIn = data.url; }
       const vod = vodIn ? parseVod(vodIn) : null;
       if (vodIn && !vod) { toast("치지직 다시보기 주소를 확인해 주세요"); return; }
-      const tmIn = txt("scf-team"), team = !tmIn || /^(snu|서울대)/i.test(tmIn) ? null : tmIn, old = f.dataset.id ? sc().matches.find(x => x.id === f.dataset.id) : null;
-      if (old && !!old.team !== !!team && (ctReady(old) || (sc().events[old.id] || []).length)) { toast("라인업·기록이 있어서 SNU ↔ 다른 팀은 바꿀 수 없어요"); return; }
+      const tmIn = teamNorm(txt("scf-team")), team = !tmIn || tmIn === SNU_NAME ? null : tmIn, old = f.dataset.id ? sc().matches.find(x => x.id === f.dataset.id) : null;
+      if (old && !!old.team !== !!team && (ctReady(old) || (sc().events[old.id] || []).length)) { toast("라인업·기록이 있어서 서울대배구부 ↔ 다른 팀은 바꿀 수 없어요"); return; }
       const R0 = old ? ctRules(old) : { pts: {} }, to = Math.round(Number(txt("scf-to"))) || 21;
       const rules = { bo: txt("scf-bo") !== "0", to: to >= 1 && to <= 99 ? to : 21, pts: R0.pts || {} };
-      const row = { rules, title: txt("scf-title"), stage: txt("scf-stage") || null, date: txt("scf-date") || null, team, opponent: txt("scf-opp") || null, recorder: txt("scf-rec") || null, division: txt("scf-div") === "9" ? "9" : "6", yt: yt || null, vod, kind: txt("scf-kind") === "friendly" ? "friendly" : "match" };
+      const row = { rules, title: txt("scf-title"), stage: txt("scf-stage") || null, date: txt("scf-date") || null, team, opponent: teamNorm(txt("scf-opp")) || null, recorder: txt("scf-rec") || null, division: txt("scf-div") === "9" ? "9" : "6", yt: yt || null, vod, kind: txt("scf-kind") === "friendly" ? "friendly" : "match" };
       sc().mk = row.kind; // 저장한 종류 목록으로
       const r = f.dataset.id ? await sb.from("scout_matches").update(row).eq("id", f.dataset.id).select().maybeSingle() : await sb.from("scout_matches").insert(row).select().maybeSingle(); ok(r);
       closeSheet(); toast("저장했어요"); await scoutLoad();

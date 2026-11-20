@@ -2748,3 +2748,9 @@ end $$;
 revoke all on function public.report_set(uuid, text, text) from public, anon;
 grant execute on function public.report_set(uuid, text, text) to authenticated;
 -- 매일 스냅샷 목록에 scout_reports 더함 (private.take_snapshot)
+
+-- 2026-11-20 팀 이름 통일 (앱에서도 입력할 때 teamNorm 으로 자동 변환)
+update scout_matches set opponent = '국민대 VAT' where opponent = '국민대';
+update scout_matches set title = '국민대 VAT 교류전' where title = '국민대 교류전';
+update scout_matches set opponent = '서울대배구부' where opponent = '서울대';
+update friendlies set opponent = '국민대 VAT' where opponent = '국민대';

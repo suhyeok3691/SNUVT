@@ -59,6 +59,14 @@ const SUITES = {
       clean(a); await a.ctx.close();
     }
   },
+  // 팀 이름 통일: 국민대 → 국민대 VAT, 서울대 · SNU → 서울대배구부 (교류전 상대 저장도)
+  async teamname(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    const r = await p.evaluate(() => ["국민대", " 국민대학교 ", "국민대 VAT", "국민대vat", "서울대", "SNU", "snuvt", "서울대학교 배구부", "경희대", ""].map(teamNorm));
+    assert.deepStrictEqual(r, ["국민대 VAT", "국민대 VAT", "국민대 VAT", "국민대 VAT", "서울대배구부", "서울대배구부", "서울대배구부", "서울대배구부", "경희대", ""]);
+    assert.strictEqual(await p.evaluate(() => ctTA({})), "서울대배구부");
+    clean(a); await a.ctx.close();
+  },
   // 날짜·시간 고르기: 달력(오늘) · 시·분 바퀴(15분) · 같은 칸 끝 시간은 시작 다음 정각부터
   async picker(b) {
     const a = await openApp(b, "coach"), p = a.page;
@@ -365,7 +373,7 @@ const SUITES = {
     // 전력분석 → 실시간 탭: 만든 경기가 보이고, 누르면 같은 실시간 화면(점수 · 기록)
     await p.evaluate(() => { state.live.open = null; state.cup.key = null; state.dirty = false; }); await a.go("home"); await a.go("scout"); await p.waitForTimeout(200);
     await p.click('[data-act="scltab"][data-k="live"]'); await p.waitForTimeout(400);
-    assert.match(await a.text(".sc-list"), /SNU vs B대/);
+    assert.match(await a.text(".sc-list"), /서울대배구부 vs B대/);
     await p.click('[data-act="sclive"]'); await p.waitForTimeout(400);
     assert.ok(await p.$('[data-act="lvpt"][data-v="us"]'), "전력분석에서 연 실시간 화면");
     assert.match(await a.text(".lv-score"), /4 : 1/); // 점수 +1 둘 · 득점 둘 · 3단 처리 미스(상대 +1)

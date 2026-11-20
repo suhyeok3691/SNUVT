@@ -77,7 +77,7 @@ const ctLibs = (L, side) => ((L[side] || {}).libero || []).filter(x => x !== "" 
 const ctIsLib = (L, v, side = "us") => ctLibs(L, side).some(x => ctSame(x, v));
 const ctOther = s => s === "us" ? "opp" : "us";
 // 분석 팀(us) · 상대 팀(opp). m.team이 있으면 분석 팀도 SNU가 아닌 팀 → 두 팀 다 등번호로 (SNU면 명단 선수)
-const ctTA = m => (m && m.team) || "SNU";
+const ctTA = m => (m && m.team) || SNU_NAME;
 const ctTB = m => (m && m.opponent) || "상대";
 const ctTN = (m, side) => side === "us" ? ctTA(m) : ctTB(m);
 const ctRos = (m, side) => side === "us" && !(m && m.team);
@@ -97,6 +97,9 @@ const ctLuAll = m => { const L = ctLu(m), o = { ...L }, ex = Object.values(L.set
   return o; };
 // 번호로 넣는 팀 이름이 서울대 · SNU · SNUVT 면 우리 부원 정보(이름 · 포지션)를 등번호로 붙이고 시즌 누적에도 넣음
 const SNU_RE = /^\s*(서울대(학교)?|snu\s*vt|snu)(\s*배구부)?\s*$/i;
+// 팀 이름 통일: 국민대 · 국민대학교 · KMU → "국민대 VAT", 서울대 · SNU · SNUVT → "서울대배구부" (입력할 때 자동으로 바꿈)
+const SNU_NAME = "서울대배구부", KMU_RE = /^\s*(국민대(학교)?|kmu|kookmin)(\s*(vat|배구부))?\s*$/i;
+const teamNorm = s => { const t = String(s || "").trim(); return !t ? t : SNU_RE.test(t) ? SNU_NAME : KMU_RE.test(t) ? "국민대 VAT" : t; };
 const ctSnuNo = (m, side) => !!m && !ctRos(m, side) && SNU_RE.test(ctTN(m, side));
 const ctByNo = n => n == null || n === "" ? null : sortedPlayers().find(p => p.number != null && String(p.number) === String(n)) || null;
 const ctNoPos = (m, side, n) => { if (!ctSnuNo(m, side)) return ""; const p = ctByNo(n), q = p ? String(p.pos || "").toUpperCase() : ""; return CT_POS.includes(q) ? q : ""; };
@@ -245,7 +248,7 @@ function ctBy(e) {
   return [nm, d && !isNaN(d) ? `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}` : ""].filter(Boolean).join(" · ");
 }
 function ctLabel(e) {
-  const m = scMatch(), a = CT_ACT[e.action], who = ctRos(m, e.side) ? (() => { const p = playerOf(e.player_id); return p ? `${pNo(p)}${esc(p.name)}` : "SNU"; })() : `${esc(ctTN(m, e.side))} #${e.opp_no ?? "?"}${(n => n ? ` ${esc(n)}` : "")(e.opp_no != null ? ctName(e.side, e.opp_no).nm : "")}`;
+  const m = scMatch(), a = CT_ACT[e.action], who = ctRos(m, e.side) ? (() => { const p = playerOf(e.player_id); return p ? `${pNo(p)}${esc(p.name)}` : SNU_NAME; })() : `${esc(ctTN(m, e.side))} #${e.opp_no ?? "?"}${(n => n ? ` ${esc(n)}` : "")(e.opp_no != null ? ctName(e.side, e.opp_no).nm : "")}`;
   if (e.action === CT_PT) return `${esc(ctTN(m, e.side))} 점수`;
   if (e.action === CT_LIB) return `리베로 바꿈 · ${who}`;
   if (e.action === CT_CFG) return `Settings · ${e.rot ? `Rot ${e.rot}:${e.opp_rot} · ` : ""}서브 ${esc(ctTN(m, e.serve === "opp" ? "opp" : "us"))} · Rally ${e.rally || 1}`;
@@ -641,7 +644,7 @@ async function ctLineupSave(f) {
   const S = sc(), m = scMatch(), v = id => (document.getElementById(id) || {}).value || "", setNo = S.sel.set || 1;
   if (ctNine(m)) {
     const ros = !m.team, us = CT_POS9.map((x, i) => v(`${ros ? "ctu" : "ctn"}-${i}`)), op = CT_POS9.map((x, i) => v(`cto-${i}`));
-    if (us.some(x => x === "") || new Set(us).size !== 9) { toast(ros ? "SNU 9명을 겹치지 않게 골라 주세요" : `${ctTA(m)} 등번호 9개를 겹치지 않게 넣어 주세요`); return false; }
+    if (us.some(x => x === "") || new Set(us).size !== 9) { toast(ros ? "서울대배구부 9명을 겹치지 않게 골라 주세요" : `${ctTA(m)} 등번호 9개를 겹치지 않게 넣어 주세요`); return false; }
     if (op.some(x => x === "") || new Set(op).size !== 9) { toast("상대 등번호 9개를 겹치지 않게 넣어 주세요"); return false; }
     const L = { ...ctLu(m), us: { slots: ros ? us : us.map(Number), pos: CT_POS9, libero: [] }, opp: { slots: op.map(Number), pos: CT_POS9, libero: [] } };
     L.sets = { ...(L.sets || {}), [setNo]: { serve: v("cts-serve") || "us" } };
@@ -650,7 +653,7 @@ async function ctLineupSave(f) {
     m.lineup = L; closeSheet(); toast("라인업을 저장했어요"); state.dirty = false; render(); await ctLineupRename(m, old9, L); return false;
   }
   const ros = !m.team, us = [0, 1, 2, 3, 4, 5].map(i => v(`${ros ? "ctu" : "ctn"}-${i}`)), op = [0, 1, 2, 3, 4, 5].map(i => v(`cto-${i}`));
-  if (us.some(x => x === "") || new Set(us).size !== 6) { toast(ros ? "SNU 선수 6명을 겹치지 않게 골라 주세요" : `${ctTA(m)} 등번호 6개를 겹치지 않게 넣어 주세요`); return false; }
+  if (us.some(x => x === "") || new Set(us).size !== 6) { toast(ros ? "서울대배구부 선수 6명을 겹치지 않게 골라 주세요" : `${ctTA(m)} 등번호 6개를 겹치지 않게 넣어 주세요`); return false; }
   const libs = (ros ? [v("ctu-l0"), v("ctu-l1")] : [v("ctn-l1"), v("ctn-l2")]).filter(x => x !== "");
   if (new Set(libs).size !== libs.length) { toast("리베로 1·2를 다른 사람으로 골라 주세요"); return false; }
   if (libs.some(x => us.includes(x))) { toast("코트 6명에 넣은 선수는 리베로로 고를 수 없어요"); return false; }
