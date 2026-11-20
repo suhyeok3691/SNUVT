@@ -511,12 +511,21 @@ function parseYt(url) {
   return null;
 }
 // 재생목록: 유튜브 퍼가기(videoseries)는 재생목록에 넣은 영상이 늦게 보여서, yt-latest 가 읽어 온 영상 목록(최근 것 위)으로 고른 영상을 바로 틂
-const vidList = v => { const u = (state.ytUpd || {})[v.id]; return v.kind === "playlist" && u && u.items && u.items.length ? u.items.slice().reverse() : null; };
+// 재생목록마다 넣는 순서가 달라서(최근 것 위 / 아래) 제목의 날짜로 정렬: 26.11.19 · 2026.03.12 · 26.5.19 · 10/9
+// 같은 날은 1 → 2 → 3세트 순(제목의 마지막 숫자), 날짜 없는 제목은 재생목록에서 바로 옆 영상의 날짜
+const vidDate = t => { let m = String(t || "").match(/(?:^|[^\d])(?:20)?(\d{2})\s*\.\s*(\d{1,2})\s*\.\s*(\d{1,2})(?!\d)/);
+  if (m) return { d: `20${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`, rest: t.replace(m[0], " ") };
+  if ((m = String(t || "").match(/(?:^|[^\d])(\d{1,2})\/(\d{1,2})(?!\d)/))) { const td = iso(new Date()), y = Number(td.slice(0, 4)), md2 = `${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`; return { d: `${`${y}-${md2}` > td ? y - 1 : y}-${md2}`, rest: t.replace(m[0], " ") }; }
+  return { d: "", rest: String(t || "") }; };
+const vidList = v => { const u = (state.ytUpd || {})[v.id]; if (v.kind !== "playlist" || !u || !u.items || !u.items.length) return null;
+  const l = u.items.map((x, i) => { const { d, rest } = vidDate(x.t), ns = rest.match(/\d+/g); return { ...x, i, d, n: ns ? Number(ns[ns.length - 1]) : 0 }; });
+  for (const x of l) if (!x.d) { const nb = [l[x.i - 1], l[x.i + 1]].find(y => y && y.d); x.d = nb ? nb.d : ""; }
+  return l.sort((a, b) => b.d.localeCompare(a.d) || a.n - b.n || a.i - b.i); };
 const vidSelOf = v => { const l = vidList(v); if (!l) return null; const s = (state.vidSel || {})[v.id]; return l.find(x => x.id === s) || l[0]; };
 // playlist= 를 주면 유튜브는 주소의 영상이 아니라 playlist 첫 영상부터 틂(2026-11 확인) → 고른 영상을 playlist 맨 앞에도 넣음
 const vidSrc = v => { const l = vidList(v), cur = vidSelOf(v); if (!cur) return ytEmbed(v); const ids = [cur.id, ...l.filter(x => x.id !== cur.id).map(x => x.id)].slice(0, 150);
   return `https://www.youtube-nocookie.com/embed/${encodeURIComponent(cur.id)}?rel=0&playlist=${ids.map(encodeURIComponent).join(",")}`; };
-const vidItems = v => { const l = vidList(v), cur = vidSelOf(v); return !l ? "" : `<ol class="vid-items">${l.map((x, i) => `<li><button type="button" class="${x.id === cur.id ? "on" : ""}" data-act="vidsel" data-id="${esc(v.id)}" data-v="${esc(x.id)}"><span class="vid-n">${l.length - i}</span>${esc(x.t || "영상")}</button></li>`).join("")}</ol>`; };
+const vidItems = v => { const l = vidList(v), cur = vidSelOf(v); return !l ? "" : `<ol class="vid-items">${l.map(x => `<li><button type="button" class="${x.id === cur.id ? "on" : ""}" data-act="vidsel" data-id="${esc(v.id)}" data-v="${esc(x.id)}">${esc(x.t || "영상")}</button></li>`).join("")}</ol>`; };
 const vidMeta = v => { const u = (state.ytUpd || {})[v.id]; return `${v.kind === "playlist" ? `재생목록${u && u.count ? " " + u.count + "개" : ""}` : "영상"} · ${VID_CATS[v.cat] || ""}${u && u.updated ? ` · ${md(parseD(u.updated))} 업데이트` : v.date ? ` · ${md(parseD(v.date))}` : ""}${v.note ? ` · ${esc(v.note)}` : ""}`; };
 const vidCard = (v, open) => `<article class="panel vid ${open ? "open" : ""}">
     <button type="button" class="vid-head" data-act="vidopen" data-id="${esc(v.id)}" aria-expanded="${open}"><span class="vid-ic">${svg("video")}</span><span class="vid-t"><b>${esc(v.title)}</b><span class="small muted">${vidMeta(v)}</span></span><span class="vid-chev" aria-hidden="true">›</span></button>

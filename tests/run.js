@@ -70,20 +70,28 @@ const SUITES = {
   // 팀 영상 재생목록: yt-latest 영상 목록(최근 것 위) · 고르면 그 영상 · 다시 열면 새로 받음(켜 둔 앱에도 새 영상)
   async vidlist(b) {
     const a = await openApp(b, "coach"), p = a.page;
-    await p.evaluate(() => { window.__ytItems = [{ id: "aaaaaaaaaa1", t: "11.18 국교 1" }, { id: "aaaaaaaaaa2", t: "11.18 국교 2" }];
-      sb.functions.invoke = async () => ({ data: { playlists: { pl1: { updated: "2026-11-01", count: window.__ytItems.length, items: window.__ytItems } } } });
-      state.videos = [{ id: "pl1", kind: "playlist", cat: "friendly", title: "검은 폭격기들", yt: "PLtest", date: null, note: "" }]; state.ytUpd = null; });
+    // 재생목록 A: 오래된 것이 위(검은 폭격기들), B: 최근 것이 위(교류전) — 둘 다 제목 날짜로 최근 것 먼저
+    await p.evaluate(() => { window.__ytItems = [{ id: "aaaaaaaaaa1", t: "26.11.18(수) 국교1" }, { id: "aaaaaaaaaa2", t: "26.11.18(수) 국교 2" }];
+      const B = [{ id: "bbbbbbbbbb1", t: "26.10.25(일) OB vs YB 2" }, { id: "bbbbbbbbbb2", t: "26.10.25 (일) OB vs YB" }, { id: "bbbbbbbbbb3", t: "10/9(금) 9인제 교류전vs 국민대(2)" }, { id: "bbbbbbbbbb4", t: "2026.03.31 [서울교대:서울대] 6인제 교류전" }];
+      sb.functions.invoke = async () => ({ data: { playlists: { pl1: { updated: "2026-11-01", count: window.__ytItems.length, items: window.__ytItems }, pl2: { updated: "2026-10-25", count: 4, items: B } } } });
+      state.videos = [{ id: "pl1", kind: "playlist", cat: "friendly", title: "검은 폭격기들", yt: "PLtest", date: null, note: "" }, { id: "pl2", kind: "playlist", cat: "friendly", title: "2026 남자부 교류전", yt: "PLtest2", date: null, note: "" }]; state.ytUpd = null; });
     await a.go("video"); await p.waitForTimeout(300);
     await p.click('[data-act="vidopen"][data-id="pl1"]'); await p.waitForTimeout(200);
-    assert.deepStrictEqual(await p.$$eval(".vid-items button", l => l.map(x => x.textContent)), ["211.18 국교 2", "111.18 국교 1"], "최근 것 위");
-    assert.match(await p.$eval(".vid-frame iframe", f => f.src), /embed\/aaaaaaaaaa2\?rel=0&playlist=aaaaaaaaaa2,aaaaaaaaaa1$/);
+    assert.deepStrictEqual(await p.$$eval(".vid-items button", l => l.map(x => x.textContent)), ["26.11.18(수) 국교1", "26.11.18(수) 국교 2"], "같은 날은 1 → 2");
+    assert.match(await p.$eval(".vid-frame iframe", f => f.src), /embed\/aaaaaaaaaa1\?rel=0&playlist=aaaaaaaaaa1,aaaaaaaaaa2$/, "고른 영상이 playlist 맨 앞");
     await p.click('.vid-items li:nth-child(2) button'); await p.waitForTimeout(100);
-    assert.match(await p.$eval(".vid-frame iframe", f => f.src), /embed\/aaaaaaaaaa1\?rel=0&playlist=aaaaaaaaaa1,aaaaaaaaaa2&autoplay=1$/);
-    // 새 영상이 올라옴 → 1분 지나 다시 열면 목록에 바로
-    await p.evaluate(() => { window.__ytItems = [...window.__ytItems, { id: "aaaaaaaaaa3", t: "11.19 교대교류전" }]; ytUpdAt = 0; });
+    assert.match(await p.$eval(".vid-frame iframe", f => f.src), /embed\/aaaaaaaaaa2\?rel=0&playlist=aaaaaaaaaa2,aaaaaaaaaa1&autoplay=1$/);
+    // 새 영상이 재생목록 끝에 올라옴 → 1분 지나 다시 열면 맨 위 · 처음 틀 영상
+    await p.evaluate(() => { window.__ytItems = [...window.__ytItems, { id: "aaaaaaaaaa3", t: "26.11.19(목) 교대교류전" }]; ytUpdAt = 0; state.vidSel = {}; state.vidOpen = null; });
     await a.go("home"); await a.go("video"); await p.waitForTimeout(300);
-    assert.match(await a.text(".vid-items"), /교대교류전/);
-    assert.match(await a.text(".vid-head"), /재생목록 3개/);
+    await p.click('[data-act="vidopen"][data-id="pl1"]'); await p.waitForTimeout(200);
+    assert.match(await a.text(".vid-items li:first-child"), /교대교류전/);
+    assert.match(await p.$eval(".vid-frame iframe", f => f.src), /embed\/aaaaaaaaaa3\?/);
+    assert.match(await a.text(".vid.open .vid-head"), /재생목록 3개/);
+    // 최근 것이 위인 재생목록도 최근 날짜 먼저(같은 날 번호 없는 것 = 1편 먼저), 10/9 꼴 날짜도
+    await p.click('[data-act="vidopen"][data-id="pl2"]'); await p.waitForTimeout(200);
+    assert.deepStrictEqual(await p.$$eval(".vid-items button", l => l.map(x => x.textContent)), ["26.10.25 (일) OB vs YB", "26.10.25(일) OB vs YB 2", "10/9(금) 9인제 교류전vs 국민대(2)", "2026.03.31 [서울교대:서울대] 6인제 교류전"]);
+    assert.match(await p.$eval(".vid-frame iframe", f => f.src), /embed\/bbbbbbbbbb2\?/);
     clean(a); await a.ctx.close();
   },
   // 날짜·시간 고르기: 달력(오늘) · 시·분 바퀴(15분) · 같은 칸 끝 시간은 시작 다음 정각부터
