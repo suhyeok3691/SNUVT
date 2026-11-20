@@ -1807,7 +1807,9 @@ function viewSeason() {
 }
 // 달력: 정규 훈련 · 자율 훈련 · 교류전 · 대회 색을 나눠서 한 달을 한눈에
 const CAL_KIND = (i, d) => i.cup ? "cup" : i.ob ? "ob" : i.slot === "match" ? "match" : i.slot === "friendly" ? "fr" : i.slot === "tryout" ? "try" : i.slot === "team" && !i.teamOff ? "team" : state.guestMine && state.guestMine.has(d) && guestOn(d) ? "guest" : opensOn(d).length ? "open" : i.slot === "team" ? "off" : "";
-const CAL_LABEL = { team: "정규 훈련", open: "자율 훈련", fr: "교류전", match: "대회", try: "트라이아웃", off: "훈련 없음", cup: "교내 대회", ob: "OB전", guest: "다른 팀 훈련 합류" };
+const CAL_LABEL = { team: "정규 훈련", open: "자율 훈련", fr: "교류전", match: "대회", try: "트라이아웃", off: "훈련 없음", cup: "교내 대회", ob: "OB전", guest: "다른 팀 훈련 참가" };
+// 남자부에선 "여자부 훈련 참가", 여자부에선 "남자부 훈련 참가"
+Object.defineProperty(CAL_LABEL, "guest", { get: () => `${state.guest ? state.guest.team.label : "다른 팀"} 훈련 참가`, enumerable: true });
 const CAL_SHORT = (k, i) => k === "cup" ? CUP_SHORT[i.cup.kind] || "교내" : k === "guest" ? (state.guest ? state.guest.team.label : "같이") : { team: "훈련", open: "자율", fr: "교류전", match: "대회", try: "트라이", ob: "OB전" }[k] || "";
 function calHtml(me) {
   const t = iso(today()), ym = state.calMonth || t.slice(0, 7), [y, m] = ym.split("-").map(Number);
@@ -2010,13 +2012,13 @@ const guestTime = x => x && x.start ? `${x.start}${x.end ? "–" + x.end : "~"}`
 function openGuest(date) {
   const g = guestOn(date); if (!g) return;
   const mine = state.guestMine.get(date), el = document.getElementById("sheet");
-  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${esc(g.label)} 훈련 합류</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
+  el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${esc(g.label)} 훈련 참가</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <p class="small muted">${longDate(parseD(date))} · ${esc(g.label)} 정규 훈련 ${esc(g.time)}</p>
     <form class="f" id="guestForm" data-d="${date}" data-team="${esc(g.team)}" data-close="1"><div class="fields">
       <div class="pair"><label class="fl">부터<input type="time" id="gs-s" required value="${esc((mine && mine.start) || g.start)}"></label><label class="fl">까지<input type="time" id="gs-e" value="${esc(mine ? mine.end : g.end)}"></label></div>
     </div><p class="small muted">${esc(g.label)} 관리자·주장·부주장·훈련 담당만 봐요.</p>
-    <div class="row"><button class="btn primary" type="submit">${mine ? "저장" : "합류"}</button></div></form>`;
-  if (mine) addDelZone(`data-act="guestdel" data-d="${date}" data-team="${esc(g.team)}"`, "합류 취소");
+    <div class="row"><button class="btn primary" type="submit">${mine ? "저장" : "참가"}</button></div></form>`;
+  if (mine) addDelZone(`data-act="guestdel" data-d="${date}" data-team="${esc(g.team)}"`, "참가 취소");
   el.hidden = false; document.body.classList.add("noscroll");
 }
 const guestLabel = g => `${g.label} 정규 훈련 · ${g.time}`;
@@ -2055,7 +2057,7 @@ function attendLi({ date, i, open, guest }, me) {
     if (guest) {
       const on = state.guestMine.get(date);
       return `<li class="guest"><div class="at-when"><b>${longDate(parseD(date))}</b><span class="small muted"><i class="dot k-guest"></i>${esc(guestLabel(guest))}</span></div>
-        <div class="at-side">${on ? `<span class="chip ok">합류 ${esc(guestTime(on))}</span>` : ""}${me && date >= t ? `<button type="button" class="btn small vote-btn ${on ? "" : "primary"}" data-act="guestgo" data-d="${date}">${on ? "수정" : "합류"}</button>` : ""}</div></li>`;
+        <div class="at-side">${on ? `<span class="chip ok">참가 ${esc(guestTime(on))}</span>` : ""}${me && date >= t ? `<button type="button" class="btn small vote-btn ${on ? "" : "primary"}" data-act="guestgo" data-d="${date}">${on ? "수정" : "참가"}</button>` : ""}</div></li>`;
     }
     const gs = !open && can("attend") ? state.guestList[date] || [] : [];
     const when = `<div class="at-when"><b>${longDate(parseD(date))}</b><span class="small muted">${esc(open ? openLabel(open) : tdLabel(i))}</span>${!open && state.practice[date] ? `<button type="button" class="btn link small pr-link" data-act="prgo" data-d="${date}">훈련 계획</button>` : ""}</div>`;
@@ -3465,8 +3467,8 @@ document.addEventListener("click", async ev => {
   if (act === "frtopick") { const ids = new Set((b.dataset.ids || "").split(",").filter(Boolean)); document.querySelectorAll("#fr-to-list input").forEach(x => { x.checked = ids.has(x.value); }); frToSync(); return; }
   if (act === "guestgo") return openGuest(b.dataset.d);
   if (act === "guestdel") {
-    if (!await confirmDel("합류를 취소할까요?", "네, 취소")) return;
-    try { ok(await sb.from("guest_votes").delete().eq("host_team", b.dataset.team).eq("date", b.dataset.d).eq("player_id", state.myPid)); state.guestMine.delete(b.dataset.d); closeSheet(); render(); toast("합류를 취소했어요"); }
+    if (!await confirmDel("참가를 취소할까요?", "네, 취소")) return;
+    try { ok(await sb.from("guest_votes").delete().eq("host_team", b.dataset.team).eq("date", b.dataset.d).eq("player_id", state.myPid)); state.guestMine.delete(b.dataset.d); closeSheet(); render(); toast("참가를 취소했어요"); }
     catch (e) { toast(failMsg(e)); }
     return;
   }
@@ -3743,7 +3745,7 @@ document.addEventListener("submit", async ev => {
     try {
       ok(await sb.from("guest_votes").upsert({ host_team: f.dataset.team, date: d, player_id: state.myPid, start_time: st, end_time: en }, { onConflict: "host_team,date,player_id" }));
       const had = state.guestMine.has(d); state.guestMine.set(d, { start: st, end: en || "" });
-      closeSheet(); render(); toast(had ? "합류 시간을 바꿨어요" : `${state.guest ? state.guest.team.label : "다른 팀"} 훈련 합류를 남겼어요`);
+      closeSheet(); render(); toast(had ? "참가 시간을 바꿨어요" : `${state.guest ? state.guest.team.label : "다른 팀"} 훈련 참가를 남겼어요`);
     } catch (e) { toast(failMsg(e)); } finally { btn.disabled = false; }
     return;
   }

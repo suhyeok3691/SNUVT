@@ -90,8 +90,9 @@ const SUITES = {
     await p.evaluate(() => { document.getElementById("gs-s").value = "19:00"; });
     await p.click("#guestForm button[type=submit]"); await p.waitForTimeout(300);
     assert.deepStrictEqual((await a.writes("guest_votes"))[0][2], { host_team: "women", date: "2026-11-02", player_id: "p2", start_time: "19:00", end_time: "21:00" });
-    assert.match(await a.text("li.guest"), /합류 19:00–21:00/);
+    assert.match(await a.text("li.guest"), /참가 19:00–21:00/);
     assert.strictEqual(await p.evaluate(() => document.querySelectorAll(".cd.k-guest").length), 1, "달력에 합류 표시");
+    assert.match(await a.text(".cal-legend"), /여자부 훈련 참가/, "이름: 여자부 훈련 참가");
     clean(a); await a.ctx.close();
     // 받는 쪽(관리자)은 우리 정규 훈련 줄에 누가 몇 시에 오는지
     const c = await openApp(b, "coach"); await c.go("season");
