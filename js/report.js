@@ -102,8 +102,10 @@ function rpData(r) {
   const starts = N.flatMap(x => scStartRows(x.m).filter(row => row.Team === ctTN(x.m, x.side)));
   const stS = rpTop(starts.filter(x => x["First Serve"] === "O").map(x => x["Start Rot"]), 2), stC = rpTop(starts.filter(x => x["First Serve"] !== "O").map(x => x["Start Rot"]), 2);
   const opts = (rot, srv) => { const l = te.filter(e => e.skill === "attack" && e.opp_rot === rot && (srv ? e.serve === "opp" : e.serve === "us") && e.opp_no != null); return l.length ? rpTop(l.map(e => e.opp_no), 3).map(([n, v]) => `#${n} <small>${Math.round(100 * v / l.length)}%</small>`).join(" · ") : "—"; };
-  const rec = nos.map(n => ({ n, x: rowOf(n) })).filter(o => o.x && o.x.s.rc >= 3).sort((a, b) => a.x.리시브점수 - b.x.리시브점수);
-  const hole = rot => { const l = te.filter(e => e.skill === "receive" && e.opp_rot === rot && e.opp_no != null), by = {}; for (const e of l) (by[e.opp_no] = by[e.opp_no] || []).push(e);
+  // 서브 타깃 · 리시브 구멍에서 세터는 뺌(세터는 서브 받을 때 빠져 있어서 노릴 대상이 아님)
+  const isS = n => posOf(n) === "S";
+  const rec = nos.map(n => ({ n, x: rowOf(n) })).filter(o => o.x && o.x.s.rc >= 3 && !isS(o.n)).sort((a, b) => a.x.리시브점수 - b.x.리시브점수);
+  const hole = rot => { const l = te.filter(e => e.skill === "receive" && e.opp_rot === rot && e.opp_no != null && !isS(e.opp_no)), by = {}; for (const e of l) (by[e.opp_no] = by[e.opp_no] || []).push(e);
     const w = Object.entries(by).filter(([, a]) => a.length >= 2).map(([n, a]) => ({ n, s: ctSum(a) })).sort((a, b) => a.s.rs - b.s.rs)[0]; return w ? `#${w.n} <small>${rpF2(w.s.rs)} · ${w.s.rc}번</small>` : "—"; };
   const our = (() => { const sm = sc().matches.filter(m => !ctNine(m) && scSnuSide(m) && rpInRange(r, m) && (r.kinds || ["match"]).includes(scKindOf(m))), A = sm.map(scAsSnu), e = A.flatMap(x => ctReal(x.ev)).filter(x => x.side === "us"), p = A.flatMap(x => x.pts);
     const ns = new Set(A.flatMap((x, i) => x.ev.filter(y => y.action).map(y => sm[i].id + ":" + y.set_no))).size, s = ctSum(e), so = p.filter(x => x.serve === "opp"), br = p.filter(x => x.serve === "us");

@@ -815,6 +815,7 @@ const SUITES = {
       for (let k = 0; k < 5; k++) add({ side: "opp", opp_no: 11, skill: "serve", action: k === 0 ? "ace" : "s2", grade: k === 0 ? "#" : "!", kind: "jump", x: 50, y: 80, opp_rot: 3, serve: "opp", point: k === 0 ? "opp" : null });
       for (let k = 0; k < 4; k++) add({ side: "opp", opp_no: 13, skill: "receive", action: k < 3 ? "r1" : "r3", grade: "!", opp_rot: 2, serve: "us" });
       for (let k = 0; k < 4; k++) add({ side: "opp", opp_no: 14, skill: "receive", action: "r3", grade: "#", opp_rot: 2, serve: "us" });
+      for (let k = 0; k < 4; k++) add({ side: "opp", opp_no: 11, skill: "receive", action: "rerr", grade: "=", opp_rot: 2, serve: "us", point: "us" }); // 세터(S)는 리시브가 나빠도 서브 타깃에서 빠짐
       for (let k = 0; k < 6; k++) db.scout_points.push({ id: "p" + k, match_id: "m1", set_no: 1, rot: 1, opp_rot: 1 + (k % 6), serve: k % 2 ? "us" : "opp", won: k % 3 === 0 }); });
     await a.go("scout"); await p.waitForTimeout(300);
     await p.click('[data-act="scltab"][data-k="report"]'); await p.waitForTimeout(400);
@@ -830,6 +831,7 @@ const SUITES = {
     assert.match(await a.text(".rp-cards"), /#11[\s\S]*5개 · 에이스 1/, "서브 카드");
     assert.ok(await p.$(".rp-rot .rv-court.mini"), "로테 그림");
     assert.match(await a.text(".rp-sec:nth-of-type(6)"), /1순위[\s\S]*13/, "서브 타깃 1순위 = 리시브 가장 낮은 13번");
+    assert.ok(!/(순위|피할 선수)\s*11\b/.test(await a.text(".rp-sec:nth-of-type(6) table")), "세터 11번은 서브 타깃 표에 없음");
     // 글 칸 저장
     await p.fill('textarea[data-rk="style"]', "빠른 토스"); await p.waitForTimeout(1100);
     assert.strictEqual(await p.evaluate(() => sc().rp.list[0].body.style), "빠른 토스", "글 칸 저장");
