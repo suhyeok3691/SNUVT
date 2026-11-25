@@ -94,6 +94,18 @@ const SUITES = {
     assert.match(await p.$eval(".vid-frame iframe", f => f.src), /embed\/bbbbbbbbbb2\?/);
     clean(a); await a.ctx.close();
   },
+  // 불러오는 중 배구공: 72px, 가운데를 축으로만 돎(돌아도 중심이 안 움직임)
+  async loader(b) {
+    const a = await openApp(b, "coach"), p = a.page;
+    await p.evaluate(() => { const d = document.createElement("div"); d.id = "ldtest"; d.innerHTML = loaderHtml(); document.body.prepend(d); });
+    const box = await p.$eval("#ldtest .ball-spin", e => { const r = e.getBoundingClientRect(); return { w: e.clientWidth || r.width }; });
+    assert.ok(Math.abs(box.w - 72) < 1, "공 크기 72px " + box.w);
+    const cs = [];
+    for (let i = 0; i < 6; i++) { cs.push(await p.$eval("#ldtest .ball-spin", e => { const r = e.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; })); await p.waitForTimeout(170); }
+    for (const c of cs) assert.ok(Math.abs(c[0] - cs[0][0]) < 0.6 && Math.abs(c[1] - cs[0][1]) < 0.6, "돌아도 중심 그대로 " + JSON.stringify(cs));
+    if (process.env.SHOTDIR) await p.screenshot({ path: path.join(process.env.SHOTDIR, "loader.png"), clip: { x: 0, y: 0, width: 390, height: 300 } });
+    clean(a); await a.ctx.close();
+  },
   // 날짜·시간 고르기: 달력(오늘) · 시·분 바퀴(15분) · 같은 칸 끝 시간은 시작 다음 정각부터
   async picker(b) {
     const a = await openApp(b, "coach"), p = a.page;
