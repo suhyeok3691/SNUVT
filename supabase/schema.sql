@@ -2891,3 +2891,12 @@ begin
   delete from public.client_errors where at < now() - interval '60 days';
   return k;
 end $function$;
+
+-- 2026-11-27 정산 내역은 부원 모두 봄(투명하게) · 낼 돈 올림 단위(기본 1,000원). 관리는 그대로 money, 부원은 내 비용만 올리기 · 고치기
+alter table public.settle_trips add column if not exists round_to integer not null default 1000 check (round_to in (10, 100, 1000, 10000));
+create policy "member read" on public.settle_trips for select using (private.is_member());
+create policy "member read" on public.settle_items for select using (private.is_member());
+drop policy if exists "receipts read" on storage.objects;
+create policy "receipts read" on storage.objects for select to authenticated
+  using (bucket_id = 'receipts' and (storage.foldername(name))[1] = private.my_team() and private.is_member());
+-- (settle_mine 은 이제 앱에서 안 씀)

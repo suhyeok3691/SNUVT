@@ -3779,6 +3779,7 @@ document.addEventListener("submit", async ev => {
   if (f.id === "stTripForm") return stTripSave(f);
   if (f.id === "stAdjForm") return stAdjSave(f);
   if (f.id === "stItemForm") return stItemSave(f);
+  if (f.id === "stNoticeForm") return stNoticeSave(f);
   if (f.id === "guestForm") {
     const st = txt("gs-s"), en = txt("gs-e") || null, d = f.dataset.d, btn = f.querySelector('button[type="submit"]');
     if (en && en <= st) { toast("끝 시간이 시작보다 앞이에요."); return; }

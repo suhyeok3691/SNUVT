@@ -106,70 +106,81 @@ const SUITES = {
     if (process.env.SHOTDIR) await p.screenshot({ path: path.join(process.env.SHOTDIR, "loader.png"), clip: { x: 0, y: 0, width: 390, height: 300 } });
     clean(a); await a.ctx.close();
   },
-  // 정산(총무): 정산 만들기 → 비용(영수증 · 유류비 대략) → 운전자 면제 · 금액 감면 → 사람별 금액 · 확인 · 정산표, 부원은 내 정산 · 내 비용만
+  // 정산(총무): 박계조배 손 정산 그대로 — 운전자 4명(전부 면제 · 유류비 6만 원씩 직접 적음) · 늦참 · 매니저 정액 1만 원 · 나머지 11명 4만 원씩.
+  // 만들면 "비용 올려 주세요" 공지, 정산 공지 글(계좌는 직접), 부원도 내역 전부 보고 내 비용만 올림
   async settle(b) {
     const a = await openApp(b, "coach", { width: 1100, height: 900 }), p = a.page;
-    await p.evaluate(() => { state.players.p3 = { name: "김운전", pos: "OH", number: 3 }; state.players.p4 = { name: "박막내", pos: "L", number: 4 }; });
+    const NM = { d1: "준우", d2: "기범", d3: "정모", d4: "종보", f1: "준호", f2: "현아" };
+    await p.evaluate(NM => { const add = (id, name, pos) => { window.__db.players.push({ id, name, pos, adjust: {}, sort: 9 }); state.players[id] = { name, pos }; };
+      for (const [id, name] of Object.entries(NM)) add(id, name, "OH"); for (let i = 3; i <= 11; i++) add("r" + i, "부원" + i, "MB"); }, NM);
     await a.go("money"); await p.waitForTimeout(300);
     assert.match(await a.text("main"), /정산을 만들어/);
     await p.click('[data-act="stnew"]'); await p.waitForTimeout(100);
-    await p.fill("#st-title", "서울대배 원정"); await p.evaluate(() => { document.getElementById("st-from").value = "2026-11-21"; document.getElementById("st-to").value = "2026-11-22"; });
-    for (const id of ["p1", "p2", "p3", "p4"]) await p.check(`input[name="st-m"][value="${id}"]`);
-    assert.match(await a.text("#st-n"), /4명/);
+    await p.fill("#st-title", "박계조배"); await p.evaluate(() => { document.getElementById("st-from").value = "2026-11-21"; document.getElementById("st-to").value = "2026-11-22"; });
+    const ids = ["p1", "p2", "d1", "d2", "d3", "d4", "f1", "f2", ...Array.from({ length: 9 }, (_, i) => "r" + (i + 3))];
+    for (const id of ids) await p.check(`input[name="st-m"][value="${id}"]`);
+    assert.match(await a.text("#st-n"), /17명/);
+    assert.strictEqual(await p.inputValue("#st-round"), "1000"); assert.ok(await p.isChecked("#st-ntc"), "공지 기본");
     await p.click('#stTripForm button[type="submit"]'); await p.waitForTimeout(300);
-    assert.match(await a.text("main h2"), /서울대배 원정/);
+    assert.match(await a.text("main h2"), /박계조배/);
+    const nt = await p.evaluate(() => (window.__w || []).filter(x => x[0] === "notices" && x[1] === "insert").map(x => x[2]));
+    assert.strictEqual(nt.length, 1); assert.match(nt[0].title, /박계조배 정산.*비용 올려/); assert.ok(nt[0].notify, "알림");
     const addItem = async (cat, amt, by, title) => { await p.click('[data-act="stitem"]'); await p.waitForTimeout(100); await p.selectOption("#st-cat", cat); await p.waitForTimeout(50);
-      if (amt != null) await p.fill("#st-amt", String(amt)); await p.fill("#st-it", title); await p.selectOption("#st-by", by); await p.click('#stItemForm button[type="submit"]'); await p.waitForTimeout(250); };
-    await addItem("lodging", 120000, "p1", "숙소 1박");
-    await addItem("food", 80000, "p2", "저녁");
-    // 유류비: 영수증 없이 대략 (300km ÷ 12 × 1600 = 40,000)
+      await p.fill("#st-amt", String(amt)); await p.fill("#st-it", title); await p.selectOption("#st-by", by); await p.click('#stItemForm button[type="submit"]'); await p.waitForTimeout(200); };
+    await addItem("lodging", 150000, "p1", "숙소"); await addItem("food", 70000, "p2", "식비");
     await p.click('[data-act="stitem"]'); await p.waitForTimeout(100); await p.selectOption("#st-cat", "car"); await p.waitForTimeout(50);
-    await p.fill("#sc-km", "300"); await p.fill("#sc-price", "1600"); await p.click('[data-act="stcarcalc"]');
-    assert.strictEqual(await p.inputValue("#st-amt"), "40000"); assert.ok(await p.isChecked("#st-approx"), "대략 표시");
-    await p.selectOption("#st-by", "p3"); await p.click('#stItemForm button[type="submit"]'); await p.waitForTimeout(250);
-    const it = await p.evaluate(() => stS().items[stS().open].map(x => [x.cat, x.amount, x.paid_by, x.approx]));
-    assert.deepStrictEqual(it, [["lodging", 120000, "p1", false], ["food", 80000, "p2", false], ["car", 40000, "p3", true]]);
-    // 김운전: 운전(유류비 자동 면제) + 숙소 면제
-    await p.click('[data-act="stadj"][data-p="p3"]'); await p.waitForTimeout(100); await p.check("#sa-drive");
-    assert.ok(await p.isChecked('input[name="sa-ex"][value="car"]'), "운전 켜면 유류비 면제");
-    await p.check('input[name="sa-ex"][value="lodging"]'); await p.click('#stAdjForm button[type="submit"]'); await p.waitForTimeout(200);
-    const rows = async () => Object.fromEntries((await p.$$eval(".st-t tbody tr", l => l.map(r => { const td = [...r.querySelectorAll("td")], t = e => e.innerText.replace(/\s+/g, " ").trim();
-      return [t(td[0]), t(td[1].children[0]).replace("낼 ", ""), t(td[1].children[1]).replace("낸 ", ""), t(td[2].querySelector("b"))]; })))
-      .map(x => [x[0].match(/(최수혁|홍길동|김운전|박막내)/)[1], x]));
-    let r = await rows();
-    // 숙소 12만 ÷ 3(운전자 빼고) = 4만, 식비 8만 ÷ 4 = 2만, 유류비 4만 ÷ 3 = 13,333 → 73,340(10원 올림)
-    const pick = r => ["최수혁", "홍길동", "김운전", "박막내"].map(n => r[n].slice(1));
-    assert.deepStrictEqual(pick(r), [["73,340원", "120,000원", "보냄 46,660원"], ["73,340원", "80,000원", "보냄 6,660원"], ["20,000원", "40,000원", "보냄 20,000원"], ["73,340원", "—", "받음 73,340원"]]);
-    assert.match(r["김운전"][0], /운전 · 숙소·유류비·톨비 면제/);
-    // 박막내 1만 원 감면 → 감면 · 면제 없는 최수혁 · 홍길동이 5천 원씩 더
-    await p.click('[data-act="stadj"][data-p="p4"]'); await p.waitForTimeout(100); await p.fill("#sa-off", "10000"); await p.click('#stAdjForm button[type="submit"]'); await p.waitForTimeout(200);
-    r = await rows(); assert.deepStrictEqual(pick(r).map(x => x[0]), ["78,340원", "78,340원", "20,000원", "63,340원"]);
-    if (process.env.SHOTDIR) { await p.evaluate(() => { stS().items[stS().open][0].receipts = ["men/x/u1/1.jpg"]; stSignUrls(); }); await p.waitForTimeout(200);
-      await p.screenshot({ path: path.join(process.env.SHOTDIR, "settle-d.png"), fullPage: true }); await p.setViewportSize({ width: 390, height: 844 }); await p.waitForTimeout(200);
-      await p.screenshot({ path: path.join(process.env.SHOTDIR, "settle-m.png"), fullPage: true }); await p.click('[data-act="stitem"]'); await p.waitForTimeout(100); await p.selectOption("#st-cat", "car"); await p.waitForTimeout(100);
-      await p.screenshot({ path: path.join(process.env.SHOTDIR, "settle-item.png") }); await p.click('[data-act="sheetclose"]'); await p.setViewportSize({ width: 1100, height: 900 }); }
-    // 부원 화면에 보일 금액 저장(calc)
-    await p.waitForTimeout(600);
-    const calc = await p.evaluate(() => { const w = (window.__w || []).filter(x => x[0] === "settle_trips" && x[1] === "update" && x[2].calc); return w.length ? w[w.length - 1][2].calc : null; });
-    assert.deepStrictEqual(calc.p4, { owe: 63340, paid: 0, net: -63340 });
-    // 확인 체크 · 영수증 확인 · 정산표
-    await p.click('[data-act="stdone"][data-p="p4"]'); await p.waitForTimeout(150);
-    assert.match(await a.text('[data-act="stdone"][data-p="p4"]'), /끝/);
+    assert.match(await a.text("#st-carnote"), /대략 적어요/); await p.click('[data-act="sheetclose"]');
+    for (const d of ["d1", "d2", "d3", "d4"]) await addItem("car", 60000, d, "유류비 · 톨비");
+    const it = await p.evaluate(() => stS().items[stS().open].map(x => [x.cat, x.amount, x.approx]));
+    assert.deepStrictEqual(it[2], ["car", 60000, true], "유류비 = 직접 적은 대략 금액");
+    // 운전자: 운전 켜면 전부 면제 / 늦참 · 매니저: 정액 1만 원
+    for (const d of ["d1", "d2", "d3", "d4"]) { await p.click(`[data-act="stadj"][data-p="${d}"]`); await p.waitForTimeout(80); await p.check("#sa-drive");
+      if (d === "d1") assert.strictEqual(await p.$$eval('input[name="sa-ex"]:checked', l => l.length), 5, "운전 = 전부 면제");
+      await p.click('#stAdjForm button[type="submit"]'); await p.waitForTimeout(150); }
+    for (const f of ["f1", "f2"]) { await p.click(`[data-act="stadj"][data-p="${f}"]`); await p.waitForTimeout(80); await p.fill("#sa-fix", "10000"); await p.click('#stAdjForm button[type="submit"]'); await p.waitForTimeout(150); }
+    const rows = async () => Object.fromEntries(await p.$$eval(".st-t tbody tr", l => l.map(r => { const td = [...r.querySelectorAll("td")], t = e => e.innerText.replace(/\s+/g, " ").trim();
+      return [t(td[0].querySelector("b")), [t(td[1].children[0]).replace("낼 ", ""), t(td[1].children[1]).replace("낸 ", ""), t(td[2].querySelector("b"))]]; })));
+    const r = await rows();
+    assert.deepStrictEqual(r["준우"], ["0원", "60,000원", "받음 60,000원"]);
+    assert.deepStrictEqual(r["준호"], ["10,000원", "—", "보냄 10,000원"]);
+    assert.deepStrictEqual(r["부원3"], ["40,000원", "—", "보냄 40,000원"]);
+    assert.deepStrictEqual(r["최수혁"], ["40,000원", "150,000원", "받음 110,000원"]);
+    assert.deepStrictEqual(r["홍길동"], ["40,000원", "70,000원", "받음 30,000원"]);
+    assert.match(await a.text(".st-sum"), /460,000원[\s\S]*380,000원[\s\S]*380,000원/, "총 비용 · 총무가 받을 돈 · 보낼 돈");
+    if (process.env.SHOTDIR) { await p.setViewportSize({ width: 390, height: 844 }); await p.waitForTimeout(200); await p.screenshot({ path: path.join(process.env.SHOTDIR, "settle-m.png"), fullPage: true }); await p.setViewportSize({ width: 1100, height: 900 }); }
+    // 정산 공지: 예전 카톡 모양, 계좌는 직접 적기 전엔 한 번 묻고 올림
+    await p.click('[data-act="stnotice"]'); await p.waitForTimeout(100);
+    const body = await p.inputValue("#sn-body");
+    assert.match(body, /\[박계조배 정산 공지\]\n이번 박계조배를 거치며/);
+    assert.match(body, /운전자 4명, 참가자 11명, 준호 10,000원, 현아 10,000원\n총 17명이 정산에 참여했습니다!/);
+    assert.match(body, /- 유류비·톨비 240,000원 \(준우, 기범, 정모, 종보 운전/);
+    assert.match(body, /⭐️금액\n준호, 현아 - 각 10,000원\n나머지 9명 \([^)]*\) - 각 40,000원/);
+    assert.match(body, /먼저 낸 비용이 있는 분[\s\S]*최수혁 - 받을 돈 110,000원 \(150,000원 − 40,000원\)/);
+    assert.match(body, /준우 - 받을 돈 60,000원/);
+    assert.match(body, /⭐️ 계좌\n\(은행 · 계좌번호 · 이름을 적어 주세요\)$/);
+    await p.fill("#sn-body", body.replace("(은행 · 계좌번호 · 이름을 적어 주세요)", "테스트은행 000 홍길동"));
+    await p.click('#stNoticeForm button[type="submit"]'); await p.waitForTimeout(250);
+    const nt2 = await p.evaluate(() => (window.__w || []).filter(x => x[0] === "notices" && x[1] === "insert").map(x => x[2]));
+    assert.strictEqual(nt2.length, 2); assert.match(nt2[1].body, /테스트은행/); assert.ok(nt2[1].pinned && nt2[1].notify);
+    // 확인 체크 · 영수증 확인
+    await p.click('[data-act="stdone"][data-p="f1"]'); await p.waitForTimeout(150);
+    assert.match(await a.text('[data-act="stdone"][data-p="f1"]'), /끝/);
     await p.click('[data-act="stok"]'); await p.waitForTimeout(150);
     assert.ok(await p.evaluate(() => stS().items[stS().open][0].ok), "영수증 확인");
-    const txt = await p.evaluate(() => stText(stCur()));
-    assert.match(txt, /\[서울대배 원정 정산\]/); assert.match(txt, /총무에게 보낼 돈\n4 박막내 63,340원/); assert.match(txt, /유류비·톨비 40,000원/);
     clean(a); await a.ctx.close();
-    // 부원: 메뉴에 정산 탭, 내 정산 금액 · 내 비용만 · 내가 낸 사람으로만 올림
+    // 부원: 내역 전부(다른 사람 금액 · 비용까지) 보고, 내 비용만 올리기 · 낸 사람은 나
     const c = await openApp(b, "player"), q = c.page;
-    await q.evaluate(() => { const db = window.__db; db.settle_trips.push({ id: "tr1", title: "서울대배 원정", date_from: "2026-11-21", date_to: "2026-11-22", members: ["p1", "p2"], calc: { p2: { owe: 50000, paid: 80000, net: 30000 } }, calc_at: "2026-11-23T10:00:00+09:00", done: {} });
-      db.settle_items.push({ id: "i1", trip_id: "tr1", cat: "food", amount: 80000, paid_by: "p2", author: "u2", receipts: ["men/tr1/u2/1.jpg"], ok: true }); });
+    await q.evaluate(() => { const db = window.__db; db.settle_trips.push({ id: "tr1", title: "박계조배", date_from: "2026-11-21", date_to: "2026-11-22", members: ["p1", "p2"], adj: { p1: { drive: true, ex: ["lodging", "food", "car", "gear", "etc"] } }, round_to: 1000, done: {} });
+      db.settle_items.push({ id: "i1", trip_id: "tr1", cat: "food", amount: 80000, paid_by: "p2", author: "u2", receipts: ["men/tr1/u2/1.jpg"], ok: true }, { id: "i2", trip_id: "tr1", cat: "car", amount: 50000, paid_by: "p1", author: "u1", receipts: [], approx: true, ok: false }); });
     await c.go("money"); await q.waitForTimeout(300);
-    assert.match(await c.text("main"), /내 정산[\s\S]*서울대배 원정[\s\S]*받을 돈 30,000원/);
+    assert.match(await c.text("main"), /박계조배[\s\S]*나: 받을 돈 0원|박계조배[\s\S]*비용 130,000원/);
+    assert.ok(!(await q.$('[data-act="stnew"]')), "부원은 정산을 못 만듦");
     await q.click('[data-act="stopen"]'); await q.waitForTimeout(300);
-    assert.match(await c.text(".st-sum"), /50,000원[\s\S]*80,000원[\s\S]*받을 돈 30,000원/);
-    assert.ok(await q.$(".st-item img.st-pic"), "내 영수증 사진");
-    assert.ok(!(await q.$('.st-item [data-act="stitem"]')), "총무가 확인한 비용은 못 고침");
+    const pr = await q.$$eval(".st-t tbody tr", l => l.map(r => r.innerText.replace(/\s+/g, " ")));
+    assert.strictEqual(pr.length, 2, "다른 사람 금액도 보임"); assert.ok(pr.some(x => /최수혁.*운전.*받음 50,000원/.test(x)), pr.join("|"));
+    assert.ok(await q.$(".st-item img.st-pic"), "영수증 사진");
+    assert.ok(!(await q.$('[data-act="stadj"]')) && !(await q.$('[data-act="stdone"]')) && !(await q.$('[data-act="stnotice"]')), "관리 버튼 없음");
+    assert.ok(!(await q.$('.st-item [data-act="stitem"]')), "남의 비용 · 확인된 비용은 못 고침");
     await q.click('[data-act="stitem"]'); await q.waitForTimeout(100);
     assert.ok(!(await q.$("#st-by")), "낸 사람은 나로 고정");
     await q.selectOption("#st-cat", "gear"); await q.fill("#st-amt", "12000"); await q.fill("#st-it", "물 · 아이싱");
