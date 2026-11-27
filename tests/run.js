@@ -8,7 +8,7 @@ const fs = require("fs"), path = require("path"), assert = require("assert");
 const { mockScript } = require("./mock.js");
 const ROOT = path.join(__dirname, "..") + path.sep;
 const NOW = new Date("2026-11-01T10:00:00+09:00");
-const VIEWS = ["home", "practice", "notes", "video", "jp", "scout", "train", "plan", "rec", "season", "comps", "cup", "fr", "campus", "sched", "report", "roster", "intake"];
+const VIEWS = ["home", "practice", "notes", "video", "jp", "scout", "train", "plan", "rec", "season", "comps", "cup", "fr", "campus", "money", "sched", "report", "roster", "intake"];
 const TYPES = { js: "text/javascript", html: "text/html", css: "text/css", png: "image/png", webmanifest: "application/manifest+json", json: "application/json" };
 
 async function openApp(browser, role, { width = 390, height = 844, now = NOW, fonts = false } = {}) {
@@ -105,6 +105,78 @@ const SUITES = {
     for (const c of cs) assert.ok(Math.abs(c[0] - cs[0][0]) < 0.6 && Math.abs(c[1] - cs[0][1]) < 0.6, "돌아도 중심 그대로 " + JSON.stringify(cs));
     if (process.env.SHOTDIR) await p.screenshot({ path: path.join(process.env.SHOTDIR, "loader.png"), clip: { x: 0, y: 0, width: 390, height: 300 } });
     clean(a); await a.ctx.close();
+  },
+  // 정산(총무): 정산 만들기 → 비용(영수증 · 유류비 대략) → 운전자 면제 · 금액 감면 → 사람별 금액 · 확인 · 정산표, 부원은 내 정산 · 내 비용만
+  async settle(b) {
+    const a = await openApp(b, "coach", { width: 1100, height: 900 }), p = a.page;
+    await p.evaluate(() => { state.players.p3 = { name: "김운전", pos: "OH", number: 3 }; state.players.p4 = { name: "박막내", pos: "L", number: 4 }; });
+    await a.go("money"); await p.waitForTimeout(300);
+    assert.match(await a.text("main"), /정산을 만들어/);
+    await p.click('[data-act="stnew"]'); await p.waitForTimeout(100);
+    await p.fill("#st-title", "서울대배 원정"); await p.evaluate(() => { document.getElementById("st-from").value = "2026-11-21"; document.getElementById("st-to").value = "2026-11-22"; });
+    for (const id of ["p1", "p2", "p3", "p4"]) await p.check(`input[name="st-m"][value="${id}"]`);
+    assert.match(await a.text("#st-n"), /4명/);
+    await p.click('#stTripForm button[type="submit"]'); await p.waitForTimeout(300);
+    assert.match(await a.text("main h2"), /서울대배 원정/);
+    const addItem = async (cat, amt, by, title) => { await p.click('[data-act="stitem"]'); await p.waitForTimeout(100); await p.selectOption("#st-cat", cat); await p.waitForTimeout(50);
+      if (amt != null) await p.fill("#st-amt", String(amt)); await p.fill("#st-it", title); await p.selectOption("#st-by", by); await p.click('#stItemForm button[type="submit"]'); await p.waitForTimeout(250); };
+    await addItem("lodging", 120000, "p1", "숙소 1박");
+    await addItem("food", 80000, "p2", "저녁");
+    // 유류비: 영수증 없이 대략 (300km ÷ 12 × 1600 = 40,000)
+    await p.click('[data-act="stitem"]'); await p.waitForTimeout(100); await p.selectOption("#st-cat", "car"); await p.waitForTimeout(50);
+    await p.fill("#sc-km", "300"); await p.fill("#sc-price", "1600"); await p.click('[data-act="stcarcalc"]');
+    assert.strictEqual(await p.inputValue("#st-amt"), "40000"); assert.ok(await p.isChecked("#st-approx"), "대략 표시");
+    await p.selectOption("#st-by", "p3"); await p.click('#stItemForm button[type="submit"]'); await p.waitForTimeout(250);
+    const it = await p.evaluate(() => stS().items[stS().open].map(x => [x.cat, x.amount, x.paid_by, x.approx]));
+    assert.deepStrictEqual(it, [["lodging", 120000, "p1", false], ["food", 80000, "p2", false], ["car", 40000, "p3", true]]);
+    // 김운전: 운전(유류비 자동 면제) + 숙소 면제
+    await p.click('[data-act="stadj"][data-p="p3"]'); await p.waitForTimeout(100); await p.check("#sa-drive");
+    assert.ok(await p.isChecked('input[name="sa-ex"][value="car"]'), "운전 켜면 유류비 면제");
+    await p.check('input[name="sa-ex"][value="lodging"]'); await p.click('#stAdjForm button[type="submit"]'); await p.waitForTimeout(200);
+    const rows = async () => Object.fromEntries((await p.$$eval(".st-t tbody tr", l => l.map(r => { const td = [...r.querySelectorAll("td")], t = e => e.innerText.replace(/\s+/g, " ").trim();
+      return [t(td[0]), t(td[1].children[0]).replace("낼 ", ""), t(td[1].children[1]).replace("낸 ", ""), t(td[2].querySelector("b"))]; })))
+      .map(x => [x[0].match(/(최수혁|홍길동|김운전|박막내)/)[1], x]));
+    let r = await rows();
+    // 숙소 12만 ÷ 3(운전자 빼고) = 4만, 식비 8만 ÷ 4 = 2만, 유류비 4만 ÷ 3 = 13,333 → 73,340(10원 올림)
+    const pick = r => ["최수혁", "홍길동", "김운전", "박막내"].map(n => r[n].slice(1));
+    assert.deepStrictEqual(pick(r), [["73,340원", "120,000원", "보냄 46,660원"], ["73,340원", "80,000원", "보냄 6,660원"], ["20,000원", "40,000원", "보냄 20,000원"], ["73,340원", "—", "받음 73,340원"]]);
+    assert.match(r["김운전"][0], /운전 · 숙소·유류비·톨비 면제/);
+    // 박막내 1만 원 감면 → 감면 · 면제 없는 최수혁 · 홍길동이 5천 원씩 더
+    await p.click('[data-act="stadj"][data-p="p4"]'); await p.waitForTimeout(100); await p.fill("#sa-off", "10000"); await p.click('#stAdjForm button[type="submit"]'); await p.waitForTimeout(200);
+    r = await rows(); assert.deepStrictEqual(pick(r).map(x => x[0]), ["78,340원", "78,340원", "20,000원", "63,340원"]);
+    if (process.env.SHOTDIR) { await p.evaluate(() => { stS().items[stS().open][0].receipts = ["men/x/u1/1.jpg"]; stSignUrls(); }); await p.waitForTimeout(200);
+      await p.screenshot({ path: path.join(process.env.SHOTDIR, "settle-d.png"), fullPage: true }); await p.setViewportSize({ width: 390, height: 844 }); await p.waitForTimeout(200);
+      await p.screenshot({ path: path.join(process.env.SHOTDIR, "settle-m.png"), fullPage: true }); await p.click('[data-act="stitem"]'); await p.waitForTimeout(100); await p.selectOption("#st-cat", "car"); await p.waitForTimeout(100);
+      await p.screenshot({ path: path.join(process.env.SHOTDIR, "settle-item.png") }); await p.click('[data-act="sheetclose"]'); await p.setViewportSize({ width: 1100, height: 900 }); }
+    // 부원 화면에 보일 금액 저장(calc)
+    await p.waitForTimeout(600);
+    const calc = await p.evaluate(() => { const w = (window.__w || []).filter(x => x[0] === "settle_trips" && x[1] === "update" && x[2].calc); return w.length ? w[w.length - 1][2].calc : null; });
+    assert.deepStrictEqual(calc.p4, { owe: 63340, paid: 0, net: -63340 });
+    // 확인 체크 · 영수증 확인 · 정산표
+    await p.click('[data-act="stdone"][data-p="p4"]'); await p.waitForTimeout(150);
+    assert.match(await a.text('[data-act="stdone"][data-p="p4"]'), /끝/);
+    await p.click('[data-act="stok"]'); await p.waitForTimeout(150);
+    assert.ok(await p.evaluate(() => stS().items[stS().open][0].ok), "영수증 확인");
+    const txt = await p.evaluate(() => stText(stCur()));
+    assert.match(txt, /\[서울대배 원정 정산\]/); assert.match(txt, /총무에게 보낼 돈\n4 박막내 63,340원/); assert.match(txt, /유류비·톨비 40,000원/);
+    clean(a); await a.ctx.close();
+    // 부원: 메뉴에 정산 탭, 내 정산 금액 · 내 비용만 · 내가 낸 사람으로만 올림
+    const c = await openApp(b, "player"), q = c.page;
+    await q.evaluate(() => { const db = window.__db; db.settle_trips.push({ id: "tr1", title: "서울대배 원정", date_from: "2026-11-21", date_to: "2026-11-22", members: ["p1", "p2"], calc: { p2: { owe: 50000, paid: 80000, net: 30000 } }, calc_at: "2026-11-23T10:00:00+09:00", done: {} });
+      db.settle_items.push({ id: "i1", trip_id: "tr1", cat: "food", amount: 80000, paid_by: "p2", author: "u2", receipts: ["men/tr1/u2/1.jpg"], ok: true }); });
+    await c.go("money"); await q.waitForTimeout(300);
+    assert.match(await c.text("main"), /내 정산[\s\S]*서울대배 원정[\s\S]*받을 돈 30,000원/);
+    await q.click('[data-act="stopen"]'); await q.waitForTimeout(300);
+    assert.match(await c.text(".st-sum"), /50,000원[\s\S]*80,000원[\s\S]*받을 돈 30,000원/);
+    assert.ok(await q.$(".st-item img.st-pic"), "내 영수증 사진");
+    assert.ok(!(await q.$('.st-item [data-act="stitem"]')), "총무가 확인한 비용은 못 고침");
+    await q.click('[data-act="stitem"]'); await q.waitForTimeout(100);
+    assert.ok(!(await q.$("#st-by")), "낸 사람은 나로 고정");
+    await q.selectOption("#st-cat", "gear"); await q.fill("#st-amt", "12000"); await q.fill("#st-it", "물 · 아이싱");
+    await q.click('#stItemForm button[type="submit"]'); await q.waitForTimeout(300);
+    const ins = await q.evaluate(() => (window.__w || []).filter(x => x[0] === "settle_items" && x[1] === "insert").map(x => x[2]));
+    assert.strictEqual(ins.length, 1); assert.strictEqual(ins[0].paid_by, "p2"); assert.strictEqual(ins[0].trip_id, "tr1"); assert.strictEqual(ins[0].ok, undefined);
+    clean(c); await c.ctx.close();
   },
   // 날짜·시간 고르기: 달력(오늘) · 시·분 바퀴(15분) · 같은 칸 끝 시간은 시작 다음 정각부터
   async picker(b) {
@@ -504,7 +576,7 @@ const SUITES = {
   async menu7(b) {
     const a = await openApp(b, "coach", { width: 390 }), p = a.page;
     assert.deepStrictEqual(await p.$$eval("#tabbar .bt", x => x.map(e => e.textContent.trim())), ["훈련", "피지컬", "영상", "홈", "일정", "대회", "전력분석"]);
-    await a.go("cup"); assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["대회", "교류전", "교내 대회"]);
+    await a.go("cup"); assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["대회", "교류전", "교내 대회", "정산"]);
     await a.go("practice"); assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["훈련 계획", "훈련 노트"]);
     await a.go("jp"); assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["팀 영상", "일본 고교"]);
     // 휴대폰: 아래엔 홈 버튼 하나만 (+ 처음 한 번 안내)
@@ -991,7 +1063,7 @@ print(json.dumps(out, ensure_ascii=False))`]).toString());
   async campustab(b) {
     const a = await openApp(b, "coach"), p = a.page;
     await a.go("cup"); await p.waitForTimeout(200);
-    assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["대회", "교류전", "교내 대회"]);
+    assert.deepStrictEqual(await p.$$eval("#tabs .seg-tab", x => x.map(e => e.textContent.trim())), ["대회", "교류전", "교내 대회", "정산"]);
     assert.doesNotMatch(await a.text("main"), /교내 대회/, "대회 화면 안에 교내 대회 칸 없음");
     await p.evaluate(() => { state.cups = [{ id: "c1", name: "2026 종합체육대회", kind: "gen", start: "2026-10-26", end: "2026-10-29", teams: [{ id: "t1", name: "종보상점" }, { id: "t2", name: "서울대 배구부" }], matches: [{ id: "f", stage: "f", label: "결승", a: "t2", b: "t1", winner: "t1", date: "2026-10-29", refs: {} }], photos: [], avail: {}, picks: {} }]; state.dirty = false; render(); });
     await p.click('#tabs [data-act="view"][data-v="campus"]'); await p.waitForTimeout(200);

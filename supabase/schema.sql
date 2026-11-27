@@ -2754,3 +2754,140 @@ update scout_matches set opponent = '국민대 VAT' where opponent = '국민대'
 update scout_matches set title = '국민대 VAT 교류전' where title = '국민대 교류전';
 update scout_matches set opponent = '서울대배구부' where opponent = '서울대';
 update friendlies set opponent = '국민대 VAT' where opponent = '국민대';
+
+-- 2026-11-27 정산 (총무): 대회 · 교류전 등 다녀온 건마다 공동 비용(숙소 · 식비 · 유류비 · 물품 · 기타)을 모아 사람별로 나눔
+-- 보기 · 관리 = 총무 · 부주장 · 관리자(주장) [private.can('money')]. 부원은 내가 낸 비용(영수증) 올리기 + 내 정산만(settle_mine)
+-- 계좌번호는 저장하지 않음 (송금은 앱 밖, 앱엔 '보냄/받음' 체크만)
+CREATE OR REPLACE FUNCTION private.can(perm text)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  select coalesce((
+    select case
+      when p.role = 'coach' then true
+      when p.role <> 'player' then false
+      when perm = 'schedule' then pl.titles && array['vice']
+      when perm = 'notice' then pl.titles && array['vice', 'treasurer']
+      when perm = 'roster' then pl.titles && array['vice', 'treasurer']
+      when perm = 'training' then pl.titles && array['trainer']
+      when perm = 'practice' then pl.titles && array['ops']
+      when perm = 'attend' then pl.titles && array['ops', 'vice']
+      when perm = 'analysis' then pl.titles && array['analyst']
+      when perm = 'video' then pl.titles && array['vice', 'media']
+      when perm = 'money' then pl.titles && array['vice', 'treasurer']
+      else false end
+    from public.profiles p left join public.players pl on pl.id = p.player_id
+    where p.id = auth.uid()), false)
+$function$;
+
+create table if not exists public.settle_trips (
+  id uuid primary key default gen_random_uuid(),
+  team_id text not null default private.my_team() references public.teams(id),
+  title text not null check (char_length(title) between 1 and 60),
+  ref_kind text check (ref_kind is null or ref_kind in ('event', 'friendly')),
+  ref_id uuid,
+  date_from date, date_to date,
+  members uuid[] not null default '{}',
+  adj jsonb not null default '{}'::jsonb,      -- {player_id: {drive, ex: [cat…], off: 원}}
+  club integer not null default 0 check (club between 0 and 100000000),  -- 회비에서 지원
+  calc jsonb not null default '{}'::jsonb,     -- 총무 화면이 계산해 둔 사람별 {owe, paid, net} (부원은 settle_mine 으로 자기 것만)
+  calc_at timestamptz,
+  done jsonb not null default '{}'::jsonb,     -- {player_id: 보냄/받음 확인 시각}
+  closed boolean not null default false,
+  note text check (note is null or char_length(note) <= 500),
+  created_by uuid default auth.uid(),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists settle_trips_team on public.settle_trips (team_id, created_at desc);
+alter table public.settle_trips enable row level security;
+create policy "team scope" on public.settle_trips as restrictive for all using (team_id = (select private.my_team())) with check (team_id = (select private.my_team()));
+create policy "money all" on public.settle_trips for all using (private.can('money')) with check (private.can('money'));
+create trigger keep_deleted before delete on public.settle_trips for each row execute function private.keep_deleted();
+
+-- 그 정산에 들어간 부원이고 아직 안 닫혔는지 (부원이 비용을 올릴 때)
+create or replace function private.settle_open_member(tid uuid) returns boolean
+language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.settle_trips t where t.id = tid and not t.closed and t.team_id = private.my_team() and private.my_player_id() = any (t.members))
+$$;
+
+create table if not exists public.settle_items (
+  id uuid primary key default gen_random_uuid(),
+  trip_id uuid not null references public.settle_trips(id) on delete cascade,
+  team_id text not null default private.my_team() references public.teams(id),
+  cat text not null check (cat in ('lodging', 'food', 'car', 'gear', 'etc')),
+  title text check (title is null or char_length(title) <= 60),
+  amount integer not null check (amount between 0 and 100000000),
+  paid_by uuid not null references public.players(id),
+  approx boolean not null default false,
+  receipts text[] not null default '{}' check (cardinality(receipts) <= 6),
+  ok boolean not null default false,          -- 총무 확인
+  author uuid not null default auth.uid(),
+  created_at timestamptz not null default now()
+);
+create index if not exists settle_items_trip on public.settle_items (trip_id);
+alter table public.settle_items enable row level security;
+create policy "team scope" on public.settle_items as restrictive for all using (team_id = (select private.my_team())) with check (team_id = (select private.my_team()));
+create policy "money all" on public.settle_items for all using (private.can('money')) with check (private.can('money'));
+create policy "mine read" on public.settle_items for select using (author = auth.uid() or paid_by = private.my_player_id());
+create policy "mine add" on public.settle_items for insert with check (author = auth.uid() and paid_by = private.my_player_id() and private.settle_open_member(trip_id));
+create policy "mine edit" on public.settle_items for update using (author = auth.uid() and not ok and private.settle_open_member(trip_id))
+  with check (author = auth.uid() and paid_by = private.my_player_id() and private.settle_open_member(trip_id));
+create policy "mine delete" on public.settle_items for delete using (author = auth.uid() and not ok and private.settle_open_member(trip_id));
+create trigger keep_deleted before delete on public.settle_items for each row execute function private.keep_deleted();
+-- 총무 확인(ok)은 총무 · 부주장 · 관리자만 바꿈
+create or replace function private.settle_item_guard() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if not private.can('money') then
+    if tg_op = 'INSERT' then new.ok := false; else new.ok := old.ok; new.trip_id := old.trip_id; end if;
+  end if;
+  return new;
+end $$;
+create trigger settle_item_guard before insert or update on public.settle_items for each row execute function private.settle_item_guard();
+
+-- 부원: 내가 들어간 정산 (이름 · 기간 · 내 금액 · 보냄/받음 확인). 다른 사람 금액 · 감면은 안 줌
+create or replace function public.settle_mine() returns table (id uuid, title text, date_from date, date_to date, closed boolean, mine jsonb, calc_at timestamptz, done_at text, n integer)
+language sql stable security definer set search_path = '' as $$
+  select t.id, t.title, t.date_from, t.date_to, t.closed, t.calc -> (private.my_player_id())::text, t.calc_at, t.done ->> (private.my_player_id())::text, cardinality(t.members)
+  from public.settle_trips t
+  where t.team_id = private.my_team() and private.is_member() and private.my_player_id() = any (t.members)
+  order by coalesce(t.date_from, t.created_at::date) desc
+$$;
+revoke all on function public.settle_mine() from public, anon;
+grant execute on function public.settle_mine() to authenticated;
+
+-- 영수증 사진 (비공개 버킷 receipts, 경로 {team}/{trip}/{올린 사람}/…): 올린 사람 · 총무 쪽만 봄
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('receipts', 'receipts', false, 5242880, array['image/jpeg', 'image/png', 'image/webp']) on conflict (id) do nothing;
+create policy "receipts read" on storage.objects for select to authenticated
+  using (bucket_id = 'receipts' and (storage.foldername(name))[1] = private.my_team() and (owner = auth.uid() or private.can('money')));
+create policy "receipts upload" on storage.objects for insert to authenticated
+  with check (bucket_id = 'receipts' and (storage.foldername(name))[1] = private.my_team() and (storage.foldername(name))[3] = auth.uid()::text and private.is_member());
+create policy "receipts delete" on storage.objects for delete to authenticated
+  using (bucket_id = 'receipts' and (storage.foldername(name))[1] = private.my_team() and (owner = auth.uid() or private.can('money')));
+
+-- 매일 스냅샷에 정산 표 더함
+CREATE OR REPLACE FUNCTION private.take_snapshot()
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare t text; k integer := 0;
+begin
+  foreach t in array array['teams','profiles','players','player_private','player_contacts','health','tests','pain_checks','lift_sets','logs','day_picks','program_edits',
+    'events','terms','team_off','practice_times','practice_plans','friendlies','event_votes','entries','lineups','absences','open_sessions','open_votes','guest_votes',
+    'notices','videos','training_notes','cups','cup_teams','cup_matches','cup_avail','cup_photos','scout_matches','scout_events','scout_points','live_games','live_rallies','scout_reports',
+    'settle_trips','settle_items'] loop
+    if to_regclass('public.' || t) is null then continue; end if;
+    execute format('insert into private.snapshots (tbl, n, data) select %L, count(*), coalesce(jsonb_agg(to_jsonb(x)), ''[]''::jsonb) from public.%I x', t, t);
+    k := k + 1;
+  end loop;
+  delete from private.snapshots where taken_at < now() - interval '15 days';
+  delete from private.trash where deleted_at < now() - interval '60 days';
+  delete from public.client_errors where at < now() - interval '60 days';
+  return k;
+end $function$;

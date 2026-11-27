@@ -1357,6 +1357,30 @@ input.rp-title:focus { outline: none; border-bottom-color: var(--blue); }
 .rp-rotb { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: start; }
 .rp-phs { display: grid; gap: 10px; } .rp-ph { display: grid; gap: 4px; } .rp-ph p { margin: 0; } .rp-phh { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .rv-court.mini { gap: 3px; padding: 5px; } .rv-court.mini .rv-c { padding: 3px 1px; } .rv-court.mini .rv-p { font-size: 13px; } .rv-court.mini .rv-n { font-size: 11px; } .rv-court.mini .rv-z, .rv-court.mini .rv-l { font-size: 9px; } .rv-court.mini .ct-netl { font-size: 9px; }
+/* 정산 (총무) */
+.st-sum { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0 4px; }
+.st-sum > div { display: grid; gap: 2px; padding: 8px 0; border-top: 2px solid var(--ink); }
+.st-sum b { font-size: 17px; font-variant-numeric: tabular-nums; }
+.st-t { width: 100%; } .st-t td { vertical-align: top; }
+.tw .st-t td:first-child { white-space: normal; word-break: keep-all; } .st-t td:first-child small { font-size: 11.5px; line-height: 1.35; }
+@media (max-width: 520px) { .tw .st-t th, .tw .st-t td { padding-left: 8px; padding-right: 8px; font-size: 13.5px; } }
+.st-op span { display: block; white-space: nowrap; } .st-op span + span { color: var(--muted); font-size: 12.5px; }
+.st-net { white-space: nowrap; } .st-net b { display: block; } .st-net .chip { margin-top: 4px; }
+.st-who { display: grid; text-align: left; background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.st-who small { color: var(--muted); font-size: 12px; }
+.st-who:disabled { cursor: default; }
+.st-get { color: var(--good); font-weight: 600; } .st-pay { color: var(--crit); font-weight: 600; }
+.st-done.on, .st-ok.on { color: var(--good); border-color: var(--good); }
+.st-items { list-style: none; margin: 0 0 8px; padding: 0; }
+.st-item { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+.st-it-main { display: grid; gap: 2px; flex: 1; min-width: 0; }
+.st-pics { display: flex; gap: 6px; margin-top: 4px; flex-wrap: wrap; }
+.st-pic { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; border: 1px solid var(--line); display: grid; place-items: center; font-size: 10px; color: var(--muted); }
+.st-mem { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 6px 10px; margin-top: 6px; max-height: 240px; overflow-y: auto; }
+.st-foot { gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.st-car summary { cursor: pointer; font-size: 13.5px; color: var(--blue); }
+.st-car .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; margin-top: 8px; } .st-car .fields .wide { grid-column: 1 / -1; }
+@media (max-width: 520px) { .st-sum b { font-size: 15px; } }
 label.rp-ck { display: inline-flex !important; align-items: center; gap: 6px; font-size: 13.5px; color: var(--ink); cursor: pointer; } label.rp-ck input { width: auto; margin: 0; }
 .rp-ms { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 13.5px; } .rp-ms li.off { opacity: .5; text-decoration: line-through; }
 .rp-range { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: end; } .rp-range .fl { width: 150px; }
@@ -1496,6 +1520,7 @@ h2 b, h3 b, .sec-head h3, .panel > h3:first-child, .cal-head h3 { font-weight: 7
 <script src="js/court.js?v=251"></script>
 <script src="js/live.js?v=250"></script>
 <script src="js/report.js?v=5"></script>
-<script src="js/app.js?v=283"></script>
+<script src="js/money.js?v=1"></script>
+<script src="js/app.js?v=284"></script>
 </body>
 </html>

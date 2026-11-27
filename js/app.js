@@ -105,12 +105,12 @@ function confirmDel(msg, yes = "네, 삭제", enter = false) {
   });
 }
 const DOW_KO = ["일", "월", "화", "수", "목", "금", "토"];
-const VIEWS = ["home", "practice", "notes", "video", "jp", "scout", "train", "plan", "rec", "season", "comps", "cup", "fr", "campus", "sched", "report", "roster", "intake"];
+const VIEWS = ["home", "practice", "notes", "video", "jp", "scout", "train", "plan", "rec", "season", "comps", "cup", "fr", "campus", "money", "sched", "report", "roster", "intake"];
 // 섹션 (위 탭 묶음): 훈련 · 피지컬 · 일정 · 대회 · 관리. 공지는 홈 맨 위, 설정은 오른쪽 위
 const SECTIONS = {
   physical: { label: "피지컬", views: [["train", "오늘"], ["plan", "프로그램"], ["rec", "기록"]] },
   schedule: { label: "일정", views: [["season", "다가오는"], ["comps", "전체 일정"], ["sched", "훈련 관리", "attend"]] },
-  cup: { label: "대회", views: [["cup", "대회"], ["fr", "교류전"], ["campus", "교내 대회"]] },
+  cup: { label: "대회", views: [["cup", "대회"], ["fr", "교류전"], ["campus", "교내 대회"], ["money", "정산"]] },
   analysis: { label: "전력분석", views: [["scout", "전력분석"]] },
   video: { label: "영상", views: [["video", "팀 영상"], ["jp", "일본 고교"]] },
   admin: { label: "관리", views: [["roster", "명단", "roster"], ["intake", "부원", "full"], ["report", "리포트", "training"]] },
@@ -119,7 +119,7 @@ const SECTIONS = {
 // 위 탭 없이 다른 탭 안에 들어간 화면 (지금은 없음 — 교내 대회도 '대회' 위 탭 하나)
 const TAB_OF = {};
 const tabOf = v => TAB_OF[v] || v;
-const SECTION_OF = { scout: "analysis", practice: "practice", notes: "practice", video: "video", jp: "video", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", cup: "cup", fr: "cup", campus: "cup", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
+const SECTION_OF = { scout: "analysis", practice: "practice", notes: "practice", video: "video", jp: "video", train: "physical", plan: "physical", rec: "physical", season: "schedule", comps: "schedule", cup: "cup", fr: "cup", campus: "cup", money: "cup", sched: "schedule", report: "admin", roster: "admin", intake: "admin" };
 // 직책: 관리자·주장 = 전체 / 부주장·훈련 담당·총무·피지컬 담당 = 맡은 일만 (서버 규칙 private.can 과 같게)
 const TITLES = { admin: "관리자", captain: "주장", vice: "부주장", treasurer: "총무", ops: "훈련 담당", trainer: "피지컬 담당", analyst: "전력분석 담당", media: "영상 담당" };
 // 한 사람이 직책을 여러 개 맡을 수 있음 (players.titles)
@@ -127,7 +127,7 @@ const titlesOf = p => Object.keys(TITLES).filter(k => ((p && p.titles) || []).in
 const titlesKo = ks => ks.length > 1 ? ks.map(k => TITLES[k].replace(/ 담당$/, "")).join("·") + (ks.some(k => / 담당$/.test(TITLES[k])) ? " 담당" : "") : ks.length ? TITLES[ks[0]] : "";
 const titleChips = (p, cls = "") => titlesOf(p).map(k => `<span class="chip${cls}">${esc(TITLES[k])}</span>`).join("");
 // attend = 정규 훈련 변경(시간·없음) · 자율 훈련 · 불참 확인
-const STAFF_PERMS = { vice: ["schedule", "notice", "roster", "video", "attend"], ops: ["practice", "attend"], treasurer: ["notice", "roster"], trainer: ["training"], analyst: ["analysis"], media: ["video"] };
+const STAFF_PERMS = { vice: ["schedule", "notice", "roster", "video", "attend", "money"], ops: ["practice", "attend"], treasurer: ["notice", "roster", "money"], trainer: ["training"], analyst: ["analysis"], media: ["video"] };
 const myStaff = () => (state.titles || []).filter(k => STAFF_PERMS[k]);
 // 화면 보기(viewAs): 관리자·주장은 모든 직책 화면으로 바꿔 볼 수 있고, 직책이 있으면 '내 직책(맡은 일 모두) ↔ 선수'
 const VIEW_LABEL = k => k === "player" ? "부원" : k === "mine" ? titlesKo(myStaff()) : TITLES[k] || k;
@@ -3173,7 +3173,7 @@ function render(soft) {
   else {
     const v = state.view;
     document.documentElement.dataset.view = v;
-    html = v === "train" ? viewTrain() : v === "comps" ? viewComps() : v === "cup" ? viewCup("event") : v === "fr" ? viewCup("friendly") : v === "campus" ? viewCampus() : v === "sched" ? viewSched() : v === "report" ? viewReport() : v === "practice" ? viewPractice() : v === "notes" ? viewNotes() : v === "video" ? viewVideo() : v === "scout" ? viewScout() : v === "jp" ? viewJp() : v === "roster" ? viewRoster() : v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : viewHome();
+    html = v === "train" ? viewTrain() : v === "comps" ? viewComps() : v === "cup" ? viewCup("event") : v === "fr" ? viewCup("friendly") : v === "campus" ? viewCampus() : v === "money" ? viewMoney() : v === "sched" ? viewSched() : v === "report" ? viewReport() : v === "practice" ? viewPractice() : v === "notes" ? viewNotes() : v === "video" ? viewVideo() : v === "scout" ? viewScout() : v === "jp" ? viewJp() : v === "roster" ? viewRoster() : v === "plan" ? viewPlan() : v === "rec" ? viewRec() : v === "season" ? viewSeason() : v === "intake" ? viewIntake() : viewHome();
   }
   const q = state.session ? queue().length : 0;
   const bar = state.loaded && (state.net === false || q) ? `<div class="netbar">${state.net === false ? "오프라인 · 마지막으로 불러온 내용" : "기록 올리는 중"}${q ? ` · 올라갈 기록 ${q}건` : ""}</div>` : "";
@@ -3357,6 +3357,7 @@ function innerBack() {
   if (v === "scout" && state.live && state.live.open) { state.live.open = null; return true; }
   if (v === "scout" && state.scoutId) { state.scoutId = null; return true; }
   if (v === "scout" && state.scout && state.scout.rp && state.scout.rp.open) { state.scout.rp.open = null; return true; }
+  if (v === "money" && state.settle && state.settle.open) { state.settle.open = null; return true; }
   return false;
 }
 // 뒤로 가기: 열린 창 닫기 → 안쪽 화면 나가기 → 이전 화면
@@ -3560,6 +3561,7 @@ document.addEventListener("click", async ev => {
   if (act.startsWith("ct")) return courtClick(b, act);
   if (act.startsWith("lv")) return liveClick(b, act);
   if (act.startsWith("rp")) return rpClick(b, act);
+  if (act.startsWith("st")) return stClick(b, act);
   if (act.startsWith("sc")) {
     const S = sc(), x = S.sel, v = b.dataset.v;
     if (act === "scnew") return openScoutForm("");
@@ -3774,6 +3776,9 @@ document.addEventListener("submit", async ev => {
   if (f.id === "qpForm") { await qpSave(); return; }
   if (f.id === "rpNewForm") { await rpNewSave(); return; }
   if (f.id === "rpForm") return;
+  if (f.id === "stTripForm") return stTripSave(f);
+  if (f.id === "stAdjForm") return stAdjSave(f);
+  if (f.id === "stItemForm") return stItemSave(f);
   if (f.id === "guestForm") {
     const st = txt("gs-s"), en = txt("gs-e") || null, d = f.dataset.d, btn = f.querySelector('button[type="submit"]');
     if (en && en <= st) { toast("끝 시간이 시작보다 앞이에요."); return; }
@@ -4295,7 +4300,7 @@ async function switchTeam(t) {
   if (r.error) { toast(r.error.code === "42501" ? r.error.message : failMsg(r.error)); return; }
   try { lsDel(snapKey()); } catch (e) {}
   // 팀마다 따로 불러오는 화면 자료(전력분석 · 실시간 기록 · 대회 라인업)도 비움 — 안 그러면 다른 팀 경기가 그대로 보임
-  state.scout = null; state.live = null; state.cup = null; state.scoutId = null;
+  state.scout = null; state.live = null; state.cup = null; state.scoutId = null; state.settle = null;
   closeSettings(); toast(`${t === "women" ? "여자부" : "남자부"}로 바꿨어요`);
   state.loaded = false; state.booting = true; render();
   return loadProfile();
