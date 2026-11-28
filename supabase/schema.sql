@@ -2900,3 +2900,17 @@ drop policy if exists "receipts read" on storage.objects;
 create policy "receipts read" on storage.objects for select to authenticated
   using (bucket_id = 'receipts' and (storage.foldername(name))[1] = private.my_team() and private.is_member());
 -- (settle_mine 은 이제 앱에서 안 씀)
+
+-- 2026-11-28 공금(동아리 돈)으로 먼저 낸 비용: 낸 사람 없음(돌려줄 사람 없음), 나누는 데는 들어감. 공금 표시는 총무 쪽만
+alter table public.settle_items add column if not exists from_club boolean not null default false;
+alter table public.settle_items alter column paid_by drop not null;
+alter table public.settle_items add constraint settle_items_payer check (from_club or paid_by is not null);
+create or replace function private.settle_item_guard() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if not private.can('money') then
+    if tg_op = 'INSERT' then new.ok := false; new.from_club := false; else new.ok := old.ok; new.trip_id := old.trip_id; new.from_club := old.from_club; end if;
+  end if;
+  if new.from_club then new.paid_by := null; end if;
+  return new;
+end $$;

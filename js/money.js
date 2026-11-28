@@ -1,6 +1,6 @@
 /* ---------- 정산 (총무) ----------
    대회 · 교류전처럼 다녀온 건마다 공동 비용(숙소 · 식비 · 유류비·톨비 · 물품 · 기타)을 모아 같이 간 사람끼리 나눔. 손으로 하던 "OO 정산 공지" 방식 그대로:
-   - 비용마다 낸 사람 · 영수증 사진(비공개 버킷 receipts). 유류비 · 톨비는 차마다 달라서 운전자가 직접 적음(영수증 없이, 계산 안 함)
+   - 비용마다 낸 사람(또는 공금 — 동아리 돈으로 먼저 냄, 돌려줄 사람 없음) · 영수증 사진(비공개 버킷 receipts). 유류비 · 톨비는 차마다 달라서 운전자가 직접 적음(영수증 없이, 계산 안 함)
    - 사람마다 그때그때: 운전(기본 = 전부 면제) · 종류별 면제 · 정액(늦참 · 매니저 "1만 원만") · 금액 감면 → 빠진 몫은 아무 조정 없는 나머지 인원이 나눠 냄
    - 회비 지원은 사람마다 똑같이 빼 줌. 낼 돈은 올림 단위(기본 1,000원)로 올림
    - 사람마다 정산 = 낸 돈 − 낼 돈 → +면 총무가 보냄, −면 총무에게 보냄. 보냄/받음은 체크만(계좌번호는 앱에 저장 안 함, 공지 글에 총무가 직접 적음)
@@ -33,7 +33,8 @@ function stCalc(t, items) {
   const P = [...new Set(t.members || [])], A = t.adj || {}, owe = {}, paid = {}, tot = {};
   const ad = p => A[p] || {}, ex = p => ad(p).ex || [], fixOf = p => { const v = ad(p).fix; return v === "" || v == null ? null : Math.max(0, Number(v) || 0); };
   P.forEach(p => { owe[p] = 0; paid[p] = 0; });
-  for (const it of items) { tot[it.cat] = (tot[it.cat] || 0) + (it.amount || 0); paid[it.paid_by] = (paid[it.paid_by] || 0) + (it.amount || 0); }
+  let fromClub = 0;
+  for (const it of items) { tot[it.cat] = (tot[it.cat] || 0) + (it.amount || 0); if (it.from_club || !it.paid_by) fromClub += it.amount || 0; else paid[it.paid_by] = (paid[it.paid_by] || 0) + (it.amount || 0); }
   // 1) 종류마다 그 종류 면제 아닌 사람끼리 똑같이
   for (const [c, T] of Object.entries(tot)) { let E = P.filter(p => !ex(p).includes(c)); if (!E.length) E = P; E.forEach(p => { owe[p] += T / E.length; }); }
   // 2) 정액 · 금액 감면: 차액은 아무 조정 없는 나머지 인원이 나눠 냄
@@ -48,7 +49,7 @@ function stCalc(t, items) {
   // 4) 올림 단위
   const u = Number(t.round_to) || 1000, ids = [...P, ...Object.keys(paid).filter(p => !P.includes(p))];
   const rows = ids.map(p => { const o = P.includes(p) ? Math.ceil(Math.round(owe[p]) / u) * u : 0, pd = paid[p] || 0; return { pid: p, owe: o, paid: pd, net: pd - o }; });
-  return { rows, tot, total, club: Math.min(Number(t.club) || 0, total) };
+  return { rows, tot, total, fromClub, club: Math.min(Number(t.club) || 0, total) };
 }
 
 /* ---- 화면 ---- */
@@ -81,7 +82,7 @@ function stTripView(t) {
     <p class="small muted">${esc([stPer(t), `${(t.members || []).length}명`, t.club ? `회비 지원 ${stWon(t.club)}` : "", `${(ST_ROUND.find(x => x[0] === (Number(t.round_to) || 1000)) || [0, "1,000원"])[1]} 단위 올림`].filter(Boolean).join(" · "))}</p>
     <div class="st-sum"><div><span class="small muted">총 비용</span><b>${stWon(c.total)}</b></div><div><span class="small muted">총무가 받을 돈</span><b>${stWon(get)}</b></div><div><span class="small muted">총무가 보낼 돈</span><b>${stWon(send)}</b></div></div>
     ${c.rows.length ? `<h3>사람별</h3><div class="tw"><table class="st-t"><thead><tr><th>이름</th><th>낼 돈 · 낸 돈</th><th>정산</th></tr></thead><tbody>${rows}</tbody></table></div>
-      <p class="small muted">보냄 = 총무에게 보낼 돈, 받음 = 먼저 낸 비용을 총무가 보내 줌.${mgr && !t.closed ? " 이름을 누르면 운전 · 면제 · 정액 · 감면." : ""}</p>` : ""}
+      <p class="small muted">${c.fromClub ? `공금으로 먼저 낸 ${stWon(c.fromClub)}은 모은 돈으로 공금에 채워요. ` : ""}보냄 = 총무에게 보낼 돈, 받음 = 먼저 낸 비용을 총무가 보내 줌.${mgr && !t.closed ? " 이름을 누르면 운전 · 면제 · 정액 · 감면." : ""}</p>` : ""}
     <div class="sec-head"><h3>비용</h3>${!t.closed && (mgr || inTrip) ? `<button class="btn add small" type="button" data-act="stitem">＋ 비용</button>` : ""}</div>
     ${items || emptyLine("같이 쓰려고 산 게 있으면 영수증과 함께 올려요. 운전자는 유류비 · 톨비를 적어요.")}
     ${mgr ? `<div class="row st-foot"><button class="btn small" type="button" data-act="stnotice">정산 공지</button><button class="btn small" type="button" data-act="stclose">${t.closed ? "다시 열기" : "정산 끝내기"}</button></div>` : ""}</section>`;
@@ -89,7 +90,7 @@ function stTripView(t) {
 function stItemLine(x, t) {
   const S = stS(), mgr = stCan(), canEdit = !t.closed && (mgr || (stMine(x) && !x.ok));
   const pics = (x.receipts || []).map((p, i) => S.urls[p] ? `<a href="${esc(S.urls[p])}" target="_blank" rel="noopener"><img class="st-pic" src="${esc(S.urls[p])}" alt="영수증 ${i + 1}"></a>` : `<span class="st-pic">영수증</span>`).join("");
-  return `<li class="st-item"><div class="st-it-main"><b>${esc(x.title || stCatKo(x.cat))}</b><span class="small muted">${esc(stName(x.paid_by))}${x.approx ? " · 영수증 없음(직접 적음)" : !(x.receipts || []).length ? " · 영수증 없음" : ""}</span>${pics ? `<span class="st-pics">${pics}</span>` : ""}</div>
+  return `<li class="st-item"><div class="st-it-main"><b>${esc(x.title || stCatKo(x.cat))}</b><span class="small muted">${x.from_club ? "공금" : esc(stName(x.paid_by))}${x.approx ? " · 영수증 없음(직접 적음)" : !(x.receipts || []).length ? " · 영수증 없음" : ""}</span>${pics ? `<span class="st-pics">${pics}</span>` : ""}</div>
     <span class="num"><b>${stWon(x.amount)}</b></span>
     ${mgr ? `<button type="button" class="chip st-ok ${x.ok ? "on" : ""}" data-act="stok" data-id="${esc(x.id)}">${x.ok ? "✓ 확인" : "확인"}</button>` : `<span class="chip ${x.ok ? "on" : ""}">${x.ok ? "✓ 확인" : "확인 전"}</span>`}
     ${canEdit ? `<button class="btn link small" type="button" data-act="stitem" data-id="${esc(x.id)}">수정</button>` : ""}</li>`;
@@ -185,13 +186,13 @@ async function stAdjSave(f) {
 /* ---- 비용 (영수증) ---- */
 function stItemForm(id) {
   const S = stS(), mgr = stCan(), t = stCur(), x = id ? (S.items[t.id] || []).find(y => y.id === id) : null, el = document.getElementById("sheet");
-  const who = mgr ? [...new Set([...(t.members || []), ...(x ? [x.paid_by] : [])])] : [];
+  const who = mgr ? [...new Set([...(t.members || []), ...(x && x.paid_by ? [x.paid_by] : [])])] : [];
   el.querySelector(".sheet-body").innerHTML = `<div class="row between"><h3>${x ? "비용 수정" : "비용 올리기"}</h3><button class="btn link" type="button" data-act="sheetclose">닫기</button></div>
     <form class="f" id="stItemForm" data-id="${x ? esc(x.id) : ""}"><div class="fields">
       <label class="fl">종류<select id="st-cat">${ST_CAT.map(([k, l]) => `<option value="${k}" ${x && x.cat === k ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <label class="fl">금액(원)<input type="number" id="st-amt" required min="0" step="10" inputmode="numeric" value="${x ? x.amount : ""}"></label>
       <label class="fl wide">내용<input id="st-it" maxlength="60" value="${esc(x ? x.title || "" : "")}" placeholder="예: 숙소 2박 · 이마트 물 · 저녁 고깃집"></label>
-      ${mgr ? `<label class="fl wide">낸 사람<select id="st-by">${who.map(p => `<option value="${esc(p)}" ${(x ? x.paid_by === p : p === state.myPid) ? "selected" : ""}>${esc(stName(p))}</option>`).join("")}</select></label>` : ""}
+      ${mgr ? `<label class="fl wide">낸 사람<select id="st-by"><option value="__club" ${x && x.from_club ? "selected" : ""}>공금 (동아리 돈으로 먼저 냄)</option>${who.map(p => `<option value="${esc(p)}" ${(x ? !x.from_club && x.paid_by === p : p === state.myPid) ? "selected" : ""}>${esc(stName(p))}</option>`).join("")}</select></label>` : ""}
       <p class="small muted wide" id="st-carnote"></p>
       <label class="fl wide">영수증 사진${x && (x.receipts || []).length ? ` <span class="small muted">(${x.receipts.length}장 있음, 새로 고르면 더함)</span>` : ""}<input type="file" id="st-files" accept="image/*" multiple></label>
     </div><div class="row"><button class="btn primary" type="submit">${x ? "저장" : "올리기"}</button></div>
@@ -204,8 +205,9 @@ async function stItemSave(f) {
   const S = stS(), mgr = stCan(), t = stCur(), old = f.dataset.id ? (S.items[t.id] || []).find(y => y.id === f.dataset.id) : null;
   const amt = Math.round(Number(document.getElementById("st-amt").value)); if (!(amt >= 0)) return toast("금액을 넣어 주세요");
   const cat = document.getElementById("st-cat").value, files = [...(document.getElementById("st-files").files || [])].slice(0, 6);
-  const row = { cat, amount: amt, title: document.getElementById("st-it").value.trim() || null, paid_by: mgr ? document.getElementById("st-by").value : state.myPid };
-  if (!row.paid_by) return toast("명단에 연결된 계정만 비용을 올릴 수 있어요");
+  const by = mgr ? document.getElementById("st-by").value : state.myPid, club = by === "__club";
+  const row = { cat, amount: amt, title: document.getElementById("st-it").value.trim() || null, paid_by: club ? null : by, from_club: club };
+  if (!club && !row.paid_by) return toast("명단에 연결된 계정만 비용을 올릴 수 있어요");
   const btn = f.querySelector('button[type="submit"]'); btn.disabled = true;
   try {
     const paths = [];
@@ -228,9 +230,10 @@ function stNoticeText(t) {
   const L = [`[${t.title} 정산 공지]`, `이번 ${t.title}${stJosa(t.title)} 거치며 소요된 금액을 정산하고자 합니다`, "다들 수고 많으셨습니다!!!", "", "* 이번 대회에 참가한 인원",
     [drivers.length ? `운전자 ${drivers.length}명` : "", `참가자 ${rest}명`, fixed.length ? fixed.map(p => `${stShort(p)}${(A[p] || {}).fix ? ` ${stWon(A[p].fix)}` : ""}`).join(", ") : ""].filter(Boolean).join(", "),
     `총 ${P.length}명이 정산에 참여했습니다!`, "", "* 정산 내역", `총 비용 ${stWon(c.total)}`];
-  for (const [k, l] of ST_CAT) if (c.tot[k]) { const by = k === "car" ? [...new Set(its.filter(x => x.cat === k).map(x => stShort(x.paid_by)))] : [];
+  for (const [k, l] of ST_CAT) if (c.tot[k]) { const by = k === "car" ? [...new Set(its.filter(x => x.cat === k && !x.from_club && x.paid_by).map(x => stShort(x.paid_by)))] : [];
     L.push(`- ${l} ${stWon(c.tot[k])}${by.length ? ` (${by.join(", ")} 운전 · 직접 적음)` : ""}`); }
   if (c.club) L.push(`- 회비 지원 −${stWon(c.club)}`);
+  if (c.fromClub) L.push(`(이 중 ${stWon(c.fromClub)}은 공금으로 먼저 냈어요 → 모은 돈으로 공금에 채움)`);
   // 낼 돈: 같은 금액끼리 묶음 (먼저 낸 비용 없는 사람)
   const pay = c.rows.filter(r => r.net < 0 && !r.paid), groups = new Map();
   for (const r of pay) { if (!groups.has(-r.net)) groups.set(-r.net, []); groups.get(-r.net).push(r.pid); }

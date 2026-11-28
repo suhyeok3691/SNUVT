@@ -167,6 +167,14 @@ const SUITES = {
     assert.match(await a.text('[data-act="stdone"][data-p="f1"]'), /끝/);
     await p.click('[data-act="stok"]'); await p.waitForTimeout(150);
     assert.ok(await p.evaluate(() => stS().items[stS().open][0].ok), "영수증 확인");
+    // 공금으로 먼저 낸 비용: 돌려받을 사람 없이 나누는 데만 들어감 (물품 11,000원 → 나머지 11명 1,000원씩 더)
+    await addItem("gear", 11000, "__club", "구급 물품");
+    const ci = await p.evaluate(() => { const l = stS().items[stS().open]; return l[l.length - 1]; });
+    assert.ok(ci.from_club && ci.paid_by === null, "공금 = 낸 사람 없음");
+    const r2 = await rows();
+    assert.deepStrictEqual(r2["부원3"], ["41,000원", "—", "보냄 41,000원"]); assert.deepStrictEqual(r2["최수혁"], ["41,000원", "150,000원", "받음 109,000원"]);
+    assert.match(await a.text(".st-items:last-of-type"), /구급 물품[\s\S]*공금/);
+    assert.match(await p.evaluate(() => stNoticeText(stCur())), /이 중 11,000원은 공금으로 먼저 냈어요/);
     clean(a); await a.ctx.close();
     // 부원: 내역 전부(다른 사람 금액 · 비용까지) 보고, 내 비용만 올리기 · 낸 사람은 나
     const c = await openApp(b, "player"), q = c.page;
